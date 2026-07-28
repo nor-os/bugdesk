@@ -1,0 +1,282 @@
+/* ════════════════════════════════════════════════════════════════════
+   ticketdesk_md.css — the markdown composer, the rendered markdown it
+   produces, and the label pill editor.
+
+   Split out of ticketdesk.css because these three are one feature: you
+   type markdown in .td-mde, it renders as .td-md, and .td-tags is the
+   same pill vocabulary applied to labels. Same tokens and the same
+   compact density as the rest of the pages.
+   ──────────────────────────────────────────────────────────────────── */
+
+/* ── composer ───────────────────────────────────────────────────── */
+
+.td-mde {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.td-mde__bar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1px;
+    padding: 2px;
+    background: var(--ea-bg-chrome, #1a1a1a);
+    border: 1px solid var(--ea-border, #333);
+    border-radius: 2px;
+}
+.td-mde__sep {
+    width: 1px;
+    align-self: stretch;
+    margin: 2px 4px;
+    background: var(--ea-border, #333);
+}
+.td-mde__btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 20px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 2px;
+    background: transparent;
+    color: var(--text-muted, #888);
+    cursor: pointer;
+}
+.td-mde__btn:hover {
+    background: rgba(255, 255, 255, 0.07);
+    color: var(--text-primary, #e0e0e0);
+    border-color: var(--ea-border, #333);
+}
+.td-mde__btn:active { background: rgba(255, 255, 255, 0.12); }
+.td-mde__btn .material-symbols-outlined { font-size: 15px; }
+/* H1/H2/H3 are text, not glyphs — keep them the same optical weight as
+   the icon buttons beside them. */
+.td-mde__txt {
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+/* Field + submit sit on ONE row: the button belongs next to what it
+   sends, not stranded under it. `align-items: flex-end` keeps the button
+   pinned to the bottom edge as the textarea grows. */
+.td-mde__row {
+    display: flex;
+    align-items: flex-end;
+    gap: 6px;
+    min-width: 0;
+}
+.td-mde__area {
+    flex: 1 1 auto;
+    min-width: 0;
+    resize: none;          /* auto-grown from JS instead */
+    overflow-y: auto;
+    line-height: 1.5;
+    font-family: inherit;
+}
+.td-mde__submit {
+    flex: 0 0 auto;
+    min-width: 84px;
+    justify-content: center;
+    align-self: flex-end;
+}
+.td-mde__file { display: none; }
+
+/* Drag an image anywhere over the composer and the whole thing lights up
+   — the drop target is the editor, not a hidden strip inside it. */
+.td-mde--drop .td-mde__area {
+    border-color: var(--accent-bright, #1683c4);
+    background: rgba(17, 119, 179, 0.10);
+}
+.td-mde--busy .td-mde__area { opacity: 0.75; }
+
+/* ── rendered markdown ──────────────────────────────────────────── */
+
+.td-md > :first-child { margin-top: 0; }
+.td-md > :last-child { margin-bottom: 0; }
+.td-md h1, .td-md h2, .td-md h3,
+.td-md h4, .td-md h5, .td-md h6 {
+    margin: 10px 0 4px;
+    color: var(--text-primary, #e0e0e0);
+    font-weight: 600;
+    line-height: 1.3;
+}
+.td-md h1 { font-size: 14px; }
+.td-md h2 { font-size: 13px; }
+.td-md h3 { font-size: 12px; }
+.td-md h4, .td-md h5, .td-md h6 { font-size: 11px; }
+.td-md p { margin: 0 0 6px; }
+.td-md ul, .td-md ol { margin: 0 0 6px; padding-left: 18px; }
+.td-md li { margin: 1px 0; }
+.td-md li > ul, .td-md li > ol { margin: 1px 0; }
+.td-md hr {
+    margin: 8px 0;
+    border: 0;
+    border-top: 1px solid var(--ea-border, #333);
+}
+.td-md blockquote {
+    margin: 0 0 6px;
+    padding: 2px 0 2px 8px;
+    border-left: 2px solid var(--ea-border, #444);
+    color: var(--text-muted, #888);
+}
+.td-md code {
+    padding: 0 3px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.07);
+    font-family: var(--ea-font-mono-family, ui-monospace, Consolas, monospace);
+    font-size: 10px;
+}
+.td-md pre.td-code {
+    position: relative;
+    margin: 0 0 6px;
+    padding: 6px 8px;
+    overflow-x: auto;
+    background: var(--ea-bg-chrome, #1a1a1a);
+    border: 1px solid var(--ea-border, #333);
+    border-radius: 2px;
+}
+.td-md pre.td-code code {
+    padding: 0;
+    background: none;
+    white-space: pre;
+}
+/* The language hint from ```csharp, surfaced so a reader can tell what
+   they are looking at without parsing it. */
+.td-md pre.td-code[data-lang]::before {
+    content: attr(data-lang);
+    position: absolute;
+    top: 2px;
+    right: 6px;
+    font-size: 8.5px;
+    letter-spacing: 0.06em;
+    color: var(--text-dim, #666);
+}
+
+.td-md__task { list-style: none; margin-left: -14px; }
+.td-md__task input { vertical-align: middle; margin-right: 4px; }
+
+/* Screenshots are the point of attachments — show them, but never let one
+   blow out the mask's width. */
+.td-md__img {
+    max-width: 100%;
+    height: auto;
+    margin: 4px 0;
+    border: 1px solid var(--ea-border, #333);
+    border-radius: 2px;
+    display: block;
+}
+
+/* A wide table scrolls INSIDE its own wrapper; the page never scrolls
+   sideways. */
+.td-md__tablewrap {
+    overflow-x: auto;
+    margin: 0 0 6px;
+    border: 1px solid var(--ea-border, #333);
+    border-radius: 2px;
+}
+.td-md__table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 10.5px;
+}
+.td-md__table th,
+.td-md__table td {
+    padding: 2px 6px;
+    border-bottom: 1px solid var(--ea-border-soft, #2a2a2a);
+    border-right: 1px solid var(--ea-border-soft, #2a2a2a);
+    text-align: left;
+}
+.td-md__table th {
+    background: var(--ea-bg-chrome, #1a1a1a);
+    color: var(--text-primary, #e0e0e0);
+    font-weight: 600;
+    white-space: nowrap;
+}
+.td-md__table tr:last-child td { border-bottom: 0; }
+.td-md__table th:last-child,
+.td-md__table td:last-child { border-right: 0; }
+
+/* ── label pills ────────────────────────────────────────────────── */
+
+.td-tags { position: relative; min-width: 0; }
+.td-tags__field {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 3px;
+    min-height: var(--ea-input-h, 20px);
+    padding: 2px 4px;
+    background: var(--ea-bg-input, #1a1a1a);
+    border: 1px solid var(--ea-border, #333);
+    border-radius: 2px;
+    cursor: text;
+}
+.td-tags__field:focus-within { border-color: var(--accent-bright, #1683c4); }
+
+.td-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 0 2px 0 6px;
+    background: var(--state-selected, rgba(17, 119, 179, 0.18));
+    border: 1px solid var(--accent-bright, #1683c4);
+    border-radius: 3px;      /* square with rounded corners, not a lozenge */
+    color: var(--text-bright, #fff);
+    font-size: 10px;
+    line-height: 15px;
+    white-space: nowrap;
+    user-select: none;
+}
+.td-tag__x {
+    display: inline-flex;
+    align-items: center;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    opacity: 0.65;
+    cursor: pointer;
+}
+.td-tag__x:hover { opacity: 1; }
+.td-tag__x .material-symbols-outlined { font-size: 12px; }
+
+.td-tags__entry {
+    flex: 1 1 60px;
+    min-width: 60px;
+    border: 0;
+    outline: none;
+    background: transparent;
+    color: var(--ea-text, #d4d4d4);
+    font-size: var(--ea-font-body, 11px);
+    font-family: inherit;
+}
+
+.td-tags__menu {
+    position: absolute;
+    z-index: 40;
+    left: 0;
+    right: 0;
+    top: 100%;
+    max-height: 180px;
+    overflow-y: auto;
+    margin-top: 2px;
+    background: var(--surface-1, #252526);
+    border: 1px solid var(--ea-border, #333);
+    border-radius: 2px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.55);
+}
+.td-tags__opt {
+    padding: 2px 8px;
+    font-size: 10.5px;
+    color: var(--ea-text, #d4d4d4);
+    cursor: pointer;
+    white-space: nowrap;
+}
+.td-tags__opt:hover,
+.td-tags__opt--on { background: var(--state-selected, rgba(17, 119, 179, 0.22)); }
+.td-tags__opt b { color: var(--text-bright, #fff); font-weight: 700; }

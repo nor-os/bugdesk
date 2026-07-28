@@ -1,0 +1,108 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   DetailHeader — shared header bar for detail views across all pages.
+   Used by: Scenario page, ETL page, Data page, Notebook editors.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.detail-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-xl);
+    padding-bottom: var(--space-lg);
+    flex-wrap: wrap;
+}
+
+.detail-header__title-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.detail-header__icon {
+    font-size: 20px;
+    color: var(--text-muted, var(--text-muted));
+    flex-shrink: 0;
+}
+
+.detail-header__name {
+    font-size: var(--font-size-2xl);
+    font-weight: 600;
+    color: var(--text-primary, #f0f0f0);
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: default;
+}
+
+.detail-header__name[data-renameable] {
+    cursor: text;
+}
+
+.detail-header__name[data-renameable]:hover {
+    color: var(--text-bright);
+}
+
+/* Inline rename input (injected by InlineRenamer) */
+.detail-header__name .node-edit-input {
+    font: inherit;
+    font-size: var(--font-size-2xl);
+    font-weight: 600;
+    background: var(--surface-1));
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary, #f0f0f0);
+    padding: 0 4px;
+    margin: -2px 0;
+    outline: none;
+    width: 100%;
+    min-width: 100px;
+}
+
+/* ─── Badges ──────────────────────────────────────────────────────────── */
+
+/* .detail-header__badge* — moved to components/controls.css (Phase 2). */
+
+/* ─── Subtitle ────────────────────────────────────────────────────────── */
+
+.detail-header__subtitle {
+    width: 100%;
+    font-size: var(--font-size-sm);
+    color: var(--text-muted, var(--text-muted));
+    margin-top: -8px;
+    padding-left: 30px;
+}
+
+.detail-header__subtitle strong {
+    color: var(--text-primary, var(--text-primary));
+}
+
+/* ─── Actions ─────────────────────────────────────────────────────────── */
+
+.detail-header__actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-shrink: 0;
+}
+
+/* ─── Buttons ─────────────────────────────────────────────────────────── */
+
+/* .detail-header__btn* — moved to components/controls.css (Phase 2). */
+
+/* ─── Data page context ──────────────────────────────────────────────── */
+
+.data-series-container .detail-header {
+    border-bottom: 1px solid var(--border-strong);
+    padding: 10px var(--layout-pad-section);
+    flex-shrink: 0;
+}
+
+/* ─── Extra elements (progress indicators, custom widgets) ────────────── */
+
+.detail-header__extra {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}

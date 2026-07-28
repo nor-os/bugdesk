@@ -1,0 +1,1174 @@
+/* host.css — body layout for the tiling shell.
+ *
+ * The Ecosim bootstrap builds .global-top-bar + .container + .global-bottom-bar.
+ * Our installer removes .container and inserts .twm-host between the
+ * top and bottom bars; this stylesheet makes the body a flex column so
+ * the WM host fills the remaining space.
+ */
+
+/* Body is a flex column: top bar, WM host (fill), bottom bar. We
+ * override the legacy `position: fixed` on both bars so they become
+ * deterministic flex items and the host's height is exactly the
+ * leftover space — no math, no overlap, no off-by-N pixels. Their
+ * `z-index` stays put for dropdown stacking. */
+body.twm-body {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden;
+}
+
+body.twm-body > .global-top-bar,
+body.twm-body > .global-bottom-bar {
+    position: relative !important;
+    inset: auto !important;
+    flex: 0 0 auto;
+}
+
+body.twm-body > .twm-host {
+    flex: 1 1 auto;
+    min-height: 0;
+    min-width: 0;
+    display: flex;
+    overflow: hidden;
+    background: var(--surface-app);
+}
+
+/* Sim controls relocated into .global-top-bar .bar-right — they came
+ * from .workspace-top-bar where the layout was different. Strip the
+ * extra padding so they sit next to the panel-toggles cleanly. */
+.global-top-bar .twm-sim-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-right: 8px;
+    padding: 0;
+}
+.global-top-bar .twm-sim-controls .menu-bar {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 0;
+    background: transparent;
+    border: none;
+}
+.global-top-bar .twm-sim-controls button {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 0;
+    color: var(--text-secondary);
+}
+.global-top-bar .twm-sim-controls button:hover {
+    background: var(--state-hover);
+    color: var(--text-primary);
+}
+.global-top-bar .twm-sim-controls .ea-run-cluster {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--border-subtle);
+}
+
+/* Desktop bar (mounted in global-bottom-bar .bar-right). */
+.twm-desktops {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    margin: 0 8px;
+}
+.twm-desk__btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    height: 18px;
+    padding: 0 6px;
+    background: transparent;
+    border: 1px solid var(--border-subtle);
+    border-radius: 0;
+    color: var(--text-secondary);
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-xs);
+    cursor: pointer;
+}
+.twm-desk__btn:hover { background: var(--state-hover); }
+.twm-desk__btn--on {
+    background: var(--state-selected);
+    color: var(--text-bright);
+    border-color: var(--accent-bright);
+}
+.twm-desk__btn--add { color: var(--text-muted); }
+
+.panel-toggle-btn--on {
+    background: var(--state-selected) !important;
+    color: var(--text-bright) !important;
+}
+
+/* Hamburger button — left of the EcoAgent brand. Collapses File/Edit/
+ * Help into a single popup so the top bar reads as one row of icons
+ * instead of three text dropdowns competing with the page shortcuts. */
+.twm-hamburger-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 35px;
+    height: 35px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+.twm-hamburger-btn:hover {
+    background: var(--state-hover);
+    color: var(--text-primary);
+}
+.twm-hamburger-btn .material-symbols-outlined {
+    font-size: 20px;
+}
+
+/* Hide the original File/Edit/Help dropdowns — they live inside the
+ * hamburger menu now. Their `.menu-entry` buttons stay in the DOM so
+ * the hamburger can trigger them via .click(). */
+.global-top-bar .menu-item.twm-hidden-menu-item {
+    display: none !important;
+}
+
+/* The agent + flow tabs each shipped their own "Pop out" button into a
+ * floating slide-out panel — superseded by the WM's Alt+F / promote-
+ * to-window. Hide them so the chrome doesn't carry two parallel
+ * affordances for the same action. */
+/* Catch-all: any pop-out trigger inside any page tile is hidden. The
+ * tiling shell handles "pop a tile out into a floating window" via
+ * Alt+F / the chrome promote button, so per-page pop-out buttons are
+ * always redundant. */
+.twm-page-shell [data-action="popout"],
+.twm-page-shell #ea-archetype-popout,
+.twm-page-shell #ea-sector-popout {
+    display: none !important;
+}
+
+/* Inline row-action buttons (edit / delete) on navigation tables. */
+.twm-row-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    margin: 0 1px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 0;
+    color: var(--text-muted);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 80ms ease, color 80ms ease, background 80ms ease;
+}
+tr:hover .twm-row-action { opacity: 1; }
+.twm-row-action:hover {
+    color: var(--text-primary);
+    background: var(--state-hover);
+}
+.twm-row-action--danger:hover {
+    color: var(--text-bright);
+    background: var(--color-danger);
+}
+.twm-row-action .material-symbols-outlined { font-size: 14px; }
+.twm-row-actions-cell { white-space: nowrap; text-align: right; }
+
+/* Hierarchical landing rows (Markets, Agents) — archetype rows carry
+ * a chevron + entity icon; instance rows are indented underneath. */
+.twm-market-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+}
+.twm-market-row__icon {
+    font-size: 14px;
+    color: var(--text-muted);
+}
+.twm-market-row--archetype .twm-market-row__icon {
+    color: var(--text-primary);
+}
+.twm-market-row__label {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.twm-market-chevron {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+.twm-market-chevron:hover { color: var(--text-primary); }
+.twm-market-chevron .material-symbols-outlined { font-size: 16px; }
+.twm-market-row--instance .twm-market-row__indent {
+    display: inline-block;
+    width: 22px;
+    flex: 0 0 22px;
+}
+.twm-market-row--instance .twm-market-row__label {
+    color: var(--text-secondary);
+}
+.twm-market-row__count {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 0 5px;
+    color: var(--text-muted);
+    font-size: 11px;
+    border: 1px solid var(--border-subtle);
+    line-height: 1.5;
+}
+.twm-market-chevron:disabled {
+    opacity: 0.25;
+    cursor: default;
+}
+
+/* Agents-landing Notes column — variation deviation chip + Contract
+ * button + delete. The chip colour-codes by deviation (red = mostly
+ * overridden, green = mostly inherited); the button opens the contract
+ * managed window with per-attribute overrides. */
+.ea-agents-landing__notes {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    justify-content: flex-end;
+    /* Inner flex wrapper inside the cell (the `<td>` stays a plain
+     * table-cell so columns align); fill the cell so the actions stay
+     * right-aligned. */
+    width: 100%;
+}
+.ea-agents-landing__dev-chip {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border: 1px solid var(--border-subtle);
+    line-height: 1.4;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+}
+.ea-agents-landing__dev-label {
+    color: var(--text-muted);
+    font-weight: 400;
+    text-transform: lowercase;
+    font-size: 10px;
+    letter-spacing: 0.02em;
+}
+
+/* DataTable filter strip stickiness — the legacy rule for this lived
+ * only inside `.preview-table-wrap--wizard`; generalize it so every
+ * DataTable (landings, instance lists, …) keeps its filter row + column
+ * headers visible when the body scrolls. Both rows need opaque
+ * backgrounds + z-index above the data cells so rows can't bleed
+ * through. */
+/* Structural split: thead lives in its own non-scrolling header wrap
+ * above the scrollable body wrap. The header gets opaque chrome so it
+ * reads as a single bar with the body; no `position: sticky` is
+ * needed anymore since the header literally doesn't scroll. */
+.data-table-component .preview-table-header-wrap {
+    background: var(--surface-1);
+    border-bottom: 1px solid var(--border-strong);
+}
+.data-table-component .preview-table-header-wrap .preview-table thead th {
+    background: var(--surface-1);
+}
+.data-table-component .preview-table-header-wrap .preview-table .data-table__filter-row th {
+    background: var(--surface-0);
+}
+
+/* Compact mode (P2) — used by the bottom-panel Registries tab.
+ * Tighter padding + smaller font matches the surrounding bottom-panel
+ * chrome (run console, bus, query) and gets ~30% more rows visible
+ * in the same vertical space. Opt-in via `mode: 'compact'`. */
+.data-table-component--compact {
+    font-size: 11px;
+}
+.data-table-component--compact .preview-table th,
+.data-table-component--compact .preview-table td {
+    padding: 2px 6px;
+    line-height: 1.35;
+}
+.data-table-component--compact .pagination-controls {
+    padding: 1px 6px !important;
+    font-size: 10px !important;
+    /* Tighter gap so pager reads as one strip, like the category /
+     * schema filter bar above the table — not as a spaced toolbar. */
+    gap: 4px !important;
+    background: #181818;
+    border-top:    1px solid var(--ea-border, #2a2a2a);
+    border-bottom: 1px solid var(--ea-border, #2a2a2a);
+}
+.data-table-component--compact .data-table__filter-input {
+    font-size: 10px;
+    padding: 1px 4px;
+}
+/* Match the narrow chrome of the filter strip (.ea-bp-browser__cat):
+ * 20px height, border-no-radius, transparent background, uppercase
+ * typography. So the pager reads as a sibling of the category /
+ * schema bar instead of a heavier toolbar.
+ *
+ * `!important` is used liberally below because DataTable.js still
+ * sets per-button / per-input chrome via inline `style.cssText` —
+ * inline beats CSS without `!important`. Once those inline styles
+ * migrate to CSS classes we can drop the `!important`s. */
+.data-table-component--compact .pagination-controls .pagination-btn {
+    min-width: 22px !important;
+    height: 20px !important;
+    padding: 0 6px !important;
+    background: transparent !important;
+    border: 1px solid var(--ea-border, #2a2a2a) !important;
+    border-radius: 0 !important;
+    color: var(--ea-text-dim, #aaa) !important;
+    font-size: 10px !important;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.data-table-component--compact .pagination-controls .pagination-btn:hover:not(:disabled) {
+    color: var(--ea-text, #ddd) !important;
+    border-color: var(--ea-accent, #1177b3) !important;
+}
+.data-table-component--compact .pagination-controls .pagination-btn .material-symbols-outlined {
+    font-size: 14px !important;
+}
+.data-table-component--compact .pagination-controls .pagination-input,
+.data-table-component--compact .pagination-controls .pagination-input-time {
+    height: 20px !important;
+    width: 60px !important;
+    padding: 0 6px !important;
+    font-size: 10px !important;
+    background: transparent !important;
+    border: 1px solid var(--ea-border, #2a2a2a) !important;
+    border-radius: 0 !important;
+    color: var(--ea-text, #ddd) !important;
+}
+/* Text labels inside the pager — the "Rows X–Y of Z" and "Page X of
+ * Y" spans don't have classes (just inline style), so target every
+ * direct-span child of the controls to neutralise their inline color
+ * + font-size + add the uppercase look from the filter strip. */
+/* Loading spinner — `setLoading(true)` (or returning a Promise from
+ * onPageChange/onSort) overlays a translucent layer + a CSS spinner
+ * over the whole table. Wrapper gets `position: relative` set
+ * inline by the JS so the absolute overlay anchors correctly. */
+.data-table__loading {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* Translucent so the user still sees the stale rows underneath
+     * and can recognise the table — the spinner says "fresh data
+     * coming", not "blank". */
+    background: rgba(20, 20, 20, 0.45);
+    backdrop-filter: blur(1px);
+    pointer-events: all;  /* swallow clicks while in-flight */
+    cursor: progress;
+}
+.data-table__spinner {
+    width: 28px;
+    height: 28px;
+    border: 2px solid rgba(255, 255, 255, 0.18);
+    border-top-color: var(--ea-accent, #1177b3);
+    border-radius: 50%;
+    animation: data-table__spin 0.7s linear infinite;
+}
+@keyframes data-table__spin {
+    to { transform: rotate(360deg); }
+}
+
+.data-table-component--compact .pagination-controls > span {
+    color: var(--ea-text-dim, #aaa) !important;
+    font-size: 9.5px !important;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+/* Sticky-cell rules removed — header now lives in its own non-
+ * scrolling container after the structural split. */
+
+/* The legacy `.ea-sfc-landing__table` host has its own `overflow:auto`,
+ * which fights with DataTable's inner `.preview-table-wrap` scroll
+ * container. When the outer scroll wins, the sticky filter row is
+ * computed against the wrong ancestor and stops sticking — rows
+ * scroll past the filter strip visually. Defer all scrolling to the
+ * inner wrap. Same fix for the navigator's table host. */
+.ea-sfc-landing__table,
+.twm-nav__table {
+    overflow: hidden !important;
+}
+.ea-sfc-landing__table > .data-table-component,
+.twm-nav__table > .data-table-component {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+/* main_new.css caps every `.preview-table-wrap` at 300px so the legacy
+ * pre-tiling pages stayed compact. Inside the tiling shell, the wrap is
+ * the SOLE scrolling surface for the landing table — capping it at
+ * 300px clips the list to ~8 rows. Force the wrap to fill its flex
+ * parent and rely on its own `overflow: auto` (set inline by DataTable)
+ * for scrolling. */
+.ea-sfc-landing__table .preview-table-wrap,
+.twm-nav__table .preview-table-wrap {
+    max-height: none !important;
+    height: auto;
+    flex: 1 1 0;
+    min-height: 0;
+}
+/* Filter-row sticky rule removed — the row lives inside the non-
+ * scrolling header wrap after the structural split, so no sticky
+ * positioning is needed and the `top: 32px` magic-offset (which
+ * broke in compact mode) is gone. */
+
+/* Navigation-table density — tighten row padding for landings + the
+ * navigator. The default DataTable padding of `var(--space-sm) 8px` is
+ * comfortable for data-viewing tables; nav tables benefit from being
+ * denser so more items fit. */
+.ea-sfc-landing .data-table-component .preview-table td,
+.ea-sfc-landing .data-table-component .preview-table th,
+.twm-nav__table .data-table-component .preview-table td,
+.twm-nav__table .data-table-component .preview-table th {
+    padding: 2px 8px;
+}
+.ea-sfc-landing .data-table-component .preview-table .data-table__filter-row th,
+.twm-nav__table .data-table-component .preview-table .data-table__filter-row th {
+    padding: 3px 4px;
+    /* Column header in these tables is ~22 px tall (font + 2×2 padding
+     * + 1 px border). The default filter-row `top: 32px` left a ~10 px
+     * gap rows scrolled through. Snap the filter row right up against
+     * the shorter header. */
+    top: 22px;
+}
+
+/* Breadcrumb strip — vertically center content. */
+.twm-page-shell__breadcrumb {
+    display: flex;
+    align-items: center;
+}
+.twm-page-shell__breadcrumb .twm-tile-breadcrumb {
+    flex: 1 1 auto;
+    min-width: 0;
+    line-height: 1;
+}
+.twm-page-shell__breadcrumb .topbar-breadcrumb__list {
+    display: inline-flex;
+    align-items: center;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    gap: 4px;
+}
+.twm-page-shell__breadcrumb .topbar-breadcrumb__item,
+.twm-page-shell__breadcrumb .topbar-breadcrumb__link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Modal dialog styling lives in ecoagent_extra_modes.css under
+ * `.managed-window--modal`. Removed legacy in-host block — was a
+ * competing `display: flex; flex-direction: column` that stacked
+ * labels above fields and fought the canonical grid layout. */
+
+/* The Object Explorer's host expects `.panel.right .right-panel-body`
+ * — we recreate that shell inside the panel:right tile so the existing
+ * module mounts unchanged. The legacy `.panel.right` layout rules
+ * (fixed width, position, etc.) would fight the tile sizing, so we
+ * reset to a plain stretchy column. */
+.twm-leaf__body .twm-panel-right {
+    position: static;
+    width: 100%;
+    height: 100%;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    background: transparent;
+    box-shadow: none;
+    overflow: hidden;
+}
+.twm-leaf__body .twm-panel-right .right-panel-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    padding: 4px;
+}
+
+/* Page-shell: every content tile gets a breadcrumb strip on top and a
+ * scrollable content area below. */
+.twm-page-shell {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+/* Lock the breadcrumb strip to a constant height across every page
+ * so the chrome doesn't visibly shift when switching between kinds
+ * with different segment counts. */
+.twm-page-shell__breadcrumb {
+    flex: 0 0 26px;
+    min-height: 26px;
+    max-height: 26px;
+    border-bottom: 1px solid var(--border-subtle);
+    background: var(--surface-1);
+    overflow: hidden;
+}
+.twm-page-shell__breadcrumb .twm-tile-breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 8px;
+    line-height: 22px;
+}
+.twm-page-shell__content {
+    flex: 1 1 auto;
+    min-height: 0;
+    min-width: 0;
+    /* No `overflow: auto` here — each mounted page owns its own
+     * scroll region (e.g. .ea-agent-editor's `.nb-structured-editor__content`).
+     * Allowing the wrapper to scroll on top of that produced double
+     * scrollbars + a shimmy on sub-tab switches inside agent / market
+     * pages (Settings vs code). */
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    /* Children that need to layer over the content slot (the loading
+     * overlay) anchor against this. */
+    position: relative;
+}
+
+/* Loading overlay — shown while a page's async mount() is in flight.
+ * `--pending` is the pre-show state set for the first 80ms so cache
+ * hits / instant renders never strobe a spinner. After that the
+ * overlay becomes visible until the mount promise resolves. */
+.twm-tile-loading {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--ea-bg-content, #1a1a1a);
+    z-index: 5;
+    opacity: 1;
+    transition: opacity 120ms ease-out;
+}
+.twm-tile-loading--pending {
+    opacity: 0;
+    pointer-events: none;
+}
+.twm-tile-loading__spinner {
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--ea-border, #333);
+    border-top-color: var(--accent, #4a90e2);
+    border-radius: 50%;
+    animation: twm-tile-loading-spin 0.7s linear infinite;
+}
+@keyframes twm-tile-loading-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Merged home page — detail header row, then the project-setup body
+ * fills the rest of the tile. */
+.twm-home-page {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+.twm-home-page__header {
+    flex: 0 0 auto;
+}
+.twm-home-page__body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+}
+/* ProjectSetupTab mounts into the body — strip its own header so we
+ * use only ours. */
+.twm-home-page__body .ea-project-setup > .ea-detail-header {
+    display: none;
+}
+.twm-home-page__body .ea-project-setup {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+/* Harmonize page bodies — every workspace tab now lives inside the
+ * same page-shell, so we want the inner container shapes to feel
+ * consistent: flat sections (no boxy borders / radii), the same
+ * spacing scale, the same title style. This makes the sector / agent /
+ * flow / SFC-landing pages read as siblings rather than separate
+ * looks. */
+.twm-page-shell__content .ea-card {
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    padding: 0;
+    margin: 0 0 14px;
+}
+.twm-page-shell__content .ea-card + .ea-card {
+    border-top: 1px solid var(--border-subtle);
+    padding-top: 12px;
+}
+/* Card title strip — drives the bg/border. When a head-row wraps the
+ * title alongside inline buttons, the bg/border moves to the head-row
+ * so the buttons sit on the same band as the title and stay aligned. */
+.twm-page-shell__content .ea-card > .ea-card__title,
+.twm-page-shell__content .ea-card > .ea-card__head-row {
+    margin: 0 0 10px;
+    padding: 4px 12px;
+    min-height: 26px;
+    border-bottom: 1px solid var(--border-subtle);
+    background: var(--surface-1);
+    font-size: var(--font-size-xs);
+}
+.twm-page-shell__content .ea-card > .ea-card__head-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.twm-page-shell__content .ea-card > .ea-card__head-row > .ea-card__title {
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    border: none;
+    min-height: 0;
+    flex: 1 1 auto;
+}
+/* Detail header — uniform height + padding across every tab. */
+.twm-page-shell__content .ea-detail-header {
+    min-height: 32px;
+    padding: 4px 12px !important;
+    margin: 0 !important;
+    background: var(--surface-1);
+    border-bottom: 1px solid var(--border-subtle);
+}
+/* Sub-tab strip (sector / agent / market / flow) — uniform height. */
+.twm-page-shell__content .nb-structured-editor__tabs {
+    min-height: 28px;
+}
+
+/* The legacy asset-kind list (`#ea-kind-list` inside sector → Slice by
+ * kind) was a bespoke `<ul>` with hover-actions. Re-skin it to match
+ * the DataTable rows in the SFC navigation tables — same hover + active
+ * background, hairline row dividers, single-column list look. */
+.twm-page-shell__content .ea-kind-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border: 1px solid var(--border-subtle);
+    background: var(--surface-0);
+}
+.twm-page-shell__content .ea-kind-list__item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 6px;
+    border-bottom: 1px solid var(--border-subtle);
+    cursor: pointer;
+}
+.twm-page-shell__content .ea-kind-list__item:last-child { border-bottom: none; }
+.twm-page-shell__content .ea-kind-list__item:hover {
+    background: var(--state-hover);
+}
+.twm-page-shell__content .ea-kind-list__item--active {
+    background: var(--state-selected);
+    color: var(--text-bright);
+}
+.twm-page-shell__content .ea-kind-list__row {
+    flex: 1 1 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 6px;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.twm-page-shell__content .ea-kind-list__row .material-symbols-outlined {
+    font-size: 14px;
+    color: var(--text-muted);
+}
+.twm-page-shell__content .ea-kind-list__name {
+    font-size: var(--font-size-sm);
+}
+.twm-page-shell__content .ea-kind-list__actions {
+    display: inline-flex;
+    gap: 2px;
+    opacity: 0;
+    transition: opacity 80ms ease;
+}
+.twm-page-shell__content .ea-kind-list__item:hover .ea-kind-list__actions {
+    opacity: 1;
+}
+
+/* Shrink the legacy viewing-tick scrubber — the box was sized for the
+ * old slide-out panel chrome and reads way too large inside a tile. */
+.ea-time-scrubber {
+    padding: 3px 8px !important;
+    margin: 0 0 6px !important;
+    gap: 8px !important;
+}
+.ea-time-scrubber__label {
+    font-size: 10px !important;
+}
+.ea-time-scrubber__value {
+    font-size: 11px !important;
+    min-width: 32px !important;
+}
+.ea-time-scrubber__latest {
+    font-size: 11px !important;
+    padding: 1px 8px !important;
+    min-height: 18px !important;
+}
+/* Shrink the native range-input thumb + track so the slider matches
+ * the compact chrome around it. */
+.ea-time-scrubber input[type="range"] {
+    height: 14px;
+}
+.ea-time-scrubber input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 10px;
+    height: 10px;
+    background: var(--accent-bright);
+    border-radius: 0;
+    border: none;
+    cursor: pointer;
+}
+.ea-time-scrubber input[type="range"]::-moz-range-thumb {
+    width: 10px;
+    height: 10px;
+    background: var(--accent-bright);
+    border-radius: 0;
+    border: none;
+    cursor: pointer;
+}
+.ea-time-scrubber input[type="range"]::-webkit-slider-runnable-track {
+    height: 3px;
+    background: #000;
+    border-radius: 0;
+}
+.ea-time-scrubber input[type="range"]::-moz-range-track {
+    height: 3px;
+    background: #000;
+    border-radius: 0;
+}
+.ea-time-scrubber input[type="range"] {
+    background: transparent;
+}
+
+/* Bottom panel mounted as a tile — reset the legacy fixed/absolute
+ * layout `.left-bottom` carries from main_new.css so it stretches to
+ * fill the tile body. */
+.twm-leaf__body .twm-panel-bottom {
+    position: static;
+    height: 100%;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.twm-leaf__body .twm-panel-bottom .bottom-tabs-header {
+    flex: 0 0 30px;
+    min-height: 30px;
+    max-height: 30px;
+    overflow: hidden;
+}
+.twm-leaf__body .twm-panel-bottom .bottom-tabs-header .tabs {
+    height: 100%;
+}
+.twm-leaf__body .twm-panel-bottom #bottom-tabs-content {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+}
+.twm-bp-loading {
+    padding: 14px;
+    color: var(--text-muted);
+    font-size: var(--font-size-xs);
+}
+.twm-bp-loading--err { color: var(--color-danger); }
+
+/* Self-contained bottom panel — sole owner of the panel:bottom tile.
+ * Tab strip on top, body below; both painted synchronously by the
+ * tiling shell so the panel can never end up visually empty. */
+.twm-bp {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+    background: var(--surface-0);
+    color: var(--text-body);
+}
+/* Tab strip matches the legacy `.bottom-tabs-header` look: light row
+ * with no per-tab background, uppercase labels spaced by left margin,
+ * white underline on the active tab. No boxy buttons. */
+.twm-bp__tabs {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 0;
+    padding: 0 0 0 4px;
+    background: var(--surface-0);
+    border-bottom: 1px solid #292929;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    white-space: nowrap;
+}
+.twm-bp__tabs::-webkit-scrollbar { width: 0; height: 0; display: none; }
+.twm-bp__tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 0;
+    height: 30px;
+    line-height: 30px;
+    margin-left: 10px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid transparent;
+    color: inherit;
+    text-transform: uppercase;
+    font-size: var(--font-size-xs);
+    cursor: pointer;
+    user-select: none;
+}
+.twm-bp__tab .material-symbols-outlined { display: none; }
+.twm-bp__tab:hover { background: transparent; color: var(--text-bright); }
+.twm-bp__tab--on {
+    color: var(--text-bright);
+    border-bottom-color: #fff;
+}
+.twm-bp__body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+}
+.twm-bp-pane {
+    padding: 6px 10px;
+}
+.twm-bp-pane__placeholder {
+    padding: 12px;
+    color: var(--text-muted);
+    font-size: var(--font-size-xs);
+}
+.twm-bp-log {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-xs);
+}
+.twm-bp-log thead th {
+    text-align: left;
+    color: var(--text-muted);
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--border-subtle);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 10px;
+    font-weight: 600;
+}
+.twm-bp-log td {
+    padding: 2px 8px;
+    border-bottom: 1px solid var(--border-subtle);
+    vertical-align: top;
+}
+.twm-bp-log__tick { color: var(--text-muted); white-space: nowrap; }
+.twm-bp-log__level {
+    color: var(--text-secondary);
+    text-transform: lowercase;
+    white-space: nowrap;
+}
+.twm-bp-log__row--warn  .twm-bp-log__level,
+.twm-bp-log__row--warn  .twm-bp-log__msg { color: var(--color-warning); }
+.twm-bp-log__row--error .twm-bp-log__level,
+.twm-bp-log__row--error .twm-bp-log__msg { color: var(--color-danger); }
+.twm-bp-log__msg { color: var(--text-body); white-space: pre-wrap; word-break: break-word; }
+
+/* Adapt the legacy BottomPanel chrome to the tiling-shell design
+ * language — square corners on every input / button / chip inside the
+ * .twm-bp tile, narrower padding around the inspector panes. Scoped
+ * so the legacy panel rendered elsewhere keeps its original look. */
+.twm-bp .ea-bp__filter,
+.twm-bp .ea-bp__filter:focus,
+.twm-bp .ea-btn,
+.twm-bp .ea-bp-flows-picker__add,
+.twm-bp .ea-bp-flows-picker__item,
+.twm-bp .ea-bp-query__editor,
+.twm-bp .ea-bp-query__input,
+.twm-bp input[type="text"],
+.twm-bp input[type="number"],
+.twm-bp input[type="search"],
+.twm-bp select,
+.twm-bp textarea {
+    border-radius: 0;
+}
+.twm-bp .ea-bp__head {
+    background: var(--ea-bg-chrome, #1a1a1a);
+    border-bottom-color: var(--ea-border, #333);
+}
+/* The legacy `.ea-bp-flows-split` 2-col layout (editor | picker) was
+ * sized for the chunky old chrome — give the picker rail a denser
+ * width so the inspector doesn't crowd the editor at typical tile
+ * widths. */
+.twm-bp .ea-bp-flows-split {
+    grid-template-columns: 1fr 220px;
+}
+
+/* Pager strip — used by every paginated surface in the bottom panel
+ * (run console, registries, query log, watch rows, population).
+ * Compact, dark, square, sits at the bottom of its host. */
+.ea-bp-pager {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 8px;
+    border-top: 1px solid var(--ea-border, #333);
+    background: var(--ea-bg-chrome, #1a1a1a);
+    font-size: 11px;
+    color: var(--ea-text-muted, #888);
+}
+.ea-bp-pager__info {
+    flex: 1 1 auto;
+    text-align: center;
+}
+.ea-bp-pager .ea-btn {
+    border-radius: 0;
+}
+
+/* SFC overview in the bottom panel — content-driven height. Elements
+ * (tables, charts, scrubber) keep their natural / fixed size; the
+ * panel body (.twm-bp__body, already `overflow: auto`) absorbs the
+ * scroll. Resizing the panel taller no longer inflates the panes
+ * with empty space, and shorter no longer crushes the content.
+ *
+ * The section pager bar is sticky-pinned to the top of the scroll
+ * container so the user keeps their navigation context as they
+ * scroll a long pane. Sticky thead is OFF inside .twm-bp — the
+ * scroll container is the panel body, not the pane, so the legacy
+ * `position: sticky` on `.ea-table thead th` would detach mid-scroll
+ * and visibly glitch (the section bar + card title scroll out, then
+ * the thead snaps to top with no context). */
+.twm-bp .ea-sfc-overview--compact {
+    height: auto;
+    overflow: visible;
+}
+.twm-bp .ea-sfc__pane {
+    flex: 0 0 auto;
+    overflow: visible;
+    min-height: 0;
+}
+.twm-bp .ea-sfc__bar {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    /* Match the .ea-bp__head contract every other bottom-panel tab uses
+     * (30 px, dark chrome, thin bottom border). Without this, switching
+     * to SFC visibly resized the strip under the tile's "Console"
+     * chrome — the rest of the panel rocked up/down as the user paged
+     * through tabs. The .ea-bp__head height is hard-coded at 30 px in
+     * ecoagent_extra_modes.css so we mirror that value here verbatim
+     * rather than refer to a shared variable that doesn't exist yet. */
+    box-sizing: border-box;
+    height: 30px;
+    padding: 0 var(--ea-pad-snug);
+    overflow: hidden;
+    background: var(--ea-bg-chrome, var(--surface-0));
+    border-bottom: 1px solid var(--ea-border, #333);
+}
+.twm-bp .ea-table thead th {
+    position: static;
+}
+/* Chart panes get a predictable *minimum* height so empty / loading
+ * states still occupy visible space, but the container is allowed to
+ * grow with content. The historical `height: 240 px` lock here was
+ * the source of a bug where time-series cards (rendered into a wrapping
+ * 4-column grid) spilled past the 240 px box once the project had more
+ * than ~4 asset kinds — the overflow painted on top of whatever sat
+ * below (the hidden flow-matrix pane, etc.) instead of pushing the
+ * scrollbar on `.twm-bp__body`.
+ *
+ * Per-card height is set in JS (`renderLineChart({height: 140})`), so
+ * Plotly still gets a deterministic size — letting the container grow
+ * doesn't change the chart sizing, it only changes how multi-row grids
+ * are laid out. */
+.twm-bp .ea-sfc__pane[data-pane="series"] #ea-history-charts,
+.twm-bp .ea-sfc__pane[data-pane="flow"] #ea-flow-matrix {
+    min-height: 240px;
+    overflow: hidden;
+}
+
+/* Context menu — override main_new.css's .context-menu to the tighter,
+ * grid-style look (icon | label) with a flat surface-1 background and
+ * square corners. All callers (sidebars, tile chrome, desktop bar, …)
+ * inherit this look — one implementation, one style. */
+.context-menu {
+    background: var(--surface-1);
+    border: 1px solid var(--border-default);
+    border-radius: 0;
+    box-shadow: var(--shadow-md);
+    padding: 4px 0;
+    min-width: 200px;
+    backdrop-filter: none;
+}
+.context-menu-item {
+    display: grid;
+    grid-template-columns: 22px 1fr;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 10px;
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-sm);
+    color: var(--text-primary);
+}
+.context-menu-item:hover:not(.disabled) {
+    background: var(--state-selected);
+    color: var(--text-bright);
+}
+.context-menu-item.delete-node {
+    color: var(--color-danger);
+}
+.context-menu-item.delete-node:hover:not(.disabled) {
+    background: var(--color-danger);
+    color: var(--text-bright);
+}
+.context-menu-item .material-symbols-outlined {
+    font-size: 16px;
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+}
+.ea-context-menu__separator {
+    height: 1px;
+    margin: 4px 0;
+    background: var(--border-subtle);
+}
+
+/* Window-placeholder body — shown in the leaf while its content is in
+ * a managed window. */
+.twm-window-placeholder {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 24px;
+    color: var(--text-muted);
+    text-align: center;
+}
+.twm-window-placeholder__icon {
+    font-size: 32px;
+    opacity: 0.5;
+}
+.twm-window-placeholder__title {
+    color: var(--text-primary);
+    font-weight: var(--font-weight-semibold);
+}
+.twm-window-placeholder__hint {
+    font-size: var(--font-size-xs);
+}
+.twm-window-placeholder__btn {
+    margin-top: 8px;
+    padding: 4px 12px;
+    background: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: 0;
+    color: var(--text-primary);
+    cursor: pointer;
+}
+.twm-window-placeholder__btn:hover {
+    background: var(--state-selected);
+    color: var(--text-bright);
+    border-color: var(--accent-bright);
+}
+
+/* Anchor bar-center next to bar-left (instead of centred). bar-right
+ * gets pushed against the right edge with margin-left:auto so the
+ * existing justify-content: space-between still reads correctly. */
+.global-top-bar .bar-left   { flex: 0 0 auto; }
+.global-top-bar .bar-right  { flex: 0 0 auto; margin-left: auto; }
+
+/* Top-nav buttons in .bar-center — archaic console look: full-height,
+ * monospace label, square, dark active-bg with white text. Each
+ * button is only as wide as its content; the strip takes only as
+ * much horizontal space as required. */
+.global-top-bar .bar-center.twm-top-nav {
+    display: flex;
+    align-items: stretch;
+    align-self: stretch;
+    gap: 0;
+    padding: 0;
+    flex: 0 0 auto;
+    height: 100%;
+    min-width: 0;
+}
+
+.twm-top-nav__btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    flex: 0 0 auto;
+    min-width: 0;
+    height: 100%;
+    padding: 0 14px;
+    background: transparent;
+    border: none;
+    border-right: 1px solid var(--surface-0);
+    border-radius: 0;
+    color: var(--text-muted);
+    font-family: var(--font-family-mono);
+    font-size: 11px;
+    font-weight: var(--font-weight-medium);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    transition: color 80ms ease, background 80ms ease;
+}
+.twm-top-nav__btn:last-child { border-right: none; }
+.twm-top-nav__btn:hover {
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-primary);
+}
+.twm-top-nav__btn--on {
+    color: var(--text-bright);
+    background: var(--surface-well);
+}
+.twm-top-nav__btn--on:hover {
+    background: #000;
+    color: var(--text-bright);
+}
+.twm-top-nav__icon {
+    font-size: 16px;
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+}
+.twm-top-nav__label {
+    /* hidden on narrow viewports; icon alone is enough */
+}
+@media (max-width: 900px) {
+    .twm-top-nav__label { display: none; }
+    .twm-top-nav__btn { padding: 0 10px; }
+}

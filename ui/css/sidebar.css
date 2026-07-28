@@ -1,0 +1,152 @@
+/**
+ * Unified sidebar panel styles for the fixed-200 left rail.
+ *
+ * Structural classes:
+ *   .sidebar-body              — scrollable body (replaces .sm-browser-list, .file-nav, etc.)
+ *   .sidebar-body--accordion   — opt-in accordion layout for collapsible categories
+ *   .sidebar-panel             — sub-panel within a multi-panel sidebar (e.g. notebook files/outline/git)
+ *
+ * All pages reuse the shared .fixed-panel-header, .sidebar-controls, .sidebar-icon-btn,
+ * and .tree-view / .tree-category / .tree-item / .tree-node base classes from main_new.css.
+ */
+
+/* ═══════════════════════════════════════════════════════════════════
+   Sidebar Body — the scrollable region between header/controls and bottom
+   ═══════════════════════════════════════════════════════════════════ */
+
+.sidebar-body {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    position: relative;
+}
+
+/* Hide native scrollbar — overlay scrollbar (JS) replaces it */
+.sidebar-body { scrollbar-width: none; }
+.sidebar-body::-webkit-scrollbar { display: none; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Sidebar Panel — for multi-panel sidebars (notebook files/outline/git)
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Container for multiple panels (e.g. files/outline/git) */
+.sidebar-panels {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.sidebar-panel {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    position: relative;
+}
+
+.sidebar-panel { scrollbar-width: none; }
+.sidebar-panel::-webkit-scrollbar { display: none; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Accordion opt-in (.sidebar-body--accordion)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.sidebar-body--accordion {
+    overflow: hidden;
+}
+
+/* Accordion targets .tree-category whether direct child or inside a .tree-view wrapper */
+.sidebar-body--accordion .tree-category {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    border-bottom: 1px solid var(--surface-3);
+}
+
+.sidebar-body--accordion .tree-category:last-child {
+    border-bottom: none;
+}
+
+/* Expanded categories share remaining space equally */
+.sidebar-body--accordion .tree-category:has(> .collapsible-content.visible) {
+    flex: 1 1 0;
+    min-height: 0;
+}
+
+.sidebar-body--accordion .tree-category > .collapsible-content {
+    display: none;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.sidebar-body--accordion .tree-category > .collapsible-content.visible {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    position: relative;
+}
+
+/* Hide native scrollbar in accordion content panels */
+.sidebar-body--accordion .tree-category > .collapsible-content.visible { scrollbar-width: none; }
+.sidebar-body--accordion .tree-category > .collapsible-content.visible::-webkit-scrollbar { display: none; }
+
+/* The .tree-view wrapper inside accordion must also flex-grow */
+.sidebar-body--accordion > .tree-view {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Category header upgrade — 10px bold uppercase (most polished style)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.sidebar-body .tree-category > .collapsible-header {
+    font-size: 10px;
+    font-weight: bold;
+    text-transform: uppercase;
+    height: auto;
+    padding: var(--space-sm) 8px;
+    gap: var(--space-xs);
+    color: inherit;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Action buttons (overlay on hover) — no layout shift
+   Applied to both .tree-item and .tree-node inside sidebars.
+   Uses position:absolute so showing/hiding never changes row height.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.sidebar-body .tree-item,
+.sidebar-body .tree-node__header {
+    position: relative;
+}
+
+.sidebar-body .tree-item__actions,
+.sidebar-body .tree-node__actions {
+    display: flex;
+    gap: var(--space-xxs);
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: var(--surface-2);
+    padding: 0 2px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--transition-fast);
+}
+
+.sidebar-body .tree-item:hover .tree-item__actions,
+.sidebar-body .tree-node__header:hover .tree-node__actions {
+    opacity: 1;
+    pointer-events: auto;
+}

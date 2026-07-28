@@ -1,0 +1,732 @@
+/* Code view styles (separate file) */
+
+/* Container inside right panel - IDE-style code editor */
+#dsl-code-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-height: 500px;
+  background: linear-gradient(145deg, #1a1a1a, #0f0f0f);
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.4);
+  position: relative;
+  min-height: 0; /* Allow inner flex children to resize */
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
+  pointer-events: auto;
+}
+
+/* Controls bar sits between tabs and code editor */
+.code-topbar {
+  height: 32px;
+  background-color: #323233;  /* Exact match to .top-bar */
+  border-bottom: 1px solid var(--surface-0);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;  /* Match .top-bar padding */
+  gap: var(--space-md);
+  flex: 0 0 auto;
+  position: relative;
+  z-index: 2;
+}
+.code-topbar .spacer { flex: 1; }
+
+/* Code language tabs */
+.code-tabs-header {
+  display: flex;
+  align-items: center;
+  height: 35px;
+  background: #2a2a2a;
+  border-bottom: 1px solid var(--surface-0);
+  gap: var(--space-xs);
+  flex: 0 0 auto;
+}
+
+.code-tabs {
+  display: flex;
+  gap: var(--space-xxs);
+  height: 35px;
+}
+
+.code-tab {
+  height: 35px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  background: transparent;
+  color: var(--text-muted);
+  border: none;
+  border-radius: var(--radius-sm) 3px 0 0;
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  transition: all var(--transition-normal);
+  position: relative;
+}
+
+.code-tab:hover {
+  background: #333;
+  color: #ccc;
+}
+
+.code-tab.active {
+  background: var(--surface-0);
+  color: var(--text-bright);
+  font-weight: 500;
+}
+
+.code-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent-bright);
+}
+
+.code-lang-content {
+  display: none;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.code-lang-content.active {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Editor area - professional code editor wrapper */
+.code-editor-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  background: var(--surface-0);
+  border-top: 1px solid #2a2a2a;
+  overflow: auto !important;
+  scrollbar-width: none;         /* Firefox: hide native scrollbar */
+  -ms-overflow-style: none;      /* IE/Edge: hide native scrollbar */
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
+}
+
+.code-editor-wrap::-webkit-scrollbar {
+  display: none;                 /* Chrome/Safari: hide native scrollbar */
+}
+
+.code-editor-inner {
+  display: flex;
+  align-items: flex-start;  /* Changed from stretch to allow independent heights */
+  width: max-content;
+  min-width: 100%;
+  min-height: 100%;
+  position: relative;
+}
+
+/* Line numbers gutter - VS Code style */
+.code-line-numbers {
+  background: linear-gradient(145deg, var(--surface-0), #181818);
+  border-right: 1px solid #2a2a2a;
+  color: var(--text-muted);
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: var(--font-size-md);
+  line-height: 1.6;
+  padding: var(--space-md) 8px 8px 12px;
+  text-align: right;
+  user-select: none;
+  overflow: visible;  /* Let content flow naturally */
+  min-width: 50px;
+  max-width: 80px;
+  flex-shrink: 0;  /* Don't shrink the line numbers */
+  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.3);
+  position: relative;  /* Normal position, not sticky */
+  z-index: 2;  /* Above code content */
+  height: auto;  /* Auto height to match all line numbers */
+}
+
+/* Hide scrollbar in Chrome/Safari */
+.code-line-numbers::-webkit-scrollbar {
+  display: none;
+}
+
+.code-line-numbers .line-number {
+  display: block;
+  cursor: text;
+  transition: color 0.1s ease;
+}
+
+.code-line-numbers .line-number:hover {
+  color: #c6c6c6;
+}
+
+.dsl-code-line {
+  display: block;
+  min-height: 1.4em;
+  padding-right: var(--space-lg);
+  margin: 0; /* prevent gaps that show separator lines */
+}
+
+.dsl-line-highlight {
+  background: rgba(28, 76, 112, 0.9);
+  border-top: none;
+  border-bottom: none;
+  box-shadow: none;
+}
+
+.code-line-numbers .line-number.dsl-line-highlight {
+  background: rgba(28, 76, 112, 0.95);
+  color: #e7f6ff;
+  border-top: none;
+  border-bottom: none;
+}
+
+/* Only draw dashed edges on the first and last lines of a highlighted block */
+.dsl-line-highlight.dsl-line-highlight-start {
+  border-top: 1px dashed rgba(170, 186, 194, 0.7);
+}
+
+.dsl-line-highlight.dsl-line-highlight-end {
+  border-bottom: 1px dashed rgba(170, 186, 194, 0.7);
+}
+
+.code-line-numbers .line-number.dsl-line-highlight-start {
+  border-top: 1px dashed rgba(170, 186, 194, 0.7);
+}
+
+.code-line-numbers .line-number.dsl-line-highlight-end {
+  border-bottom: 1px dashed rgba(170, 186, 194, 0.7);
+}
+
+/* Collapse vertical seams for contiguous highlighted lines */
+.dsl-line-highlight + .dsl-line-highlight {
+  margin-top: -1px;
+}
+
+/* Code display area - VS Code style with overlay scrollbars */
+#dsl-code-ecolang,
+#dsl-code-python {
+  white-space: pre;
+  margin: 0;
+  padding: var(--space-md) 12px;
+  background: linear-gradient(145deg, #1a1a1a, #121212);
+  color: var(--text-body);
+  width: 100%;
+  min-height: 100%;
+  overflow: visible;
+  border-radius: 0;
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
+  position: relative;
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: var(--font-size-md);
+  line-height: 1.6;
+  letter-spacing: 0.2px;
+  cursor: text;
+  flex: 1 1 auto;  /* Changed from 0 0 auto to allow growth */
+  box-sizing: border-box;
+  display: block;
+}
+
+#dsl-code-container .code-editor-wrap,
+#dsl-code-container .code-editor-wrap *,
+#dsl-code-container .code-editor-inner,
+#dsl-code-container pre,
+#dsl-code-container code {
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+  user-select: text !important;
+  pointer-events: auto;
+}
+
+/* Ensure text cursor appears over all text elements */
+#dsl-code-ecolang, 
+#dsl-code-ecolang *,
+#dsl-code-ecolang code,
+#dsl-code-ecolang pre,
+#dsl-code-ecolang span,
+#dsl-code-python,
+#dsl-code-python *,
+#dsl-code-python code,
+#dsl-code-python pre,
+#dsl-code-python span {
+  cursor: text !important;
+}
+
+/* Override excessive padding/margin from hljs and reset styles */
+#dsl-code-ecolang pre, 
+#dsl-code-ecolang code,
+#dsl-code-ecolang .hljs,
+#dsl-code-ecolang code.hljs,
+#dsl-code-python pre,
+#dsl-code-python code,
+#dsl-code-python .hljs,
+#dsl-code-python code.hljs {
+  background: transparent !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  display: block !important;
+  min-height: inherit !important;  /* Inherit parent's min-height */
+  /* No width/height constraints - let content determine size */
+}
+
+/* Allow selecting tokens inside code across browsers */
+#dsl-code-ecolang, #dsl-code-ecolang *, #dsl-code-ecolang code, #dsl-code-ecolang pre,
+#dsl-code-python, #dsl-code-python *, #dsl-code-python code, #dsl-code-python pre {
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
+}
+
+/* ============================================================================
+   CodeMirror Token Styles for Read-Only DSL Preview
+   These apply to spans generated by highlightToHtml() from language.js
+   The .cm-ecolang class is added to the code element by _renderDslCode()
+   ============================================================================ */
+
+.cm-ecolang .cm-comment,
+#dsl-code-ecolang .cm-comment,
+#dsl-code-code-ecolang .cm-comment {
+  color: #607080;
+  font-style: italic;
+  opacity: 0.85;
+}
+
+.cm-ecolang .cm-meta,
+#dsl-code-ecolang .cm-meta,
+#dsl-code-code-ecolang .cm-meta {
+  color: #7f8c99;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.cm-ecolang .cm-keyword,
+#dsl-code-ecolang .cm-keyword,
+#dsl-code-code-ecolang .cm-keyword {
+  color: #1e8bc3;
+  font-weight: 600;
+}
+
+.cm-ecolang .cm-function,
+#dsl-code-ecolang .cm-function,
+#dsl-code-code-ecolang .cm-function {
+  color: #dcdcaa;
+  font-weight: 600;
+}
+
+.cm-ecolang .cm-function.cm-deprecated,
+#dsl-code-ecolang .cm-function.cm-deprecated,
+#dsl-code-code-ecolang .cm-function.cm-deprecated {
+  color: #9a3a12;
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+.cm-ecolang .cm-atom,
+#dsl-code-ecolang .cm-atom,
+#dsl-code-code-ecolang .cm-atom {
+  color: #8bc34a;
+  font-weight: 600;
+}
+
+.cm-ecolang .cm-number,
+#dsl-code-ecolang .cm-number,
+#dsl-code-code-ecolang .cm-number {
+  color: #f78c6c;
+  font-weight: 500;
+}
+
+.cm-ecolang .cm-operator,
+#dsl-code-ecolang .cm-operator,
+#dsl-code-code-ecolang .cm-operator {
+  color: #9aa5b1;
+}
+
+.cm-ecolang .cm-punctuation,
+#dsl-code-ecolang .cm-punctuation,
+#dsl-code-code-ecolang .cm-punctuation {
+  color: #9aa5b1;
+}
+
+.cm-ecolang .cm-typeName,
+#dsl-code-ecolang .cm-typeName,
+#dsl-code-code-ecolang .cm-typeName {
+  color: #7ec8ff;
+  font-weight: 600;
+}
+
+.cm-ecolang .cm-variableName,
+#dsl-code-ecolang .cm-variableName,
+#dsl-code-code-ecolang .cm-variableName {
+  color: #e6edf3;
+  font-weight: 500;
+}
+
+.cm-ecolang .cm-variableName.cm-special,
+#dsl-code-ecolang .cm-variableName.cm-special,
+#dsl-code-code-ecolang .cm-variableName.cm-special {
+  color: #c792ea;
+  font-weight: 500;
+}
+
+.cm-ecolang .cm-namespace,
+#dsl-code-ecolang .cm-namespace,
+#dsl-code-code-ecolang .cm-namespace {
+  color: #9ad6f5;
+  font-weight: 600;
+}
+
+.cm-ecolang .cm-propertyName,
+#dsl-code-ecolang .cm-propertyName,
+#dsl-code-code-ecolang .cm-propertyName {
+  color: #dcdcaa;
+}
+
+/* ============================================================================
+   Legacy EcoLang syntax palette (tok-* classes)
+   ============================================================================ */
+#dsl-code-ecolang .tok-comment,
+#dsl-code-python .tok-comment {
+  color: #6c9f66;
+  font-style: italic;
+  opacity: 0.85;
+}
+#dsl-code-ecolang .tok-number,
+#dsl-code-python .tok-number { 
+  color: #f2f2f2; 
+  font-weight: 500;
+}
+#dsl-code-ecolang .tok-op,
+#dsl-code-python .tok-op { 
+  color: #d0d0d0; 
+}
+#dsl-code-ecolang .tok-fn,
+#dsl-code-python .tok-fn { 
+  color: #9a3a12; 
+  font-weight: 600;
+}
+#dsl-code-ecolang .tok-kw,
+#dsl-code-python .tok-kw { 
+  color: #a0a4ae; 
+  font-weight: 600;
+}
+#dsl-code-ecolang .tok-stock,
+#dsl-code-python .tok-stock { 
+  color: #7ec8ff; 
+  font-weight: 600;
+}
+
+.hljs {
+  color: #d6d6d6;
+  background: transparent;
+}
+
+.hljs-comment {
+  color: #607080;
+  font-style: italic;
+  opacity: 0.85;
+}
+
+.hljs-meta { 
+  color: #7f8c99; 
+  font-weight: 700; 
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.hljs-variable,
+.hljs-variable.language,
+.hljs-variable.other {
+  color: #e6edf3;
+  font-weight: 600;
+}
+
+.hljs-variable.parameter,
+.hljs-variable.parameter_ {
+  color: #c792ea;
+  font-weight: 500;
+}
+
+.hljs-variable.constant,
+.hljs-variable.constant_,
+.hljs-literal {
+  color: #8bc34a;
+  font-weight: 600;
+}
+
+.hljs-built_in,
+.hljs-function .hljs-title,
+.hljs-title.function_,
+.hljs-title.function {
+  color: #9a3a12;
+  font-weight: 600;
+}
+
+.hljs-title,
+.hljs-type,
+.hljs-symbol {
+  color: #9ad6f5;
+  font-weight: 600;
+}
+
+.hljs-number {
+  color: #f78c6c;
+  font-weight: 500;
+}
+
+.hljs-operator,
+.hljs-punctuation {
+  color: #9aa5b1;
+}
+
+.hljs-match-keyword {
+  color: #39d9c8;
+  font-weight: 700;
+  text-transform: lowercase;
+}
+
+.hljs-keyword {
+  color: #1e8bc3;
+  font-weight: 600;
+}
+
+/* Derivative symbols (d, dt) */
+.hljs-diff-derivative {
+  color: #ffd84d;
+  font-weight: 700;
+}
+
+.hljs-string {
+  color: #d6d6d6;
+}
+
+/* Ensure our palette wins over the bundled GitHub dark theme */
+#dsl-code-ecolang .hljs,
+#dsl-code-python .hljs { color: #d6d6d6 !important; }
+#dsl-code-ecolang .hljs-comment,
+#dsl-code-python .hljs-comment { color: #607080 !important; font-style: italic !important; opacity: 0.85 !important; }
+#dsl-code-ecolang .hljs-meta,
+#dsl-code-python .hljs-meta { color: #7f8c99 !important; font-weight: 700 !important; }
+#dsl-code-ecolang .hljs-variable,
+#dsl-code-python .hljs-variable,
+#dsl-code-ecolang .hljs-variable.language,
+#dsl-code-python .hljs-variable.language,
+#dsl-code-ecolang .hljs-variable.other,
+#dsl-code-python .hljs-variable.other { color: #e6edf3 !important; font-weight: 600 !important; }
+#dsl-code-ecolang .hljs-variable.parameter,
+#dsl-code-python .hljs-variable.parameter,
+#dsl-code-ecolang .hljs-variable.parameter_,
+#dsl-code-python .hljs-variable.parameter_ { color: #c792ea !important; font-weight: 500 !important; }
+#dsl-code-ecolang .hljs-variable.constant,
+#dsl-code-python .hljs-variable.constant,
+#dsl-code-ecolang .hljs-variable.constant_,
+#dsl-code-python .hljs-variable.constant_,
+#dsl-code-ecolang .hljs-literal,
+#dsl-code-python .hljs-literal { color: #8bc34a !important; font-weight: 600 !important; }
+#dsl-code-ecolang .hljs-built_in,
+#dsl-code-python .hljs-built_in,
+#dsl-code-ecolang .hljs-function .hljs-title,
+#dsl-code-python .hljs-function .hljs-title,
+#dsl-code-ecolang .hljs-title.function_,
+#dsl-code-python .hljs-title.function_,
+#dsl-code-ecolang .hljs-title.function,
+#dsl-code-python .hljs-title.function { color: #9a3a12 !important; font-weight: 600 !important; }
+#dsl-code-ecolang .hljs-title,
+#dsl-code-python .hljs-title,
+#dsl-code-ecolang .hljs-type,
+#dsl-code-python .hljs-type,
+#dsl-code-ecolang .hljs-symbol,
+#dsl-code-python .hljs-symbol { color: #9ad6f5 !important; font-weight: 600 !important; }
+#dsl-code-ecolang .hljs-number,
+#dsl-code-python .hljs-number { color: #f78c6c !important; font-weight: 500 !important; }
+#dsl-code-ecolang .hljs-operator,
+#dsl-code-python .hljs-operator,
+#dsl-code-ecolang .hljs-punctuation,
+#dsl-code-python .hljs-punctuation { color: #9aa5b1 !important; }
+#dsl-code-ecolang .hljs-match-keyword,
+#dsl-code-python .hljs-match-keyword { color: #39d9c8 !important; font-weight: 700 !important; text-transform: lowercase !important; }
+#dsl-code-ecolang .hljs-keyword,
+#dsl-code-python .hljs-keyword { color: #1e8bc3 !important; font-weight: 600 !important; }
+#dsl-code-ecolang .hljs-diff-derivative,
+#dsl-code-python .hljs-diff-derivative { color: #ffd84d !important; font-weight: 700 !important; }
+
+/* ============================================================================
+   DSL Editor Window (ManagedWindow with CodeMirror)
+   ============================================================================ */
+
+.dsl-editor {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--surface-0);
+  color: var(--text-body);
+  overflow: hidden;
+}
+
+/* Toolbar: namespace tabs */
+.dsl-editor__toolbar {
+  display: flex;
+  align-items: center;
+  height: 34px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--surface-3);
+  padding: 0 8px;
+  gap: var(--space-xxs);
+  flex-shrink: 0;
+}
+
+/* Namespace tabs */
+.dsl-editor__tabs {
+  display: flex;
+  gap: var(--space-xxs);
+  height: 100%;
+  align-items: stretch;
+}
+
+.dsl-editor__tab {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm) 3px 0 0;
+  position: relative;
+  transition: color var(--transition-normal), background var(--transition-normal);
+}
+
+.dsl-editor__tab:hover {
+  color: #ccc;
+  background: #333;
+}
+
+.dsl-editor__tab--active {
+  color: var(--text-bright);
+  background: var(--surface-0);
+  font-weight: 500;
+}
+
+.dsl-editor__tab--active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent-bright);
+}
+
+/* Editor area (CodeMirror container) */
+.dsl-editor__area {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.dsl-editor__cm-container {
+  height: 100%;
+  overflow: hidden;
+}
+
+.dsl-editor__cm-container .cm-editor {
+  height: 100%;
+}
+
+.dsl-editor__cm-container .cm-scroller {
+  overflow: auto !important;
+}
+
+/* Status bar */
+.dsl-editor__status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  height: 24px;
+  padding: 0 10px;
+  background: var(--surface-1);
+  border-top: 1px solid var(--surface-3);
+  flex-shrink: 0;
+  font-size: var(--font-size-xs);
+  color: #999;
+}
+
+.dsl-editor__status-icon {
+  font-size: var(--font-size-lg);
+}
+
+.dsl-editor__status-icon--ok {
+  color: #4ec9b0;
+}
+
+.dsl-editor__status-icon--error {
+  color: #f44747;
+}
+
+.dsl-editor__status-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dsl-editor__status--flash {
+  animation: dsl-status-flash 0.6s ease;
+}
+
+@keyframes dsl-status-flash {
+  0%, 100% { background-color: transparent; }
+  30%, 70% { background-color: rgba(244, 71, 71, 0.25); }
+}
+
+/* DSL Editor Context Menu */
+.dsl-editor-context-menu .context-menu-item .shortcut {
+  margin-left: auto;
+  font-size: var(--font-size-xs);
+  color: var(--text-dim);
+}
+
+.dsl-editor-context-menu .context-menu-separator {
+  height: 1px;
+  background: var(--surface-3);
+  margin: var(--space-xs) 8px;
+}
+
+/* Toolbar actions (right side) */
+.dsl-editor__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xxs);
+}
+
+.dsl-editor__action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: #999;
+  cursor: pointer;
+  padding: 0;
+  transition: background var(--transition-normal), color var(--transition-normal);
+}
+
+.dsl-editor__action-btn:hover {
+  background: var(--surface-3);
+  color: var(--text-bright);
+}
+
+.dsl-editor__action-btn .material-symbols-outlined {
+  font-size: var(--font-size-2xl);
+}
+

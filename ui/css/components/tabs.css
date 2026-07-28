@@ -1,0 +1,252 @@
+/**
+ * Shared Tab Component Styles
+ *
+ * Base styling for tabbed interfaces throughout the application.
+ * Use the .tabs class on the container and .tab on individual tab elements.
+ *
+ * Features:
+ * - Horizontal scrolling with hidden scrollbars
+ * - Drag-and-drop reordering support
+ * - Close button with hover reveal
+ * - Add button aligned to the right
+ * - Dirty indicator for unsaved state
+ */
+
+/* =============================================================================
+   Container
+   ============================================================================= */
+
+.tabs {
+    display: flex;
+    align-items: center;
+    background: var(--surface-1);
+    border-top: 1px solid var(--surface-0);
+    border-bottom: 1px solid #2b2b2b;
+    height: 34px;
+    flex-shrink: 0;
+    position: relative;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.tabs::-webkit-scrollbar {
+    height: 0;
+}
+
+/* =============================================================================
+   Individual Tab
+   ============================================================================= */
+
+.tabs .tab {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: 0 12px 0 10px;
+    height: 32px;
+    background: transparent;
+    border: none;
+    border-top: 2px solid transparent;
+    border-right: 1px solid #3e3e42;
+    color: var(--text-muted);
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+    white-space: nowrap;
+    max-width: 200px;
+    transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+
+.tabs .tab:hover {
+    background: #2a2a2a;
+    color: var(--text-bright);
+}
+
+.tabs .tab.active {
+    background: var(--surface-0);
+    color: var(--text-bright);
+    border-top-color: var(--accent-bright);
+}
+
+.tabs .tab.dragging {
+    opacity: 0.5;
+}
+
+/* =============================================================================
+   Tab Content Elements
+   ============================================================================= */
+
+/* Generic icon (material symbols) */
+.tabs .tab .tab-icon {
+    font-size: var(--font-size-xl);
+    color: var(--text-muted);
+    margin-right: var(--space-xxs);
+}
+
+/* Function icon style (italic f) */
+.tabs .tab .tab-icon--function {
+    font-family: 'Cambria Math', 'Georgia', serif;
+    font-style: italic;
+    font-size: var(--font-size-lg);
+    color: #dcdcaa;
+    margin-right: var(--space-sm);
+}
+
+/* Dirty indicator (unsaved changes dot) */
+.tabs .tab .tab-dirty {
+    color: #f0f0f0;
+    font-size: 10px;
+    margin-left: -2px;
+}
+
+/* Tab title */
+.tabs .tab .tab-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Close button */
+.tabs .tab .tab-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: var(--font-size-lg);
+    opacity: 0;
+    transition: opacity 0.1s, background 0.1s;
+}
+
+.tabs .tab:hover .tab-close {
+    opacity: 1;
+}
+
+.tabs .tab .tab-close:hover {
+    background: #505050;
+    color: var(--text-bright);
+}
+
+/* =============================================================================
+   Drag and Drop
+   ============================================================================= */
+
+.tabs .tab-drop-indicator {
+    flex: 0 0 auto;
+    width: 22px;
+    height: 100%;
+    margin: 0 2px;
+    background: rgba(117, 190, 255, 0.25);
+    border-radius: var(--radius-md);
+    box-shadow: 0 0 8px rgba(117, 190, 255, 0.35);
+}
+
+/* =============================================================================
+   Add Tab Button
+   ============================================================================= */
+
+.tabs .add-tab {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    padding: 0 8px;
+    cursor: pointer;
+    color: var(--text-muted);
+    height: 100%;
+}
+
+.tabs .add-tab:hover {
+    background-color: #3f4040;
+}
+
+.tabs .add-tab .material-symbols-outlined {
+    font-size: var(--font-size-lg);
+    color: var(--text-muted);
+}
+
+/* =============================================================================
+   Context Menu (shared)
+   ============================================================================= */
+
+.context-menu,
+.tab-context-menu {
+    position: fixed;
+    display: none;
+    min-width: 160px;
+    background: linear-gradient(145deg, rgba(40, 42, 48, 0.98), rgba(32, 34, 40, 0.96));
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    padding: var(--space-sm);
+    z-index: 10000001;
+    backdrop-filter: blur(8px);
+}
+
+.context-menu__item,
+.tab-context-menu__item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: var(--space-md) 12px;
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+    transition: background 0.1s;
+}
+
+.context-menu__item:hover,
+.tab-context-menu__item:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.context-menu__item[disabled],
+.tab-context-menu__item[disabled] {
+    opacity: 0.4;
+    pointer-events: none;
+}
+
+.context-menu__item .material-symbols-outlined,
+.tab-context-menu__item .material-symbols-outlined {
+    font-size: var(--font-size-xl);
+    color: var(--text-muted);
+}
+
+.context-menu__item:hover .material-symbols-outlined,
+.tab-context-menu__item:hover .material-symbols-outlined {
+    color: #ccc;
+}
+
+.context-menu__item--danger:hover,
+.tab-context-menu__item--danger:hover {
+    background: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+}
+
+.context-menu__item--danger:hover .material-symbols-outlined,
+.tab-context-menu__item--danger:hover .material-symbols-outlined {
+    color: #f87171;
+}
+
+.context-menu__shortcut,
+.tab-context-menu__shortcut {
+    margin-left: auto;
+    font-size: var(--font-size-xs);
+    color: rgba(255, 255, 255, 0.4);
+    font-family: system-ui, sans-serif;
+}
+
+.context-menu__separator,
+.tab-context-menu__separator {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.1);
+    margin: var(--space-sm) 8px;
+}

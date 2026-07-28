@@ -1,0 +1,237 @@
+/* ════════════════════════════════════════════════════════════════════
+   containers.css — dialog, panel, section-header, list-row.
+
+   Phase 3 of the UX harmonization. See docs/UX_HARMONIZATION.md.
+
+   Canonical shapes for the surfaces that wrap content:
+     - .dialog        — modal / wizard / confirm overlays
+     - .panel         — sidebars, drawers, slide-outs
+     - .section-header— mid-page section titles
+     - .list-row      — clickable list items (defined here, opt-in)
+
+   Co-lists existing class names so JS doesn't have to change.
+   Loaded after controls.css, before page CSS.
+   ──────────────────────────────────────────────────────────────────── */
+
+
+/* ════════════════════════════════════════════════════════════════════
+   Dialog (modal frame)
+
+   Replaces the duplicate .modal-overlay / .modal blocks that lived
+   at main_new.css:474 AND :11299 (identical copies). Existing markup
+   using <div class="modal-overlay"><div class="modal"><header>…
+   </header><div class="modal-body">…</div><footer>…</footer></div>
+   </div> continues to work via co-listed selectors.
+   ──────────────────────────────────────────────────────────────────── */
+
+.dialog-overlay,
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-modal);
+    background: rgba(0, 0, 0, 0.5);
+    display: none;
+    align-items: center;
+    justify-content: center;
+}
+
+.dialog-overlay.visible,
+.modal-overlay.visible {
+    display: flex;
+}
+
+.dialog,
+.modal {
+    display: flex;
+    flex-direction: column;
+    width: 760px;
+    max-width: 90vw;
+    max-height: 80vh;
+    background: var(--surface-0);
+    color: var(--text-primary);
+    border: 1px solid var(--surface-3);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+}
+
+/* ── Dialog header / body / footer ───────────────────────────────── */
+
+.dialog__header,
+.modal header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-lg) var(--space-lg);    /* 12px 12px */
+    border-bottom: 1px solid var(--border-subtle);
+    flex-shrink: 0;
+}
+
+.dialog__header h3,
+.modal header h3 {
+    margin: 0;
+    font-size: var(--font-size-lg);              /* 14px */
+    font-weight: var(--font-weight-semibold);
+}
+
+.dialog__body,
+.modal .modal-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: var(--space-lg);                    /* 12px */
+    overflow: auto;
+    position: relative;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.dialog__footer,
+.modal footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-md);
+    padding: var(--space-lg);                    /* 12px */
+    border-top: 1px solid var(--border-subtle);
+    flex-shrink: 0;
+}
+
+
+/* ════════════════════════════════════════════════════════════════════
+   Panel — sidebar / drawer / slide-out base
+
+   Co-lists the existing panel classes so they share a header pattern
+   even when their containers differ (sidebar vs slide-out animated).
+   ──────────────────────────────────────────────────────────────────── */
+
+.panel {
+    display: flex;
+    flex-direction: column;
+    background: var(--surface-0);
+    color: var(--text-primary);
+    min-height: 0;
+}
+
+.panel__header,
+.slide-out-panel__header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-md) var(--space-md) var(--space-md) var(--space-lg);
+    border-bottom: 1px solid var(--border-subtle);
+    flex-shrink: 0;
+    user-select: none;
+}
+
+.panel__title,
+.slide-out-panel__title {
+    flex: 1;
+    font-size: var(--font-size-sm);              /* 12px */
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.panel__body,
+.slide-out-panel__body {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: var(--space-md);
+    min-height: 0;
+}
+
+
+/* ════════════════════════════════════════════════════════════════════
+   Section header — mid-page section titles
+
+   New primitive. Replaces the ad-hoc <h3>-with-inline-styling pattern
+   that's scattered through the codebase (F-17). Usage:
+     <div class="section-header">
+       <h3 class="section-header__title">Outputs</h3>
+       <span class="badge">3</span>
+     </div>
+   ──────────────────────────────────────────────────────────────────── */
+
+.section-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    margin: 0 0 var(--space-md);
+    padding-bottom: var(--space-sm);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.section-header__title {
+    margin: 0;
+    font-size: var(--font-size-md);              /* 13px */
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+    flex: 1;
+}
+
+.section-header__actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-shrink: 0;
+}
+
+
+/* ════════════════════════════════════════════════════════════════════
+   List row — clickable list-item primitive
+
+   New primitive. Opt-in for new lists. Existing .tree-item and
+   .scenario-item keep their styles (intentionally distinct: flat
+   row vs card). Variants:
+     .list-row              — flat row (~28px height)
+     .list-row--compact     — tighter (~22px) for dense trees
+     .list-row--card        — full border + radius, card density
+   ──────────────────────────────────────────────────────────────────── */
+
+.list-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    border-left: 2px solid transparent;
+    color: var(--text-primary);
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+    transition: background var(--transition-normal),
+                border-color var(--transition-normal);
+    user-select: none;
+}
+
+.list-row:hover {
+    background: var(--state-hover);
+}
+
+.list-row.is-active,
+.list-row[aria-selected="true"] {
+    background: var(--state-selected);
+    border-left-color: var(--accent);
+}
+
+.list-row--compact {
+    padding: var(--space-xs) var(--space-md);
+    font-size: var(--font-size-xs);
+}
+
+.list-row--card {
+    padding: var(--space-md) var(--space-lg);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    background: var(--surface-1);
+}
+
+.list-row--card:hover {
+    border-color: var(--border-default);
+    background: var(--surface-2);
+}
+
+.list-row--card.is-active,
+.list-row--card[aria-selected="true"] {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px rgba(0, 122, 204, 0.35);
+    background: var(--surface-2);
+}

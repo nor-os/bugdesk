@@ -1,0 +1,91 @@
+/**
+ * Zoom Controls Styles
+ *
+ * Styles for the canvas zoom control buttons and global zoom indicator.
+ * Buttons: positioned in the bottom-right corner of the canvas.
+ * Indicator: positioned in the global bottom-right of the application.
+ */
+
+/* Ensure .left-top is a positioning context for the zoom controls */
+.left-top {
+    position: relative;
+}
+
+/* Container for zoom buttons - absolute position within .left-top */
+.zoom-controls {
+    position: absolute;
+    bottom: 12px;
+    right: 12px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0;
+    z-index: var(--z-dropdown);
+    user-select: none;
+    pointer-events: auto;
+}
+
+/* Global zoom indicator - in global-bottom-bar .bar-right */
+.zoom-indicator {
+    display: inline-flex;
+    align-items: center;
+    height: 100%;
+    padding: 0 10px;
+    border-right: 1px solid var(--surface-3);
+}
+
+.zoom-indicator__text {
+    color: #aaa;
+    font-size: var(--font-size-xs);
+    font-family: inherit;
+    white-space: nowrap;
+    line-height: 20px;
+}
+
+/* Individual zoom button */
+.zoom-controls__btn {
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(30, 30, 30, 0.85);
+    border: 1px solid #555;
+    border-radius: 0;
+    color: #aaa;
+    font-size: var(--font-size-md);
+    font-family: inherit;
+    font-weight: 400;
+    cursor: pointer;
+    transition: background 0.1s ease, color 0.1s ease;
+}
+
+/* Remove double borders between adjacent buttons */
+.zoom-controls__btn:not(:first-child) {
+    border-left: none;
+}
+
+/* Hover state - solarized blue */
+.zoom-controls__btn:hover {
+    background: rgba(38, 139, 210, 0.75);
+    color: var(--text-bright);
+}
+
+/* Active/pressed state - darker solarized blue */
+.zoom-controls__btn:active {
+    background: rgba(38, 139, 210, 0.9);
+}
+
+/* Focus state for accessibility - solarized blue */
+.zoom-controls__btn:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(38, 139, 210, 0.4);
+    z-index: 1;
+}
+
+/* Reset button - use lowercase 'o' for circle appearance */
+.zoom-controls__btn--reset {
+    font-size: var(--font-size-xs);
+}

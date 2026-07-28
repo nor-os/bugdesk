@@ -1,0 +1,74 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Node Group Overlay
+   Visual grouping container rendered behind grouped nodes.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.node-group-overlay {
+    position: absolute;
+    border: 2px dashed rgba(180, 180, 180, 0.6);
+    border-radius: var(--radius-md);
+    background: linear-gradient(135deg, rgba(40, 40, 40, 0.10), rgba(40, 40, 40, 0.40));
+    pointer-events: auto;
+    cursor: move;
+    z-index: 0;
+}
+
+.node-group-overlay.selected {
+    border-style: solid;
+    box-shadow: 0 0 10px rgba(0, 122, 204, 0.3);
+}
+
+.node-group-overlay__label {
+    position: absolute;
+    top: 2px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: var(--font-size-md);
+    font-family: system-ui, -apple-system, sans-serif;
+    color: rgba(200, 200, 200, 0.7);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    user-select: none;
+    pointer-events: auto;
+    cursor: pointer;
+    padding: 1px 4px;
+    line-height: 18px;
+}
+
+.node-group-overlay__label:hover {
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.node-group-overlay__label .node-edit-input {
+    background: var(--surface-0);
+    border: 1px solid #007FD4;
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: var(--font-size-md);
+    font-family: system-ui, -apple-system, sans-serif;
+    padding: 0 4px;
+    outline: none;
+    text-align: center;
+    width: 100%;
+    min-width: 60px;
+    line-height: 18px;
+    box-shadow: 0 0 0 1px rgba(38, 139, 210, 0.3);
+    caret-color: #FDF6E3;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Dock Guide
+   Snap indicator shown during node drag when near a dock target.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.dock-guide {
+    position: absolute;
+    width: 2px;
+    background: var(--accent-blue, #4fc3f7);
+    pointer-events: none;
+    z-index: 999;
+    opacity: 0.8;
+    transition: opacity var(--transition-normal);
+}

@@ -1,0 +1,1704 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Simulation Run Page
+   Header uses detail_header.css, tab bar uses scenario-detail-tabs
+   from control_board.css — only page-specific overrides here.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ─── Design tokens (aliases to global :root tokens) ─────────────── */
+
+.simulation-run-main {
+    --simrun-surface-0: var(--surface-0);
+    --simrun-surface-1: var(--surface-1);
+    --simrun-border-subtle: var(--surface-2);
+    --simrun-border-default: var(--border-strong);
+    --simrun-text-primary: var(--text-primary);
+    --simrun-text-muted: var(--text-muted);
+    --simrun-accent: var(--accent-bright);
+    --simrun-radius: var(--layout-radius);
+    --simrun-pad-section: var(--layout-pad-section);
+    --simrun-pad-detail-h: var(--layout-pad-h);
+}
+
+.simulation-run-main {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+    background: var(--surface-1);
+    color: var(--text-secondary);
+}
+
+/* ─── Header + Tab bar ─────────────────────────────────────────────── */
+
+/* Give header breathing room within the simulation page container */
+.simulation-run-main > .detail-header {
+    padding: var(--layout-pad-section) var(--layout-pad-h) 12px;
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--border-strong);
+}
+
+/* Tab bar uses .scenario-detail-tabs from control_board.css. */
+.simulation-run-main > .scenario-detail-tabs {
+    padding: 0 var(--layout-pad-h) 0 var(--layout-tab-bar-pad-left);
+    flex-shrink: 0;
+}
+
+/* ─── Tab Content ──────────────────────────────────────────────────── */
+
+.simrun-tab-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 0;
+    background: var(--surface-0);
+}
+
+/* Inner container fills available space and scrolls */
+.simrun-tab-content__inner {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+/* Flex column mode for tabs that need toolbar + scrolling editor (documentation) */
+.simrun-tab-content--flex {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.simrun-tab-content--flex > .simrun-tab-content__inner {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* ─── Documentation Tab (cell editor) ─────────────────────────────── */
+
+.simrun-doc__toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: var(--space-md) 12px;
+    border-bottom: 1px solid var(--border-strong);
+    background: var(--surface-0);
+    flex-shrink: 0;
+}
+
+.simrun-doc__toolbar-spacer {
+    flex: 1;
+}
+
+.simrun-doc__toolbar-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    height: 26px;
+    padding: 0 10px;
+    font-size: var(--font-size-sm);
+    color: #ccc;
+    background: #2a2a2a;
+    border: 1px solid #3a3a3a;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.simrun-doc__toolbar-btn:hover:not(:disabled) {
+    background: #333;
+    color: var(--text-bright);
+    border-color: #555;
+}
+
+.simrun-doc__toolbar-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.simrun-doc__toolbar-btn .material-symbols-outlined {
+    font-size: var(--font-size-lg);
+}
+
+.simrun-doc__editor {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+/* Empty / error states — use shared .simrun-empty-state where possible */
+.simrun-doc__empty,
+.simrun-doc__error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 48px var(--layout-pad-section);
+    color: var(--text-muted);
+    text-align: center;
+    font-size: var(--font-size-lg);
+}
+
+.simrun-doc__error {
+    color: #f44336;
+}
+
+/* ─── Dashboard Tab ───────────────────────────────────────────────── */
+
+.simrun-dashboard {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    padding: var(--layout-pad-section) var(--layout-pad-section) 0;
+    gap: 10px;
+    background: var(--surface-1);
+}
+
+.simrun-dashboard__empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 48px var(--layout-pad-section);
+    color: var(--text-muted);
+    text-align: center;
+}
+
+.simrun-dashboard__hint {
+    font-size: var(--font-size-md);
+    color: var(--text-dim);
+}
+
+.simrun-dashboard__hint code {
+    background: var(--surface-1);
+    padding: var(--space-xxs) 6px;
+    border-radius: var(--radius-sm);
+}
+
+.simrun-dashboard__warning {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-md) var(--layout-pad-section);
+    background: #2c2a1a;
+    border: 1px solid rgba(255, 152, 0, 0.25);
+    border-radius: var(--radius-md);
+    color: var(--color-warning);
+    font-size: var(--font-size-md);
+    margin: var(--space-md) var(--layout-pad-section) 0;
+}
+
+.simrun-dashboard__warning .material-symbols-outlined {
+    font-size: var(--font-size-2xl);
+}
+
+/* Dashboard toolbar consistent padding */
+.simrun-dashboard > .results-toolbar-header {
+    padding: var(--space-md) var(--layout-pad-section);
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--surface-2);
+}
+
+/* ─── Dashboard sub-tab bar (multi-dashboard tabs) ─────────────── */
+
+.simrun-dashboard__tab-bar-row {
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid var(--surface-2);
+    flex-shrink: 0;
+    background: var(--surface-1);
+}
+
+.simrun-dashboard__tab-bar-row .notebook-tabs {
+    flex: 1;
+    min-width: 0;
+    border-top: 1px solid var(--surface-2);
+}
+
+.simrun-dashboard__add-tab-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.4);
+    cursor: pointer;
+    flex-shrink: 0;
+    border-radius: var(--radius-sm);
+    margin-right: var(--space-xs);
+}
+
+.simrun-dashboard__add-tab-btn:hover {
+    color: rgba(255, 255, 255, 0.9);
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.simrun-dashboard__add-tab-btn .material-symbols-outlined {
+    font-size: var(--font-size-2xl);
+}
+
+/* ─── Share dashboard dialog ────────────────────────────────────
+   Layered on top of the app-default confirm-dialog__* styles
+   (see managed_window.css). Adds field layout + radio styling. */
+
+.dashboard-share-dialog__body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding-bottom: var(--space-xs);
+}
+
+.dashboard-share-dialog__desc {
+    margin: 0;
+    font-size: var(--font-size-md);
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+.dashboard-share-dialog__desc strong {
+    color: var(--text-bright);
+    font-weight: 600;
+}
+
+.dashboard-share-dialog__field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.dashboard-share-dialog__field-label {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+.dashboard-share-dialog__radio {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    font-size: var(--font-size-md);
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: var(--space-xs) 0;
+}
+
+.dashboard-share-dialog__radio input[type="radio"] {
+    accent-color: var(--accent);
+}
+
+.dashboard-share-dialog .confirm-dialog__btn .material-symbols-outlined {
+    font-size: var(--font-size-xl);
+    vertical-align: -3px;
+    margin-right: var(--space-xs);
+}
+
+.simrun-dashboard__grid {
+    flex: 1;
+    overflow: auto;
+    padding: 0 var(--layout-pad-section) var(--layout-pad-section);
+    position: relative;
+    background: var(--surface-0);
+}
+
+/* ─── Auto-dashboard notice ───────────────────────────────────── */
+
+.auto-dashboard-notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin: var(--space-lg) var(--layout-pad-section) 0;
+    padding: 10px 14px;
+    background: rgba(59, 130, 246, 0.08);
+    border: 1px solid rgba(59, 130, 246, 0.25);
+    border-radius: var(--radius-md);
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.auto-dashboard-notice__icon {
+    font-size: var(--font-size-2xl);
+    color: rgba(59, 130, 246, 0.7);
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+.auto-dashboard-notice__text {
+    flex: 1;
+}
+
+.auto-dashboard-notice__text strong {
+    color: rgba(255, 255, 255, 0.95);
+}
+
+.auto-dashboard-notice__dismiss {
+    background: none;
+    border: none;
+    padding: var(--space-xxs);
+    cursor: pointer;
+    color: rgba(255, 255, 255, 0.4);
+    flex-shrink: 0;
+    border-radius: var(--radius-sm);
+}
+
+.auto-dashboard-notice__dismiss:hover {
+    color: rgba(255, 255, 255, 0.8);
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.auto-dashboard-notice__dismiss .material-symbols-outlined {
+    font-size: var(--font-size-xl);
+}
+
+/* Live parameter controls moved to main_new.css (right panel lives outside .simulation-run-main) */
+
+/* ─── Plot Config Panel (inside param panel) ─────────────────── */
+
+.plot-config-back {
+    margin-right: var(--space-xs);
+    padding: var(--space-xxs);
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+}
+.plot-config-back:hover {
+    color: var(--accent-bright);
+}
+.plot-config-back .material-symbols-outlined {
+    font-size: var(--font-size-2xl);
+}
+
+.simrun-dashboard__plot-config-body {
+    padding: var(--space-md);
+    overflow-y: auto;
+}
+
+/* Right panel overrides for narrower width */
+.simrun-dashboard__plot-config-body .plot-layout-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+    margin-bottom: var(--space-md);
+}
+.simrun-dashboard__plot-config-body .plot-layout-btn {
+    font-size: 10px;
+    padding: var(--space-xxs) 6px;
+}
+.simrun-dashboard__plot-config-body .plot-subplot-tabs {
+    margin-bottom: var(--space-md);
+}
+.simrun-dashboard__plot-config-body .config-label {
+    width: 100px;
+    min-width: 100px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Dashboard File Editor
+   ═══════════════════════════════════════════════════════════════════ */
+
+.dashboard-editor__placeholders {
+    padding: var(--space-xl);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+}
+
+.dashboard-editor__desc {
+    width: 100%;
+    min-height: 50px;
+    resize: vertical;
+}
+
+.dashboard-editor__empty {
+    color: var(--text-muted);
+    font-size: var(--font-size-md);
+    padding: var(--space-lg) 0;
+}
+
+.dashboard-editor__table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--font-size-md);
+}
+
+.dashboard-editor__table th {
+    text-align: left;
+    padding: var(--space-md) 10px;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border-strong);
+    font-size: var(--font-size-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.dashboard-editor__table td {
+    padding: var(--space-xs) 4px;
+    border-bottom: 1px solid var(--surface-2);
+}
+
+.dashboard-editor__input {
+    width: 100%;
+    padding: var(--space-xs) 8px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--surface-0);
+    color: var(--text-primary);
+    font-size: var(--font-size-sm);
+}
+
+.dashboard-editor__input:focus {
+    border-color: var(--accent-bright);
+    outline: none;
+}
+
+.dashboard-editor__input--id {
+    font-family: 'Consolas', 'Fira Code', monospace;
+    color: #6c71c4;
+}
+
+.dashboard-editor__input--unit {
+    max-width: 80px;
+}
+
+.dashboard-editor__select {
+    padding: var(--space-xs) 8px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--surface-0);
+    color: var(--text-primary);
+    font-size: var(--font-size-sm);
+}
+
+.dashboard-editor__delete-btn {
+    display: flex;
+    align-items: center;
+    padding: var(--space-xs);
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+}
+
+.dashboard-editor__delete-btn:hover {
+    background: rgba(244, 67, 54, 0.15);
+    color: #f44336;
+}
+
+.dashboard-editor__delete-btn .material-symbols-outlined {
+    font-size: var(--font-size-xl);
+}
+
+/* Layout tab — embeds toolbar header + TileGrid */
+
+.dashboard-editor__layout {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+
+/* Toolbar header inside the layout tab */
+.dashboard-editor__layout > .results-toolbar-header {
+    flex-shrink: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding: var(--space-xs) 8px;
+}
+
+.dashboard-editor__grid-container {
+    flex: 1;
+    min-height: 400px;
+    position: relative;
+    overflow-y: auto;
+}
+
+/* Ensure tile grid fills the container */
+.dashboard-editor__grid-container .tile-grid {
+    min-height: 320px;
+    padding: var(--space-xl);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Dashboard Config Modal
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Config modal overlay */
+.simrun-config-modal__overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: var(--z-dropdown);
+}
+
+.simrun-config-modal {
+    background: var(--surface-1);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--layout-radius);
+    min-width: 380px;
+    max-width: 500px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.simrun-config-modal__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px var(--layout-pad-section) 10px;
+    border-bottom: 1px solid var(--border-strong);
+}
+
+.simrun-config-modal__header h3 {
+    margin: 0;
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.simrun-config-modal__close {
+    display: flex;
+    align-items: center;
+    padding: var(--space-xs);
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+}
+
+.simrun-config-modal__close:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-primary);
+}
+
+.simrun-config-modal__form {
+    padding: var(--space-lg) var(--layout-pad-section);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.simrun-config-modal__field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.simrun-config-modal__field > label {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: #b0bec5;
+}
+
+.simrun-config-modal__desc {
+    font-size: var(--font-size-xs);
+    color: var(--text-muted);
+}
+
+.simrun-config-modal__input {
+    padding: var(--space-sm) 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--surface-0);
+    color: var(--text-primary);
+    font-size: var(--font-size-md);
+}
+
+.simrun-config-modal__input:focus {
+    border-color: var(--accent-bright);
+    outline: none;
+}
+
+.simrun-config-modal__field--checkbox {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-sm) 2px;
+    gap: var(--space-lg);
+}
+
+.simrun-config-modal__field--checkbox > label {
+    font-weight: 400;
+    cursor: pointer;
+    order: -1;          /* label first, toggle on the right */
+    font-size: var(--font-size-md);
+    color: var(--text-primary);
+    user-select: none;
+}
+
+.simrun-config-modal__field--color {
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+}
+
+.simrun-config-modal__field--color > label {
+    flex-shrink: 0;
+    min-width: 80px;
+}
+
+.simrun-config-modal__field--color > input[type="color"] {
+    width: 36px;
+    height: 28px;
+    padding: var(--space-xxs);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+}
+
+/* Toggle switch */
+.simrun-config-modal__checkbox {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 34px;
+    height: 18px;
+    background: var(--border-strong);
+    border-radius: 9px;
+    cursor: pointer;
+    flex-shrink: 0;
+    position: relative;
+    transition: background var(--transition-normal);
+}
+
+.simrun-config-modal__checkbox::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 14px;
+    height: 14px;
+    background: var(--text-bright);
+    border-radius: 50%;
+    transition: transform var(--transition-normal);
+}
+
+.simrun-config-modal__checkbox:checked {
+    background: var(--accent-bright);
+}
+
+.simrun-config-modal__checkbox:checked::after {
+    transform: translateX(16px);
+}
+
+/* Chip list for multi-variable selection */
+.simrun-config-modal__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+    margin-top: var(--space-xs);
+}
+
+.simrun-config-modal__chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-xxs) 6px 2px 8px;
+    border-radius: 12px;
+    background: rgba(38, 139, 210, 0.2);
+    color: #7ec8e3;
+    font-size: var(--font-size-xs);
+    line-height: 1.4;
+}
+
+.simrun-config-modal__chip-remove {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.5);
+    cursor: pointer;
+    font-size: var(--font-size-md);
+    line-height: 1;
+    padding: 0 2px;
+}
+
+.simrun-config-modal__chip-remove:hover {
+    color: #ff6b6b;
+}
+
+/* AutocompleteField inside config panel */
+.simrun-config-modal__field .autocomplete-field {
+    width: 100%;
+}
+
+.simrun-config-modal__footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-md);
+    padding: 10px var(--layout-pad-section) 14px;
+    border-top: 1px solid var(--border-strong);
+}
+
+.simrun-config-modal__btn {
+    padding: var(--space-sm) 16px;
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-md);
+    cursor: pointer;
+    border: 1px solid var(--border-strong);
+}
+
+.simrun-config-modal__btn--cancel {
+    background: transparent;
+    color: #b0bec5;
+}
+
+.simrun-config-modal__btn--cancel:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.simrun-config-modal__btn--save {
+    background: var(--accent-bright);
+    color: var(--text-bright);
+    border-color: var(--accent-bright);
+}
+
+.simrun-config-modal__btn--save:hover {
+    background: #0098ff;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Shared Empty State (unified across all tabs)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.simrun-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 48px var(--layout-pad-section);
+    color: var(--text-muted);
+    text-align: center;
+    font-size: var(--font-size-lg);
+}
+
+.simrun-empty-state .material-symbols-outlined {
+    font-size: 48px;
+    color: #555;
+}
+
+.simrun-empty-state p {
+    margin: 0;
+}
+
+/* Tab loading placeholder */
+.simrun-tab-loading__spinner {
+    width: 28px;
+    height: 28px;
+    border: 3px solid var(--border-default);
+    border-top-color: var(--accent, #4fc3f7);
+    border-radius: 50%;
+    animation: simrun-spin 0.8s linear infinite;
+}
+
+@keyframes simrun-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Shared tab empty / hint states
+   ═══════════════════════════════════════════════════════════════════ */
+
+.simrun-tab__empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 48px var(--layout-pad-section);
+    color: var(--text-muted);
+    text-align: center;
+    font-size: var(--font-size-lg);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Settings Tab
+   ═══════════════════════════════════════════════════════════════════ */
+
+.simrun-settings {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: var(--layout-pad-h) var(--layout-pad-section);
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.simrun-settings__section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+    background: var(--surface-1);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--layout-radius);
+    padding: var(--layout-pad-section);
+}
+
+.simrun-settings__title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.simrun-settings__title .material-symbols-outlined {
+    font-size: var(--font-size-2xl);
+    color: var(--accent-bright);
+}
+
+.simrun-settings__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: var(--space-lg);
+}
+
+.simrun-settings__field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.simrun-settings__label {
+    font-size: var(--font-size-xs);
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.simrun-settings__input {
+    padding: var(--space-sm) 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--surface-0);
+    color: var(--text-primary);
+    font-size: var(--font-size-md);
+}
+
+.simrun-settings__input:focus {
+    border-color: var(--accent-bright);
+    outline: none;
+}
+
+.simrun-settings__select {
+    padding: var(--space-sm) 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--surface-0);
+    color: var(--text-primary);
+    font-size: var(--font-size-md);
+}
+
+.simrun-settings__select:focus {
+    border-color: var(--accent-bright);
+    outline: none;
+}
+
+.simrun-settings__desc-input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    background: var(--surface-0);
+    color: var(--text-primary);
+    font-size: var(--font-size-md);
+    font-family: inherit;
+    resize: vertical;
+    line-height: 1.5;
+}
+
+.simrun-settings__desc-input:focus {
+    border-color: var(--accent-bright);
+    outline: none;
+}
+
+.simrun-settings__hint {
+    color: var(--text-muted);
+    font-size: var(--font-size-md);
+    margin: 0;
+    padding: var(--space-md) 0;
+}
+
+.simrun-settings__metadata-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-lg);
+}
+
+.simrun-settings__field--wide {
+    grid-column: 1 / -1;
+}
+
+.simrun-settings__field--tags {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.simrun-settings__tag-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.simrun-settings__tag-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+}
+
+.simrun-settings__tag-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xxs);
+    padding: var(--space-xxs) 8px;
+    font-size: var(--font-size-sm);
+    background: #333;
+    border-radius: 10px;
+    color: #ccc;
+}
+
+.simrun-settings__tag-remove {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: var(--font-size-md);
+    line-height: 1;
+    padding: 0 2px;
+}
+.simrun-settings__tag-remove:hover { color: #f48771; }
+
+.simrun-settings__tag-input {
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--border-strong);
+    color: #ccc;
+    font-size: var(--font-size-sm);
+    padding: var(--space-xxs) 4px;
+    outline: none;
+}
+.simrun-settings__tag-input:focus { border-bottom-color: var(--accent-bright); }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Assumptions Tab — Split Panel
+   ═══════════════════════════════════════════════════════════════════ */
+
+.simrun-assumptions-split {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+}
+
+.simrun-assumptions-split__list {
+    width: 260px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--border-strong);
+    background: var(--surface-1);
+}
+
+.simrun-assumptions-split__list-header {
+    padding: var(--space-lg) var(--layout-pad-section);
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--border-strong);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.simrun-assumptions-split__cards {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--space-md);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.simrun-assumptions-split__card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+    padding: var(--space-md) 10px;
+    border-radius: var(--radius-md);
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: background var(--transition-normal);
+}
+
+.simrun-assumptions-split__card:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.simrun-assumptions-split__card--selected {
+    background: rgba(0, 122, 204, 0.15);
+    border-color: rgba(0, 122, 204, 0.3);
+}
+
+.simrun-assumptions-split__card-info {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xxs);
+    min-width: 0;
+}
+
+.simrun-assumptions-split__card-name {
+    font-size: var(--font-size-md);
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.simrun-assumptions-split__card-count {
+    font-size: var(--font-size-xs);
+    color: var(--text-muted);
+}
+
+.simrun-assumptions-split__card-actions {
+    display: flex;
+    gap: var(--space-xxs);
+    opacity: 0;
+    transition: opacity var(--transition-normal);
+    flex-shrink: 0;
+}
+
+.simrun-assumptions-split__card:hover .simrun-assumptions-split__card-actions {
+    opacity: 1;
+}
+
+
+.simrun-assumptions-split__detail {
+    flex: 1;
+    min-width: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+.simrun-assumptions-split__detail-header {
+    padding: var(--layout-pad-section) var(--layout-pad-h);
+    border-bottom: 1px solid var(--surface-2);
+    flex-shrink: 0;
+}
+
+.simrun-assumptions-split__detail-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.simrun-assumptions-split__detail-desc {
+    font-size: var(--font-size-sm);
+    line-height: 1.6;
+    color: var(--text-muted);
+    margin-top: var(--space-sm);
+}
+
+.simrun-assumptions-split__detail-body {
+    padding: var(--layout-pad-section) var(--layout-pad-h);
+    flex: 1;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Parameters Tab
+   ═══════════════════════════════════════════════════════════════════ */
+
+.simrun-parameters {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: var(--layout-pad-h) var(--layout-pad-section);
+}
+
+.simrun-parameters__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-xl);
+}
+
+.simrun-parameters__empty {
+    color: var(--text-muted);
+    font-size: var(--font-size-md);
+    padding: var(--space-lg) 0;
+}
+
+.simrun-parameters__table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--font-size-md);
+}
+
+.simrun-parameters__table th {
+    text-align: left;
+    padding: var(--space-md) 10px;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border-strong);
+    font-size: var(--font-size-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.simrun-parameters__table td {
+    padding: var(--space-sm) 10px;
+    border-bottom: 1px solid var(--surface-2);
+    color: var(--text-primary);
+}
+
+.simrun-parameters__param-name {
+    font-family: 'Consolas', 'Fira Code', monospace;
+    color: #6c71c4;
+    font-weight: 600;
+}
+
+.simrun-parameters__add-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-lg) 0;
+    border-top: 1px solid var(--border-strong);
+    margin-top: var(--space-md);
+}
+
+.simrun-parameters__add-select {
+    flex: 1;
+    min-width: 200px;
+}
+
+.simrun-parameters__add-autocomplete {
+    flex: 1;
+    min-width: 240px;
+}
+
+.simrun-parameters__add-autocomplete .autocomplete-field__helper {
+    display: none;
+}
+
+.simrun-parameters__add-value {
+    width: 120px;
+    flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Tests Tab — Split Panel
+   ═══════════════════════════════════════════════════════════════════ */
+
+.simrun-tests-split {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+}
+
+/* Left panel — test list */
+.simrun-tests-split__list {
+    width: 260px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--border-strong);
+    background: var(--surface-1);
+}
+
+.simrun-tests-split__toolbar {
+    padding: var(--space-lg);
+    border-bottom: 1px solid var(--border-strong);
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.simrun-tests-split__toolbar-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.simrun-tests-split__toolbar-config {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.simrun-tests-split__run-all {
+    width: 100%;
+}
+
+.simrun-tests-split__run-all.scenario-btn.primary,
+.simrun-tests-split__detail-title-row .scenario-btn.primary {
+    background: #e67e22;
+    border-color: #e67e22;
+}
+
+.simrun-tests-split__run-all.scenario-btn.primary:hover,
+.simrun-tests-split__detail-title-row .scenario-btn.primary:hover {
+    background: #d35400;
+    border-color: #d35400;
+}
+
+.simrun-tests__config-select,
+.simrun-tests__config-input {
+    padding: var(--space-xxs) 6px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--surface-0);
+    color: var(--text-primary);
+    font-size: var(--font-size-xs);
+    font-family: inherit;
+}
+
+.simrun-tests__config-input {
+    width: 64px;
+}
+
+.simrun-tests__progress {
+    font-size: var(--font-size-xs);
+    color: var(--text-muted);
+    margin-left: auto;
+}
+
+.simrun-tests-split__cards {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--space-md);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.simrun-tests-split__card {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-md) 10px;
+    border-radius: var(--radius-md);
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: background var(--transition-normal);
+}
+
+.simrun-tests-split__card:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.simrun-tests-split__card--selected {
+    background: rgba(0, 122, 204, 0.15);
+    border-color: rgba(0, 122, 204, 0.3);
+}
+
+.simrun-tests-split__card-status {
+    font-size: var(--font-size-2xl);
+    flex-shrink: 0;
+}
+
+.simrun-tests-split__card-info {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xxs);
+    min-width: 0;
+}
+
+.simrun-tests-split__card-name {
+    font-size: var(--font-size-md);
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.simrun-tests-split__card-meta {
+    font-size: var(--font-size-xs);
+    color: var(--text-muted);
+}
+
+/* Status colors (shared with old tab) */
+.simrun-tests__status--pending { color: var(--text-muted); }
+.simrun-tests__status--running { color: var(--accent-bright); animation: simrun-tests-spin 1s linear infinite; }
+.simrun-tests__status--pass { color: var(--color-success); }
+.simrun-tests__status--fail { color: #f44336; }
+
+@keyframes simrun-tests-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* Right panel — detail */
+.simrun-tests-split__detail {
+    flex: 1;
+    min-width: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+.simrun-tests-split__detail-header {
+    padding: var(--layout-pad-section) var(--layout-pad-h);
+    border-bottom: 1px solid var(--surface-2);
+    flex-shrink: 0;
+}
+
+.simrun-tests-split__detail-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-lg);
+}
+
+.simrun-tests-split__detail-badges {
+    display: flex;
+    gap: var(--space-sm);
+    margin-top: var(--space-md);
+    flex-wrap: wrap;
+}
+
+.simrun-tests-split__detail-body {
+    padding: var(--layout-pad-section) var(--layout-pad-h);
+    flex: 1;
+}
+
+.simrun-tests-split__section-title {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin: 0 0 10px;
+    padding-top: var(--space-lg);
+}
+
+.simrun-tests-split__section-title:first-child {
+    padding-top: 0;
+}
+
+/* Assertion cards */
+.simrun-tests-split__assertions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.simrun-tests-split__assertion-card {
+    display: flex;
+    align-items: center;
+    gap: var(--space-lg);
+    padding: 10px 14px;
+    background: var(--surface-1);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    flex-wrap: wrap;
+}
+
+.simrun-tests-split__assertion-card--pass {
+    border-color: rgba(63, 185, 80, 0.3);
+}
+
+.simrun-tests-split__assertion-card--fail {
+    border-color: rgba(244, 67, 54, 0.3);
+}
+
+.simrun-tests-split__assertion-var {
+    font-size: var(--font-size-md);
+    font-weight: 600;
+    color: #6c71c4;
+    font-family: 'Consolas', 'Fira Code', monospace;
+}
+
+.simrun-tests-split__assertion-expr {
+    font-size: var(--font-size-md);
+    color: #b0bec5;
+}
+
+.simrun-tests-split__assertion-result {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-left: auto;
+}
+
+.simrun-tests-split__assertion-msg {
+    font-size: var(--font-size-xs);
+    color: var(--text-muted);
+}
+
+/* History items */
+.simrun-tests-split__history {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.simrun-tests-split__history-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: var(--space-md) 12px;
+    background: var(--surface-1);
+    border: 1px solid var(--surface-2);
+    border-radius: var(--radius-sm);
+}
+
+.simrun-tests-split__history-info {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xxs);
+}
+
+.simrun-tests-split__history-label {
+    font-size: var(--font-size-md);
+    color: var(--text-primary);
+}
+
+.simrun-tests-split__history-time {
+    font-size: var(--font-size-xs);
+    color: var(--text-muted);
+}
+
+/* ─── Active scenario star in sidebar ─────────────────────────── */
+
+.simrun-active-star {
+    font-size: var(--font-size-lg);
+    color: var(--color-success);
+    margin-left: var(--space-xs);
+    flex-shrink: 0;
+    font-variation-settings: 'FILL' 1;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   General Tab — Recent Runs, Data Sources, Test Status
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Recent runs list */
+.simrun-general__run-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.simrun-general__run-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-sm) 10px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-1);
+    border: 1px solid var(--surface-2);
+    font-size: var(--font-size-md);
+}
+
+.simrun-general__run-icon {
+    font-size: var(--font-size-xl);
+    color: var(--color-success);
+    font-variation-settings: 'FILL' 1;
+    flex-shrink: 0;
+}
+
+.simrun-general__run-time {
+    flex: 1;
+    color: #b0bec5;
+    font-size: var(--font-size-sm);
+}
+
+.simrun-general__run-link {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-xxs) 8px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--accent-bright);
+    font-size: var(--font-size-xs);
+    cursor: pointer;
+}
+
+.simrun-general__run-link:hover {
+    background: rgba(0, 122, 204, 0.1);
+    border-color: var(--accent-bright);
+}
+
+.simrun-general__run-link .material-symbols-outlined {
+    font-size: var(--font-size-lg);
+}
+
+/* Data sources list */
+.simrun-general__source-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.simrun-general__source-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: var(--space-md) 10px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-1);
+    border: 1px solid var(--surface-2);
+}
+
+.simrun-general__source-icon {
+    font-size: var(--font-size-2xl);
+    color: var(--accent-bright);
+    flex-shrink: 0;
+}
+
+.simrun-general__source-info {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.simrun-general__source-name {
+    font-size: var(--font-size-md);
+    font-weight: 600;
+    color: var(--text-primary);
+    font-family: 'Consolas', 'Fira Code', monospace;
+}
+
+.simrun-general__source-detail {
+    font-size: var(--font-size-xs);
+    color: var(--text-muted);
+}
+
+/* Test status list */
+.simrun-general__test-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.simrun-general__test-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-sm) 10px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-1);
+    border: 1px solid var(--surface-2);
+    font-size: var(--font-size-md);
+}
+
+.simrun-general__test-icon {
+    font-size: var(--font-size-xl);
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.simrun-general__test-name {
+    flex: 1;
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.simrun-general__test-count {
+    font-size: var(--font-size-xs);
+    color: var(--text-muted);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Assumption Row Overrides (scoped to simulation run page)
+   Ensures assumption-row/slider/input from scenario_manager.css
+   use the simrun design tokens instead of --sm-* variables.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.simrun-assumptions-split .assumption-row__label {
+    color: var(--text-primary);
+}
+
+.simrun-assumptions-split .assumption-row__value {
+    color: var(--text-primary);
+}
+
+.simrun-assumptions-split .assumption-row__default {
+    color: var(--text-muted);
+}
+
+.simrun-assumptions-split .assumption-slider {
+    accent-color: var(--accent-bright);
+}
+
+.simrun-assumptions-split .assumption-number-input {
+    border-color: var(--border-strong);
+    background: var(--surface-0);
+    color: var(--text-primary);
+}
+
+.simrun-assumptions-split .assumption-number-input:focus {
+    border-color: var(--accent-bright);
+}
+
+.simrun-assumptions-split .assumption-row__desc {
+    color: var(--text-muted);
+}
+
+.simrun-assumptions-split .assumption-desc__textarea {
+    border-color: var(--accent-bright);
+    background: var(--surface-0);
+    color: var(--text-primary);
+}
+
+.simrun-assumptions-split .assumption-card__action {
+    color: var(--text-muted);
+}
+
+.simrun-assumptions-split .assumption-card__action:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-primary);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Documentation heading sub-items in sidebar
+   ═══════════════════════════════════════════════════════════════════ */
+
+.simrun-doc-heading-item {
+    font-size: var(--font-size-sm) !important;
+}
+
+.simrun-doc-heading-item .tree-item__icon {
+    font-size: var(--font-size-lg);
+    color: rgba(255, 255, 255, 0.35);
+}
+
+.simrun-doc-heading-item--level-2 .tree-item__label,
+.simrun-doc-heading-item--level-3 .tree-item__label {
+    color: rgba(255, 255, 255, 0.55);
+    font-weight: 400;
+}
+
+.simrun-doc-heading-item--level-3 .tree-item__icon {
+    font-size: var(--font-size-sm);
+}
+
+/* Active sub-item highlight (sidebar dashboard / doc heading) */
+.tree-item.simrun-subitem--active {
+    background: rgba(0, 122, 204, 0.18);
+    color: var(--text-bright);
+}
+
+.tree-item.simrun-subitem--active .tree-item__label {
+    color: var(--text-bright);
+}
+
+.tree-item.simrun-subitem--active .tree-item__icon {
+    color: rgba(0, 122, 204, 0.8);
+}

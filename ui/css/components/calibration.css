@@ -1,0 +1,158 @@
+/* calibration.css — Calibration + ETL tab. Matches the app chrome: sub-tabs in
+ * the .ea-detail-header, flat .ea-card sections, .ea-row/.ea-form-grid forms,
+ * real design tokens. Square corners (buttons keep the app's 2px via .ea-btn). */
+
+.ea-calib { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+
+/* sub-tabs living inside the .ea-detail-header */
+.ea-calib__tabs { display: flex; gap: 2px; height: 100%; align-items: stretch; }
+.ea-calib__tab {
+    display: inline-flex; align-items: center; padding: 0 var(--space-md);
+    background: transparent; border: 0; border-bottom: 2px solid transparent;
+    color: var(--text-muted); font-size: var(--font-size-sm); cursor: pointer;
+}
+.ea-calib__tab:hover { color: var(--text-body); }
+.ea-calib__tab.is-on { color: var(--text-bright); border-bottom-color: var(--accent-bright); }
+.ea-calib__hint { color: var(--text-muted); font-size: var(--font-size-xs); }
+
+.ea-calib__body { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+
+/* split: left list + right detail */
+.ea-calib__split { display: flex; height: 100%; min-height: 0; }
+.ea-calib__side {
+    flex: 0 0 230px; min-width: 200px; display: flex; flex-direction: column;
+    border-right: 1px solid var(--border-default); background: var(--surface-0);
+    overflow: hidden;
+}
+.ea-calib__side-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 4px var(--space-md); min-height: 26px;
+    border-bottom: 1px solid var(--border-subtle); background: var(--surface-1);
+    color: var(--text-muted); font-size: var(--font-size-xs);
+    text-transform: uppercase; letter-spacing: 0.04em;
+}
+.ea-calib__main {
+    flex: 1 1 auto; min-width: 0; overflow: auto; padding: var(--space-lg) var(--space-xl);
+}
+.ea-calib__placeholder { color: var(--text-muted); font-size: var(--font-size-sm); padding: var(--space-lg); }
+
+/* lists */
+.ea-calib__list { list-style: none; margin: 0; padding: 0; overflow: auto; }
+.ea-calib__item {
+    display: flex; align-items: center; gap: var(--space-xs);
+    padding: var(--space-xs) var(--space-md); border-bottom: 1px solid var(--border-subtle);
+    cursor: pointer; font-size: var(--font-size-sm); color: var(--text-body);
+}
+.ea-calib__item:hover { background: var(--state-hover); }
+.ea-calib__item.is-sel { background: var(--state-selected); }
+.ea-calib__item-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ea-calib__item-meta { color: var(--text-dim); font-size: var(--font-size-xs); }
+.ea-calib__empty { padding: var(--space-md); color: var(--text-dim); font-size: var(--font-size-xs); }
+
+/* editor header (title + actions) */
+.ea-calib__ed-head { display: flex; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-lg); }
+.ea-calib__title-input {
+    flex: 1 1 auto; font-size: var(--font-size-lg); color: var(--text-bright);
+    background: transparent; border: 0; border-bottom: 1px solid transparent; padding: 2px 0;
+}
+.ea-calib__title-input:focus { outline: none; border-bottom-color: var(--accent-bright); }
+.ea-calib__id { color: var(--text-dim); font-size: var(--font-size-xs); }
+
+/* editable rows (params / targets / transforms) */
+.ea-calib__rows { display: flex; flex-direction: column; gap: var(--space-xs); }
+.ea-calib__row { display: flex; gap: var(--space-xs); align-items: center; }
+.ea-calib__row select,
+.ea-calib__row input {
+    background: var(--surface-2); color: var(--text-body);
+    border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+    padding: var(--space-xs) var(--space-sm); font: inherit; font-size: var(--font-size-sm);
+    min-width: 0;
+}
+.ea-calib__row select { flex: 1 1 110px; }
+.ea-calib__row input[type="number"] { flex: 0 0 72px; width: 72px; }
+.ea-calib__row .ea-calib__mono { flex: 1 1 auto; font-family: var(--font-family-mono); }
+.ea-calib__row input.is-bad { border-color: var(--color-danger); }
+
+/* forms use the app .ea-form-grid / .ea-row; a couple of helpers */
+.ea-row--wide { grid-column: 1 / -1; }
+.ea-calib__textarea {
+    width: 100%; font-family: var(--font-family-mono); font-size: var(--font-size-sm);
+    background: var(--surface-2); color: var(--text-body);
+    border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+    padding: var(--space-xs) var(--space-sm); resize: vertical;
+}
+
+/* run / charts / apply / preview */
+.ea-calib__run-status { font-size: var(--font-size-sm); color: var(--text-body); margin-bottom: var(--space-sm); }
+.ea-calib__chart { min-height: 70px; margin: var(--space-sm) 0; }
+.ea-calib__apply { display: flex; gap: var(--space-xs); align-items: center; margin-top: var(--space-md); }
+.ea-calib__apply input {
+    flex: 0 0 200px; background: var(--surface-2); color: var(--text-body);
+    border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: var(--space-xs) var(--space-sm);
+}
+.ea-calib__table-wrap { overflow: auto; max-height: 240px; margin-top: var(--space-sm); }
+.ea-calib__muted { color: var(--text-muted); font-size: var(--font-size-xs); margin: var(--space-xs) 0; }
+.ea-calib__err { color: var(--color-danger); font-size: var(--font-size-sm); }
+
+/* ── ETL node-DAG editor ── */
+.etl-editor { display: flex; gap: var(--space-md); align-items: flex-start; margin-bottom: var(--space-lg); }
+.etl-pal {
+    flex: 0 0 168px; display: flex; flex-direction: column; gap: var(--space-sm);
+    border: 1px solid var(--border-default); background: var(--surface-0);
+    padding: var(--space-sm); max-height: 420px; overflow: auto;
+}
+.etl-pal__grp { display: flex; flex-direction: column; gap: 2px; }
+.etl-pal__lbl { color: var(--text-muted); font-size: var(--font-size-xs); text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 0; }
+.etl-pal__node {
+    display: flex; align-items: center; gap: var(--space-xs); text-align: left;
+    background: var(--surface-1); color: var(--text-body); border: 1px solid var(--border-subtle);
+    border-radius: 0; padding: 3px var(--space-sm); font-size: var(--font-size-sm); cursor: pointer;
+}
+.etl-pal__node:hover { background: var(--surface-2); border-color: var(--border-strong); }
+.etl-pal__node .material-symbols-outlined { font-size: 16px; color: var(--text-muted); }
+
+.etl-nodes { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: var(--space-xs); }
+.etl-node {
+    border: 1px solid var(--border-default); border-left: 3px solid var(--border-strong);
+    background: var(--surface-1); padding: var(--space-xs) var(--space-sm); cursor: pointer;
+}
+.etl-node.is-sel { border-color: var(--accent-bright); border-left-color: var(--accent-bright); background: var(--state-selected); }
+.etl-node--source { border-left-color: var(--color-success); }
+.etl-node--macro { border-left-color: var(--color-success); }
+.etl-node--reshape { border-left-color: var(--accent-bright); }
+.etl-node--compute { border-left-color: var(--color-warning); }
+.etl-node--sink { border-left-color: var(--color-danger); }
+.etl-node__hd { display: flex; align-items: center; gap: var(--space-xs); }
+.etl-node__hd .material-symbols-outlined { font-size: 16px; color: var(--text-muted); }
+.etl-node__ty { font-size: var(--font-size-sm); color: var(--text-bright); font-weight: var(--font-weight-medium); }
+.etl-node__ins { display: flex; gap: var(--space-xs); margin-top: 2px; }
+.etl-node__in {
+    flex: 1 1 auto; background: var(--surface-2); color: var(--text-body);
+    border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+    padding: 2px var(--space-xs); font-size: var(--font-size-xs);
+}
+.etl-node__sum { color: var(--text-muted); font-size: var(--font-size-xs); font-family: var(--font-family-mono); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.etl-dock .ea-calib__chart { min-height: 60px; }
+
+/* node_config_form helpers */
+.ea-calib__field-ctl { display: flex; gap: var(--space-xs); align-items: center; flex-wrap: wrap; }
+.ea-calib__field-ctl select, .ea-calib__field-ctl input, .ea-calib__field-ctl textarea {
+    background: var(--surface-2); color: var(--text-body); border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm); padding: var(--space-xs) var(--space-sm); font: inherit; font-size: var(--font-size-sm);
+}
+.ea-calib__field-ctl input[type="checkbox"] { width: auto; }
+.ea-calib__col-other { flex: 0 0 120px; }
+.ea-calib__hint-line { color: var(--text-dim); font-size: var(--font-size-xs); margin: -2px 0 var(--space-xs); padding-left: 164px; }
+.ea-calib__cols { display: flex; flex-wrap: wrap; gap: var(--space-xs); }
+.ea-calib__chk { display: inline-flex; align-items: center; gap: 2px; font-size: var(--font-size-xs); color: var(--text-body); }
+.ea-calib__kvs, .ea-calib__exprs { display: flex; flex-direction: column; gap: var(--space-xs); }
+.ea-calib__kv, .ea-calib__expr { display: flex; gap: var(--space-xs); align-items: center; }
+.ea-calib__kv input, .ea-calib__expr input {
+    background: var(--surface-2); color: var(--text-body); border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm); padding: var(--space-xs); font-size: var(--font-size-sm);
+}
+.ea-calib__mono { font-family: var(--font-family-mono); }
+.ea-calib__preset { padding: var(--space-xs) 0; border-bottom: 1px solid var(--border-subtle); cursor: pointer; }
+.ea-calib__preset:hover .ea-calib__item { background: var(--state-hover); }
+.ea-calib__preset-desc { padding: 2px var(--space-md) var(--space-xs); }

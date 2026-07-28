@@ -1,0 +1,483 @@
+:root {
+    --config-page-bg: var(--surface-0);
+    --config-page-surface: var(--surface-1);
+    --config-page-header-bg: #191919;
+    --config-page-border: var(--border-default);
+    --config-text-primary: var(--text-primary, var(--text-primary));
+    --config-text-muted: var(--text-muted, var(--text-muted));
+    --config-primary: var(--accent);
+    --config-primary-hover: var(--accent-hover));
+}
+
+.config-main-placeholder {
+    margin: auto;
+    max-width: 340px;
+    text-align: center;
+    color: var(--text-muted);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+}
+
+.config-main-placeholder p {
+    margin: 0;
+    line-height: 1.5;
+}
+
+.config-main-placeholder .config-primary-btn {
+    align-self: center;
+}
+
+.config-error-placeholder {
+    color: var(--text-muted);
+}
+
+/* .config-primary-btn — moved to components/controls.css (Phase 2). */
+
+.config-editor {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.config-editor-header {
+    margin-bottom: var(--space-sm);
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+}
+
+.config-editor-title {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.config-section-heading {
+    margin: 0;
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: 1.05rem;
+}
+
+.config-section-lead {
+    margin: var(--space-sm) 0 20px;
+    color: var(--text-muted);
+    min-height: 1.2em;
+}
+
+.config-type-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 8px;
+    min-width: 32px;
+    height: 22px;
+    border-radius: var(--radius-pill);
+    font-size: 0.7rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-weight: 600;
+    background: rgba(14, 99, 156, 0.18);
+    color: var(--accent);
+    white-space: nowrap;
+}
+
+.config-type-pill.is-static {
+    background: rgba(14, 99, 156, 0.18);
+    color: var(--accent);
+}
+
+.config-type-pill.is-monte-carlo {
+    background: rgba(208, 102, 218, 0.24);
+    color: #d066da;
+}
+
+.config-name {
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 420px;
+}
+
+.config-name[title] {
+    cursor: text;
+}
+
+.config-header-spacer {
+    flex: 1;
+}
+
+.config-tab-content {
+    flex: 1;
+    overflow: auto;
+    padding: 20px;
+    background-color: var(--surface-0);
+}
+
+.config-tab-content > *:first-child {
+    margin-top: 0;
+}
+
+/* Add Dataset button - original dashed style */
+.add-dataset-btn {
+    width: 100%;
+    justify-content: center;
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-md) 12px;
+    margin-top: var(--space-md);
+    background: rgba(74, 144, 217, 0.1);
+    border: 1px dashed rgba(74, 144, 217, 0.5);
+    border-radius: var(--radius-md);
+    color: #4A90D9;
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+    transition: background-color var(--transition-normal), border-color var(--transition-normal);
+    min-width: 0;
+    white-space: nowrap;
+}
+
+.add-dataset-btn:hover {
+    background: rgba(74, 144, 217, 0.2);
+    border-color: #4A90D9;
+}
+
+.add-dataset-btn .material-symbols-outlined {
+    font-size: var(--font-size-xl);
+}
+
+.config-tab-content .config-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.config-tab-content .config-section {
+    background: rgba(22, 22, 22, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: var(--radius-md);
+    padding: 18px 20px;
+}
+
+.config-tab-content .config-section-heading {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    margin: 0 0 8px;
+}
+
+.config-tab-content .config-section-lead {
+    margin: 0 0 16px;
+    color: var(--text-muted);
+}
+
+.config-tab-content .config-row {
+    align-items: center;
+    gap: var(--space-lg);
+}
+
+.config-tab-content .config-row-vertical {
+    align-items: flex-start;
+    gap: 10px;
+}
+
+.config-tab-content .config-row-vertical .config-label {
+    width: auto;
+}
+
+.config-tab-content .config-input--textarea {
+    width: 100%;
+    min-height: 120px;
+    resize: vertical;
+    font-family: var(--monospace-font, 'Fira Code', 'Consolas', 'Courier New', monospace);
+    line-height: 1.45;
+}
+
+.config-tab-content .config-hint {
+    margin-top: -2px;
+}
+
+.namespace-monte-carlo-section .config-section-heading {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.namespace-monte-carlo-section .config-section-lead {
+    margin-bottom: 0.9rem;
+}
+
+.namespace-mc-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.namespace-mc-subheading {
+    margin: 0;
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.namespace-mc-row {
+    align-items: flex-start;
+    gap: var(--space-lg);
+}
+
+.namespace-mc-row.is-disabled {
+    opacity: 0.65;
+}
+
+.namespace-mc-label {
+    max-width: 180px;
+}
+
+.namespace-mc-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    flex: 1;
+}
+
+.namespace-mc-topline {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.namespace-mc-enabled {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.namespace-mc-type {
+    min-width: 140px;
+    padding: var(--space-xs) 8px;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
+    background: rgba(24, 24, 24, 0.8);
+    color: var(--text-primary);
+}
+
+.namespace-mc-fields {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.namespace-mc-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    min-width: 120px;
+    flex: 1 1 140px;
+}
+
+.namespace-mc-field-label {
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.namespace-mc-field input {
+    padding: var(--space-sm) 8px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-default);
+    background: rgba(26, 26, 26, 0.9);
+    color: var(--text-primary);
+}
+
+.namespace-mc-baseline {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.namespace-mc-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.namespace-mc-reset {
+    padding: var(--space-xs) 10px;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   Definition Field — Write / Preview widget for node documentation
+   ═══════════════════════════════════════════════════════════════════ */
+
+.definition-field {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+}
+
+.definition-field__toolbar {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--border-default);
+    margin-bottom: var(--space-sm);
+}
+
+.definition-field__tab {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: var(--font-size-xs);
+    font-weight: 500;
+    padding: var(--space-xs) 10px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    transition: color var(--transition-normal), border-color var(--transition-normal);
+}
+
+.definition-field__tab:hover {
+    color: var(--text-primary);
+}
+
+.definition-field__tab--active {
+    color: var(--text-primary);
+    border-bottom-color: var(--accent);
+}
+
+.definition-field__editor {
+    min-height: 80px;
+    max-height: 200px;
+    resize: vertical;
+    font-family: inherit;
+    font-size: var(--font-size-sm);
+    line-height: 1.5;
+    background-color: var(--surface-1);
+    color: var(--text-body);
+    border: 1px solid var(--surface-3);
+    border-radius: var(--radius-sm);
+    padding: var(--space-sm) 10px;
+    outline: none;
+}
+
+.definition-field__editor:focus {
+    border-color: var(--accent-bright);
+    box-shadow: 0 0 3px rgba(0, 122, 204, 0.3);
+}
+
+.definition-field__editor::placeholder {
+    color: var(--text-dim);
+    font-style: italic;
+}
+
+.definition-field__preview {
+    min-height: 60px;
+    max-height: 300px;
+    overflow-y: auto;
+    padding: var(--space-sm) 10px;
+    font-size: var(--font-size-sm);
+    line-height: 1.6;
+    background-color: var(--surface-1);
+    border: 1px solid var(--surface-3);
+    border-radius: var(--radius-sm);
+    color: var(--text-body);
+}
+
+.definition-field__preview p { margin: 0 0 8px 0; }
+.definition-field__preview p:last-child { margin-bottom: 0; }
+
+.definition-field__preview h1,
+.definition-field__preview h2,
+.definition-field__preview h3,
+.definition-field__preview h4 {
+    margin: 10px 0 4px 0;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.definition-field__preview h1 { font-size: 15px; }
+.definition-field__preview h2 { font-size: var(--font-size-lg); }
+.definition-field__preview h3 { font-size: var(--font-size-md); }
+.definition-field__preview h4 { font-size: var(--font-size-sm); }
+
+.definition-field__preview code {
+    background: rgba(255, 255, 255, 0.06);
+    padding: 1px 4px;
+    border-radius: var(--radius-sm);
+    font-family: 'Courier New', Courier, monospace;
+    font-size: var(--font-size-xs);
+}
+
+.definition-field__preview pre {
+    background: rgba(0, 0, 0, 0.2);
+    padding: var(--space-md);
+    border-radius: var(--radius-sm);
+    overflow-x: auto;
+    margin: var(--space-sm) 0;
+}
+
+.definition-field__preview pre code {
+    background: none;
+    padding: 0;
+}
+
+.definition-field__preview ul,
+.definition-field__preview ol {
+    margin: var(--space-xs) 0;
+    padding-left: 20px;
+}
+
+.definition-field__preview li { margin: var(--space-xxs) 0; }
+
+.definition-field__preview blockquote {
+    border-left: 3px solid var(--accent);
+    padding-left: 10px;
+    margin: var(--space-sm) 0;
+    color: var(--text-muted);
+}
+
+.definition-field__preview strong { font-weight: 600; }
+.definition-field__preview em { font-style: italic; }
+
+.definition-field__preview a {
+    color: var(--accent);
+    text-decoration: none;
+}
+.definition-field__preview a:hover { text-decoration: underline; }
+
+.definition-field__preview hr {
+    border: none;
+    border-top: 1px solid var(--border-default);
+    margin: var(--space-md) 0;
+}
+
+.definition-field__empty {
+    color: var(--text-muted);
+    font-style: italic;
+    margin: 0;
+}
+
+/* LaTeX math blocks rendered by KaTeX */
+.definition-field__preview .ai-md__math-block {
+    margin: var(--space-md) 0;
+    overflow-x: auto;
+}
+.definition-field__preview .ai-md__math-block .katex-display {
+    margin: var(--space-xs) 0;
+}
+.definition-field__preview .ai-md__math-fallback {
+    color: #ce93d8;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: var(--font-size-xs);
+}

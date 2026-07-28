@@ -1,0 +1,970 @@
+.node.plot {
+  /* Dark theme matching app background */
+  background: var(--surface-0);
+  border-color: var(--svr-border);
+  color: var(--svr-text);
+}
+.node.plot .node-icon { color: var(--svr-primary); }
+
+/* Live plot node: do not show default corner icon (tilde) */
+.node.plot:not(.template)::before {
+    content: none !important;
+}
+
+/* Template styling in palette */
+.node.plot.template {
+  background: linear-gradient(145deg, #2a2d32, var(--surface-0));
+  border-color: var(--svr-border);
+  border-style: dashed;
+}
+/* Palette/gallery tile – use high-specificity selector to override generic template styles */
+.panel.fixed-200 .node.template.plot {
+  background: linear-gradient(145deg, #2a2d32, var(--surface-0));
+  border-color: var(--svr-border);
+  color: var(--svr-text);
+  border-style: dashed;
+}
+/* Plot template icon via CSS */
+.panel.fixed-200 .node.template.plot .template-icon {
+  font-family: 'Material Symbols Outlined';
+  color: var(--svr-primary);
+}
+
+/* Plot node special formatting - similar to stock variable */
+.node.plot:not(.template) {
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-xxs); /* Reduced gap to save space */
+  padding: var(--space-sm) 6px 6px 6px; /* Reduced bottom padding */
+  position: relative; /* anchor for absolute children like the pill */
+  width: 320px;  /* Default width (can be resized) */
+  height: 240px; /* Default height (can be resized) */
+  min-width: 200px;  /* Minimum width */
+  min-height: 150px; /* Minimum height */
+  resize: none; /* Disable browser resize, use custom handle */
+  cursor: move; /* Move cursor on the node surface (outside chart) */
+}
+
+.node.plot .plot-wrap {
+  display: block;
+  width: 100%;
+  flex: 1 1 auto; /* Take remaining height after header */
+  margin: 0 3px 0 0; /* 3px right margin for breathing room */
+  background: transparent; /* Same as node background - no differentiation */
+  border: none;
+  border-radius: 0;
+  overflow: hidden;
+  position: relative; /* Anchor for Plotly's absolute positioning */
+  cursor: grab; /* Hand cursor on the chart area for pan/zoom interactions */
+}
+.node.plot .plot-wrap canvas.plot-canvas { width: 100%; height: 100%; display:block; }
+
+/* Plotly.js container styling */
+.node.plot .plot-wrap .js-plotly-plot,
+.node.plot .plot-wrap .plot-container.plotly {
+  width: 100% !important;
+  height: 100% !important;
+}
+.node.plot .plot-wrap .svg-container {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Plotly modebar styling - match app dark theme */
+.node.plot .modebar {
+  top: 4px !important;
+  right: 4px !important;
+  background: rgba(30, 35, 42, 0.9) !important;
+  border-radius: var(--radius-sm) !important;
+  padding: var(--space-xxs) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+}
+.node.plot .modebar-group {
+  padding: 0 2px !important;
+}
+.node.plot .modebar-btn {
+  padding: var(--space-xs) !important;
+  margin: 1px !important;
+  border-radius: var(--radius-sm) !important;
+  transition: background-color var(--transition-normal) !important;
+}
+.node.plot .modebar-btn:hover {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+}
+.node.plot .modebar-btn.active {
+  background-color: rgba(74, 144, 217, 0.3) !important;
+}
+.node.plot .modebar-btn path {
+  fill: rgba(200, 210, 220, 0.7) !important;
+}
+.node.plot .modebar-btn:hover path {
+  fill: rgba(255, 255, 255, 0.9) !important;
+}
+.node.plot .modebar-btn.active path {
+  fill: #4A90D9 !important;
+}
+/* Hide the modebar separator lines */
+.node.plot .modebar-group:not(:last-child)::after {
+  display: none !important;
+}
+
+.node.plot .plot-empty {
+  font-size: var(--font-size-sm); opacity: .75; width:100%; height:100%; display:flex; align-items:center; justify-content:center; color: #8a8f98;
+}
+
+/* Plot header structure (similar to stock variable) */
+.plot-header {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: auto;
+  padding-top: 3px;
+  padding-bottom: 3px;
+  text-align: center;
+}
+
+/* Single-line title for plot info - very compact */
+.plot-title {
+    display: grid;
+    grid-template-rows: auto; /* Single row only */
+    gap: 0px; /* No gap needed for single line */
+    min-width: 0; /* allow truncation */
+}
+.plot-title-line1 {
+  font-size: var(--font-size-md); /* Slightly larger for visibility */
+  font-weight: 600;
+  color: var(--svr-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.3;
+  text-align: center;
+}
+.plot-title-line2 {
+    display: none; /* Hide second title line */
+}
+
+/* Hide legacy inline-edit title for plot nodes; header is read-only (not for templates) */
+.node.plot:not(.template) .node-text {
+    display: none;
+}
+
+/* Hide the dataset/series pill - not required */
+.node.plot .input-source-pill {
+  display: none !important;
+}
+
+/* Hide legacy input source field - not required */
+.plot-input-source {
+  display: none !important;
+}
+
+.plot-input-source.is-unbound {
+  display: none !important;
+}
+
+/* Resize handle styling */
+.plot-resize-handle {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 16px;
+    height: 16px;
+    cursor: nwse-resize;
+    z-index: 20;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.plot-resize-handle::before {
+    content: '';
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    width: 0;
+    height: 0;
+    border-style: solid;
+    border-width: 0 0 12px 12px;
+    border-color: transparent transparent rgba(159, 182, 207, 0.6) transparent;
+}
+
+.node.plot:hover .plot-resize-handle,
+.node.plot.resizing .plot-resize-handle {
+    opacity: 1;
+}
+
+/* Pop-out button (opens plot in separate window) - absolute top-right */
+.plot-popout-btn {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    background: rgba(60, 60, 60, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: var(--radius-sm);
+    color: #aaa;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.2s ease, background var(--transition-normal), color var(--transition-normal);
+    padding: 0;
+    z-index: 15;
+}
+
+.node.plot:hover .plot-popout-btn {
+    opacity: 1;
+}
+
+.plot-popout-btn:hover {
+    background: rgba(74, 144, 217, 0.9);
+    border-color: rgba(74, 144, 217, 0.5);
+    color: var(--text-bright);
+}
+
+.plot-popout-btn .material-symbols-outlined {
+    font-size: var(--font-size-lg);
+}
+
+.node.plot.resizing {
+    transition: none !important;
+}
+
+.node.plot.resizing .plot-wrap {
+    pointer-events: none;
+}
+
+/* Config panel styling aligned with app */
+.plot-config {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  color: var(--text-body);
+}
+
+
+.plot-config-panel,
+.plot-axes-panel,
+.plot-display-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.config-section-header {
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 8px 0;
+  padding: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.plot-axes-panel {
+  overflow-y: auto;
+  max-height: 100%;
+  padding-right: var(--space-xs);
+}
+
+.plot-section {
+  background-color: var(--surface-1);
+  border: 1px solid #343434;
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.plot-section label {
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+}
+
+.plot-section.read-only-input input[readonly] {
+  color: #9ca3af;
+}
+
+.plot-input-source {
+  font-family: "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
+  letter-spacing: 0.02em;
+  color: #9bd4ff;
+  border-color: #3b6b9a;
+  background-color: #111820;
+}
+
+.plot-input-source.is-unbound {
+  color: #ffb7b7;
+  border-color: #704148;
+  background-color: #1f1113;
+}
+
+.plot-input {
+  width: 100%;
+  background-color: #1c1d1e;
+  border: 1px solid #3a3a3a;
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  padding: var(--space-sm) 8px;
+  font-size: var(--font-size-sm);
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.config-source-summary {
+  font-family: "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
+  letter-spacing: 0.02em;
+  color: #9bd4ff;
+  border-color: #3b6b9a;
+  background-color: #111820;
+  cursor: default;
+}
+
+.config-source-summary.is-unbound {
+  color: #ffb7b7;
+  border-color: #704148;
+  background-color: #1f1113;
+}
+
+.plot-input:focus {
+  border-color: #4da3ff;
+  box-shadow: 0 0 0 2px rgba(77, 163, 255, 0.15);
+}
+
+.plot-config select.plot-input {
+  padding-right: 28px;
+}
+
+/* plot-config buttons now use .btn-add and .btn-delete from main.css */
+
+.axis-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.plot-y-axes {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top:10px;
+}
+
+.plot-axis-card {
+  background-color: #1f1f1f;
+  border: 1px solid #333;
+  border-radius: var(--radius-lg);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.axis-card-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.axis-card-header .axis-name {
+  flex: 1;
+}
+
+.axis-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+}
+
+.axis-row label {
+  width: 80px;
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  color: #cfd2d6;
+}
+
+.axis-row input.plot-input,
+.axis-row select.plot-input {
+  flex: 1;
+}
+
+.axis-row.axis-limits input.plot-input {
+  max-width: 120px;
+}
+
+.axis-series-row-group {
+  align-items: center;
+}
+
+.axis-series-list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg); /* Increased gap between series */
+}
+
+.axis-series-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* First line: Variable search + delete button */
+.axis-series-row .series-var-line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+/* Second line: Style controls grouped per field */
+.axis-series-row .series-style-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.axis-series-row .series-style-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  flex: 1 1 80px;
+  min-width: 80px;
+}
+
+/* Special width for color input field */
+.axis-series-row .series-style-field.color-field {
+  flex: 0 0 60px;
+  min-width: 60px;
+  max-width: 60px;
+}
+
+.axis-series-row .series-style-field input,
+.axis-series-row .series-style-field select {
+  width: 100%;
+}
+
+.axis-series-row .series-control-label {
+  font-size: 10px;
+  color: #8a8f98;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin: 0;
+}
+
+/* Variable search UI within series rows */
+.axis-series-row .variable-namespace-input-container.series-dim-search {
+  display: flex;
+  gap: var(--space-xs);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.axis-series-row input.series-width.plot-input {
+  text-align: right;
+  width: 100%;
+}
+
+.axis-series-row select.series-style.plot-input {
+  width: 100%;
+}
+
+.axis-series-row select.plot-input,
+.axis-series-row input.plot-input {
+  min-width: 0;
+}
+
+/* Color input wrapper shows selected color via overlay swatch */
+.series-style-field.color-field .color-input-wrapper {
+  position: relative;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  border: 1px solid #3a3a3a;
+  overflow: hidden;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.series-style-field.color-field .series-color-preview {
+  border-radius: 0;
+  pointer-events: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.series-style-field.color-field .color-input-wrapper:focus-within {
+  border-color: #4da3ff;
+  box-shadow: 0 0 0 2px rgba(77, 163, 255, 0.2);
+}
+
+.series-style-field.color-field input[type="color"].series-color {
+  padding: 0;
+  cursor: pointer;
+}
+
+.series-style-field.color-field input[type="color"].series-color::-webkit-color-swatch-wrapper,
+.series-style-field.color-field input[type="color"].series-color::-webkit-color-swatch,
+.series-style-field.color-field input[type="color"].series-color::-moz-color-swatch {
+  border: 0;
+  padding: 0;
+}
+
+/* axis-series-row buttons now use .btn-delete from main.css */
+
+.axis-series-list .no-series {
+  color: #8a8f98;
+  font-style: italic;
+  font-size: var(--font-size-xs);
+}
+/* Y axes editor - supports multiple axes with multiple series each */
+.plot-y-axes-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+/* Axis group (Y or Z) */
+.plot-axis-group,
+.plot-y-axis-group {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--surface-3);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+}
+
+.plot-axis-header,
+.plot-y-axis-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-md);
+  padding-bottom: var(--space-sm);
+  border-bottom: 1px solid var(--surface-3);
+}
+
+.plot-axis-header .axis-label,
+.plot-y-axis-header .axis-label {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text-body);
+  cursor: pointer;
+}
+
+.plot-axis-header .axis-label:hover,
+.plot-y-axis-header .axis-label:hover {
+  color: var(--text-bright);
+}
+
+/* Axis label inline input (for renaming) */
+.plot-axis-header .axis-label-input,
+.plot-y-axis-header .axis-label-input {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text-bright);
+  background: var(--surface-2);
+  border: 1px solid #4A90D9;
+  border-radius: var(--radius-sm);
+  padding: var(--space-xxs) 6px;
+  outline: none;
+  width: 120px;
+  box-shadow: 0 0 0 2px rgba(74, 144, 217, 0.2);
+}
+
+/* Axis configuration row */
+.plot-axis-config {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  margin-bottom: 10px;
+  padding: var(--space-md);
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: var(--radius-sm);
+}
+
+.axis-config-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 60px;
+}
+
+.axis-config-field label {
+  font-size: 10px;
+  color: #8a8f98;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.axis-config-field input,
+.axis-config-field select {
+  padding: var(--space-xs) 6px;
+  font-size: var(--font-size-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--surface-3);
+  border-radius: var(--radius-sm);
+  color: var(--text-body);
+  width: 70px;
+}
+
+.axis-config-field input:focus,
+.axis-config-field select:focus {
+  outline: none;
+  border-color: #4A90D9;
+}
+
+.axis-config-field input::placeholder {
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+/* Disabled select options styling */
+.plot-config select option:disabled,
+.axis-config-field select option:disabled {
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.axis-header-actions {
+  display: flex;
+  gap: var(--space-xs);
+}
+
+.btn-icon {
+  background: transparent;
+  border: none;
+  color: #8a8f98;
+  cursor: pointer;
+  padding: var(--space-xs);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--transition-normal), background-color var(--transition-normal);
+}
+
+.btn-icon:hover {
+  color: var(--text-bright);
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.btn-icon.btn-remove:hover {
+  color: #ff6b6b;
+  background-color: rgba(255, 107, 107, 0.1);
+}
+
+.btn-icon .material-symbols-outlined {
+  font-size: var(--font-size-2xl);
+}
+
+/* Series list within an axis */
+.plot-series-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+/* Individual series item - all controls on same line */
+.plot-series-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+/* Autocomplete variable inputs in plot config (series, X axis, Z axis) */
+.series-autocomplete.autocomplete-field {
+  flex: 1;
+  min-width: 0;
+}
+
+.series-autocomplete .autocomplete-field__helper {
+  display: none;
+}
+
+.series-autocomplete .autocomplete-field__input-wrapper {
+  flex-wrap: nowrap;
+}
+
+/* Series legend label input */
+.plot-series-item .series-label {
+  width: 120px;
+  height: 28px;
+  padding: var(--space-xs) 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--surface-3);
+  background-color: var(--surface-2);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  flex-shrink: 1;
+  min-width: 50px;
+}
+
+.plot-series-item .series-label:focus {
+  outline: none;
+  border-color: #4A90D9;
+}
+
+.plot-series-item .series-label::placeholder {
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.plot-series-item .series-color {
+  width: 28px;
+  height: 28px;
+  padding: var(--space-xxs);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--surface-3);
+  background-color: var(--surface-2);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+/* Series line width input */
+.plot-series-item .series-width {
+  width: 40px;
+  height: 28px;
+  padding: var(--space-xs) 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--surface-3);
+  background-color: var(--surface-2);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.plot-series-item .series-width:focus {
+  outline: none;
+  border-color: #4A90D9;
+}
+
+/* Series line style dropdown */
+.plot-series-item .series-style {
+  height: 28px;
+  padding: var(--space-xs) 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--surface-3);
+  background-color: var(--surface-2);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.plot-series-item .series-style:focus {
+  outline: none;
+  border-color: #4A90D9;
+}
+
+/* Series stack group input */
+.plot-series-item .series-stack-group {
+  width: 50px;
+  min-width: 50px;
+  height: 28px;
+  padding: var(--space-xs) 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--surface-3);
+  background-color: var(--surface-2);
+  color: #ccc;
+  font-size: var(--font-size-xs);
+  flex-shrink: 0;
+}
+
+.plot-series-item .series-stack-group:focus {
+  outline: none;
+  border-color: #4A90D9;
+}
+
+.plot-series-item .series-stack-group::placeholder {
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+/* ── Overlay (ETL actuals) section per series ──────────────────── */
+
+.plot-series-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.plot-overlay-section {
+  margin-left: var(--space-lg);
+  margin-bottom: var(--space-sm);
+}
+
+.plot-overlay-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xxs);
+  cursor: pointer;
+  user-select: none;
+  padding: var(--space-xxs) 0;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: var(--font-size-xs);
+}
+
+.plot-overlay-toggle:hover {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.plot-overlay-chevron {
+  font-size: var(--font-size-xl);
+}
+
+.plot-overlay-toggle-label {
+  font-size: var(--font-size-xs);
+}
+
+.plot-overlay-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: var(--space-sm) 8px;
+  margin-top: var(--space-xxs);
+  background: rgba(255, 255, 255, 0.02);
+  border-left: 2px solid rgba(74, 144, 217, 0.3);
+  border-radius: 0 4px 4px 0;
+}
+
+.plot-overlay-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.plot-overlay-row label {
+  width: 60px;
+  flex-shrink: 0;
+  font-size: var(--font-size-xs);
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.plot-overlay-input {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  padding: var(--space-xxs) 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--surface-3);
+  background-color: var(--surface-2);
+  color: var(--text-primary);
+  font-size: var(--font-size-xs);
+}
+
+.plot-overlay-input:focus {
+  outline: none;
+  border-color: #4A90D9;
+}
+
+.plot-overlay-color {
+  width: 24px;
+  height: 24px;
+  padding: 1px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--surface-3);
+  background-color: var(--surface-2);
+  cursor: pointer;
+}
+
+.btn-overlay-clear {
+  padding: var(--space-xs) 8px;
+  margin-top: var(--space-xxs);
+  background: rgba(234, 67, 53, 0.1);
+  border: 1px solid rgba(234, 67, 53, 0.3);
+  border-radius: var(--radius-sm);
+  color: #ea4335;
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.btn-overlay-clear:hover {
+  background: rgba(234, 67, 53, 0.2);
+}
+
+.plot-overlay-error {
+  color: rgba(234, 67, 53, 0.6);
+  font-size: var(--font-size-xs);
+  padding: var(--space-xs);
+}
+
+/* Add Y Axis button */
+.btn-add-axis {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  width: 100%;
+  padding: var(--space-md) 12px;
+  margin-top: var(--space-md);
+  background: rgba(74, 144, 217, 0.1);
+  border: 1px dashed rgba(74, 144, 217, 0.5);
+  border-radius: var(--radius-md);
+  color: #4A90D9;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: background-color var(--transition-normal), border-color var(--transition-normal);
+}
+
+.btn-add-axis:hover:not(:disabled) {
+  background: rgba(74, 144, 217, 0.2);
+  border-color: #4A90D9;
+}
+
+.btn-add-axis .material-symbols-outlined {
+  font-size: var(--font-size-xl);
+}
+
+/* Disabled state for add axis button */
+.btn-add-axis:disabled,
+.btn-add-axis.btn-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: rgba(74, 144, 217, 0.05);
+  border-color: rgba(74, 144, 217, 0.25);
+}
+
+/* Disabled icon button */
+.btn-icon:disabled,
+.btn-icon.btn-disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-icon:disabled:hover,
+.btn-icon.btn-disabled:hover {
+  color: #8a8f98;
+  background: transparent;
+}
+
+/* Z-axis series item (single variable for z-axis) */
+.plot-z-series-item {
+  padding: var(--space-xs) 0;
+}
+
+/* Custom section container */
+.config-custom-section {
+  margin-top: var(--space-md);
+}
+
+/* Plot config panel stack (used by plot_config_panel.js) */
+.plot-config-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.plot-config-stack .config-section {
+  width: 100%;
+}

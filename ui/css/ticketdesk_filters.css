@@ -1,0 +1,647 @@
+/* ════════════════════════════════════════════════════════════════════
+   ticketdesk_filters.css — custom filters: the expression EDITOR modal
+   (`td-fed` BEM namespace) plus the left-rail rows the integrator uses
+   to list custom filters (`td-nav__item--custom` & friends).
+
+   Dark theme only, same expert-tool density as ticketdesk.css: 10-11px
+   text, 2px radii, tight padding, everything built on the --ea-* /
+   --text-* / --color-* tokens with literal fallbacks so the file still
+   reads correctly if a token is missing.
+
+   Loaded AFTER ticketdesk.css (see ui/index.html) so it can lean on
+   .ea-btn / .ea-tin and the .td-* scaffolding without fighting it.
+   ticketdesk.css itself is owned by another file — nothing here edits
+   or overrides its rules, it only adds new `td-fed`/`td-nav` classes.
+   ──────────────────────────────────────────────────────────────────── */
+
+/* ════════════════════════════════════════════════════════════════════
+   1. Overlay + dialog chrome
+   Same z-tier and dim as .td-modal-backdrop in ticketdesk.css (11000,
+   safely above the 6000-6999 ManagedWindow band), so the editor stacks
+   predictably with every other dialog in the shell.
+   ──────────────────────────────────────────────────────────────────── */
+.td-fed {
+    position: fixed;
+    inset: 0;
+    z-index: 11000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.55);
+    font-size: var(--ea-font-body, 11px);
+    color: var(--ea-text, #d4d4d4);
+}
+
+.td-fed__dialog {
+    position: relative;          /* anchor for the confirm sheet */
+    display: flex;
+    flex-direction: column;
+    width: 900px;
+    max-width: 94vw;
+    height: 640px;
+    max-height: 90vh;
+    background: var(--ea-bg-content, #212121);
+    border: 1px solid #383838;
+    border-radius: 2px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+    overflow: hidden;
+}
+
+.td-fed__head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 0 0 auto;
+    padding: 5px 8px 5px 10px;
+    background: var(--ea-bg-chrome, #1a1a1a);
+    border-bottom: 1px solid var(--ea-border-soft, #2a2a2a);
+    user-select: none;
+}
+.td-fed__headicon { font-size: 14px; color: var(--ea-accent, #1177b3); }
+.td-fed__title {
+    font-size: 10.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-primary, #e0e0e0);
+}
+.td-fed__grow { flex: 1; }
+
+.td-fed__close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 18px;
+    padding: 0;
+    background: none;
+    border: none;
+    border-radius: 2px;
+    color: var(--text-dim, #666);
+    cursor: pointer;
+}
+.td-fed__close .material-symbols-outlined { font-size: 14px; }
+.td-fed__close:hover { color: #fff; background: rgba(255, 255, 255, 0.08); }
+.td-fed__close:focus-visible { outline: 1px solid var(--ea-accent, #1177b3); outline-offset: -1px; }
+
+.td-fed__body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   2. Name row + icon picker
+   ──────────────────────────────────────────────────────────────────── */
+.td-fed__namerow {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 0 0 auto;
+}
+.td-fed__lbl {
+    font-size: 10.5px;
+    color: var(--text-muted, #888);
+    user-select: none;
+}
+.td-fed__name { flex: 1; min-width: 0; }
+
+/* Inputs/selects inside the dialog get the same recessed well treatment
+   the pages use (.td-page .ea-tin in ticketdesk.css) — restated here
+   because the overlay lives on <body>, outside .td-page. */
+.td-fed .ea-tin {
+    background: var(--ea-bg-well, #0d0d0d);
+    color: var(--ea-text, #d4d4d4);
+    border: 1px solid var(--ea-border, #333);
+    border-radius: 2px;
+    padding: 2px 8px;
+    min-height: 20px;
+    font-size: var(--ea-font-body, 11px);
+    font-family: inherit;
+    box-shadow: none;
+    outline: none;
+    box-sizing: border-box;
+}
+.td-fed select.ea-tin { padding: 2px 4px; }
+.td-fed .ea-tin:hover:not([readonly]):not(:disabled) { border-color: var(--border-strong, #383838); }
+.td-fed .ea-tin:focus {
+    border-color: var(--ea-accent, #1177b3);
+    box-shadow: 0 0 0 1px var(--ea-accent, #1177b3);
+}
+
+.td-fed__iconpick { position: relative; flex: 0 0 auto; }
+.td-fed__iconbtn {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    height: 20px;
+    padding: 0 4px 0 6px;
+    background: var(--ea-bg-well, #0d0d0d);
+    border: 1px solid var(--ea-border, #333);
+    border-radius: 2px;
+    color: var(--ea-text, #d4d4d4);
+    cursor: pointer;
+}
+.td-fed__iconbtn:hover { border-color: var(--border-strong, #383838); }
+.td-fed__iconbtn:focus-visible {
+    outline: none;
+    border-color: var(--ea-accent, #1177b3);
+    box-shadow: 0 0 0 1px var(--ea-accent, #1177b3);
+}
+.td-fed__iconface { font-size: 14px; color: var(--ea-accent, #1177b3); }
+.td-fed__caret { font-size: 12px; color: var(--text-dim, #666); }
+
+/* Popover: a local stacking context inside the dialog — no global z-tier
+   needed, it only has to beat its siblings. */
+.td-fed__iconpop {
+    position: absolute;
+    top: calc(100% + 3px);
+    right: 0;
+    z-index: 5;
+    width: 244px;
+    padding: 6px;
+    background: var(--ea-bg-chrome, #1a1a1a);
+    border: 1px solid #383838;
+    border-radius: 2px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
+}
+.td-fed__iconpop[hidden] { display: none; }
+.td-fed__iconsearch { width: 100%; margin-bottom: 6px; }
+.td-fed__icongrid {
+    display: grid;
+    /* 8 columns — the arrow-key handler in filter_editor.js uses the same
+       count for up/down, keep the two in sync. */
+    grid-template-columns: repeat(8, 1fr);
+    gap: 2px;
+    max-height: 190px;
+    overflow-y: auto;
+}
+.td-fed__iconopt {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 24px;
+    padding: 0;
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 2px;
+    color: var(--text-muted, #888);
+    cursor: pointer;
+}
+.td-fed__iconopt .material-symbols-outlined { font-size: 15px; }
+.td-fed__iconopt:hover { background: rgba(255, 255, 255, 0.07); color: var(--ea-text, #d4d4d4); }
+.td-fed__iconopt:focus-visible {
+    outline: none;
+    border-color: var(--ea-accent, #1177b3);
+    color: var(--ea-text, #d4d4d4);
+}
+.td-fed__iconopt.is-on { border-color: var(--ea-accent, #1177b3); color: var(--ea-accent, #1177b3); }
+.td-fed__iconempty {
+    padding: 8px 4px;
+    text-align: center;
+    font-style: italic;
+    color: var(--text-dim, #666);
+}
+.td-fed__iconempty[hidden] { display: none; }
+
+/* ════════════════════════════════════════════════════════════════════
+   3. Two-pane body: builder | preview
+   ──────────────────────────────────────────────────────────────────── */
+.td-fed__cols {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 300px;
+    gap: 8px;
+}
+@media (max-width: 860px) {
+    .td-fed__cols { grid-template-columns: minmax(0, 1fr); grid-template-rows: 1fr 200px; }
+}
+
+.td-fed__pane {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    background: var(--ea-bg-chrome, #1a1a1a);
+    border: 1px solid var(--ea-border, #333);
+    border-radius: 2px;
+}
+.td-fed__panehead {
+    flex: 0 0 auto;
+    padding: 3px 8px;
+    background: var(--ea-bg-content, #212121);
+    border-bottom: 1px solid var(--ea-border-soft, #2a2a2a);
+    font-size: 9.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted, #888);
+    user-select: none;
+}
+.td-fed__tree,
+.td-fed__preview {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 8px;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   4. Expression builder — groups, connector rail, clauses
+   ──────────────────────────────────────────────────────────────────── */
+.td-fed__group {
+    border: 1px solid var(--ea-border, #333);
+    border-left: 2px solid #3a3a3a;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.015);
+}
+.td-fed__group--root { border-left-color: var(--ea-accent, #1177b3); }
+
+.td-fed__grouphead {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 6px;
+    border-bottom: 1px solid var(--ea-border-soft, #2a2a2a);
+    user-select: none;
+}
+
+/* Segmented AND/OR control */
+.td-fed__seg {
+    display: inline-flex;
+    border: 1px solid var(--ea-border, #333);
+    border-radius: 2px;
+    overflow: hidden;
+}
+.td-fed__segbtn {
+    padding: 1px 8px;
+    min-height: 17px;
+    background: var(--ea-bg-well, #0d0d0d);
+    border: none;
+    color: var(--text-muted, #888);
+    font-size: 9.5px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+}
+.td-fed__segbtn + .td-fed__segbtn { border-left: 1px solid var(--ea-border, #333); }
+.td-fed__segbtn:hover { color: var(--ea-text, #d4d4d4); background: #171717; }
+.td-fed__segbtn.is-on { background: var(--ea-accent, #1177b3); color: #fff; }
+.td-fed__segbtn:focus-visible { outline: 1px solid var(--ea-accent, #1177b3); outline-offset: -1px; }
+
+/* NOT badge — off by default, danger-tinted when armed. */
+.td-fed__not {
+    padding: 1px 6px;
+    min-height: 17px;
+    background: var(--ea-bg-well, #0d0d0d);
+    border: 1px solid var(--ea-border, #333);
+    border-radius: 2px;
+    color: var(--text-dim, #666);
+    font-size: 9.5px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+}
+.td-fed__not:hover { color: var(--ea-text, #d4d4d4); border-color: var(--border-strong, #383838); }
+.td-fed__not.is-on {
+    background: #3a1f1f;
+    border-color: #5a3434;
+    color: #d9886a;
+}
+.td-fed__not:focus-visible { outline: 1px solid var(--ea-accent, #1177b3); outline-offset: -1px; }
+
+.td-fed__hint { font-size: 9.5px; color: var(--text-dim, #666); }
+
+/* Connector rail: one vertical line down the group, one tick per child. */
+.td-fed__children {
+    padding: 4px 6px 4px 12px;
+    margin-left: 8px;
+    border-left: 1px solid var(--ea-border-soft, #2a2a2a);
+}
+.td-fed__child { position: relative; margin: 3px 0; }
+.td-fed__child::before {
+    content: "";
+    position: absolute;
+    left: -12px;
+    top: 10px;
+    width: 8px;
+    height: 1px;
+    background: var(--ea-border-soft, #2a2a2a);
+}
+.td-fed__noconds {
+    padding: 2px 0;
+    font-style: italic;
+    color: var(--text-dim, #666);
+}
+
+.td-fed__groupfoot {
+    display: flex;
+    gap: 4px;
+    padding: 4px 6px;
+    border-top: 1px solid var(--ea-border-soft, #2a2a2a);
+}
+.td-fed__groupfoot .ea-btn { min-height: 18px; padding: 0 8px; font-size: 10px; }
+
+/* Clause row: field · operator · value · remove */
+.td-fed__row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+    padding: 2px 4px;
+    background: var(--ea-bg-content, #212121);
+    border: 1px solid var(--ea-border, #333);
+    border-radius: 2px;
+}
+.td-fed__row:focus-within { border-color: var(--border-strong, #383838); }
+.td-fed__sel--field { flex: 0 0 130px; max-width: 130px; }
+.td-fed__sel--op    { flex: 0 0 132px; max-width: 132px; }
+.td-fed__val {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 1 1 150px;
+    min-width: 120px;
+    flex-wrap: wrap;
+}
+.td-fed__vin { flex: 1 1 90px; min-width: 80px; }
+.td-fed__vin--num { flex: 0 0 78px; text-align: right; font-variant-numeric: tabular-nums; }
+.td-fed__vsel { flex: 1 1 110px; min-width: 90px; }
+.td-fed__and { font-size: 9.5px; color: var(--text-dim, #666); }
+.td-fed__novalue { color: var(--text-dim, #666); }
+
+.td-fed__x {
+    flex: 0 0 auto;
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    background: none;
+    border: none;
+    border-radius: 2px;
+    color: var(--text-dim, #666);
+    font-size: 12px;
+    line-height: 1;
+    cursor: pointer;
+}
+.td-fed__x:hover { color: var(--color-danger, #c74e4e); background: rgba(199, 78, 78, 0.12); }
+.td-fed__x:focus-visible { outline: 1px solid var(--ea-accent, #1177b3); outline-offset: -1px; }
+
+/* Token / chip value control (labels + "one of" multi-selects) */
+.td-fed__tokens {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    flex-wrap: wrap;
+    flex: 1 1 150px;
+    min-width: 120px;
+    padding: 1px 3px;
+    background: var(--ea-bg-well, #0d0d0d);
+    border: 1px solid var(--ea-border, #333);
+    border-radius: 2px;
+    min-height: 20px;
+    box-sizing: border-box;
+}
+.td-fed__tokens:focus-within { border-color: var(--ea-accent, #1177b3); box-shadow: 0 0 0 1px var(--ea-accent, #1177b3); }
+.td-fed__token {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 0 2px 0 5px;
+    background: #2d2d2d;
+    border: 1px solid var(--ea-border, #333);
+    border-radius: 2px;
+    font-size: 9.5px;
+    color: var(--ea-text, #d4d4d4);
+    white-space: nowrap;
+}
+.td-fed__tokenx {
+    background: none;
+    border: none;
+    padding: 0 1px;
+    color: var(--text-dim, #666);
+    font-size: 10px;
+    line-height: 1;
+    cursor: pointer;
+}
+.td-fed__tokenx:hover { color: var(--color-danger, #c74e4e); }
+.td-fed__tokenin,
+.td-fed__tokenadd {
+    flex: 1 1 60px;
+    min-width: 54px;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--ea-text, #d4d4d4);
+    font-family: inherit;
+    font-size: var(--ea-font-body, 11px);
+}
+.td-fed__tokenadd { color: var(--text-muted, #888); }
+.td-fed__tokenadd option { background: var(--ea-bg-content, #212121); color: var(--ea-text, #d4d4d4); }
+
+/* ════════════════════════════════════════════════════════════════════
+   5. Live preview pane
+   ──────────────────────────────────────────────────────────────────── */
+.td-fed__sentence {
+    padding: 4px 6px;
+    background: var(--ea-bg-content, #212121);
+    border: 1px solid var(--ea-border, #333);
+    border-left: 2px solid var(--ea-accent, #1177b3);
+    border-radius: 2px;
+    line-height: 1.5;
+    color: var(--ea-text, #d4d4d4);
+}
+.td-fed__count {
+    padding: 5px 2px 4px;
+    font-size: 10px;
+    color: var(--text-muted, #888);
+}
+.td-fed__count b { color: var(--text-primary, #e0e0e0); font-variant-numeric: tabular-nums; }
+
+.td-fed__list { list-style: none; margin: 0; padding: 0; }
+.td-fed__hit {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 3px;
+    border-bottom: 1px solid var(--ea-border-soft, #2a2a2a);
+    white-space: nowrap;
+    overflow: hidden;
+}
+.td-fed__hitid {
+    flex: 0 0 auto;
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 9.5px;
+    color: var(--text-dim, #666);
+}
+.td-fed__hittitle {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.td-fed__hitstatus { flex: 0 0 auto; font-size: 9.5px; color: var(--text-dim, #666); }
+.td-fed__more { padding: 4px 3px; font-size: 9.5px; color: var(--text-dim, #666); }
+
+/* Severity dot — same colour ramp as .td-pri--1..4 in ticketdesk.css. */
+.td-fed__dot {
+    flex: 0 0 auto;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text-dim, #666);
+}
+.td-fed__dot--crash  { background: var(--color-danger, #c74e4e); }
+.td-fed__dot--high   { background: var(--color-warning, #ff9800); }
+.td-fed__dot--medium { background: var(--ea-accent, #1177b3); }
+.td-fed__dot--low    { background: var(--text-dim, #666); }
+
+.td-fed__none,
+.td-fed__invalid {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 6px;
+    color: var(--text-dim, #666);
+}
+.td-fed__none {
+    align-items: center;
+    text-align: center;
+    font-style: italic;
+}
+.td-fed__none .material-symbols-outlined { font-size: 20px; }
+.td-fed__invalidhead {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--color-danger, #c74e4e);
+    font-weight: 600;
+    font-style: normal;
+}
+.td-fed__invalidhead .material-symbols-outlined { font-size: 14px; }
+.td-fed__errlist {
+    margin: 0;
+    padding-left: 18px;
+    line-height: 1.6;
+    color: #d9886a;
+    font-style: normal;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   6. Footer, save error, confirm sheet
+   ──────────────────────────────────────────────────────────────────── */
+.td-fed__saveerr {
+    flex: 0 0 auto;
+    padding: 4px 10px;
+    background: #3a1f1f;
+    border-top: 1px solid #5a3434;
+    color: #d9886a;
+}
+.td-fed__saveerr[hidden] { display: none; }
+
+.td-fed__foot {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 0 0 auto;
+    padding: 6px 10px;
+    background: var(--ea-bg-chrome, #1a1a1a);
+    border-top: 1px solid var(--ea-border-soft, #2a2a2a);
+}
+.td-fed__foot .ea-btn { min-width: 76px; justify-content: center; }
+.td-fed__delbtn[hidden] { display: none; }
+
+/* Confirm sheet — modal *within* the modal (discard changes / delete).
+   Covers the dialog so the destructive choice is unmissable; the JS
+   focus trap narrows to .td-fed__confirmbox while it is open. */
+.td-fed__confirm {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.6);
+}
+.td-fed__confirm[hidden] { display: none; }
+.td-fed__confirmbox {
+    width: 320px;
+    max-width: 84%;
+    padding: 10px;
+    background: var(--ea-bg-content, #212121);
+    border: 1px solid #383838;
+    border-radius: 2px;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.6);
+}
+.td-fed__confirmtitle {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-primary, #e0e0e0);
+    margin-bottom: 4px;
+}
+.td-fed__confirmbody { line-height: 1.5; color: var(--text-muted, #888); }
+.td-fed__confirmacts {
+    display: flex;
+    justify-content: flex-end;
+    gap: 4px;
+    margin-top: 10px;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   7. LEFT RAIL — custom filter rows (used by ticketdesk/pages.js)
+
+   Markup contract for the integrator:
+
+     <div class="td-nav__item td-nav__item--custom" data-filter="<id>">
+         <span class="material-symbols-outlined">bolt</span>
+         <span>My filter</span>
+         <span class="td-nav__actions">
+             <button class="td-nav__action" data-act="edit" title="Edit">
+                 <span class="material-symbols-outlined">edit</span></button>
+             <button class="td-nav__action" data-act="copy" title="Duplicate">
+                 <span class="material-symbols-outlined">content_copy</span></button>
+         </span>
+         <span class="td-nav__badge">12</span>
+     </div>
+
+   .td-nav__actions is hidden until the row is hovered OR something inside
+   it has focus, so the rail stays quiet but is still keyboard reachable
+   (tabbing into a button reveals its group via :focus-within).
+   ──────────────────────────────────────────────────────────────────── */
+.td-nav__item--custom .material-symbols-outlined { color: var(--ea-accent, #1177b3); }
+
+.td-nav__actions {
+    display: none;
+    align-items: center;
+    gap: 1px;
+    margin-left: auto;
+    flex: 0 0 auto;
+}
+.td-nav__item:hover .td-nav__actions,
+.td-nav__item:focus-within .td-nav__actions { display: inline-flex; }
+
+/* When the actions are showing they take over the auto margin, so the
+   count badge must stop claiming it or the row jumps. */
+.td-nav__item:hover .td-nav__actions ~ .td-nav__badge,
+.td-nav__item:focus-within .td-nav__actions ~ .td-nav__badge { margin-left: 4px; }
+
+.td-nav__action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    background: none;
+    border: none;
+    border-radius: 2px;
+    color: var(--text-dim, #666);
+    cursor: pointer;
+}
+.td-nav__action .material-symbols-outlined { font-size: 14px; color: inherit; }
+.td-nav__action:hover { color: var(--ea-text, #d4d4d4); background: rgba(255, 255, 255, 0.08); }
+.td-nav__action:focus-visible { outline: 1px solid var(--ea-accent, #1177b3); outline-offset: -1px; }
+.td-nav__action--danger:hover { color: var(--color-danger, #c74e4e); background: rgba(199, 78, 78, 0.12); }

@@ -1,0 +1,459 @@
+/* tile.css — WM containers, leaves, chrome, splitters. */
+
+.twm-shell__main {
+    overflow: hidden;
+    position: relative;
+}
+
+.twm-root {
+    display: flex;
+    height: 100%;
+    width: 100%;
+    background: var(--surface-app);
+}
+
+.twm-empty {
+    display: flex;
+    height: 100%;
+    width: 100%;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    font-size: var(--font-size-xs);
+}
+
+/* Split + slot — flex containers along one axis. */
+.twm-split {
+    display: flex;
+    flex: 1 1 auto;
+    overflow: hidden;
+    min-width: 0;
+    min-height: 0;
+}
+.twm-split--h { flex-direction: row; }
+.twm-split--v { flex-direction: column; }
+
+.twm-slot {
+    display: flex;
+    overflow: hidden;
+    min-width: 0;
+    min-height: 0;
+}
+.twm-slot > .twm-leaf,
+.twm-slot > .twm-split { flex: 1 1 auto; min-width: 0; min-height: 0; }
+
+/* Splitter handle between siblings. */
+.twm-splitter {
+    flex: 0 0 4px;
+    background: transparent;
+    position: relative;
+    z-index: 1;
+}
+.twm-splitter:hover,
+body.twm-dragging .twm-splitter { background: var(--accent-bright); opacity: 0.5; }
+.twm-splitter--h { cursor: ew-resize; }
+.twm-splitter--v { cursor: ns-resize; height: 4px; flex: 0 0 4px; }
+
+body.twm-dragging * { user-select: none; }
+
+/* Leaf — chrome + body. */
+.twm-leaf {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    background: var(--surface-0);
+    border: 1px solid var(--border-subtle);
+    border-radius: 0;
+    margin: 0;
+    overflow: hidden;
+    min-width: 0;
+    min-height: 0;
+    outline: none;
+}
+.twm-leaf--focused {
+    border-color: var(--accent-bright);
+    box-shadow: 0 0 0 1px rgba(0, 122, 204, 0.25) inset;
+}
+
+.twm-leaf__chrome {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+    padding: 0 var(--space-sm);
+    height: 22px;
+    /* Pin the chrome like its sibling .twm-leaf__tabbar. Without
+     * flex-shrink:0 the chrome inherits the default `0 1 auto` and is the
+     * only fixed-height bar the flex column may shrink: a tab whose content
+     * has a tall max-content height (e.g. Watch — rows min-height:60px +
+     * Monaco editor + hits + help aside) inflates .twm-leaf__body's
+     * flex-basis:auto, and the negative free space gets distributed onto
+     * the chrome too, visibly changing its height. The body (overflow:auto)
+     * is what should absorb the overflow, never the chrome. */
+    flex: 0 0 auto;
+    background: var(--surface-1);
+    border-bottom: 1px solid var(--border-subtle);
+    user-select: none;
+    font-size: var(--font-size-xs);
+}
+.twm-leaf--focused .twm-leaf__chrome {
+    background: var(--surface-2);
+    color: var(--text-primary);
+}
+/* No text-transform: these carry real content titles — a bug summary, a
+   filter name — and forcing them lowercase mangled proper nouns and the
+   "#44" ids alike. The case the page supplies is the case that shows. */
+.twm-leaf__title {
+    color: var(--text-secondary);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    letter-spacing: 0.02em;
+}
+.twm-leaf__actions { display: inline-flex; gap: 2px; }
+.twm-leaf__btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 0;
+}
+.twm-leaf__btn:hover { background: var(--state-hover); color: var(--text-primary); }
+.twm-leaf__btn .material-symbols-outlined { font-size: 14px; }
+
+.twm-leaf__body {
+    flex: 1 1 auto;
+    overflow: auto;
+    min-height: 0;
+    background: var(--surface-0);
+}
+
+/* Bottom tab strip — appears only when the leaf carries >1 tab.
+ * Trapezoidal/spreadsheet-style tabs (slanted top corners) sit on a
+ * thin bar at the bottom of the tile, sharing the visual language of
+ * the bottom panel's chrome (surface-1, square corners, 11 px label).
+ *
+ * The hamburger button on the left opens the per-tile "browse this
+ * page's content" menu (`wm.ctx.onTileTabMenu`). */
+.twm-leaf__tabbar {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: stretch;
+    height: 22px;
+    background: var(--surface-1);
+    border-top: 1px solid var(--border-default);
+    padding: 0 4px;
+    overflow: hidden;
+    user-select: none;
+    font-size: var(--font-size-xs);
+}
+.twm-leaf__tabbar--hidden { display: none; }
+.twm-leaf__tab-hamburger {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    margin-right: 4px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 0;
+}
+.twm-leaf__tab-hamburger:hover {
+    color: var(--text-primary);
+    background: var(--state-hover);
+}
+.twm-leaf__tab-hamburger .material-symbols-outlined {
+    font-size: 16px;
+}
+
+.twm-leaf__tabs {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    align-items: stretch;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+.twm-leaf__tabs::-webkit-scrollbar { display: none; }
+
+.twm-leaf__tab {
+    /* Spreadsheet-style PARALLELOGRAM: both left and right edges
+     * slanted by ~8 px in the same direction (top-right / bottom-left
+     * pulled inward), giving each tab a uniform slant. Reads as the
+     * old Excel/Lotus sheet-tab look without the trapezoid's bottom
+     * flare. */
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 14px 2px 14px;
+    /* Tabs sit flush against each other — no spacing between them.
+     * The parallelogram clip-path provides the visual separation on
+     * its own (each tab's left edge starts at 8 px in, the previous
+     * tab's right edge ends 8 px in; they interlock without overlap). */
+    margin-right: 0;
+    background: var(--surface-2);
+    color: var(--text-muted);
+    border: none;
+    cursor: pointer;
+    line-height: 1;
+    white-space: nowrap;
+    clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+}
+.twm-leaf__tab:hover {
+    background: var(--surface-3);
+    color: var(--text-primary);
+}
+.twm-leaf__tab--on {
+    background: var(--surface-0);   /* matches the body — looks lifted */
+    color: var(--text-bright);
+    /* Active tab gets a subtle border on the slanted edge so it
+     * separates from the surface-1 bar. Done via a layered ::before
+     * because clip-path drops the actual border. */
+}
+.twm-leaf__tab--on::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border-top: 1px solid var(--accent-bright, #1683c4);
+    clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+}
+.twm-leaf__tab-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    /* Wider than the old 160px: tabs now read "#44 — <summary>", and the
+       point of the summary is lost if it ellipsises after two words. */
+    max-width: 260px;
+    letter-spacing: 0.02em;
+}
+.twm-leaf__tab-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    margin-left: 2px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    color: inherit;
+    opacity: 0.6;
+    cursor: pointer;
+    border-radius: 0;
+}
+.twm-leaf__tab-close:hover {
+    opacity: 1;
+    color: var(--text-bright);
+}
+.twm-leaf__tab-close .material-symbols-outlined {
+    font-size: 12px;
+}
+
+
+/* ── Tile tab menu (hamburger pop-out) ────────────────────────────
+ * Anchored above the hamburger button. Lists every entity that the
+ * tile's home page would show, grouped by source, with search +
+ * pagination. Click a row → opens in a new tab on the originating
+ * tile (see install._tileTabMenu). */
+.twm-tile-tabmenu-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-modal);
+    pointer-events: none;
+}
+.twm-tile-tabmenu {
+    pointer-events: auto;
+    width: 360px;
+    max-height: 480px;
+    display: flex;
+    flex-direction: column;
+    background: var(--surface-1);
+    border: 1px solid var(--border-default);
+    box-shadow: var(--shadow-lg);
+}
+.twm-tile-tabmenu__head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border-subtle);
+    font-size: var(--font-size-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+}
+.twm-tile-tabmenu__head-icon { font-size: 14px; }
+.twm-tile-tabmenu__head-label { flex: 1 1 auto; }
+.twm-tile-tabmenu__close {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0 4px;
+    font-size: 14px;
+}
+.twm-tile-tabmenu__close:hover { color: var(--text-primary); }
+
+.twm-tile-tabmenu__search {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--border-subtle);
+    background: var(--surface-1);
+}
+.twm-tile-tabmenu__search .material-symbols-outlined {
+    font-size: 14px;
+    color: var(--text-muted);
+}
+.twm-tile-tabmenu__search input {
+    flex: 1 1 auto;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text-primary);
+    font-size: var(--font-size-sm);
+}
+
+.twm-tile-tabmenu__body {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 4px 0;
+}
+.twm-tile-tabmenu__loading {
+    padding: var(--space-md);
+    color: var(--text-muted);
+    font-size: var(--font-size-xs);
+    text-align: center;
+}
+
+.twm-tile-tabmenu__section {
+    padding: 0 0 4px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+.twm-tile-tabmenu__section:last-child { border-bottom: none; }
+.twm-tile-tabmenu__section-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: 4px 8px;
+    color: var(--text-muted);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+.twm-tile-tabmenu__section-head .material-symbols-outlined { font-size: 12px; }
+.twm-tile-tabmenu__section-label { flex: 1 1 auto; }
+.twm-tile-tabmenu__section-count {
+    color: var(--text-muted);
+    background: var(--surface-2);
+    padding: 0 4px;
+    font-size: 9px;
+}
+
+.twm-tile-tabmenu__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.twm-tile-tabmenu__item {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: 3px 12px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
+}
+.twm-tile-tabmenu__item:hover,
+.twm-tile-tabmenu__item--cursor {
+    background: var(--state-selected);
+    color: var(--text-bright);
+}
+.twm-tile-tabmenu__item--cursor {
+    /* Keyboard cursor reads slightly heavier than hover so a
+     * mouse-cursor-on-a-different-row state is still legible. */
+    outline: 1px solid var(--accent-bright, #1683c4);
+    outline-offset: -1px;
+}
+.twm-tile-tabmenu__item-hint {
+    color: var(--text-muted);
+    font-size: var(--font-size-xs);
+}
+.twm-tile-tabmenu__empty {
+    padding: 6px 12px;
+    color: var(--text-muted);
+    font-size: var(--font-size-xs);
+}
+
+.twm-tile-tabmenu__pager {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-md);
+    padding: 4px 8px;
+    color: var(--text-muted);
+    font-size: var(--font-size-xs);
+}
+.twm-tile-tabmenu__pager button {
+    background: transparent;
+    border: 1px solid var(--border-subtle);
+    color: inherit;
+    padding: 1px 6px;
+    cursor: pointer;
+    border-radius: 0;
+}
+.twm-tile-tabmenu__pager button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* ── Compact variant: the hamburger's "open tabs" list ──────────────────
+ * A short, auto-height popover (no search / pagination) anchored above the
+ * tab-bar hamburger. Each row is one open tab; the active tab is flagged. */
+.twm-tile-tabmenu--compact {
+    max-height: 60vh;
+    width: 260px;
+}
+.twm-tile-tabmenu--compact .twm-tile-tabmenu__list {
+    overflow-y: auto;
+    max-height: calc(60vh - 32px);
+}
+.twm-tile-tabmenu__item-icon {
+    font-size: 14px;
+    color: var(--text-muted);
+    flex: 0 0 auto;
+}
+/* The compact item is icon + label + optional "current" hint. */
+.twm-tile-tabmenu--compact .twm-tile-tabmenu__item {
+    grid-template-columns: auto 1fr auto;
+}
+.twm-tile-tabmenu--compact .twm-tile-tabmenu__item-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.twm-tile-tabmenu__item--active .twm-tile-tabmenu__item-icon {
+    color: var(--accent-bright, #1683c4);
+}
+.twm-tile-tabmenu__item--active .twm-tile-tabmenu__item-label {
+    font-weight: 600;
+    color: var(--text-primary);
+}

@@ -1,0 +1,931 @@
+/**
+ * Steady State Modal Styles
+ */
+
+.steady-state-modal {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xl);
+    padding: var(--space-xl);
+    height: 100%;
+    overflow: hidden;
+}
+
+/* Status Section */
+.steady-state-modal__status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: var(--space-lg) 16px;
+    background: #2a2a2a;
+    border-radius: var(--radius-md);
+}
+
+.steady-state-modal__status-icon {
+    font-size: 24px;
+}
+
+.steady-state-modal__status-icon.converged {
+    color: #4ec9b0;
+}
+
+.steady-state-modal__status-icon.not-converged {
+    color: #f14c4c;
+}
+
+.steady-state-modal__status-text {
+    font-size: var(--font-size-lg);
+    color: var(--text-primary);
+}
+
+/* Section Titles */
+.steady-state-modal__section-title {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: var(--space-md);
+}
+
+/* Table Section */
+.steady-state-modal__table-section {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+
+.steady-state-modal__table-wrap {
+    flex: 1;
+    overflow: auto;
+    border: 1px solid #3e3e42;
+    border-radius: var(--radius-sm);
+}
+
+.steady-state-modal__table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--font-size-md);
+}
+
+.steady-state-modal__table thead {
+    position: sticky;
+    top: 0;
+    background: var(--surface-2);
+    z-index: 1;
+}
+
+.steady-state-modal__table th {
+    padding: var(--space-md) 12px;
+    text-align: left;
+    font-weight: 600;
+    color: #aaa;
+    border-bottom: 1px solid #3e3e42;
+}
+
+.steady-state-modal__table td {
+    padding: var(--space-md) 12px;
+    border-bottom: 1px solid #2a2a2a;
+}
+
+.steady-state-modal__table tr:hover {
+    background: #2a2a2a;
+}
+
+.steady-state-modal__table .var-name {
+    color: #dcdcaa;
+    font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.steady-state-modal__table .var-value {
+    color: #b5cea8;
+    font-family: 'Consolas', 'Monaco', monospace;
+    text-align: right;
+}
+
+.steady-state-modal__table .var-value.equilibrium {
+    color: #4ec9b0;
+    font-weight: 600;
+}
+
+/* Row Actions (inline copy / set-as-parameter buttons) */
+.steady-state-modal__actions-col {
+    width: 56px;
+    padding: 0 !important;
+}
+
+.steady-state-modal__row-actions {
+    display: flex;
+    gap: var(--space-xxs);
+    justify-content: flex-end;
+    padding-right: var(--space-md) !important;
+    opacity: 0;
+    transition: opacity var(--transition-fast);
+}
+
+.steady-state-modal__table tbody tr:hover .steady-state-modal__row-actions {
+    opacity: 1;
+}
+
+.steady-state-modal__row-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    color: var(--text-muted);
+    padding: 0;
+    transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.steady-state-modal__row-btn:hover {
+    background: var(--surface-3);
+    color: var(--text-primary);
+}
+
+.steady-state-modal__row-btn .material-symbols-outlined {
+    font-size: var(--font-size-xl);
+}
+
+/* Context Menu */
+.steady-state-modal__context-menu,
+.steady-state-modal__param-picker {
+    position: absolute;
+    z-index: var(--z-dropdown);
+    min-width: 180px;
+    max-height: 260px;
+    overflow-y: auto;
+    background: var(--surface-2);
+    border: 1px solid #3e3e42;
+    border-radius: var(--radius-md);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    padding: var(--space-xs) 0;
+}
+
+.steady-state-modal__context-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-sm) 12px;
+    font-size: var(--font-size-md);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: background 0.1s;
+}
+
+.steady-state-modal__context-item:hover {
+    background: #094771;
+}
+
+.steady-state-modal__context-item .material-symbols-outlined {
+    font-size: var(--font-size-xl);
+    color: var(--text-muted);
+}
+
+.steady-state-modal__context-item:hover .material-symbols-outlined {
+    color: var(--text-primary);
+}
+
+.steady-state-modal__context-divider {
+    height: 1px;
+    background: #3e3e42;
+    margin: var(--space-xs) 0;
+}
+
+.steady-state-modal__context-header {
+    padding: var(--space-sm) 12px 2px;
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.steady-state-modal__context-ns {
+    padding: var(--space-xs) 12px 2px;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Stability Section */
+.steady-state-modal__stability {
+    padding: var(--space-lg);
+    background: var(--surface-1);
+    border-radius: var(--radius-md);
+}
+
+.steady-state-modal__stability-status {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-md) 12px;
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-md);
+}
+
+.steady-state-modal__stability-status.stable {
+    background: rgba(78, 201, 176, 0.15);
+    color: #4ec9b0;
+}
+
+.steady-state-modal__stability-status.unstable {
+    background: rgba(241, 76, 76, 0.15);
+    color: #f14c4c;
+}
+
+.steady-state-modal__stability-status .material-symbols-outlined {
+    font-size: var(--font-size-2xl);
+}
+
+/* Eigenvalues */
+.steady-state-modal__eigenvalues {
+    margin-top: var(--space-lg);
+    padding-top: var(--space-lg);
+    border-top: 1px solid #3e3e42;
+}
+
+.steady-state-modal__eigen-title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    font-size: var(--font-size-xs);
+    color: var(--text-muted);
+    margin-bottom: var(--space-sm);
+}
+
+.steady-state-modal__eigen-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+}
+
+.steady-state-modal__eigen-info {
+    font-size: var(--font-size-xl);
+    color: var(--text-dim);
+    cursor: help;
+    transition: color var(--transition-normal);
+}
+
+.steady-state-modal__eigen-info:hover {
+    color: #4ec9b0;
+}
+
+.steady-state-modal__eigen-list .eigen-value {
+    padding: var(--space-xxs) 8px;
+    background: var(--surface-0);
+    border-radius: var(--radius-sm);
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: var(--font-size-xs);
+    color: #9cdcfe;
+}
+
+.steady-state-modal__eigen-list .eigen-value--stable {
+    color: #4ec9b0;
+    border-left: 2px solid #4ec9b0;
+}
+
+.steady-state-modal__eigen-list .eigen-value--unstable {
+    color: #f14c4c;
+    border-left: 2px solid #f14c4c;
+}
+
+.steady-state-modal__eigen-list .eigen-value--marginal {
+    color: #dcdcaa;
+    border-left: 2px solid #dcdcaa;
+}
+
+/* Action Buttons */
+.steady-state-modal__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding-top: var(--space-md);
+    border-top: 1px solid #3e3e42;
+}
+
+.steady-state-modal__btn {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-md) 16px;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-md);
+    cursor: pointer;
+    transition: background var(--transition-normal), transform 0.1s;
+}
+
+.steady-state-modal__btn:active {
+    transform: scale(0.98);
+}
+
+.steady-state-modal__btn .material-symbols-outlined {
+    font-size: var(--font-size-2xl);
+}
+
+.steady-state-modal__btn--secondary {
+    background: var(--surface-3);
+    color: var(--text-primary);
+}
+
+.steady-state-modal__btn--secondary:hover {
+    background: #4a4a4a;
+}
+
+.steady-state-modal__btn--primary {
+    background: var(--accent);
+    color: var(--text-bright);
+}
+
+.steady-state-modal__btn--primary:hover {
+    background: var(--accent-hover);
+}
+
+/* Menu bar divider for the button */
+.menu-bar-divider {
+    display: inline-block;
+    width: 1px;
+    height: 20px;
+    background: #4a4a4a;
+    margin: 0 4px;
+    vertical-align: middle;
+}
+
+/* Steady state button icon style */
+.control-icon--steady {
+    color: #4ec9b0;
+}
+
+/* ============================================================================
+ * Steady State Configuration Modal Styles
+ * ============================================================================ */
+
+.steady-state-config-modal {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.steady-state-config-modal__body {
+    flex: 1;
+    padding: var(--space-xl);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xl);
+}
+
+.steady-state-config-modal__description {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: var(--space-lg);
+    background: var(--surface-1);
+    border-radius: var(--radius-md);
+    color: #aaa;
+    font-size: var(--font-size-md);
+}
+
+.steady-state-config-modal__description .material-symbols-outlined {
+    font-size: var(--font-size-2xl);
+    color: #4ec9b0;
+    flex-shrink: 0;
+}
+
+.steady-state-config-modal__description p {
+    margin: 0;
+    line-height: 1.4;
+}
+
+.steady-state-config-modal__field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.steady-state-config-modal__label {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.steady-state-config-modal__select {
+    padding: 10px 12px;
+    font-size: var(--font-size-lg);
+    color: var(--text-primary);
+    background: var(--surface-0);
+    border: 1px solid #3e3e42;
+    border-radius: var(--radius-sm);
+    outline: none;
+    cursor: pointer;
+}
+
+.steady-state-config-modal__select:focus {
+    border-color: var(--accent-bright);
+}
+
+.steady-state-config-modal__select:hover {
+    background: var(--surface-1);
+}
+
+.steady-state-config-modal__empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-lg);
+    padding: var(--space-3xl);
+    text-align: center;
+    color: var(--text-muted);
+}
+
+.steady-state-config-modal__empty .material-symbols-outlined {
+    font-size: 32px;
+    color: var(--text-dim);
+}
+
+.steady-state-config-modal__empty p {
+    margin: 0;
+    font-size: var(--font-size-md);
+}
+
+.steady-state-config-modal__footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: var(--space-lg) 16px;
+    border-top: 1px solid #3e3e42;
+    background: var(--surface-0);
+}
+
+.steady-state-config-modal__btn {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-md) 16px;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-md);
+    cursor: pointer;
+    transition: background var(--transition-normal), transform 0.1s;
+}
+
+.steady-state-config-modal__btn:active {
+    transform: scale(0.98);
+}
+
+.steady-state-config-modal__btn .material-symbols-outlined {
+    font-size: var(--font-size-2xl);
+}
+
+.steady-state-config-modal__btn--cancel {
+    background: var(--surface-3);
+    color: var(--text-primary);
+}
+
+.steady-state-config-modal__btn--cancel:hover {
+    background: #4a4a4a;
+}
+
+.steady-state-config-modal__btn--run {
+    background: var(--accent);
+    color: var(--text-bright);
+}
+
+.steady-state-config-modal__btn--run:hover {
+    background: var(--accent-hover);
+}
+
+/* ============================================================================
+ * Bifurcation Proximity Section (inside steady-state results modal)
+ * ============================================================================ */
+
+.steady-state-modal__bifurcation {
+    padding: var(--space-lg);
+    background: var(--surface-1);
+    border-radius: var(--radius-md);
+}
+
+.steady-state-modal__bifurcation-status {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-md) 12px;
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-md);
+}
+
+.steady-state-modal__bifurcation-status .material-symbols-outlined {
+    font-size: var(--font-size-2xl);
+}
+
+.steady-state-modal__bifurcation-detail {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: var(--space-md);
+    padding: var(--space-xs) 12px;
+    font-size: var(--font-size-sm);
+    color: var(--text-muted);
+}
+
+.steady-state-modal__bifurcation-type {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+.steady-state-modal__bifurcation-type .material-symbols-outlined {
+    font-size: var(--font-size-xl);
+}
+
+.steady-state-modal__bifurcation-distance {
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: var(--font-size-xs);
+}
+
+/* ============================================================================
+ * Bifurcation Button Icon
+ * ============================================================================ */
+
+.control-icon--bifurcation {
+    color: #dcdcaa;
+}
+
+/* ============================================================================
+ * Bifurcation Configuration Modal
+ * ============================================================================ */
+
+.bifurcation-config-modal {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.bifurcation-config-modal__description {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: var(--space-lg);
+    background: var(--surface-1);
+    border-radius: var(--radius-md);
+    color: #aaa;
+    font-size: var(--font-size-md);
+}
+
+.bifurcation-config-modal__description .material-symbols-outlined {
+    font-size: var(--font-size-2xl);
+    color: #dcdcaa;
+    flex-shrink: 0;
+}
+
+.bifurcation-config-modal__description p {
+    margin: 0;
+    line-height: 1.4;
+}
+
+.bifurcation-config-modal__field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.bifurcation-config-modal__field--half {
+    flex: 1;
+}
+
+.bifurcation-config-modal__label {
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.bifurcation-config-modal__body {
+    flex: 1;
+    padding: var(--space-xl);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+    overflow-y: auto;
+}
+
+.bifurcation-config-modal__type-select,
+.bifurcation-config-modal__ns-select,
+.bifurcation-config-modal__param-select,
+.bifurcation-config-modal select[class*="__hyst-"],
+.bifurcation-config-modal select[class*="__two-"],
+.bifurcation-config-modal select[class*="__orbit-"],
+.bifurcation-config-modal select[class*="__basin-"] {
+    padding: var(--space-md) 10px;
+    font-size: var(--font-size-md);
+    color: var(--text-primary);
+    background: var(--surface-0);
+    border: 1px solid #3e3e42;
+    border-radius: var(--radius-sm);
+    outline: none;
+    cursor: pointer;
+}
+
+.bifurcation-config-modal select:focus {
+    border-color: var(--accent-bright);
+}
+
+.bifurcation-config-modal select:hover {
+    background: var(--surface-1);
+}
+
+.bifurcation-config-modal__group {
+    padding: 10px 12px;
+    background: var(--surface-1);
+    border-radius: var(--radius-md);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.bifurcation-config-modal__group-header {
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    color: #4ec9b0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.bifurcation-config-modal__range-row {
+    display: flex;
+    gap: var(--space-lg);
+}
+
+.bifurcation-config-modal__input {
+    padding: var(--space-md) 10px;
+    font-size: var(--font-size-md);
+    color: var(--text-primary);
+    background: var(--surface-0);
+    border: 1px solid #3e3e42;
+    border-radius: var(--radius-sm);
+    outline: none;
+    font-family: 'Consolas', 'Monaco', monospace;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.bifurcation-config-modal__input:focus {
+    border-color: var(--accent-bright);
+}
+
+.bifurcation-config-modal__empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-lg);
+    padding: var(--space-3xl);
+    text-align: center;
+    color: var(--text-muted);
+}
+
+.bifurcation-config-modal__empty .material-symbols-outlined {
+    font-size: 32px;
+    color: var(--text-dim);
+}
+
+.bifurcation-config-modal__empty p {
+    margin: 0;
+    font-size: var(--font-size-md);
+}
+
+.bifurcation-config-modal__footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: var(--space-lg) 16px;
+    border-top: 1px solid #3e3e42;
+    background: var(--surface-0);
+}
+
+.bifurcation-config-modal__btn {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-md) 16px;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-md);
+    cursor: pointer;
+    transition: background var(--transition-normal), transform 0.1s;
+}
+
+.bifurcation-config-modal__btn:active {
+    transform: scale(0.98);
+}
+
+.bifurcation-config-modal__btn .material-symbols-outlined {
+    font-size: var(--font-size-2xl);
+}
+
+.bifurcation-config-modal__btn--cancel {
+    background: var(--surface-3);
+    color: var(--text-primary);
+}
+
+.bifurcation-config-modal__btn--cancel:hover {
+    background: #4a4a4a;
+}
+
+.bifurcation-config-modal__btn--run {
+    background: var(--accent);
+    color: var(--text-bright);
+}
+
+.bifurcation-config-modal__btn--run:hover {
+    background: var(--accent-hover);
+}
+
+.bifurcation-config-modal__btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* ============================================================================
+ * Bifurcation Results Modal
+ * ============================================================================ */
+
+.bifurcation-results {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+    padding: var(--space-lg);
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+}
+
+.bifurcation-results__summary {
+    display: flex;
+    gap: var(--space-xl);
+    padding: var(--space-md) 12px;
+    background: var(--surface-1);
+    border-radius: var(--radius-md);
+    flex-shrink: 0;
+}
+
+.bifurcation-results__summary-item {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xxs);
+}
+
+.bifurcation-results__summary-item--highlight {
+    color: #dcdcaa;
+}
+
+.bifurcation-results__summary-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+}
+
+.bifurcation-results__summary-value {
+    font-size: var(--font-size-md);
+    font-family: 'Consolas', 'Monaco', monospace;
+    color: var(--text-primary);
+}
+
+.bifurcation-results__summary-item--highlight .bifurcation-results__summary-value {
+    color: #dcdcaa;
+    font-weight: 600;
+}
+
+.bifurcation-results__toolbar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-xs) 8px;
+    flex-shrink: 0;
+}
+
+.bifurcation-results__toolbar-label {
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.bifurcation-results__variant-select {
+    padding: var(--space-xs) 8px;
+    font-size: var(--font-size-sm);
+    color: var(--text-primary);
+    background: var(--surface-0);
+    border: 1px solid #3e3e42;
+    border-radius: var(--radius-sm);
+    outline: none;
+    cursor: pointer;
+}
+
+.bifurcation-results__variant-select:focus {
+    border-color: var(--accent-bright);
+}
+
+.bifurcation-results__variant-select:hover {
+    background: var(--surface-1);
+}
+
+.bifurcation-results__chart-area {
+    height: 350px;
+    flex-shrink: 0;
+    border-radius: var(--radius-sm);
+    position: relative;
+}
+
+/* Ensure Plotly containers fill the chart area */
+.bifurcation-results__chart-area .js-plotly-plot,
+.bifurcation-results__chart-area .plot-container.plotly {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+.bifurcation-results__chart-area .svg-container {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+.bifurcation-results__table-section {
+    max-height: 120px;
+    overflow: auto;
+    flex-shrink: 0;
+    border: 1px solid #3e3e42;
+    border-radius: var(--radius-sm);
+}
+
+.bifurcation-results__table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--font-size-sm);
+}
+
+.bifurcation-results__table thead {
+    position: sticky;
+    top: 0;
+    background: var(--surface-2);
+    z-index: 1;
+}
+
+.bifurcation-results__table th {
+    padding: var(--space-sm) 10px;
+    text-align: left;
+    font-weight: 600;
+    color: #aaa;
+    border-bottom: 1px solid #3e3e42;
+}
+
+.bifurcation-results__table td {
+    padding: 5px 10px;
+    border-bottom: 1px solid #2a2a2a;
+}
+
+.bifurcation-results__table .bif-type {
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 10px;
+    letter-spacing: 0.5px;
+}
+
+.bifurcation-results__table .bif-type--fold {
+    color: #dcdcaa;
+}
+
+.bifurcation-results__table .bif-type--hopf {
+    color: #c586c0;
+}
+
+.bifurcation-results__table .bif-value {
+    font-family: 'Consolas', 'Monaco', monospace;
+    color: #b5cea8;
+}
+
+.bifurcation-results__table .bif-desc {
+    color: #aaa;
+}
+
+.basin-attractor-swatch {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+    vertical-align: middle;
+    margin-right: var(--space-sm);
+}

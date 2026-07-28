@@ -1,0 +1,1048 @@
+/* Godley accounting matrix — read-only port from EcoSim
+ * #142 / G7 — used by the Agent tab's Godley sub-tab and, later, the
+ * SFC-overview per-sector roll-up. Square corners only (per the no-
+ * rounded-corners chrome convention).
+ */
+
+.ea-godley {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.ea-godley__wrap {
+    overflow: auto;
+    max-height: 100%;
+    border: 1px solid var(--ea-border, #333);
+    background: var(--ea-bg-elev, #1e1e1e);
+}
+
+.ea-godley__table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 12px;
+    color: var(--ea-fg, #d4d4d4);
+}
+
+.ea-godley__table thead th {
+    position: sticky;
+    background: var(--ea-bg-elev-2, #242424);
+    border-bottom: 1px solid var(--ea-border, #333);
+    border-right: 1px solid var(--ea-border, #333);
+    text-align: center;
+    font-weight: 500;
+    padding: 4px 8px;
+    white-space: nowrap;
+}
+
+.ea-godley__head-row-1 th { top: 0; z-index: 2; }
+.ea-godley__head-row-2 th { top: 26px; z-index: 2; }
+
+.ea-godley__th-group {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    opacity: 0.85;
+}
+.ea-godley__th-group--assets       { color: #6db876; }
+.ea-godley__th-group--liabilities  { color: #d97c6b; }
+.ea-godley__th-group--equity       { color: #b58fc2; }
+
+.ea-godley__th-flow {
+    text-align: left;
+    opacity: 0.75;
+    font-size: 11px;
+    padding: 4px 12px;
+    min-width: 160px;
+    left: 0;
+    z-index: 3;
+}
+
+.ea-godley__th-account {
+    font-size: 11px;
+    font-weight: 400;
+    opacity: 0.9;
+    border-top: 0;
+    min-width: 80px;
+}
+.ea-godley__th-account--assets       { border-top: 2px solid #2f6336; }
+.ea-godley__th-account--liabilities  { border-top: 2px solid #6e3329; }
+.ea-godley__th-account--equity       { border-top: 2px solid #4e3a5e; }
+
+.ea-godley__th-balance {
+    min-width: 36px;
+    border-right: 0;
+}
+
+.ea-godley__row td {
+    border-bottom: 1px solid var(--ea-border, #2a2a2a);
+    border-right: 1px solid var(--ea-border, #2a2a2a);
+    padding: 4px 8px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.ea-godley__cell-label {
+    text-align: left;
+    font-weight: 500;
+    background: var(--ea-bg-elev, #1e1e1e);
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    min-width: 160px;
+}
+
+.ea-godley__row--initial .ea-godley__cell-label { font-style: italic; }
+.ea-godley__row--initial td {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.ea-godley__cell--pos { color: #6db876; }
+.ea-godley__cell--neg { color: #d97c6b; }
+
+.ea-godley__cell-balance {
+    text-align: center;
+    border-right: 0;
+}
+.ea-godley__cell-balance .material-symbols-outlined {
+    font-size: 16px;
+    vertical-align: middle;
+}
+.ea-godley__cell-balance--ok      { color: #6db876; }
+.ea-godley__cell-balance--bad     { color: #d97c6b; }
+.ea-godley__cell-balance--unknown { color: #7a7a7a; }
+
+.ea-godley__empty-hint {
+    margin-top: 8px;
+}
+
+
+/* ─── Godley P4 — editable mode + interleaved Code sections ─────────── */
+
+.ea-godley__th-meta {
+    font-size: 11px;
+    font-weight: 400;
+    opacity: 0.75;
+    min-width: 96px;
+}
+
+/* Inline-editable account cell. */
+.ea-godley__cell--editable { cursor: text; }
+.ea-godley__cell--editable:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+/* Make the amount read as an editable FIELD (not static text): a boxed
+ * value with a hover edit cue, so it's obvious you click it to edit. */
+.ea-godley--editable .ea-godley__cell--editable .ea-godley__cell-val {
+    border: 1px dashed var(--ea-border, #4a4a4a);
+    border-radius: 0;
+    padding: 1px 6px;
+    min-width: 56px;
+    cursor: text;
+    transition: border-color 0.1s ease, background 0.1s ease;
+}
+.ea-godley--editable .ea-godley__cell--editable:hover .ea-godley__cell-val {
+    border-color: #4a8db5;
+    background: rgba(74, 141, 181, 0.10);
+}
+/* Empty editable cell: a dashed "+ amount" placeholder so it reads as a
+ * fillable field. */
+.ea-godley--editable .ea-godley__cell--editable:empty::before {
+    content: '+ amount';
+    display: inline-block;
+    padding: 1px 6px;
+    border: 1px dashed var(--ea-border, #3a3a3a);
+    color: #6a6a6a;
+    font-size: 11px;
+}
+.ea-godley--editable .ea-godley__cell--editable:empty:hover::before {
+    border-color: #4a8db5;
+    color: #9fbdd0;
+}
+.ea-godley__cell-input {
+    width: 100%;
+    min-width: 70px;
+    box-sizing: border-box;
+    background: var(--ea-bg, #141414);
+    color: var(--ea-fg, #d4d4d4);
+    border: 1px solid #4a8db5;
+    border-radius: 0;
+    padding: 2px 4px;
+    font: inherit;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+.ea-godley__cell-val { display: inline-block; }
+/* +/- delta (does this push the balance up or down — the original flows
+ * representation). Model stays signed; click to flip. Magnitude sits beside. */
+.ea-godley__delta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    margin-right: 6px;
+    padding: 0;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.4;
+    border-radius: 0;
+    border: 1px solid transparent;
+    cursor: pointer;
+    font-family: inherit;
+    vertical-align: middle;
+}
+.ea-godley__delta--pos { color: #6db876; background: rgba(109, 184, 118, 0.14); border-color: rgba(109, 184, 118, 0.40); }
+.ea-godley__delta--neg { color: #d97c6b; background: rgba(217, 124, 107, 0.14); border-color: rgba(217, 124, 107, 0.40); }
+.ea-godley__delta--static { cursor: default; opacity: 0.85; }
+.ea-godley__delta:not(.ea-godley__delta--static):hover { filter: brightness(1.35); }
+/* Left-align Dr/Cr cells so the pill + magnitude read naturally. */
+.ea-godley--editable .ea-godley__cell { text-align: left; }
+.ea-godley__override-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    margin-left: 4px;
+    background: #d9a441;
+    vertical-align: middle;
+}
+
+/* Meta cells (counterparty / trigger) align left and wrap chips. */
+.ea-godley__cell--meta {
+    text-align: left;
+    white-space: normal;
+}
+.ea-godley__cell--cp { display: table-cell; }
+
+/* Square chips, styled after the schema browser's column chips
+ * (ea-bp-browser__chip): no rounded corners, dark inset, a structured
+ * row of sub-spans, and edit/delete actions revealed on hover. */
+.ea-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin: 1px 2px;
+    min-height: 18px;
+    padding: 1px 6px;
+    font-size: 10.5px;
+    line-height: 1.4;
+    border: 1px solid var(--ea-border, #3a3a3a);
+    border-radius: 0;
+    background: #0d0d0d;
+    color: var(--ea-fg, #d4d4d4);
+    cursor: default;
+    white-space: nowrap;
+}
+.ea-chip:hover { border-color: #4a8db5; }
+/* Edit/delete actions — revealed on hover, but they RESERVE their space
+ * always (visibility, not display) so the chip width is static and doesn't
+ * reflow when hovered. */
+.ea-godley__chip-actions {
+    display: inline-flex;
+    visibility: hidden;
+    align-items: center;
+    gap: 1px;
+    margin-left: 2px;
+}
+.ea-chip:hover .ea-godley__chip-actions { visibility: visible; }
+.ea-godley__chip-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 15px;
+    height: 15px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    color: var(--ea-text-muted, #8a8a8a);
+    cursor: pointer;
+}
+.ea-godley__chip-btn:hover { color: var(--ea-fg, #d4d4d4); }
+.ea-godley__chip-btn--del:hover { color: #d9886a; }
+.ea-godley__chip-btn .material-symbols-outlined { font-size: 13px; }
+.ea-chip--clickable { cursor: pointer; }
+.ea-chip--clickable:hover { border-color: #4a8db5; }
+
+/* Inline editors (trigger / counterparty) — edited in place, no modal. */
+.ea-godley__inline-edit {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 4px 6px;
+}
+.ea-godley__inline-edit--cp { flex-direction: column; align-items: stretch; min-width: 200px; }
+.ea-godley__inline-field { display: flex; flex-direction: column; gap: 1px; }
+.ea-godley__inline-label {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    opacity: 0.6;
+}
+.ea-godley__inline-input {
+    background: var(--ea-bg, #141414);
+    color: var(--ea-fg, #d4d4d4);
+    border: 1px solid #4a8db5;
+    border-radius: 0;
+    padding: 2px 5px;
+    font: inherit;
+    font-size: 12px;
+}
+.ea-godley__inline-input:focus { outline: none; border-color: #6ab0f3; }
+.ea-godley__inline-btns { display: inline-flex; gap: 2px; align-self: flex-start; }
+.ea-godley__inline-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    background: var(--ea-bg-elev-2, #242424);
+    border: 1px solid var(--ea-border, #3a3a3a);
+    border-radius: 0;
+    color: #9a9a9a;
+    cursor: pointer;
+}
+.ea-godley__inline-btn:hover { color: var(--ea-fg, #d4d4d4); border-color: #4a8db5; }
+.ea-godley__inline-del:hover { color: #d9886a; border-color: #d9886a; }
+.ea-godley__inline-btn .material-symbols-outlined { font-size: 15px; }
+.ea-chip__role  { font-weight: 600; }
+.ea-chip__axis  { opacity: 0.7; }
+.ea-chip__id    { color: #6db8b0; }
+.ea-chip__kind  { font-weight: 600; }
+.ea-chip__phase {
+    opacity: 0.8;
+    text-transform: uppercase;
+    font-size: 10px;
+    letter-spacing: 0.04em;
+}
+.ea-chip__detail {
+    opacity: 0.7;
+    font-family: var(--ea-mono, monospace);
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.ea-chip--add {
+    color: #8a8a8a;
+    padding: 1px 8px;
+    font-weight: 700;
+    border-style: dashed;
+}
+/* The button-style chips (toggle/add) are clickable as a whole. */
+.ea-chip--add, .ea-chip--equity { cursor: pointer; }
+.ea-chip--add:hover, .ea-chip--equity:hover { color: var(--ea-fg, #d4d4d4); border-color: #4a8db5; }
+.ea-chip--trigger { background: #20303a; }
+/* "Balanced by equity" toggle chip on a flow row. */
+.ea-chip--equity { background: #2a3530; color: #9fd6b6; }
+.ea-chip--equity.ea-chip--on {
+    background: #2f6336;
+    color: #cfe7d6;
+    border-color: #3e8f4a;
+}
+
+.ea-godley__flow-name { font-weight: 500; }
+.ea-godley__flow-name--editable { cursor: text; border-bottom: 1px dashed transparent; }
+.ea-godley__flow-name--editable:hover { border-bottom-color: #4a8db5; }
+.ea-godley__flow-name--placeholder { font-style: italic; opacity: 0.5; font-weight: 400; }
+.ea-godley__flow-name-input {
+    background: var(--ea-bg, #141414);
+    color: var(--ea-fg, #d4d4d4);
+    border: 1px solid #4a8db5;
+    border-radius: 0;
+    padding: 1px 4px;
+    font: inherit;
+    font-weight: 500;
+    width: 130px;
+}
+/* Flow-name label cell lays out the name + an always-visible Edit/Delete
+ * toolbar pinned to the right. */
+.ea-godley--editable .ea-godley__cell-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.ea-godley__row-actions {
+    margin-left: auto;
+    display: inline-flex;
+    gap: 2px;
+    flex: 0 0 auto;
+}
+.ea-godley__row-act {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 20px;
+    padding: 0;
+    background: var(--ea-bg-elev-2, #242424);
+    border: 1px solid var(--ea-border, #3a3a3a);
+    border-radius: 0;
+    color: #9a9a9a;
+    cursor: pointer;
+}
+.ea-godley__row-act:hover { color: var(--ea-fg, #d4d4d4); border-color: #4a8db5; }
+.ea-godley__row-act--del:hover { color: #d9886a; border-color: #d9886a; }
+.ea-godley__row-act .material-symbols-outlined { font-size: 15px; }
+.ea-godley__role-chip {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 0 5px;
+    font-size: 10px;
+    border-radius: 0;
+    background: #3a3050;
+    color: #c9b6e0;
+}
+.ea-godley__row-del {
+    float: right;
+    background: none;
+    border: none;
+    color: #7a7a7a;
+    cursor: pointer;
+    padding: 0 2px;
+    line-height: 1;
+}
+.ea-godley__row-del:hover { color: #d97c6b; }
+.ea-godley__row-del .material-symbols-outlined { font-size: 14px; }
+.ea-godley__row--cross td { opacity: 0.92; }
+
+/* Godley P6 — propagated receiver-side mirror rows. */
+.ea-godley__from-chip {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 0 5px;
+    font-size: 10px;
+    border-radius: 0;
+    background: #2a3548;
+    color: #9fb6d6;
+}
+.ea-godley__row--inherited .ea-godley__cell-val { opacity: 0.75; }
+.ea-godley__cell-override,
+.ea-godley__cell-reset {
+    background: none;
+    border: none;
+    color: #7a7a7a;
+    cursor: pointer;
+    padding: 0 2px;
+    margin-left: 3px;
+    line-height: 1;
+    vertical-align: middle;
+}
+.ea-godley__cell-override:hover { color: #4a8db5; }
+.ea-godley__cell-reset:hover    { color: #d9a441; }
+.ea-godley__cell-override .material-symbols-outlined,
+.ea-godley__cell-reset .material-symbols-outlined { font-size: 13px; }
+
+/* Per-section host needs an explicit height ceiling so it doesn't clip
+ * to ~10 rows (main_new.css caps generic table wraps). */
+.ea-code-section__godley .ea-godley__wrap { max-height: 360px; }
+
+/* Sector roll-up + Market clear hosts (Godley P5) — same ceiling so the
+ * standalone tables don't clip to the generic table-wrap cap either. */
+.ea-godley-host .ea-godley__wrap { max-height: 480px; }
+
+/* A roll-up flow name that links to the owning agent's Code tab. */
+.ea-godley__flow-name--link { color: var(--ea-accent, #6ab0f3); }
+.ea-godley__flow-name--link:hover { text-decoration: underline; }
+
+/* ─── Interleaved Code view sections ───────────────────────────────── */
+
+.ea-code-interleaved {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    height: 100%;
+    overflow: auto;
+    padding: 4px;
+    box-sizing: border-box;
+}
+
+.ea-code-view-toggle {
+    display: inline-flex;
+    border: 1px solid var(--ea-border, #3a3a3a);
+}
+.ea-code-view-toggle__btn {
+    background: var(--ea-bg-elev, #1e1e1e);
+    color: var(--ea-fg, #d4d4d4);
+    border: none;
+    padding: 3px 12px;
+    cursor: pointer;
+    font: inherit;
+}
+.ea-code-view-toggle__btn.active {
+    background: #2d4a5a;
+    color: #fff;
+}
+
+.ea-code-section {
+    border: 1px solid var(--ea-border, #2f2f2f);
+    background: var(--ea-bg-elev, #1b1b1b);
+}
+.ea-code-section__head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: var(--ea-bg-elev-2, #242424);
+    border-bottom: 1px solid var(--ea-border, #2f2f2f);
+    cursor: pointer;
+    user-select: none;
+}
+.ea-code-section__chevron {
+    transition: transform 0.12s ease;
+    font-size: 18px;
+    opacity: 0.8;
+}
+.ea-code-section--collapsed .ea-code-section__chevron {
+    transform: rotate(-90deg);
+}
+.ea-code-section__title {
+    font-weight: 600;
+    font-size: 13px;
+}
+.ea-code-section__kind {
+    font-size: 11px;
+    opacity: 0.6;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.ea-code-section__spacer { flex: 1; }
+.ea-code-section__body { padding: 8px; }
+.ea-code-section--collapsed .ea-code-section__body { display: none; }
+.ea-code-section--godley .ea-code-section__head {
+    background: #1d2630;
+}
+
+.ea-code-section__monaco {
+    height: 220px;
+    min-height: 120px;
+    border: 1px solid var(--ea-border, #2a2a2a);
+}
+.ea-code-section--observe  .ea-code-section__monaco,
+.ea-code-section--adjust   .ea-code-section__monaco,
+.ea-code-section--execute  .ea-code-section__monaco { height: 220px; }
+
+.ea-code-section__addrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--ea-bg-elev, #1e1e1e);
+    color: var(--ea-fg, #d4d4d4);
+    border: 1px solid var(--ea-border, #3a3a3a);
+    padding: 2px 10px;
+    cursor: pointer;
+    font: inherit;
+    font-size: 12px;
+}
+.ea-code-section__addrow:hover { border-color: #4a8db5; }
+.ea-code-section__addrow .material-symbols-outlined { font-size: 16px; }
+
+
+/* ─── Godley editor (hybrid) — account CRUD, IC editing, Monaco cells ─── */
+
+/* Category header: type label + "add account" button. */
+.ea-godley__group-head {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    justify-content: center;
+}
+.ea-godley__acct-add,
+.ea-godley__acct-btn {
+    display: inline-flex;
+    align-items: center;
+    background: none;
+    border: none;
+    color: #7a7a7a;
+    cursor: pointer;
+    padding: 0 2px;
+    line-height: 1;
+}
+.ea-godley__acct-add:hover { color: #6db876; }
+.ea-godley__acct-add .material-symbols-outlined,
+.ea-godley__acct-btn .material-symbols-outlined { font-size: 14px; vertical-align: middle; }
+
+/* Account-name header with hover-revealed rename/delete buttons. */
+.ea-godley__acct-head {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+.ea-godley__acct-name { font-weight: 400; }
+.ea-godley__acct-btns {
+    display: inline-flex;
+    gap: 1px;
+    opacity: 0;
+    transition: opacity 0.1s ease;
+}
+.ea-godley__th-account:hover .ea-godley__acct-btns { opacity: 1; }
+.ea-godley__acct-btn:hover { color: #4a8db5; }
+.ea-godley__acct-btn--del:hover { color: #d97c6b; }
+.ea-godley__acct-rename {
+    width: 90px;
+    box-sizing: border-box;
+    background: var(--ea-bg, #141414);
+    color: var(--ea-fg, #d4d4d4);
+    border: 1px solid #4a8db5;
+    border-radius: 0;
+    padding: 1px 3px;
+    font: inherit;
+    font-size: 11px;
+}
+.ea-godley__th-account--empty { opacity: 0.5; }
+.ea-godley__no-acct { font-style: italic; font-size: 10px; }
+.ea-godley__cell--empty { color: #555; text-align: center; }
+
+/* Editable initial-conditions input. */
+.ea-godley__init-input {
+    width: 100%;
+    min-width: 64px;
+    box-sizing: border-box;
+    background: var(--ea-bg, #141414);
+    color: var(--ea-fg, #d4d4d4);
+    border: 1px solid var(--ea-border, #3a3a3a);
+    border-radius: 0;
+    padding: 1px 3px;
+    font: inherit;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+.ea-godley__init-input:focus { border-color: #4a8db5; outline: none; }
+
+/* Monaco inline cell editor host (injected by the editor adapter). */
+.ea-godley__cell-monaco {
+    width: 100%;
+    min-width: 120px;
+    height: 22px;
+    border: 1px solid #4a8db5;
+    background: var(--ea-bg, #141414);
+}
+
+/* "+ Add row" button below the matrix. */
+.ea-godley__addrow {
+    align-self: flex-start;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 8px;
+    background: var(--ea-bg-elev, #1e1e1e);
+    color: var(--ea-fg, #d4d4d4);
+    border: 1px solid var(--ea-border, #3a3a3a);
+    padding: 3px 12px;
+    cursor: pointer;
+    font: inherit;
+    font-size: 12px;
+}
+.ea-godley__addrow:hover { border-color: #4a8db5; }
+.ea-godley__addrow .material-symbols-outlined { font-size: 16px; }
+
+/* Leg-model counterparty chip (other agent + their account + Dr/Cr). */
+.ea-chip--leg-cp { background: #2a2438; }
+.ea-chip__dir { font-size: 10px; font-weight: 700; }
+.ea-chip__dir--dr { color: #6db8d6; }
+.ea-chip__dir--cr { color: #d6a86d; }
+.ea-chip__warn { color: #d9a441; font-weight: 700; margin-left: 2px; }
+.ea-chip__delta { font-weight: 700; }
+.ea-chip__delta--pos { color: #6db876; }
+.ea-chip__delta--neg { color: #d97c6b; }
+
+/* Editor shell: host + Save footer. */
+.ea-gme-host {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    gap: 6px;
+}
+.ea-gme__foot {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.ea-gme__btn {
+    background: var(--ea-bg-elev, #222);
+    color: var(--ea-fg, #d4d4d4);
+    border: 1px solid var(--ea-border, #3a3a3a);
+    border-radius: 0;
+    padding: 3px 14px;
+    font: inherit;
+    cursor: pointer;
+}
+.ea-gme__btn:hover:not(:disabled) { border-color: #4a8db5; }
+.ea-gme__btn:disabled { opacity: 0.5; cursor: default; }
+.ea-gme__status { font-size: 11px; opacity: 0.85; }
+.ea-gme__status--ok  { color: #6db876; }
+.ea-gme__status--err { color: #d97c6b; }
+
+/* Whole-row edit dialog. */
+.ea-gme-roweditor { display: flex; flex-direction: column; gap: 6px; min-width: 460px; }
+.ea-gme-re__head {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    opacity: 0.65;
+    margin-top: 8px;
+}
+.ea-gme-re__row { display: flex; align-items: center; gap: 6px; }
+.ea-gme-re__cp { display: flex; flex-direction: column; gap: 6px; }
+.ea-gme-re__input {
+    background: var(--ea-bg, #141414);
+    color: var(--ea-fg, #d4d4d4);
+    border: 1px solid var(--ea-border, #3a3a3a);
+    border-radius: 0;
+    padding: 3px 6px;
+    font: inherit;
+    font-size: 12px;
+}
+.ea-gme-re__input:focus { border-color: #4a8db5; outline: none; }
+.ea-gme-re__row .ea-gme-re__input:nth-child(3),
+.ea-gme-re__cp > .ea-gme-re__input { flex: 1; }
+.ea-gme-re__del {
+    background: none; border: none; color: #8a8a8a; cursor: pointer;
+    display: inline-flex; align-items: center; padding: 0 2px;
+}
+.ea-gme-re__del:hover { color: #d9886a; }
+.ea-gme-re__del .material-symbols-outlined { font-size: 16px; }
+.ea-gme-re__add {
+    align-self: flex-start;
+    background: var(--ea-bg-elev, #1e1e1e);
+    color: var(--ea-fg, #d4d4d4);
+    border: 1px dashed var(--ea-border, #3a3a3a);
+    border-radius: 0;
+    padding: 2px 10px;
+    cursor: pointer;
+    font: inherit;
+    font-size: 12px;
+}
+.ea-gme-re__add:hover { border-color: #4a8db5; }
+
+
+/* ─── Code tab — three full-height, pop-out-able panes ──────────────── */
+
+.ea-code-panes {
+    display: flex;
+    flex-direction: column;     /* stacked panes — the column scrolls */
+    gap: 8px;
+    height: 100%;
+    min-height: 0;
+    padding: 4px;
+    box-sizing: border-box;
+    overflow: auto;
+}
+.ea-pane {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 auto;             /* each pane at its natural height */
+    min-height: 0;
+    border: 1px solid var(--ea-border, #2f2f2f);
+    background: var(--ea-bg-elev, #1b1b1b);
+}
+
+.ea-pane__head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 10px;
+    background: var(--ea-bg-elev-2, #242424);
+    border-bottom: 1px solid var(--ea-border, #2f2f2f);
+}
+.ea-pane__title { font-weight: 600; font-size: 13px; }
+.ea-pane__kind {
+    font-size: 11px;
+    opacity: 0.6;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.ea-pane__spacer { flex: 1; }
+.ea-pane__popout, .ea-pane__act {
+    background: none;
+    border: none;
+    color: #7a7a7a;
+    cursor: pointer;
+    padding: 0 2px;
+    line-height: 1;
+}
+.ea-pane__popout:hover, .ea-pane__act:hover { color: #4a8db5; }
+.ea-pane__popout .material-symbols-outlined,
+.ea-pane__act .material-symbols-outlined { font-size: 16px; vertical-align: middle; }
+
+.ea-pane__body {
+    min-height: 0;
+    overflow: auto;
+    padding: 8px;
+    box-sizing: border-box;
+}
+/* Stacked: the Code pane gives Monaco a definite height; Godley caps + scrolls. */
+.ea-pane--code .ea-pane__body { padding: 0; height: 480px; }
+.ea-pane--code .ea-monaco-host { height: 100%; }
+.ea-pane--godley .ea-godley__wrap { max-height: 480px; }
+
+.ea-pane--popped .ea-pane__body { display: none; }
+.ea-pane__placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    flex: 1;
+    opacity: 0.7;
+    font-size: 12px;
+}
+.ea-pane__restore {
+    background: var(--ea-bg-elev, #1e1e1e);
+    color: var(--ea-fg, #d4d4d4);
+    border: 1px solid var(--ea-border, #3a3a3a);
+    padding: 3px 12px;
+    cursor: pointer;
+    font: inherit;
+}
+.ea-pane__restore:hover { border-color: #4a8db5; }
+.ea-pane__win-body {
+    height: 100%;
+    overflow: auto;
+    padding: 8px;
+    box-sizing: border-box;
+}
+/* A popped-out pane fills its window (override the docked heights). */
+.ea-pane__win-body .ea-pane__body { height: 100%; padding: 0; }
+.ea-pane__win-body .ea-monaco-host { height: 100%; }
+.ea-pane__win-body .ea-godley__wrap { max-height: none; }
+
+/* ── LedgerRulesEditor (SFC-by-construction Godley pane) ──────────────────── */
+.ea-flows-host, .ea-godley-host { overflow: auto; padding: 8px; box-sizing: border-box; }
+.ea-ledger__h {
+    margin: 0 0 6px; font-size: 12px; font-weight: 600;
+    color: var(--ea-fg, #d4d4d4); text-transform: uppercase; letter-spacing: .04em;
+}
+.ea-ledger__findings { margin-bottom: 10px; display: flex; flex-direction: column; gap: 3px; }
+.ea-ledger__ok { color: #7ec699; font-size: 12px; }
+.ea-ledger__finding {
+    font-size: 12px; padding: 4px 8px; border-left: 3px solid transparent;
+    background: var(--ea-bg-elev, #1e1e1e);
+}
+.ea-ledger__finding--error { border-left-color: #d16969; color: #e6a3a3; }
+.ea-ledger__finding--warn { border-left-color: #d7ba7d; color: #d7ba7d; }
+.ea-ledger__finding-code {
+    font-family: var(--ea-mono, monospace); opacity: .8; margin-right: 6px;
+}
+.ea-ledger__chart { margin-bottom: 14px; }
+.ea-ledger__chart-table, .ea-ledger__rules-table { width: 100%; border-collapse: collapse; }
+.ea-ledger__chart-table td, .ea-ledger__rules-table td, .ea-ledger__rules-table th {
+    border: 1px solid var(--ea-border, #3a3a3a); padding: 3px 8px; font-size: 12px;
+    color: var(--ea-fg, #d4d4d4);
+}
+.ea-ledger__acct { font-weight: 500; }
+.ea-ledger__kind, .ea-ledger__key {
+    margin-left: 8px; font-family: var(--ea-mono, monospace);
+    font-size: 11px; opacity: .6;
+}
+.ea-ledger__type { opacity: .7; }
+.ea-ledger__ic { text-align: right; font-variant-numeric: tabular-nums; }
+.ea-ledger__ic-verdict { margin-top: 6px; font-size: 12px; padding: 4px 8px; }
+.ea-ledger__ic-verdict--ok { color: #7ec699; }
+.ea-ledger__ic-verdict--bad { color: #e6a3a3; }
+.ea-ledger__rules-head {
+    display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;
+}
+.ea-ledger__add { font-size: 12px; padding: 2px 10px; border-radius: 0; }
+.ea-ledger__rules-table th { background: var(--ea-bg-elev, #1e1e1e); text-align: center; }
+.ea-ledger__cell--dr { color: #6a9955; text-align: center; }
+.ea-ledger__cell--cr { color: #ce9178; text-align: center; }
+.ea-ledger__cell--empty { color: transparent; }
+.ea-ledger__cp { font-family: var(--ea-mono, monospace); font-size: 11px; }
+.ea-ledger__nw { white-space: nowrap; }
+.ea-ledger__none { opacity: .4; }
+.ea-ledger__bad { color: #e6a3a3; }
+.ea-ledger__actions { white-space: nowrap; text-align: right; }
+.ea-godley__rowbtn {
+    background: none; border: none; cursor: pointer; color: var(--ea-fg, #d4d4d4);
+    opacity: .6; padding: 0 4px; font-size: 12px;
+}
+.ea-godley__rowbtn:hover { opacity: 1; }
+
+
+/* ── LedgerRulesEditor — flow cards (my accounts / other side) ────────────── */
+.ea-flows-host, .ea-godley-host { overflow: auto; padding: 8px; box-sizing: border-box; }
+.ea-flows { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.ea-flow { border: 1px solid var(--ea-border, #3a3a3a); background: var(--ea-bg-elev, #1e1e1e); }
+/* A rule resolved from a parent archetype (see `_effective_ledger_rules`) —
+   greyed + non-interactive; edit it on the parent instead. */
+.ea-flow--inherited { opacity: .55; pointer-events: none; }
+.ea-flow__inherited-badge {
+    font-size: 9.5px; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--ea-fg-dim, #9a9a9a); border: 1px solid var(--ea-border, #3a3a3a);
+    border-radius: 0; padding: 1px 5px; white-space: nowrap;
+}
+.ea-flow__head {
+    display: flex; align-items: center; gap: 8px; padding: 3px 8px;
+    background: var(--ea-bg-elev-2, #242424); border-bottom: 1px solid var(--ea-border, #3a3a3a);
+}
+.ea-flow__name {
+    background: transparent; border: 1px solid transparent; color: var(--ea-fg, #d4d4d4);
+    font: inherit; font-family: var(--ea-mono, monospace); font-weight: 600; font-size: 12px;
+    width: 18ch; padding: 1px 4px; border-radius: 0;
+}
+.ea-flow__name:hover { border-color: var(--ea-border, #3a3a3a); }
+.ea-flow__name:focus { border-color: #4a8db5; outline: none; }
+.ea-flow__hint {
+    font-family: var(--ea-mono, monospace); font-size: 10.5px; opacity: .45;
+    margin-left: auto; white-space: nowrap;
+}
+.ea-flow__sec {
+    font-size: 9.5px; text-transform: uppercase; letter-spacing: .06em;
+    opacity: .45; padding: 5px 10px 1px;
+}
+.ea-flow__legs { display: flex; flex-direction: column; gap: 4px; padding: 1px 10px; }
+/* Each leg is a self-contained card with a sign-coloured left accent bar
+   (green = increase, amber = decrease) so stacked legs read as distinct. */
+.ea-flow__leg {
+    display: flex; align-items: center; gap: 6px;
+    padding: 2px 6px; border-radius: 0;
+    background: var(--ea-bg-elev-2, #242424);
+    border: 1px solid var(--ea-border, #3a3a3a);
+    border-left: 3px solid transparent;
+}
+.ea-flow__leg--pos { border-left-color: #7ec699; }
+.ea-flow__leg--neg { border-left-color: #d7a07a; }
+.ea-flow__sel {
+    background: var(--ea-bg, #252526); border: 1px solid var(--ea-border, #3a3a3a);
+    color: var(--ea-fg, #d4d4d4); font: inherit; font-size: 12px; padding: 1px 4px;
+    border-radius: 0; width: 20ch;
+}
+/* In a leg card the select flexes to fill the card and shrinks with the
+   now-narrower two-column halves. */
+.ea-flow__leg .ea-flow__sel { flex: 1 1 auto; width: auto; min-width: 0; }
+.ea-sign {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 24px; height: 22px; border: 1px solid var(--ea-border, #3a3a3a);
+    border-radius: 0; cursor: pointer; font-weight: 700; font-size: 13px;
+    background: var(--ea-bg, #252526); line-height: 1; padding: 0;
+}
+.ea-sign--pos { color: #7ec699; } .ea-sign--neg { color: #d7a07a; }
+.ea-sign:hover { border-color: #4a8db5; }
+.ea-flow__addlink {
+    background: none; border: none; color: #6fa8c7; cursor: pointer; font: inherit;
+    font-size: 11px; padding: 1px 4px; white-space: nowrap;
+}
+.ea-flow__addlink:hover { text-decoration: underline; }
+.ea-flow__note { font-size: 11px; opacity: .5; font-style: italic; }
+
+/* Card body — two halves side by side (MY ACCOUNTS | OTHER SIDE) to spend
+   horizontal space; wraps back to stacked when the pane is too narrow. The
+   matching section labels keep the two halves' first rows aligned. */
+.ea-flow__body { display: flex; flex-wrap: wrap; align-items: flex-start; column-gap: 14px; row-gap: 2px; }
+.ea-flow__half { flex: 1 1 300px; min-width: 0; }
+
+/* OTHER SIDE — a vertical option list (reservoir | a partner | none) that
+   drives the detail to its right (echoes .ea-bp-flows-picker__list). Keeping
+   it as a side rail, not a top bar, lets the detail's first row line up with
+   the first leg in MY ACCOUNTS. */
+.ea-flow__othersplit { display: flex; align-items: flex-start; gap: 8px; padding: 1px 10px; }
+.ea-flow__sidelist { list-style: none; margin: 0; padding: 0; flex: 0 0 auto; }
+.ea-flow__sideitem {
+    display: flex; align-items: center; gap: 6px; padding: 3px 8px; cursor: pointer;
+    color: #ccc; font-size: 12px; border-left: 2px solid transparent; white-space: nowrap;
+}
+.ea-flow__sideitem:hover { background: #232323; }
+.ea-flow__sideitem--active {
+    background: #2a2a2a; color: var(--ea-fg, #fff); border-left-color: #1177b3;
+}
+.ea-flow__sideicon { font-size: 15px; color: var(--ea-text-dim, #888); }
+.ea-flow__sideitem--active .ea-flow__sideicon { color: #4ec9b0; }
+.ea-flow__sidelabel { overflow: hidden; text-overflow: ellipsis; }
+.ea-flow__sidedetail { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ea-segmented--small .ea-segmented__btn { font-size: 11px; padding: 1px 8px; }
+.ea-flow__partner { display: flex; flex-direction: column; gap: 2px; }
+.ea-flow__restrict {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 3px;
+}
+.ea-flow__restrict-lbl { font-size: 11px; opacity: .5; }
+.ea-flow__chip {
+    display: inline-flex; align-items: center; gap: 3px; border: 1px solid #4a8db5;
+    background: rgba(74,141,181,.15); color: #9cd2f0; font-family: var(--ea-mono, monospace);
+    font-size: 11px; padding: 0 3px 0 6px; border-radius: 0;
+}
+.ea-flow__chipx { background: none; border: none; color: inherit; cursor: pointer; font-size: 12px; padding: 0; opacity: .7; }
+.ea-flow__chipx:hover { opacity: 1; }
+
+/* Partner side split into labelled "partner"/"account" sub-rows. The caption
+   echoes the section-label type style but sits inline at a fixed width. */
+.ea-flow__subrow { display: flex; align-items: flex-start; gap: 8px; padding: 1px 0; }
+.ea-flow__subsec {
+    flex: 0 0 5ch; padding-top: 4px;
+    font-size: 9.5px; text-transform: uppercase; letter-spacing: .06em; opacity: .45;
+}
+.ea-flow__subline { flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.ea-flow__subcol { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.ea-flow__leglist { align-self: stretch; display: flex; flex-direction: column; gap: 4px; }
+
+/* "＋" picker button — opens the searchable archetype popover. */
+.ea-flow__pickbtn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 20px; padding: 0; border-radius: 0; cursor: pointer;
+    background: var(--ea-bg, #252526); border: 1px solid var(--ea-border, #3a3a3a); color: #6fa8c7;
+}
+.ea-flow__pickbtn:hover { border-color: #4a8db5; color: #9cd2f0; }
+.ea-flow__pickbtn .material-symbols-outlined { font-size: 16px; }
+
+/* Searchable archetype popover (combobox) — search field + filtered list,
+   styled after the tile tab-menu's search/list. */
+.ea-pick-overlay { position: fixed; inset: 0; z-index: var(--z-modal, 4000); }
+.ea-pick {
+    position: absolute; width: 220px; max-height: 280px; display: flex; flex-direction: column;
+    background: var(--ea-bg-elev, #1e1e1e); border: 1px solid var(--ea-border, #3a3a3a);
+    box-shadow: 0 6px 24px rgba(0,0,0,.45); border-radius: 0;
+}
+.ea-pick__search {
+    display: flex; align-items: center; gap: 5px; padding: 4px 8px;
+    background: var(--ea-bg-elev-2, #242424); border-bottom: 1px solid var(--ea-border, #3a3a3a);
+}
+.ea-pick__search .material-symbols-outlined { font-size: 14px; opacity: .6; }
+.ea-pick__search input {
+    flex: 1 1 auto; background: transparent; border: none; outline: none;
+    color: var(--ea-fg, #d4d4d4); font: inherit; font-size: 12px;
+}
+.ea-pick__list { flex: 1 1 auto; overflow-y: auto; padding: 3px 0; }
+.ea-pick__item {
+    padding: 3px 10px; cursor: pointer; font-size: 12px; color: var(--ea-fg, #d4d4d4);
+    font-family: var(--ea-mono, monospace); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ea-pick__item:hover, .ea-pick__item--cursor { background: rgba(74, 141, 181, .22); color: #cfeaff; }
+.ea-pick__empty { padding: 6px 10px; font-size: 11px; opacity: .5; font-style: italic; }
+.ea-flow__foot {
+    display: flex; align-items: center; padding: 3px 10px;
+    border-top: 1px solid var(--ea-border, #3a3a3a);
+}
+/* Net-worth verdict — a small badge in the flow header (after the name). */
+.ea-flow__nw {
+    font-size: 10.5px; font-weight: 500; padding: 0 5px; border: 1px solid transparent;
+}
+.ea-flow__nw--income  { color: #7ec699; border-color: rgba(126,198,153,.4); }
+.ea-flow__nw--expense { color: #d7a07a; border-color: rgba(215,160,122,.4); }
+.ea-flow__nw--swap    { opacity: .5; }
+.ea-flow__nw--none    { opacity: .4; }
+.ea-flow__rm, .ea-flow__del { display: inline-flex; align-items: center; }
+.ea-flow__rm .material-symbols-outlined, .ea-flow__del .material-symbols-outlined { font-size: 16px; }
+
+/* Flows pane header actions live in ea-pane__head (like the Signature pane).
+   A thin separator splits the flow actions from open-in-tab/window. */
+.ea-pane__act-sep {
+    width: 1px; align-self: stretch; margin: 3px 4px;
+    background: var(--ea-border, #3a3a3a);
+}
+
+/* Pop-out Flows window: no split-view ea-pane__head, so the pane renders its
+   own header strip and the body scrolls beneath it. */
+.ea-flows-popout { display: flex; flex-direction: column; overflow: hidden; padding: 0; }
+.ea-flows-popout__head { flex: 0 0 auto; }
+.ea-flows-popout__body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 8px; }
+
+/* Collapsible flow cards — same chevron technique as the signature panel. */
+.ea-flow > .ea-flow__head { list-style: none; cursor: pointer; }
+.ea-flow > .ea-flow__head::-webkit-details-marker { display: none; }
+.ea-flow__head::before {
+    content: 'expand_more'; font-family: 'Material Symbols Outlined';
+    font-size: 16px; color: var(--ea-text-dim, rgba(255,255,255,.5));
+    transition: transform .12s ease;
+}
+.ea-flow:not([open]) > .ea-flow__head::before { transform: rotate(-90deg); }
+.ea-flow:not([open]) > .ea-flow__head { border-bottom: none; }

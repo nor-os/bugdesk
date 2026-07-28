@@ -1,0 +1,146 @@
+/* nav.css — left-nav panel-tile (project / files / git). */
+
+.twm-nav {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: var(--surface-0);
+    overflow: hidden;
+}
+
+.twm-nav__modes {
+    display: flex;
+    gap: 0;
+    padding: 0;
+    background: var(--surface-1);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.twm-nav__mode {
+    flex: 1 1 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 6px 8px;
+    background: transparent;
+    border: none;
+    border-right: 1px solid var(--border-subtle);
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    color: var(--text-secondary);
+    font-size: var(--font-size-xs);
+    cursor: pointer;
+}
+.twm-nav__mode:last-child { border-right: none; }
+.twm-nav__mode .material-symbols-outlined { font-size: 14px; }
+.twm-nav__mode:hover { background: var(--state-hover); }
+.twm-nav__mode--on {
+    background: var(--surface-0);
+    color: var(--text-bright);
+    border-bottom-color: var(--accent-bright);
+}
+
+/* Filter strip — inherits look from sidebar.css's .sidebar-controls
+ * primitive. Just tweak the bottom border to match our pane chrome. */
+.twm-nav .sidebar-controls.twm-nav__filter {
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.twm-nav__body {
+    flex: 1 1 auto;
+    overflow: hidden;
+    display: flex;
+    min-height: 0;
+}
+
+/* Each mode pane fills the body when visible. Inline style.display
+ * flips between 'flex' and 'none'. */
+.twm-nav__pane {
+    flex: 1 1 auto;
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.twm-nav__table {
+    flex: 1 1 auto;
+    width: 100%;
+    overflow: auto;
+    min-height: 0;
+}
+
+/* The ProjectSidebar's data-browser-panel + the GitPanel both expect
+ * a flex parent with full width. We give them that with the pane. */
+.twm-nav__pane--files .data-browser-panel,
+.twm-nav__pane--files .ea-browser-panel {
+    width: 100% !important;
+}
+.twm-nav__pane--git .git-panel {
+    width: 100%;
+}
+
+/* Hide the ProjectSidebar's internal chrome — we drive filter from the
+ * unified filter strip above and don't want the duplicate "Project"
+ * header or its own search bar. The single "Files" collapsible-header
+ * (and its + button) are also hidden — we expose a dedicated
+ * `.twm-nav__files-actions` row above the mount with a single
+ * activity-button-styled action. */
+.twm-nav__pane--files .fixed-panel-header,
+.twm-nav__pane--files .sidebar-controls,
+.twm-nav__pane--files .collapsible-header {
+    display: none !important;
+}
+/* Force the file-tree section's content to be expanded since there is
+ * no longer a header to toggle it. */
+.twm-nav__pane--files .collapsible-content {
+    display: block !important;
+}
+
+/* Action row above the file list — hosts the single "New file" button. */
+.twm-nav__files-actions {
+    display: flex;
+    gap: 4px;
+    padding: 6px 6px 4px;
+    border-bottom: 1px solid var(--border-subtle);
+    flex: 0 0 auto;
+}
+.twm-nav__files-mount {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Ensure the sidebar-body inside any pane actually scrolls. */
+.twm-nav__pane .sidebar-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+}
+
+/* Reset <ul.tree-view> browser defaults so list items render at the
+ * left edge of the body instead of with the 40px UA padding. */
+.twm-nav__pane ul.tree-view {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.twm-nav__pane .tree-item {
+    /* keep the .tree-item padding from main_new.css for nested chevron */
+}
+
+.twm-nav__icon {
+    font-size: 14px;
+    color: var(--text-muted);
+    vertical-align: middle;
+}
+
+.twm-nav__error {
+    padding: 12px;
+    color: var(--color-danger);
+    font-size: var(--font-size-xs);
+}

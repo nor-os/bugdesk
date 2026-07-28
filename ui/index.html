@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BugDesk</title>
+    <link rel="icon" href="data:," />
+    <meta http-equiv="Cache-Control" content="no-cache, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+
+    <link href="vendor/material-symbols/material-symbols-outlined.css" rel="stylesheet" />
+    <link href="css/tokens.css" rel="stylesheet" />
+    <link href="css/base.css" rel="stylesheet" />
+    <link href="css/components/controls.css" rel="stylesheet" />
+    <link href="css/components/containers.css" rel="stylesheet" />
+    <link id="main-new-css" href="css/main_new.css" rel="stylesheet" />
+    <link href="css/config_page.css" rel="stylesheet" />
+    <link href="css/scenario.css" rel="stylesheet" />
+    <link href="css/scenario_manager.css" rel="stylesheet" />
+    <link href="css/documentation.css" rel="stylesheet" />
+    <link href="css/etl_page.css" rel="stylesheet" />
+    <link href="css/control_board.css" rel="stylesheet" />
+    <link href="css/results_dashboard.css" rel="stylesheet" />
+    <link href="css/results_widgets.css" rel="stylesheet" />
+    <link href="css/mc_progress.css" rel="stylesheet" />
+    <link href="css/etl_progress.css" rel="stylesheet" />
+    <link href="css/code.css" rel="stylesheet" />
+    <link href="css/components/godley_table.css" rel="stylesheet" />
+    <link href="css/components/calibration.css" rel="stylesheet" />
+    <link href="css/components/slider_field.css" rel="stylesheet" />
+    <link href="css/components/caption.css" rel="stylesheet" />
+    <link href="css/global_search.css" rel="stylesheet" />
+    <link href="css/zoom_controls.css" rel="stylesheet" />
+    <link href="css/components/tabs.css" rel="stylesheet" />
+    <link href="css/managed_window.css" rel="stylesheet" />
+    <link href="css/about_dialog.css" rel="stylesheet" />
+    <link href="css/components/detail_header.css" rel="stylesheet" />
+    <link href="css/components/kpi_tab.css" rel="stylesheet" />
+    <link href="css/components/asset_kind_tab.css" rel="stylesheet" />
+    <link href="css/components/attribute_list_editor.css" rel="stylesheet" />
+    <link href="css/components/instances.css" rel="stylesheet" />
+    <link href="css/help.css" rel="stylesheet" />
+    <link href="css/settings_page.css" rel="stylesheet" />
+    <link href="css/template_gallery.css" rel="stylesheet" />
+    <link href="css/sidebar.css" rel="stylesheet" />
+    <link href="css/notebook.css" rel="stylesheet" />
+    <link href="css/git_panel.css" rel="stylesheet" />
+    <link href="css/simulation_run_page.css" rel="stylesheet" />
+    <link href="css/slide_out_panel.css" rel="stylesheet" />
+    <link href="css/ai_chat.css" rel="stylesheet" />
+    <link href="css/plot_config.css" rel="stylesheet" />
+    <link href="css/ecoagent_runpage.css" rel="stylesheet" />
+    <link href="css/ecoagent_extra_modes.css" rel="stylesheet" />
+    <link href="css/godley_table.css" rel="stylesheet" />
+
+    <!-- Tiling shell additions (loaded last so they win over legacy styles). -->
+    <link href="css/tiling/tile.css" rel="stylesheet" />
+    <link href="css/tiling/command_palette.css" rel="stylesheet" />
+    <link href="css/tiling/nav.css" rel="stylesheet" />
+    <link href="css/tiling/host.css" rel="stylesheet" />
+    <link href="css/ticketdesk.css" rel="stylesheet" />
+    <link href="css/ticketdesk_filters.css" rel="stylesheet" />
+    <link href="css/ticketdesk_md.css" rel="stylesheet" />
+
+    <link rel="stylesheet" href="vendor/katex/katex.min.css" />
+    <script defer src="vendor/katex/katex.min.js"></script>
+    <script defer src="vendor/plotly/plotly-2.35.2.min.js"></script>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "@codemirror/state": "./vendor/codemirror/state.js",
+            "@codemirror/view": "./vendor/codemirror/view.js",
+            "@codemirror/commands": "./vendor/codemirror/commands.js",
+            "@codemirror/language": "./vendor/codemirror/language.js",
+            "@codemirror/autocomplete": "./vendor/codemirror/autocomplete.js",
+            "@codemirror/search": "./vendor/codemirror/search.js",
+            "@codemirror/lint": "./vendor/codemirror/lint.js",
+            "@lezer/common": "./vendor/lezer/common.js",
+            "@lezer/highlight": "./vendor/lezer/highlight.js",
+            "@lezer/lr": "./vendor/lezer/lr.js",
+            "crelt": "./vendor/crelt.js",
+            "style-mod": "./vendor/style-mod.js",
+            "w3c-keyname": "./vendor/w3c-keyname.js"
+        }
+    }
+    </script>
+</head>
+<body>
+    <main id="ecoagent-root" class="ecosim-app-root" aria-live="polite"></main>
+    <div id="ecoagent-notifications" class="ecosim-notifications-region" aria-live="assertive"></div>
+
+    <script>
+        (() => {
+            const params = new URLSearchParams(window.location.search || '');
+            window.__ECOAGENT_DEBUG__ = params.has('dev_ts') || params.get('debug') === '1';
+        })();
+    </script>
+
+    <!-- Browser-mode pywebview polyfill. -->
+    <script>
+        (() => {
+            if (window.pywebview && window.pywebview.api) return;
+            const api = new Proxy({}, {
+                get(_, method) {
+                    if (typeof method !== 'string') return undefined;
+                    if (method === 'then') return undefined;
+                    return async (...args) => {
+                        const body = (args.length === 1 && args[0] && typeof args[0] === 'object' && !Array.isArray(args[0]))
+                            ? JSON.stringify(args[0])
+                            : JSON.stringify(args);
+                        const resp = await fetch('/api/' + method, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body,
+                        });
+                        const data = await resp.json().catch(() => null);
+                        if (!resp.ok || !data || data.ok === false) {
+                            const msg = (data && data.error) || `Bridge call ${method} failed (${resp.status})`;
+                            throw new Error(msg);
+                        }
+                        return data.result;
+                    };
+                },
+            });
+            window.pywebview = { api };
+            window.dispatchEvent(new Event('pywebviewready'));
+        })();
+    </script>
+
+    <!-- Original Ecosim chrome bootstrap + tiling-WM installer. -->
+    <script type="module">
+        import { bootstrapApplication } from './js/bootstrap/app_bootstrap.js';
+
+        const root = document.getElementById('ecoagent-root');
+        const notifications = document.getElementById('ecoagent-notifications');
+
+        bootstrapApplication({
+            root,
+            mounts: { notifications },
+            waitForHostBridge: true,
+            enableConsoleLogging: window.__ECOAGENT_DEBUG__,
+        }).then(async (runtime) => {
+            const bus = runtime?.eventBus;
+            if (bus) {
+                bus.on?.('welcome-screen:shown', () => bus.emit?.('welcome-screen:hidden'));
+                bus.emit?.('welcome-screen:hidden');
+            }
+            try {
+                const { installTilingShell } = await import('./js/tiling/install.js');
+                await installTilingShell({
+                    eventBus: bus,
+                    logger: runtime?.loggingService?.scoped?.('tiling-shell'),
+                    runtime,
+                });
+            } catch (err) {
+                console.error('tiling shell install failed', err);
+            }
+            window.__ecoagent = runtime;
+        }).catch((error) => {
+            console.error('EcoAgent bootstrap failed', error);
+            const fallback = document.createElement('pre');
+            fallback.className = 'bootstrap-error';
+            fallback.textContent = 'Failed to bootstrap EcoAgent. Check console for details.';
+            root.appendChild(fallback);
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,1877 @@
+/* ═══════════════════════════════════════════════════════════════════════
+ * ETL Pipeline Styles
+ *
+ * Node category theming follows the project convention:
+ *   --X-primary, --X-bg, --X-border, --X-text
+ *   background: linear-gradient(145deg, darker, var(--X-bg))
+ *
+ * Also covers:
+ *   - ETL toolbar (designer toolbar in workspace-top-bar)
+ *   - Pipeline status indicators (run result glow + inline status text)
+ *   - Palette template icon tints
+ * ═══════════════════════════════════════════════════════════════════════ */
+
+/* ─── ETL Page Layout ───────────────────────────────────────────── */
+
+#etl-manager-page {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+}
+
+/* ─── ETL Category Theme Variables ───────────────────────────────── */
+
+:root {
+    /* Source — Teal / Cyan */
+    --etl-source-primary: #26a69a;
+    --etl-source-bg: #1a2b2a;
+    --etl-source-border: #2d7a73;
+    --etl-source-text: #b5ddd9;
+
+    /* Transform — Indigo / Blue */
+    --etl-transform-primary: #5c6bc0;
+    --etl-transform-bg: #1e2038;
+    --etl-transform-border: #3f4a8a;
+    --etl-transform-text: #c5c9f0;
+
+    /* Sink — Amber / Warm */
+    --etl-sink-primary: #d4a053;
+    --etl-sink-bg: #2a2419;
+    --etl-sink-border: #8a6f3a;
+    --etl-sink-text: #e0d0b0;
+
+    /* Operation — Purple (Join / Union) */
+    --etl-operation-primary: #9c27b0;
+    --etl-operation-bg: #261e30;
+    --etl-operation-border: #7a4da0;
+    --etl-operation-text: #cbb5e0;
+
+    /* Utility — Neutral / Gray-blue */
+    --etl-utility-primary: #78909c;
+    --etl-utility-bg: #1e2328;
+    --etl-utility-border: #4a5a65;
+    --etl-utility-text: #b8c8d4;
+}
+
+/* ─── ETL Node Category Styles ───────────────────────────────────── */
+
+/* Source nodes */
+.node.etl-source {
+    background: linear-gradient(145deg, #142220, var(--etl-source-bg));
+    border-color: var(--etl-source-border);
+    color: var(--etl-source-text);
+    border-left: 3px solid var(--etl-source-primary);
+}
+
+.node.etl-source.template {
+    background: linear-gradient(145deg, #1c302e, var(--etl-source-bg));
+    border-color: var(--etl-source-border);
+    border-style: dashed;
+    border-left: 3px solid var(--etl-source-primary);
+}
+
+/* Transform nodes */
+.node.etl-transform {
+    background: linear-gradient(145deg, #161830, var(--etl-transform-bg));
+    border-color: var(--etl-transform-border);
+    color: var(--etl-transform-text);
+    border-left: 3px solid var(--etl-transform-primary);
+}
+
+.node.etl-transform.template {
+    background: linear-gradient(145deg, #1e2040, var(--etl-transform-bg));
+    border-color: var(--etl-transform-border);
+    border-style: dashed;
+    border-left: 3px solid var(--etl-transform-primary);
+}
+
+/* Sink nodes */
+.node.etl-sink {
+    background: linear-gradient(145deg, #221c12, var(--etl-sink-bg));
+    border-color: var(--etl-sink-border);
+    color: var(--etl-sink-text);
+    border-left: 3px solid var(--etl-sink-primary);
+}
+
+.node.etl-sink.template {
+    background: linear-gradient(145deg, #302818, var(--etl-sink-bg));
+    border-color: var(--etl-sink-border);
+    border-style: dashed;
+    border-left: 3px solid var(--etl-sink-primary);
+}
+
+/* Utility nodes */
+.node.etl-utility {
+    background: linear-gradient(145deg, #161a1e, var(--etl-utility-bg));
+    border-color: var(--etl-utility-border);
+    color: var(--etl-utility-text);
+    border-left: 3px solid var(--etl-utility-primary);
+}
+
+.node.etl-utility.template {
+    background: linear-gradient(145deg, #1e2428, var(--etl-utility-bg));
+    border-color: var(--etl-utility-border);
+    border-style: dashed;
+    border-left: 3px solid var(--etl-utility-primary);
+}
+
+/* ─── Connector Dot Tinting ──────────────────────────────────────── */
+
+.node.etl-source .connector-handle.connected:not(.wildcard) .connector-dot { background: var(--etl-source-border); }
+.node.etl-transform .connector-handle.connected:not(.wildcard) .connector-dot { background: var(--etl-transform-border); }
+.node.etl-sink .connector-handle.connected:not(.wildcard) .connector-dot { background: var(--etl-sink-border); }
+.node.etl-utility .connector-handle.connected:not(.wildcard) .connector-dot { background: var(--etl-utility-border); }
+
+.node.etl-source .connector-dot { border-color: var(--etl-source-border); }
+.node.etl-transform .connector-dot { border-color: var(--etl-transform-border); }
+.node.etl-sink .connector-dot { border-color: var(--etl-sink-border); }
+.node.etl-utility .connector-dot { border-color: var(--etl-utility-border); }
+
+/* ─── Pipeline Status Indicators ──────────────────────────────────── */
+
+.node.etl-status--ok {
+    box-shadow: 0 0 0 2px #2e7d32;
+}
+
+.node.etl-status--error {
+    box-shadow: 0 0 0 2px var(--error-color);
+}
+
+.etl-run-status--ok {
+    color: #4caf50;
+}
+
+.etl-run-status--error {
+    color: #f44336;
+}
+
+/* ─── Palette Template Icon Tinting ──────────────────────────────── */
+
+#fixed-200-etl .node.template.etl-source .template-icon {
+    color: var(--etl-source-primary);
+}
+
+#fixed-200-etl .node.template.etl-transform .template-icon {
+    color: var(--etl-transform-primary);
+}
+
+#fixed-200-etl .node.template.etl-sink .template-icon {
+    color: var(--etl-sink-primary);
+}
+
+#fixed-200-etl .node.template.etl-utility .template-icon {
+    color: var(--etl-utility-primary);
+}
+
+/* ─── Pipeline Overview Table ────────────────────────────────────── */
+
+.etl-overview-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--font-size-sm);
+}
+
+.etl-overview-table thead th {
+    text-align: left;
+    font-weight: 600;
+    font-size: var(--font-size-xs);
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: var(--space-xs) 8px;
+    border-bottom: 1px solid var(--border-default);
+}
+
+.etl-overview-table tbody td {
+    padding: 5px 8px;
+    border-bottom: 1px solid var(--border-subtle, rgba(255,255,255,0.04));
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 280px;
+}
+
+.etl-overview-table tbody tr:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.etl-overview-table__url {
+    color: var(--text-muted);
+    font-family: var(--font-mono, monospace);
+    font-size: var(--font-size-xs);
+}
+
+.etl-table-empty {
+    font-size: var(--font-size-sm);
+    color: var(--text-muted);
+    padding: var(--space-xs) 0;
+    font-style: italic;
+}
+
+.scenario-btn--xs {
+    padding: var(--space-xxs) 6px;
+    font-size: var(--font-size-xs);
+    line-height: 1;
+}
+
+/* ─── Run History Counter ───────────────────────────────────────── */
+
+.etl-run-count {
+    font-weight: 400;
+    color: var(--text-muted);
+    font-size: var(--font-size-xs);
+}
+
+.etl-run-status--partial {
+    color: var(--color-warning);
+}
+
+/* ─── Expandable Orchestration Run Rows ────────────────────────── */
+
+.etl-run-row--expandable {
+    cursor: pointer;
+}
+
+.etl-run-row--expandable:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.etl-run-row__summary {
+    display: flex;
+    align-items: center;
+}
+
+.etl-run-row__chevron {
+    transition: transform 0.2s ease;
+    color: var(--text-muted);
+}
+
+.etl-run-row--expanded .etl-run-row__chevron {
+    transform: rotate(180deg);
+}
+
+/* Orchestration detail sub-table */
+.etl-run-detail td {
+    padding: 0;
+    border-bottom: none;
+}
+
+.etl-run-detail__content {
+    padding: var(--space-md) 12px 12px;
+    background: rgba(255, 255, 255, 0.02);
+    border-top: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.04));
+}
+
+.etl-run-detail__table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--font-size-xs);
+}
+
+.etl-run-detail__table thead th {
+    text-align: left;
+    font-weight: 600;
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 3px 6px;
+    border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
+}
+
+.etl-run-detail__table tbody td {
+    padding: var(--space-xs) 6px;
+    border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.03));
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 200px;
+}
+
+.etl-run-detail__pipeline-name {
+    font-weight: 500;
+    color: var(--text-primary, #ccc);
+    -webkit-user-select: text;
+    user-select: text;
+    cursor: text;
+}
+
+.etl-run-detail__status--ok {
+    color: #4caf50;
+}
+
+.etl-run-detail__status--error {
+    color: #f44336;
+}
+
+.etl-run-detail__errors {
+    color: var(--text-muted);
+    font-size: 10px;
+    font-family: var(--font-mono, monospace);
+    max-width: 250px;
+    -webkit-user-select: text;
+    user-select: text;
+    cursor: text;
+}
+
+.etl-run-detail__rerun-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: var(--space-xxs) 8px;
+    font-size: 10px;
+    font-weight: 500;
+    color: #4a9eff;
+    background: rgba(74, 158, 255, 0.1);
+    border: 1px solid rgba(74, 158, 255, 0.25);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background-color var(--transition-normal), border-color var(--transition-normal);
+    white-space: nowrap;
+}
+
+.etl-run-detail__rerun-btn:hover {
+    background: rgba(74, 158, 255, 0.2);
+    border-color: rgba(74, 158, 255, 0.5);
+}
+
+.etl-run-detail__pipeline-row { cursor: pointer; transition: background 0.1s ease; }
+.etl-run-detail__pipeline-row:hover { background: rgba(255, 255, 255, 0.04); }
+.etl-run-detail__pipeline-row--selected { background: rgba(74, 158, 255, 0.12); }
+.etl-run-detail__pipeline-row--selected:hover { background: rgba(74, 158, 255, 0.18); }
+
+/* ─── Data Preview Table ────────────────────────────────────────── */
+
+.etl-preview-table tbody td {
+    font-family: var(--font-mono, monospace);
+    font-size: var(--font-size-xs);
+    max-width: 160px;
+}
+
+/* ─── Pipeline Flow Diagram (arrow-shaped process nodes) ──────── */
+
+.etl-flow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    overflow-x: auto;
+    padding: var(--space-md) 0;
+    scrollbar-width: thin;
+    scrollbar-color: #4b4b4b var(--surface-2);
+}
+
+/* Multi-lane: switch to vertical stacking of lanes */
+.etl-flow--multi-lane {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-md);
+    position: relative;
+}
+
+.etl-flow__lane {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+/* ── Arrow-shaped nodes ─────────────────────────────────────────── */
+
+.etl-flow-node {
+    display: flex;
+    align-items: stretch;
+    width: 200px;
+    height: 48px;
+    flex-shrink: 0;
+    cursor: default;
+    box-sizing: border-box;
+}
+
+/* Clip paths: source = flat left, arrow right */
+.etl-flow-node--source {
+    clip-path: polygon(
+        0 0,
+        calc(100% - 12px) 0,
+        100% 50%,
+        calc(100% - 12px) 100%,
+        0 100%
+    );
+}
+
+/* Non-source: notch left, arrow right */
+.etl-flow-node--transform,
+.etl-flow-node--operation,
+.etl-flow-node--sink,
+.etl-flow-node--utility {
+    clip-path: polygon(
+        0 0,
+        calc(100% - 12px) 0,
+        100% 50%,
+        calc(100% - 12px) 100%,
+        0 100%,
+        12px 50%
+    );
+}
+
+/* ── Icon zone (left strip) ─────────────────────────────────────── */
+
+.etl-flow-node__icon-zone {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    flex-shrink: 0;
+}
+
+.etl-flow-node--source .etl-flow-node__icon-zone    { padding-left: var(--space-md);  background: #1a403a; }
+.etl-flow-node--transform .etl-flow-node__icon-zone { padding-left: var(--space-xl); background: #252850; }
+.etl-flow-node--operation .etl-flow-node__icon-zone { padding-left: var(--space-xl); background: #351a40; }
+.etl-flow-node--sink .etl-flow-node__icon-zone      { padding-left: var(--space-xl); background: #3a3018; }
+.etl-flow-node--utility .etl-flow-node__icon-zone   { padding-left: var(--space-xl); background: #1e2830; }
+
+.etl-flow-node__icon {
+    font-size: var(--font-size-2xl);
+    opacity: 0.9;
+}
+
+.etl-flow-node--source    { color: var(--etl-source-text); }
+.etl-flow-node--transform { color: var(--etl-transform-text); }
+.etl-flow-node--operation { color: var(--etl-operation-text); }
+.etl-flow-node--sink      { color: var(--etl-sink-text); }
+.etl-flow-node--utility   { color: var(--etl-utility-text); }
+
+/* ── Separator ──────────────────────────────────────────────────── */
+
+.etl-flow-node__separator {
+    width: 1px;
+    align-self: stretch;
+    background: rgba(255, 255, 255, 0.1);
+    box-shadow: 1px 0 3px rgba(0, 0, 0, 0.3);
+    flex-shrink: 0;
+}
+
+/* ── Text zone (right area) ─────────────────────────────────────── */
+
+.etl-flow-node__text-zone {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 1px;
+    padding: var(--space-xs) 8px;
+    padding-right: var(--space-xl);
+    min-width: 0;
+    overflow: hidden;
+}
+
+.etl-flow-node--source .etl-flow-node__text-zone    { background: var(--etl-source-bg); }
+.etl-flow-node--transform .etl-flow-node__text-zone { background: var(--etl-transform-bg); }
+.etl-flow-node--operation .etl-flow-node__text-zone { background: var(--etl-operation-bg); }
+.etl-flow-node--sink .etl-flow-node__text-zone      { background: var(--etl-sink-bg); }
+.etl-flow-node--utility .etl-flow-node__text-zone   { background: var(--etl-utility-bg); }
+
+.etl-flow-node__name {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.etl-flow-node__type {
+    font-size: 10px;
+    opacity: 0.6;
+    white-space: nowrap;
+}
+
+/* ── Gap spacer between nodes (SVG overlay draws the actual line) ── */
+
+.etl-flow__lane-gap {
+    width: 6px;
+    flex-shrink: 0;
+}
+
+/* SVG connector overlay (all connections drawn uniformly) */
+.etl-flow__connectors {
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    overflow: visible;
+}
+
+.etl-flow__connector-path {
+    fill: none;
+    stroke: #5b9bd5;
+    stroke-width: 2;
+}
+
+.etl-flow__empty {
+    font-size: var(--font-size-sm);
+    color: var(--text-muted);
+    font-style: italic;
+    padding: var(--space-md) 0;
+}
+
+/* ─── ETL Data Preview Panel (inside .left-bottom in designer) ──── */
+
+.etl-preview-panel {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    background: var(--surface-0);
+    overflow: hidden;
+}
+
+.etl-preview-panel__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 12px;
+    border-bottom: 1px solid var(--surface-3);
+    flex-shrink: 0;
+    background: var(--surface-1);
+}
+
+.etl-preview-panel__title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--text-primary, #ccc);
+}
+
+.etl-preview-panel__row-count {
+    font-weight: 400;
+    color: var(--text-muted, var(--text-muted));
+    font-size: var(--font-size-xs);
+}
+
+.etl-preview-panel__pin {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-muted, var(--text-muted));
+    cursor: pointer;
+    padding: 0;
+}
+
+.etl-preview-panel__pin:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-primary, #ccc);
+}
+
+.etl-preview-panel__pin .material-symbols-outlined {
+    font-size: var(--font-size-xl);
+    transition: transform var(--transition-normal), opacity var(--transition-normal);
+}
+
+/* Pin states */
+.etl-preview-panel__pin[data-state="auto"] .material-symbols-outlined {
+    opacity: 0.5;
+}
+
+.etl-preview-panel__pin[data-state="pinned-open"] .material-symbols-outlined {
+    transform: rotate(45deg);
+    opacity: 1;
+    color: var(--accent-color, var(--accent-bright));
+}
+
+.etl-preview-panel__pin[data-state="pinned-closed"] .material-symbols-outlined {
+    opacity: 0.3;
+}
+
+.etl-preview-panel__content {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+}
+
+.etl-preview-panel__content .preview-table-wrap {
+    border: none;
+    border-radius: 0;
+    max-height: none;
+    flex: 1;
+    min-height: 0;
+}
+
+.etl-preview-panel__empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-md);
+    padding: var(--space-2xl);
+    flex: 1;
+    font-size: var(--font-size-sm);
+    color: var(--text-muted, var(--text-muted));
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * Step Editor
+ *
+ * Three-panel inline editor for pipeline definitions:
+ *   Top-left: step list (drag-to-reorder cards)
+ *   Top-right: config panel (describeConfig output)
+ *   Bottom: data preview (DataTable)
+ * ═══════════════════════════════════════════════════════════════════════ */
+
+.etl-step-editor-container {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+}
+
+.step-editor {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    background: var(--surface-0);
+}
+
+/* ─── Toolbar ──────────────────────────────────────────────────────── */
+
+.step-editor__toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-sm) 12px;
+    border-bottom: 1px solid var(--surface-3);
+    background: var(--surface-1);
+    flex-shrink: 0;
+}
+
+.step-editor__toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+}
+
+.step-editor__toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.step-editor__back-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--text-muted, var(--text-muted));
+    cursor: pointer;
+    padding: 0;
+}
+
+.step-editor__back-btn:hover {
+    color: var(--text-primary, #ccc);
+    background: rgba(255, 255, 255, 0.07);
+}
+
+.step-editor__back-btn .material-symbols-outlined {
+    font-size: var(--font-size-2xl);
+}
+
+.step-editor__title {
+    font-size: var(--font-size-md);
+    font-weight: 600;
+    color: var(--text-primary, #ccc);
+}
+
+/* ─── Main Area (flow canvas, full width — config in app right panel) ── */
+
+.step-editor__main {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 200px;
+    overflow: hidden;
+}
+
+.step-editor__canvas {
+    flex: 1;
+    overflow: auto;
+    min-height: 0;
+}
+
+/* ─── Step Cards ───────────────────────────────────────────────────── */
+
+.step-card {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-md) 8px 8px 4px;
+    border-radius: var(--radius-md);
+    border: 1px solid;
+    border-left-width: 3px;
+    cursor: pointer;
+    transition: background var(--transition-fast), box-shadow var(--transition-fast);
+    user-select: none;
+}
+
+.step-card:hover {
+    filter: brightness(1.1);
+}
+
+/* Category colors */
+.step-card--source {
+    background: var(--etl-source-bg);
+    border-color: var(--etl-source-border);
+    border-left-color: var(--etl-source-primary);
+    color: var(--etl-source-text);
+}
+
+.step-card--transform {
+    background: var(--etl-transform-bg);
+    border-color: var(--etl-transform-border);
+    border-left-color: var(--etl-transform-primary);
+    color: var(--etl-transform-text);
+}
+
+.step-card--sink {
+    background: var(--etl-sink-bg);
+    border-color: var(--etl-sink-border);
+    border-left-color: var(--etl-sink-primary);
+    color: var(--etl-sink-text);
+}
+
+.step-card--operation {
+    background: var(--etl-operation-bg);
+    border-color: var(--etl-operation-border);
+    border-left-color: var(--etl-operation-primary);
+    color: var(--etl-operation-text);
+}
+
+.step-card--utility {
+    background: var(--etl-utility-bg);
+    border-color: var(--etl-utility-border);
+    border-left-color: var(--etl-utility-primary);
+    color: var(--etl-utility-text);
+}
+
+/* Selected state */
+.step-card--selected {
+    box-shadow: 0 0 0 2px var(--accent-color, var(--accent-bright));
+}
+
+/* Disabled state */
+.step-card--disabled {
+    opacity: 0.45;
+}
+
+/* Error state */
+.step-card--error {
+    border-color: var(--error-color, #f44336);
+    box-shadow: inset 2px 0 0 var(--error-color, #f44336);
+}
+.step-card--error.step-card--selected {
+    box-shadow: inset 2px 0 0 var(--error-color, #f44336), 0 0 0 2px var(--accent-color, var(--accent-bright));
+}
+
+.step-card__error-badge {
+    flex-shrink: 0;
+    font-size: var(--font-size-xl);
+    color: var(--error-color, #f44336);
+    cursor: help;
+}
+
+/* Drag states */
+.step-card--dragging {
+    opacity: 0.4;
+}
+
+/* Drop placeholder — ghost card shown at the target position during drag */
+.step-drop-indicator {
+    flex: 0 0 auto;
+    height: 38px;
+    width: 100%;
+    background: rgba(117, 190, 255, 0.12);
+    border: 1px dashed rgba(117, 190, 255, 0.5);
+    border-radius: var(--radius-md);
+    box-shadow: 0 0 8px rgba(117, 190, 255, 0.15);
+    pointer-events: none;
+}
+
+.step-card__drag-handle {
+    font-size: var(--font-size-xl);
+    color: currentColor;
+    opacity: 0.35;
+    cursor: grab;
+    flex-shrink: 0;
+}
+
+.step-card__drag-handle:active {
+    cursor: grabbing;
+}
+
+.step-card__index {
+    font-size: 10px;
+    font-weight: 700;
+    opacity: 0.5;
+    width: 14px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.step-card__icon {
+    font-size: var(--font-size-2xl);
+    flex-shrink: 0;
+    opacity: 0.8;
+}
+
+.step-card__body {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+    flex: 1;
+}
+
+.step-card__name {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.step-card__type {
+    font-size: 10px;
+    opacity: 0.55;
+    white-space: nowrap;
+}
+
+.step-card__actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xxs);
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity var(--transition-fast);
+}
+
+.step-card:hover .step-card__actions {
+    opacity: 1;
+}
+
+.step-card__action-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: currentColor;
+    opacity: 0.5;
+    cursor: pointer;
+    padding: 0;
+}
+
+.step-card__action-btn:hover {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.step-card__action-btn .material-symbols-outlined {
+    font-size: var(--font-size-lg);
+}
+
+/* ─── Add Step ─────────────────────────────────────────────────────── */
+
+.step-editor__add-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-xs);
+    width: 100%;
+    padding: var(--space-sm) 12px;
+    border: 1px dashed var(--surface-3);
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--text-muted, var(--text-muted));
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+    transition: border-color var(--transition-fast), color var(--transition-fast), background var(--transition-fast);
+    flex-shrink: 0;
+}
+
+.step-editor__add-btn:hover {
+    border-color: var(--accent-color, var(--accent-bright));
+    color: var(--text-primary, #ccc);
+    background: rgba(0, 122, 204, 0.06);
+}
+
+.step-editor__add-btn .material-symbols-outlined {
+    font-size: var(--font-size-xl);
+}
+
+/* ─── Add Step Menu ────────────────────────────────────────────────── */
+
+.step-editor__add-menu {
+    background: #2d2d30;
+    border: 1px solid var(--surface-3);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    padding: var(--space-sm);
+    min-width: 200px;
+    max-height: 400px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+}
+
+.step-editor__add-menu-category {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-sm) 8px 4px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted, var(--text-muted));
+    opacity: 0.7;
+}
+
+.step-editor__add-menu-category .material-symbols-outlined {
+    font-size: var(--font-size-lg);
+}
+
+.step-editor__add-menu-option {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    width: 100%;
+    padding: var(--space-sm) 8px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-primary, #ccc);
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+    text-align: left;
+}
+
+.step-editor__add-menu-option:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.step-editor__add-menu-option .material-symbols-outlined {
+    font-size: var(--font-size-xl);
+    opacity: 0.7;
+}
+
+/* ─── Tab Indicator (category color dots in standard bottom tabs) ──── */
+
+.step-editor__tab-indicator {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-right: var(--space-sm);
+}
+
+.step-editor__tab-indicator--source    { background: var(--etl-source-primary); }
+.step-editor__tab-indicator--transform { background: var(--etl-transform-primary); }
+.step-editor__tab-indicator--operation { background: var(--pfc-operation-border, #7a4da0); }
+.step-editor__tab-indicator--sink      { background: var(--etl-sink-primary); }
+.step-editor__tab-indicator--utility   { background: var(--etl-utility-primary); }
+.step-editor__tab-indicator--error     { background: var(--error-color, #f44336); }
+
+/* ─── No Config Placeholder ────────────────────────────────────────── */
+
+.step-editor__no-config {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-md);
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--text-muted, var(--text-muted));
+    font-size: var(--font-size-sm);
+}
+
+.step-editor__no-config .material-symbols-outlined {
+    font-size: 36px;
+    opacity: 0.3;
+}
+
+/* ─── Parameters Panel ─────────────────────────────────────────────── */
+
+.step-editor__params {
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--surface-3);
+}
+
+.step-editor__params-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-md) 10px 4px;
+}
+
+.step-editor__params-title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted, var(--text-muted));
+}
+
+.step-editor__params-title .material-symbols-outlined {
+    font-size: var(--font-size-lg);
+}
+
+.step-editor__params-add {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-muted, var(--text-muted));
+    cursor: pointer;
+    padding: 0;
+}
+
+.step-editor__params-add:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary, #ccc);
+}
+
+.step-editor__params-add .material-symbols-outlined {
+    font-size: var(--font-size-xl);
+}
+
+.step-editor__params-hint {
+    padding: var(--space-xs) 10px 8px;
+    font-size: var(--font-size-xs);
+    color: var(--text-muted, var(--text-muted));
+    line-height: 1.4;
+}
+
+.step-editor__params-list {
+    padding: var(--space-xxs) 10px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.step-editor__param-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+.step-editor__param-key,
+.step-editor__param-label,
+.step-editor__param-default {
+    padding: 3px 6px;
+    border: 1px solid var(--surface-3);
+    border-radius: var(--radius-sm);
+    background: rgba(0, 0, 0, 0.2);
+    color: var(--text-primary, #ccc);
+    font-size: var(--font-size-xs);
+}
+
+.step-editor__param-key {
+    width: 70px;
+    font-family: var(--font-mono, monospace);
+}
+
+.step-editor__param-label {
+    flex: 1;
+    min-width: 0;
+}
+
+.step-editor__param-default {
+    width: 60px;
+    font-family: var(--font-mono, monospace);
+}
+
+.step-editor__param-key:focus,
+.step-editor__param-label:focus,
+.step-editor__param-default:focus {
+    border-color: var(--accent-color, var(--accent-bright));
+    outline: none;
+}
+
+.step-editor__param-remove {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-muted, var(--text-muted));
+    cursor: pointer;
+    padding: 0;
+    flex-shrink: 0;
+}
+
+.step-editor__param-remove:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #f44336;
+}
+
+.step-editor__param-remove .material-symbols-outlined {
+    font-size: var(--font-size-lg);
+}
+
+/* ─── Validation Messages ─────────────────────────────────────────── */
+
+.step-editor__validation {
+    padding: var(--space-xs) 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xxs);
+}
+
+.step-editor__validation-msg {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-xs) 8px;
+    font-size: var(--font-size-xs);
+    color: var(--color-warning);
+    border-radius: var(--radius-sm);
+    background: rgba(255, 152, 0, 0.08);
+}
+
+.step-editor__validation-msg .material-symbols-outlined {
+    font-size: var(--font-size-lg);
+}
+
+/* ─── Orchestration No-Params Hint ────────────────────────────────── */
+
+.orch-editor__no-params {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-md);
+    padding: var(--space-lg) 16px;
+    font-size: var(--font-size-xs);
+    color: var(--text-muted, var(--text-muted));
+    line-height: 1.4;
+}
+
+.orch-editor__no-params .material-symbols-outlined {
+    font-size: var(--font-size-xl);
+    opacity: 0.5;
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+/* ─── Orchestration Parameters Section ────────────────────────────── */
+
+.orch-override-section--params {
+    border-left: 3px solid var(--etl-utility-primary, #78909c);
+}
+
+/* ─── Orchestration Add Menu Text ─────────────────────────────────── */
+
+.orch-editor__add-menu-text {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+}
+
+.orch-editor__add-menu-meta {
+    font-size: 10px;
+    color: var(--text-muted, var(--text-muted));
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * Create Dropdown (sidebar "+" menu)
+ *
+ * Reuses .fn-add-group / .fn-add-trigger / .fn-add-menu / .fn-add-option
+ * classes from functions_page.css — no ETL-specific styles needed.
+ * ═══════════════════════════════════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * Orchestration Editor
+ *
+ * Three-panel inline editor for orchestration definitions:
+ *   Top-left: pipeline item list (checkbox, name, overrides summary)
+ *   Top-right: override config panel (per-step field overrides)
+ *   Bottom: tabbed results preview
+ * ═══════════════════════════════════════════════════════════════════════ */
+
+.orch-editor {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    background: var(--surface-0);
+}
+
+/* ─── Toolbar ──────────────────────────────────────────────────────── */
+
+.orch-editor__toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-sm) 12px;
+    border-bottom: 1px solid var(--surface-3);
+    background: var(--surface-1);
+    flex-shrink: 0;
+}
+
+.orch-editor__toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+}
+
+.orch-editor__toolbar-center {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.orch-editor__cache-label {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary, #999);
+    white-space: nowrap;
+}
+
+.orch-editor__cache-input {
+    width: 40px;
+    padding: var(--space-xxs) 4px;
+    border: 1px solid var(--surface-3);
+    border-radius: var(--radius-sm);
+    background: var(--input-bg, var(--surface-0));
+    color: var(--text-primary, #ccc);
+    font-size: var(--font-size-sm);
+    text-align: center;
+}
+
+.orch-editor__cache-input:focus {
+    border-color: var(--accent-color, var(--accent-bright));
+    outline: none;
+}
+
+.orch-editor__dataset-input {
+    width: 180px;
+    padding: var(--space-xxs) 6px;
+    border: 1px solid var(--surface-3);
+    border-radius: var(--radius-sm);
+    background: var(--input-bg, var(--surface-0));
+    color: var(--text-primary, #ccc);
+    font-size: var(--font-size-sm);
+}
+
+.orch-editor__dataset-input:focus {
+    border-color: var(--accent-color, var(--accent-bright));
+    outline: none;
+}
+
+.orch-editor__dataset-input::placeholder {
+    color: var(--text-muted, var(--text-muted));
+    font-style: italic;
+}
+
+.etl-dataset-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-xxs) 8px;
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary, #aaa);
+    background: var(--surface-raised, #2a2a2a);
+    border: 1px solid var(--border-subtle, #3a3a3a);
+    border-radius: var(--radius-sm);
+}
+
+.orch-editor__toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.orch-editor__back-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--text-muted, var(--text-muted));
+    cursor: pointer;
+    padding: 0;
+}
+
+.orch-editor__back-btn:hover {
+    color: var(--text-primary, #ccc);
+    background: rgba(255, 255, 255, 0.07);
+}
+
+.orch-editor__back-btn .material-symbols-outlined {
+    font-size: var(--font-size-2xl);
+}
+
+.orch-editor__title {
+    font-size: var(--font-size-md);
+    font-weight: 600;
+    color: var(--text-primary, #ccc);
+}
+
+/* ─── Top Area (wraps split layout above the resizer) ─────────────── */
+
+.orch-editor__top-area {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 200px;
+    overflow: hidden;
+}
+
+/* ─── Split Layout ─────────────────────────────────────────────────── */
+
+.orch-editor__split {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.orch-editor__left {
+    display: flex;
+    flex-direction: column;
+    width: 280px;
+    min-width: 220px;
+    max-width: 350px;
+    border-right: 1px solid var(--surface-3);
+    overflow: hidden;
+}
+
+.orch-editor__item-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--space-md);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    scrollbar-width: thin;
+    scrollbar-color: #4b4b4b transparent;
+}
+
+.orch-editor__right {
+    flex: 1;
+    min-width: 0;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #4b4b4b transparent;
+}
+
+.orch-editor__config-panel {
+    min-height: 100%;
+}
+
+/* ─── Pipeline Item Cards ──────────────────────────────────────────── */
+
+.orch-item-card {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-md) 10px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--surface-3);
+    background: rgba(255, 255, 255, 0.02);
+    cursor: pointer;
+    transition: background var(--transition-fast), box-shadow var(--transition-fast);
+    user-select: none;
+}
+
+.orch-item-card:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.orch-item-card--selected {
+    box-shadow: 0 0 0 2px var(--accent-color, var(--accent-bright));
+}
+
+.orch-item-card--disabled {
+    opacity: 0.45;
+}
+
+.orch-item-card__checkbox {
+    flex-shrink: 0;
+}
+
+.orch-item-card__checkbox input[type="checkbox"] {
+    cursor: pointer;
+}
+
+.orch-item-card__body {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+    flex: 1;
+}
+
+.orch-item-card__name {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--text-primary, #ccc);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.orch-item-card__meta {
+    font-size: 10px;
+    color: var(--text-muted, var(--text-muted));
+    white-space: nowrap;
+}
+
+.orch-item-card__remove-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-muted, var(--text-muted));
+    opacity: 0;
+    cursor: pointer;
+    padding: 0;
+    transition: opacity var(--transition-fast);
+}
+
+.orch-item-card:hover .orch-item-card__remove-btn {
+    opacity: 1;
+}
+
+.orch-item-card__remove-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #f44336;
+}
+
+.orch-item-card__remove-btn .material-symbols-outlined {
+    font-size: var(--font-size-lg);
+}
+
+/* ─── Add Pipeline Button ──────────────────────────────────────────── */
+
+.orch-editor__add-wrapper {
+    padding: var(--space-md);
+    flex-shrink: 0;
+}
+
+.orch-editor__add-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-xs);
+    width: 100%;
+    padding: var(--space-sm) 12px;
+    border: 1px dashed var(--surface-3);
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--text-muted, var(--text-muted));
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+    transition: border-color var(--transition-fast), color var(--transition-fast), background var(--transition-fast);
+}
+
+.orch-editor__add-btn:hover {
+    border-color: var(--accent-color, var(--accent-bright));
+    color: var(--text-primary, #ccc);
+    background: rgba(0, 122, 204, 0.06);
+}
+
+.orch-editor__add-btn .material-symbols-outlined {
+    font-size: var(--font-size-xl);
+}
+
+/* ─── Add Pipeline Menu ────────────────────────────────────────────── */
+
+.orch-editor__add-menu {
+    background: #2d2d30;
+    border: 1px solid var(--surface-3);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    padding: var(--space-sm);
+    min-width: 200px;
+    max-height: 400px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+}
+
+.orch-editor__add-menu-option {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    width: 100%;
+    padding: var(--space-sm) 8px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-primary, #ccc);
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+    text-align: left;
+}
+
+.orch-editor__add-menu-option:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.orch-editor__add-menu-option .material-symbols-outlined {
+    font-size: var(--font-size-xl);
+    opacity: 0.7;
+}
+
+/* ─── Override Config Panel ────────────────────────────────────────── */
+
+.orch-editor__config-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-lg) 16px 8px;
+}
+
+.orch-editor__config-header h3 {
+    font-size: var(--font-size-md);
+    font-weight: 600;
+    color: var(--text-primary, #ccc);
+    margin: 0;
+}
+
+.orch-editor__empty-config {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-md);
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--text-muted, var(--text-muted));
+    font-size: var(--font-size-sm);
+}
+
+.orch-editor__empty-config .material-symbols-outlined {
+    font-size: 36px;
+    opacity: 0.3;
+}
+
+.orch-editor__no-overrides {
+    padding: var(--space-lg) 16px;
+    font-size: var(--font-size-sm);
+    color: var(--text-muted, var(--text-muted));
+    font-style: italic;
+}
+
+/* Override sections (source / sink / transform groups) */
+.orch-override-section {
+    margin: 0 16px 12px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--surface-3);
+    overflow: hidden;
+}
+
+.orch-override-section--source {
+    border-left: 3px solid var(--etl-source-primary);
+}
+
+.orch-override-section--sink {
+    border-left: 3px solid var(--etl-sink-primary);
+}
+
+.orch-override-section--transform {
+    border-left: 3px solid var(--etl-transform-primary);
+}
+
+.orch-override-section__header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-md) 10px;
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--text-primary, #ccc);
+    background: rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid var(--surface-3);
+}
+
+.orch-override-section__header .material-symbols-outlined {
+    font-size: var(--font-size-xl);
+    opacity: 0.7;
+}
+
+.orch-override-section__type {
+    font-size: 10px;
+    font-weight: 400;
+    color: var(--text-muted, var(--text-muted));
+    margin-left: auto;
+}
+
+/* Override fields */
+.orch-override-fields {
+    padding: var(--space-md) 10px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.orch-override-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xxs);
+}
+
+.orch-override-field--overridden {
+    background: rgba(0, 122, 204, 0.08);
+    border-radius: var(--radius-sm);
+    padding: var(--space-xs) 6px;
+    margin: -2px -4px;
+    border-left: 2px solid var(--accent-color, var(--accent-bright));
+}
+
+.orch-override-field__label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted, var(--text-muted));
+}
+
+.orch-override-field__input-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+.orch-override-field__input {
+    flex: 1;
+    padding: var(--space-xs) 8px;
+    border: 1px solid var(--surface-3);
+    border-radius: var(--radius-sm);
+    background: rgba(0, 0, 0, 0.2);
+    color: var(--text-primary, #ccc);
+    font-size: var(--font-size-sm);
+    font-family: var(--font-mono, monospace);
+}
+
+.orch-override-field__input:focus {
+    border-color: var(--accent-color, var(--accent-bright));
+    outline: none;
+}
+
+.orch-override-field__reset {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--accent-color, var(--accent-bright));
+    cursor: pointer;
+    padding: 0;
+    flex-shrink: 0;
+}
+
+.orch-override-field__reset:hover {
+    background: rgba(0, 122, 204, 0.15);
+}
+
+.orch-override-field__reset .material-symbols-outlined {
+    font-size: var(--font-size-lg);
+}
+
+/* Advanced toggle for transform overrides */
+.orch-override-advanced {
+    margin: var(--space-xs) 16px 12px;
+}
+
+.orch-override-advanced summary {
+    font-size: var(--font-size-xs);
+    color: var(--text-muted, var(--text-muted));
+    cursor: pointer;
+    padding: var(--space-xs) 0;
+}
+
+.orch-override-advanced summary:hover {
+    color: var(--text-primary, #ccc);
+}
+
+.orch-override-advanced .orch-override-section {
+    margin: var(--space-md) 0;
+}
+
+/* ─── ETL Preview (shared styles for standard bottom panel content) ── */
+
+.etl-preview-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.etl-preview__empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-md);
+    padding: var(--space-2xl);
+    flex: 1;
+    font-size: var(--font-size-sm);
+    color: var(--text-muted, var(--text-muted));
+}
+
+.etl-preview__empty .material-symbols-outlined {
+    font-size: 32px;
+    opacity: 0.3;
+}
+
+.etl-preview__table {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+/* Error state in preview */
+.etl-preview__error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-md);
+    padding: var(--space-2xl);
+    flex: 1;
+    font-size: var(--font-size-sm);
+    color: var(--error-color, #f44336);
+}
+
+.etl-preview__error .material-symbols-outlined {
+    font-size: 32px;
+    opacity: 0.6;
+}
+
+/* Updating overlay (shown during auto-run) */
+.etl-preview--updating {
+    position: relative;
+    opacity: 0.5;
+    pointer-events: none;
+    transition: opacity var(--transition-normal);
+}
+
+#etl-preview-bottom-panel .preview-table-wrap {
+    max-height: none;
+}
+
+/* ─── Run Progress Dialog ─────────────────────────────────────────── */
+
+.run-progress__body {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xl);
+    padding: var(--space-md) 0;
+}
+
+.run-progress__spinner {
+    width: 24px;
+    height: 24px;
+    border: 3px solid rgba(255, 255, 255, 0.15);
+    border-top-color: var(--accent-color, var(--accent-bright));
+    border-radius: 50%;
+    flex-shrink: 0;
+    animation: etl-spin 0.8s linear infinite;
+}
+
+.run-progress__icon {
+    flex-shrink: 0;
+}
+
+.run-progress__icon .material-symbols-outlined {
+    font-size: 28px;
+}
+
+.run-progress__icon--success .material-symbols-outlined {
+    color: #4caf50;
+}
+
+.run-progress__icon--error .material-symbols-outlined {
+    color: #f44336;
+}
+
+.run-progress__icon--cancelled .material-symbols-outlined {
+    color: var(--color-warning);
+}
+
+.run-progress__message {
+    font-size: var(--font-size-md);
+    color: var(--text-primary, #ccc);
+    line-height: 1.4;
+}
+
+.run-progress__stop-actions {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: var(--space-xs);
+}
+
+.run-progress__stop-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: var(--text-secondary, #aaa);
+    border-radius: var(--radius-sm);
+    padding: var(--space-xs) 12px;
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+    transition: border-color var(--transition-normal), color var(--transition-normal);
+}
+
+.run-progress__stop-btn .material-symbols-outlined {
+    font-size: var(--font-size-xl);
+}
+
+.run-progress__stop-btn:hover:not(:disabled) {
+    border-color: #f44336;
+    color: #f44336;
+}
+
+.run-progress__stop-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+@keyframes etl-spin {
+    to { transform: rotate(360deg); }
+}

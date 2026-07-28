@@ -1,0 +1,467 @@
+/* ════════════════════════════════════════════════════════════════════
+   controls.css — canonical buttons, icon-buttons, badges, form-row.
+
+   Phase 2 of the UX harmonization. See docs/UX_HARMONIZATION.md.
+
+   This file is the single home for control styling. Existing class
+   names (.data-page__button, .scenario-btn, .toolbar-btn, …) are
+   co-listed as selectors on the canonical rules below — the JS that
+   constructs those classes does not need to change. Old per-page
+   rule blocks have been deleted from their files; this is now the
+   authoritative source.
+
+   Loaded after tokens.css and base.css, before all page CSS.
+   ──────────────────────────────────────────────────────────────────── */
+
+
+/* ════════════════════════════════════════════════════════════════════
+   Buttons
+   ──────────────────────────────────────────────────────────────────── */
+
+/* ── Base — applies to every button class listed here ─────────────── */
+.btn,
+.data-page__button,
+.simulation-page__button,
+.scenario-btn,
+.toolbar-btn,
+.detail-header__btn,
+.config-primary-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-xs);
+    padding: var(--space-md) var(--space-xl);   /* 8px 16px — default md size */
+    font-family: inherit;
+    font-size: var(--font-size-sm);              /* 12px */
+    font-weight: var(--font-weight-semibold);    /* 600 */
+    line-height: 1.2;
+    color: var(--text-primary);
+    background: var(--surface-2);                /* default secondary look */
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background var(--transition-normal),
+                border-color var(--transition-normal),
+                color var(--transition-normal),
+                opacity var(--transition-normal);
+    user-select: none;
+}
+
+/* ── Size variants ───────────────────────────────────────────────── */
+.btn--sm,
+.toolbar-btn,
+.detail-header__btn {
+    padding: var(--space-sm) var(--space-lg);    /* 6px 12px */
+}
+
+.btn--lg {
+    padding: var(--space-lg) var(--space-2xl);   /* 12px 24px */
+    font-size: var(--font-size-md);
+}
+
+/* ── Hover (applies to all base buttons unless overridden) ───────── */
+.btn:hover:not(:disabled):not([aria-disabled="true"]),
+.data-page__button:hover:not(:disabled),
+.simulation-page__button:hover:not(:disabled),
+.scenario-btn:hover:not(:disabled):not([aria-disabled="true"]),
+.toolbar-btn:hover:not(:disabled),
+.detail-header__btn:hover:not(:disabled),
+.config-primary-btn:hover:not(:disabled) {
+    background: var(--surface-3);
+    border-color: var(--border-strong);
+}
+
+/* ── Focus (uniform across the system) ───────────────────────────── */
+.btn:focus-visible,
+.data-page__button:focus-visible,
+.simulation-page__button:focus-visible,
+.scenario-btn:focus-visible,
+.toolbar-btn:focus-visible,
+.detail-header__btn:focus-visible,
+.config-primary-btn:focus-visible {
+    outline: 2px solid rgba(0, 122, 204, 0.5);
+    outline-offset: 1px;
+}
+
+/* ── Disabled ────────────────────────────────────────────────────── */
+.btn:disabled,
+.btn[aria-disabled="true"],
+.data-page__button:disabled,
+.simulation-page__button:disabled,
+.scenario-btn:disabled,
+.scenario-btn[aria-disabled="true"],
+.toolbar-btn:disabled,
+.detail-header__btn:disabled,
+.config-primary-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+/* ── Material-symbols icon inside buttons — uniform 16px ─────────── */
+.btn .material-symbols-outlined,
+.data-page__button .material-symbols-outlined,
+.simulation-page__button .material-symbols-outlined,
+.scenario-btn .material-symbols-outlined,
+.detail-header__btn .material-symbols-outlined,
+.config-primary-btn .material-symbols-outlined {
+    font-size: 16px;
+    line-height: 1;
+}
+
+.toolbar-btn .material-symbols-outlined {
+    font-size: 18px;  /* toolbar icons stay slightly larger */
+}
+
+
+/* ════════════════════════════════════════════════════════════════════
+   Button variants — primary / secondary / ghost / danger
+   ──────────────────────────────────────────────────────────────────── */
+
+/* ── Primary — filled accent ─────────────────────────────────────── */
+.btn--primary,
+.data-page__button--primary,
+.simulation-page__button--primary,
+.scenario-btn.primary,
+.detail-header__btn--primary,
+.config-primary-btn {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #ffffff;
+}
+
+.btn--primary:hover:not(:disabled):not([aria-disabled="true"]),
+.data-page__button--primary:hover:not(:disabled),
+.simulation-page__button--primary:hover:not(:disabled),
+.scenario-btn.primary:hover:not(:disabled):not([aria-disabled="true"]),
+.detail-header__btn--primary:hover:not(:disabled),
+.config-primary-btn:hover:not(:disabled) {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+}
+
+/* ── Secondary — explicit class for clarity (matches default base) ─ */
+.btn--secondary,
+.data-page__button--secondary,
+.scenario-btn.secondary {
+    background: var(--surface-2);
+    border-color: var(--border-default);
+    color: var(--text-primary);
+}
+
+/* ── Ghost — transparent ─────────────────────────────────────────── */
+.btn--ghost,
+.data-page__button--ghost {
+    background: transparent;
+    border-color: transparent;
+    color: var(--text-primary);
+}
+
+.btn--ghost:hover:not(:disabled),
+.data-page__button--ghost:hover:not(:disabled) {
+    background: var(--state-hover);
+    border-color: transparent;
+}
+
+/* ── Danger — red text on hover, red bg for filled variant ───────── */
+.btn--danger,
+.scenario-btn.danger,
+.detail-header__btn--danger {
+    color: var(--color-danger);
+    background: transparent;
+    border-color: transparent;
+}
+
+.btn--danger:hover:not(:disabled),
+.scenario-btn.danger:hover:not(:disabled):not([aria-disabled="true"]),
+.detail-header__btn--danger:hover:not(:disabled) {
+    background: rgba(199, 78, 78, 0.1);
+    border-color: var(--color-danger);
+}
+
+/* ── Filled-danger — for destructive primary actions ────────────── */
+.btn--danger-filled,
+.simulation-page__button--danger {
+    background: var(--color-danger);
+    border-color: var(--color-danger);
+    color: #ffffff;
+}
+
+.btn--danger-filled:hover:not(:disabled),
+.simulation-page__button--danger:hover:not(:disabled) {
+    background: var(--color-danger-hover);
+    border-color: var(--color-danger-hover);
+}
+
+/* ── btn-secondary legacy alias (broad class, used as standalone) ── */
+.btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-xs);
+    padding: var(--space-sm) var(--space-lg);   /* 6px 12px */
+    font-family: inherit;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    background: var(--surface-3);                /* preserves observed value */
+    color: var(--text-primary);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: background var(--transition-normal),
+                border-color var(--transition-normal);
+}
+
+.btn-secondary:hover:not(:disabled) {
+    background: var(--border-strong);
+}
+
+
+/* ════════════════════════════════════════════════════════════════════
+   Icon-only buttons — two sizes only
+   ──────────────────────────────────────────────────────────────────── */
+
+.icon-btn,
+.btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: background var(--transition-normal),
+                color var(--transition-normal);
+}
+
+.icon-btn--sm {
+    width: 20px;
+    height: 20px;
+}
+
+.icon-btn:hover:not(:disabled),
+.btn-icon:hover:not(:disabled) {
+    background: var(--state-hover);
+}
+
+.icon-btn:focus-visible,
+.btn-icon:focus-visible {
+    outline: 2px solid rgba(0, 122, 204, 0.5);
+    outline-offset: 1px;
+}
+
+.icon-btn:disabled,
+.btn-icon:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.icon-btn .material-symbols-outlined,
+.btn-icon .material-symbols-outlined {
+    font-size: 18px;
+    line-height: 1;
+}
+
+.icon-btn--sm .material-symbols-outlined {
+    font-size: 14px;
+}
+
+
+/* ════════════════════════════════════════════════════════════════════
+   Badges — small inline status / count pills
+   ──────────────────────────────────────────────────────────────────── */
+
+.badge,
+.detail-header__badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-xxs) var(--space-md);   /* 2px 8px */
+    border-radius: 10px;
+    background: var(--state-active);              /* rgba(255,255,255,0.08) */
+    color: var(--text-muted);
+    font-size: var(--font-size-xs);               /* 11px */
+    font-weight: var(--font-weight-medium);       /* 500 */
+    line-height: 1.4;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.badge .material-symbols-outlined,
+.detail-header__badge .material-symbols-outlined {
+    font-size: 14px;
+    vertical-align: middle;
+}
+
+/* ── Badge color variants ───────────────────────────────────────── */
+.badge--success,
+.detail-header__badge--active {
+    background: rgba(63, 185, 80, 0.15);
+    color: var(--color-success);
+}
+
+.badge--info,
+.detail-header__badge--mc {
+    background: rgba(14, 99, 156, 0.2);
+    color: var(--accent);
+}
+
+.badge--warning {
+    background: rgba(255, 152, 0, 0.15);
+    color: var(--color-warning);
+}
+
+.badge--danger {
+    background: rgba(199, 78, 78, 0.15);
+    color: var(--color-danger);
+}
+
+/* ── Pill-shaped badge (uppercase, for tags/categories) ──────────── */
+.badge--pill {
+    padding: var(--space-xxs) var(--space-sm);   /* 2px 6px */
+    border-radius: var(--radius-pill);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+
+/* ════════════════════════════════════════════════════════════════════
+   Checkboxes & radios
+   Previously unstyled (relied on native browser rendering — see
+   F-11 in the harmonization doc). We use `accent-color` to tint
+   the native control with our brand, which is the lowest-friction
+   way to harmonize without re-implementing the control.
+   ──────────────────────────────────────────────────────────────────── */
+
+input[type="checkbox"],
+input[type="radio"] {
+    accent-color: var(--accent);
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    cursor: pointer;
+    vertical-align: middle;
+}
+
+input[type="checkbox"]:disabled,
+input[type="radio"]:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+/* Common pattern: label wrapping a checkbox + text. */
+.checkbox-label,
+.radio-label {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-sm);
+    font-size: var(--font-size-sm);
+    color: var(--text-primary);
+    cursor: pointer;
+    user-select: none;
+}
+
+
+/* ════════════════════════════════════════════════════════════════════
+   Form fields — .field family
+
+   Canonical sans-serif form-field container + label + input/select/
+   textarea + hint. Co-lists the .sm-field family. The .config-input
+   ecosystem (monospace code/parameter inputs with many contextual
+   overrides) is deliberately left separate for a later phase.
+   ──────────────────────────────────────────────────────────────────── */
+
+.field,
+.sm-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);   /* 6px */
+}
+
+/* Note: .sm-field__label keeps its distinctive uppercase-tiny style
+   in scenario_manager.css — it's a deliberate visual signature for
+   that page and not consolidated into .field__label. */
+
+.field__label {
+    font-size: var(--font-size-sm);          /* 12px */
+    font-weight: var(--font-weight-medium);  /* 500 */
+    color: var(--text-muted);
+}
+
+.field__hint {
+    font-size: var(--font-size-xs);          /* 11px */
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+/* ── Inputs / selects / textareas — uniform 28px baseline ───────── */
+.field__input,
+.field__select,
+.field__textarea,
+.sm-field__input,
+.sm-field__select,
+.config-input {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 28px;
+    padding: var(--space-sm) var(--space-md);  /* 6px 8px */
+    background: var(--surface-1);
+    color: var(--text-primary);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
+    font-family: inherit;
+    font-size: var(--font-size-sm);            /* 12px */
+    line-height: 1.4;
+    outline: none;
+    transition: border-color var(--transition-normal),
+                box-shadow var(--transition-normal);
+}
+
+/* Monospace variant — used for code, parameter expressions, identifiers. */
+.field__input--code,
+.config-input {
+    font-family: var(--font-family-mono);
+}
+
+.field__textarea {
+    min-height: 64px;
+    resize: vertical;
+    line-height: 1.5;
+}
+
+.field__input:focus,
+.field__select:focus,
+.field__textarea:focus,
+.sm-field__input:focus,
+.sm-field__select:focus,
+.config-input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(0, 122, 204, 0.2);
+}
+
+.field__input::placeholder,
+.field__textarea::placeholder,
+.sm-field__input::placeholder,
+.config-input::placeholder {
+    color: var(--text-dim);
+    font-style: italic;
+}
+
+.field__input:disabled,
+.field__select:disabled,
+.field__textarea:disabled,
+.sm-field__input:disabled,
+.sm-field__select:disabled,
+.config-input:disabled {
+    background: var(--surface-0);
+    color: var(--text-muted);
+    cursor: not-allowed;
+    opacity: 0.7;
+}

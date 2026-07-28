@@ -1,0 +1,150 @@
+/* command_palette.css — Ctrl+K popup. */
+
+.twm-cmdpal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-modal);
+    background: rgba(0, 0, 0, 0.55);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 12vh;
+}
+
+.twm-cmdpal {
+    width: min(640px, 90vw);
+    background: var(--surface-1);
+    border: 1px solid var(--border-strong);
+    border-radius: 0;
+    /* Literal instead of --shadow-lg: the strongest token (0 8px 24px
+     * rgba(0,0,0,.5)) still lets the palette blend into the tiling grid,
+     * which is itself dark and full of 1px borders. Two layers — a tight
+     * contact shadow to detach the edge, a wide soft one to darken the
+     * grid underneath — so the popup unambiguously floats. */
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45), 0 18px 48px rgba(0, 0, 0, 0.65);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Input row hosts the optional type-filter chip + the actual text
+ * input. The chip sits to the left of the caret; typing `<prefix>:`
+ * promotes the prefix into the chip and strips it from the input
+ * (see command_palette.js `tryConsumePrefix`). It is the popup's first
+ * child now that the shortcut chips are gone, so its top edge IS the
+ * palette's top edge — no top border of its own, the container's
+ * border and `overflow: hidden` clip do the work. */
+.twm-cmdpal__inputrow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-md) var(--space-lg);
+    background: var(--surface-1);
+    border-bottom: 1px solid var(--border-subtle);
+}
+.twm-cmdpal__type-chip-slot:empty {
+    /* Empty slot collapses entirely so the input flushes against the
+     * row's left padding when no filter is set. */
+    display: none;
+}
+.twm-cmdpal__type-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: 2px 4px 2px 8px;
+    background: var(--state-selected, rgba(17, 119, 179, 0.18));
+    border: 1px solid var(--accent-bright, #1683c4);
+    border-radius: 2px;
+    color: var(--text-bright, #fff);
+    font-size: var(--font-size-xs);
+    white-space: nowrap;
+    user-select: none;
+}
+.twm-cmdpal__type-chip-icon {
+    font-size: 14px;
+}
+.twm-cmdpal__type-chip-label {
+    text-transform: lowercase;
+    letter-spacing: 0.02em;
+}
+.twm-cmdpal__type-chip-x {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    margin-left: 2px;
+    background: transparent;
+    border: none;
+    color: inherit;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    border-radius: 0;
+}
+.twm-cmdpal__type-chip-x:hover {
+    background: rgba(255, 255, 255, 0.12);
+}
+.twm-cmdpal__input {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 0;
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-size: var(--font-size-lg);
+    outline: none;
+}
+
+/* .twm-cmdpal__chips / .twm-cmdpal__toggles and the .twm-chip button
+ * styles they were the sole users of are gone: the kind shortcuts and
+ * the left/right/bottom panel toggles live in the global top bar, and
+ * duplicating them here just buried the search results. */
+
+.twm-cmdpal__list {
+    max-height: 40vh;
+    overflow: auto;
+}
+
+.twm-cmdpal__item {
+    display: grid;
+    grid-template-columns: 20px 1fr auto auto;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-xs) var(--space-md);
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
+}
+.twm-cmdpal__item:hover,
+.twm-cmdpal__item--active {
+    background: var(--state-selected);
+    color: var(--text-bright);
+}
+.twm-cmdpal__icon { color: var(--text-muted); font-size: 16px; }
+.twm-cmdpal__label { font-weight: var(--font-weight-medium); }
+.twm-cmdpal__kind,
+.twm-cmdpal__hint {
+    color: var(--text-muted);
+    font-size: var(--font-size-xs);
+}
+
+.twm-cmdpal__footer {
+    display: flex;
+    gap: var(--space-md);
+    padding: var(--space-xs) var(--space-md);
+    background: var(--surface-0);
+    border-top: 1px solid var(--border-subtle);
+    color: var(--text-muted);
+    font-size: var(--font-size-xs);
+}
+.twm-cmdpal__footer kbd {
+    display: inline-block;
+    padding: 1px 4px;
+    background: var(--surface-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: 0;
+    font-family: var(--font-family-mono);
+    font-size: 10px;
+    margin: 0 1px;
+}

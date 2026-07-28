@@ -1,0 +1,184 @@
+/**
+ * About Dialog Styles
+ * Modal dialog showing EcoSim version, license, and third-party credits.
+ */
+
+/* ========== Root Container ========== */
+
+.about-dialog__content {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    box-sizing: border-box;
+}
+
+/* ========== Header ========== */
+
+.about-dialog__header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: 20px 16px 16px;
+    border-bottom: 1px solid #333;
+    flex-shrink: 0;
+}
+
+.about-dialog__logo {
+    font-size: 40px;
+    color: var(--accent-bright);
+}
+
+.about-dialog__title {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+.about-dialog__version {
+    font-size: var(--font-size-sm);
+    color: var(--text-muted);
+}
+
+.about-dialog__tagline {
+    font-size: var(--font-size-sm);
+    color: var(--text-muted);
+}
+
+/* ========== Scrollable Body ========== */
+
+.about-dialog__body {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--space-lg) 16px;
+    min-height: 0;
+}
+
+/* ========== Sections ========== */
+
+.about-dialog__section {
+    margin-bottom: 14px;
+}
+
+.about-dialog__section:last-child {
+    margin-bottom: 0;
+}
+
+.about-dialog__section-title {
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: var(--space-md);
+}
+
+/* ========== Project Links ========== */
+
+.about-dialog__links {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.about-dialog__link {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-sm);
+    font-size: var(--font-size-sm);
+    color: #3794ff;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.about-dialog__link:hover {
+    text-decoration: underline;
+    color: #4da6ff;
+}
+
+.about-dialog__link .material-symbols-outlined {
+    font-size: var(--font-size-lg);
+}
+
+.about-dialog__license-text {
+    font-size: var(--font-size-sm);
+    color: var(--text-muted);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.about-dialog__license-text .material-symbols-outlined {
+    font-size: var(--font-size-lg);
+}
+
+/* ========== Dependency List ========== */
+
+.about-dialog__dep-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.about-dialog__dep {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-md);
+    padding: var(--space-xxs) 0;
+}
+
+.about-dialog__dep-name {
+    font-size: var(--font-size-sm);
+    color: #3794ff;
+    text-decoration: none;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.about-dialog__dep-name:hover {
+    text-decoration: underline;
+    color: #4da6ff;
+}
+
+.about-dialog__dep-license {
+    font-size: var(--font-size-xs);
+    color: var(--text-dim);
+    flex-shrink: 0;
+}
+
+/* ========== Footer ========== */
+
+.about-dialog__footer {
+    display: flex;
+    justify-content: flex-end;
+    padding: 10px 16px;
+    border-top: 1px solid #333;
+    flex-shrink: 0;
+}
+
+button.about-dialog__btn {
+    padding: var(--space-sm) 16px;
+    border: 1px solid #444;
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-sm);
+    font-family: inherit;
+    cursor: pointer;
+    transition: background-color var(--transition-normal), border-color var(--transition-normal);
+}
+
+button.about-dialog__btn--close {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--text-bright);
+}
+
+button.about-dialog__btn--close:hover {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+}
+
+button.about-dialog__btn--close:focus {
+    outline: 2px solid var(--accent-bright);
+    outline-offset: 2px;
+}

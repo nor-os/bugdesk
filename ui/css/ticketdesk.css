@@ -1,0 +1,928 @@
+/* ════════════════════════════════════════════════════════════════════
+   ticketdesk.css — TicketDesk pages inside the EcoAgent shell.
+
+   Everything is td- prefixed to avoid colliding with shell styles.
+   Consumes the EcoAgent tokens (--ea-*, --text-*, --color-*) so the
+   pages inherit the expert-tool density. Buttons/inputs reuse the real
+   .ea-btn / .ea-tin classes; only ticket-specific structures live here.
+   ──────────────────────────────────────────────────────────────────── */
+
+/* ── Page scaffold ──────────────────────────────────────────────── */
+.td-page {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ea-pad-loose, 10px);
+    padding: var(--ea-pad-loose, 10px);
+    height: 100%;
+    overflow-y: auto;
+    box-sizing: border-box;
+    font-size: var(--ea-font-body, 11px);
+    color: var(--ea-text, #d4d4d4);
+}
+.td-page__bar {
+    display: flex;
+    align-items: center;
+    gap: var(--ea-pad-snug, 6px);
+    flex: 0 0 auto;
+}
+.td-page__bar--bottom { position: sticky; bottom: 0; background: var(--surface-0, #1e1e1e); padding: 6px 0 2px; z-index: 4; }
+.td-page__title {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+    color: var(--text-primary, #e0e0e0);
+    font-size: 12px;
+}
+.td-page__title .material-symbols-outlined { font-size: 15px; color: var(--ea-accent, #1177b3); }
+.td-spacer { flex: 1; }
+.td-dim { color: var(--text-dim, #666); font-size: 10px; }
+.td-mono { font-family: var(--ea-font-mono-family, ui-monospace, Consolas, monospace); font-size: 10.5px; }
+.td-link { color: #1486cf; cursor: pointer; }
+.td-link:hover { text-decoration: underline; }
+.td-breach { color: var(--color-danger, #c74e4e); font-weight: 600; }
+.td-empty { color: var(--text-dim, #666); font-style: italic; text-align: center; }
+
+/* ── Group boxes (ERP sections) ─────────────────────────────────── */
+.td-group {
+    background: var(--ea-bg-content, #212121);
+    border: 1px solid var(--ea-border, #333);
+    border-radius: 2px;
+}
+.td-group__title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px var(--ea-pad-loose, 10px);
+    background: var(--ea-bg-chrome, #1a1a1a);
+    border-bottom: 1px solid var(--ea-border-soft, #2a2a2a);
+    font-size: 10.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ea-text, #d4d4d4);
+    user-select: none;
+}
+.td-group__actions { margin-left: auto; display: flex; gap: 2px; align-items: center; text-transform: none; letter-spacing: 0; }
+.td-group__body { padding: var(--ea-pad-loose, 10px); }
+.td-group__body--flush { padding: 0; }
+
+/* ── Field grid ─────────────────────────────────────────────────── */
+.td-grid2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--ea-pad-snug, 6px) 24px;
+}
+@media (max-width: 900px) { .td-grid2 { grid-template-columns: 1fr; } }
+.td-field {
+    display: grid;
+    grid-template-columns: 120px 1fr;
+    align-items: center;
+    gap: 8px;
+    min-height: var(--ea-row-h, 18px);
+}
+.td-field--top { grid-template-columns: 120px 1fr; align-items: start; }
+.td-field--top > label { margin-top: 4px; }
+.td-span2 { grid-column: 1 / -1; }
+.td-field > label {
+    font-size: 10.5px;
+    color: var(--text-muted, #888);
+    text-align: right;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    user-select: none;
+}
+.td-field > label.td-req::after { content: " *"; color: var(--color-danger, #c74e4e); }
+.td-field .ea-tin, .td-field select.ea-tin { width: 100%; box-sizing: border-box; }
+.td-area { resize: vertical; line-height: 1.5; width: 100%; box-sizing: border-box; }
+.td-check { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+.td-check input { accent-color: var(--ea-accent, #1177b3); }
+
+/* SLA box */
+.td-slabox {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 8px;
+    background: var(--ea-bg-content, #212121);
+    border: 1px solid #1f4a3f;
+    border-radius: 2px;
+    color: #4ec9b0;
+    font-size: 10.5px;
+}
+.td-slabox__dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.td-slabox--breach { border-color: #5a3434; color: #d9886a; }
+
+/* ── Workflow stage chevrons ────────────────────────────────────── */
+.td-stagebar {
+    display: flex;
+    align-items: center;
+    gap: var(--ea-pad-loose, 10px);
+    flex: 0 0 auto;
+    user-select: none;
+}
+.td-stages { display: flex; list-style: none; flex: 1; min-width: 0; margin: 0; padding: 0; }
+.td-stage {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    padding: 4px 10px 4px 18px;
+    background: var(--ea-bg-content, #212121);
+    border: 1px solid var(--ea-border, #333);
+    border-left: none;
+    font-size: 10.5px;
+    color: var(--text-muted, #888);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+    clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 50%, calc(100% - 9px) 100%, 0 100%, 9px 50%);
+}
+.td-stage:first-child {
+    border-left: 1px solid var(--ea-border, #333);
+    padding-left: 10px;
+    clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 50%, calc(100% - 9px) 100%, 0 100%);
+}
+.td-stage:last-child { clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 9px 50%); }
+.td-stage:hover { background: #2d2d2d; color: var(--ea-text, #d4d4d4); }
+.td-stage__num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 13px; height: 13px;
+    margin-right: 4px;
+    border-radius: 50%;
+    border: 1px solid currentColor;
+    font-size: 9px;
+    vertical-align: -2px;
+}
+.td-stage--done { background: #2d2d2d; color: var(--ea-text, #d4d4d4); }
+.td-stage--done .td-stage__num { border-color: var(--color-success, #3fb950); color: var(--color-success, #3fb950); }
+.td-stage--active { background: var(--ea-accent, #1177b3); color: #fff; font-weight: 600; }
+.td-stage--active .td-stage__num { border-color: #fff; color: #fff; }
+
+/* ── Tables ─────────────────────────────────────────────────────── */
+.td-table { width: 100%; border-collapse: collapse; font-size: var(--ea-font-body, 11px); }
+.td-table th {
+    text-align: left;
+    padding: 3px 8px;
+    background: var(--ea-bg-chrome, #1a1a1a);
+    border-bottom: 1px solid var(--ea-border, #333);
+    color: var(--text-muted, #888);
+    font-weight: 600;
+    white-space: nowrap;
+    user-select: none;
+}
+.td-table td {
+    padding: 2px 8px;
+    height: var(--ea-row-h, 18px);
+    border-bottom: 1px solid var(--ea-border-soft, #2a2a2a);
+    vertical-align: middle;
+}
+.td-table tbody tr { cursor: default; }
+.td-table tbody tr[data-id], .td-table tbody tr[data-rel] { cursor: pointer; }
+.td-table tbody tr:hover { background: rgba(255, 255, 255, 0.05); }
+
+/* Priority cell — a small colour SWATCH followed by the "P3" label, both
+   flush left. Expected markup (queue DataTable, renderCell colIdx 0):
+
+     <span class="td-pri-cell"><span class="td-pri td-pri--3"></span><span class="td-dim">P3</span></span>
+
+   The wrapper owns the spacing so the swatch and the label read as one
+   unit; the bare `<span class="td-pri">…</span><span class="td-dim">…</span>`
+   markup (no wrapper) still renders correctly via the sibling margin
+   below, so the styling holds while pages.js is mid-migration. */
+.td-pri-cell {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 6px;
+    line-height: 1;
+}
+.td-pri {
+    display: inline-block;
+    flex: 0 0 auto;
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    vertical-align: middle;
+}
+/* Un-wrapped fallback: the label is a plain sibling, so it needs its own
+   gutter. Inside .td-pri-cell the flex `gap` already supplies it — reset
+   the margin there so the two never stack into a 12px gutter. */
+.td-pri + .td-dim { margin-left: 6px; }
+.td-pri-cell .td-pri + .td-dim { margin-left: 0; }
+.td-pri--1 { background: var(--color-danger, #c74e4e); }
+.td-pri--2 { background: var(--color-warning, #ff9800); }
+.td-pri--3 { background: var(--ea-accent, #1177b3); }
+.td-pri--4 { background: var(--text-dim, #666); }
+
+/* The Pri column holds the values 1..4, so DataTable's column-type
+   sniffer (_detectColumnTypes → >50% numeric) tags column 0 `num` and
+   main_new.css right-aligns `.preview-table th.num, td.num`. That drags
+   the swatch+label off to the right edge of a 48px column. Force column 0
+   flush left for header, filter row and body alike — the `.num` variants
+   are listed explicitly so this out-specifies the `.preview-table X.num`
+   rules regardless of stylesheet order. DataTable renders the header in
+   its own <table>, hence the plain :first-child selectors too. */
+.td-tablehost .preview-table th:first-child,
+.td-tablehost .preview-table td:first-child,
+.td-tablehost .preview-table th.num:first-child,
+.td-tablehost .preview-table td.num:first-child { text-align: left; }
+
+.td-chip {
+    font-size: 9.5px;
+    border: 1px solid var(--ea-border, #333);
+    border-radius: 2px;
+    padding: 0 5px;
+    color: var(--text-muted, #888);
+    white-space: nowrap;
+}
+.td-chip--internal { color: var(--color-warning, #ff9800); border-color: #4a4030; }
+.td-chip--public   { color: #4ec9b0; border-color: #1f4a3f; }
+.td-pill {
+    display: inline-block;
+    padding: 0 8px;
+    border-radius: 2px;
+    border: 1px solid var(--ea-border, #333);
+    font-size: 10px;
+    white-space: nowrap;
+}
+.td-pill--ok   { color: #4ec9b0; border-color: #1f4a3f; }
+.td-pill--warn { color: #dcdcaa; border-color: #4a4030; }
+
+/* ── Jira-like work log ─────────────────────────────────────────── */
+.td-wstream { display: flex; flex-direction: column; }
+.td-wentry {
+    display: grid;
+    grid-template-columns: 26px 1fr;
+    gap: 8px;
+    padding: var(--ea-pad-snug, 6px) 0;
+    border-bottom: 1px solid var(--ea-border-soft, #2a2a2a);
+}
+.td-avatar {
+    position: relative;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: #2d2d2d;
+    border: 1px solid var(--ea-border, #333);
+    color: var(--ea-text, #d4d4d4);
+    font-size: 9px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    flex: 0 0 auto;
+}
+.td-wentry__head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.td-wentry__head b { color: var(--text-primary, #e0e0e0); font-size: 10.5px; }
+.td-wentry__text { margin-top: 2px; line-height: 1.5; white-space: pre-wrap; }
+.td-shots { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.td-shot {
+    width: 120px; height: 76px;
+    object-fit: cover;
+    border: 1px solid var(--ea-border, #333);
+    border-radius: 2px;
+    cursor: zoom-in;
+    background: var(--ea-bg-well, #0d0d0d);
+}
+.td-shot:hover { border-color: var(--ea-accent, #1177b3); }
+.td-shotwrap { position: relative; }
+.td-shotwrap .td-shot { cursor: default; }
+.td-shotdel {
+    position: absolute; top: 2px; right: 2px;
+    background: rgba(0, 0, 0, 0.7);
+    border: 1px solid var(--ea-border, #333);
+    border-radius: 2px;
+    color: var(--ea-text, #d4d4d4);
+    font-size: 9px;
+    cursor: pointer;
+    padding: 0 4px;
+}
+.td-composer { display: grid; grid-template-columns: 26px 1fr; gap: 8px; padding-top: var(--ea-pad-loose, 10px); }
+.td-composer__box { display: flex; flex-direction: column; gap: 6px; }
+
+.td-lightbox {
+    position: fixed; inset: 0;
+    background: rgba(0, 0, 0, 0.75);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 12000;
+    cursor: zoom-out;
+}
+.td-lightbox img { max-width: 86vw; max-height: 86vh; border: 1px solid #383838; border-radius: 2px; }
+
+/* ── Entry modal ────────────────────────────────────────────────── */
+.td-modal-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 11000;
+}
+.td-modal {
+    width: 620px;
+    max-width: 92vw;
+    max-height: 86vh;
+    display: flex;
+    flex-direction: column;
+    background: var(--ea-bg-content, #212121);
+    border: 1px solid #383838;
+    border-radius: 2px;
+    font-size: var(--ea-font-body, 11px);
+    color: var(--ea-text, #d4d4d4);
+}
+.td-modal__title {
+    display: flex;
+    align-items: center;
+    padding: 5px 10px;
+    background: var(--ea-bg-chrome, #1a1a1a);
+    border-bottom: 1px solid var(--ea-border-soft, #2a2a2a);
+    font-size: 10.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    user-select: none;
+}
+.td-modal__close { margin-left: auto; background: none; border: none; color: var(--text-dim, #666); cursor: pointer; font-size: 12px; }
+.td-modal__close:hover { color: #fff; }
+.td-modal__body { padding: 10px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.td-modal__actions {
+    display: flex;
+    gap: 4px;
+    justify-content: flex-end;
+    padding: 6px 10px;
+    border-top: 1px solid var(--ea-border-soft, #2a2a2a);
+    background: var(--ea-bg-chrome, #1a1a1a);
+}
+.td-paste {
+    border: 1px dashed #383838;
+    border-radius: 2px;
+    padding: 10px;
+    text-align: center;
+    color: var(--text-dim, #666);
+}
+.td-paste:focus-within { border-color: var(--ea-accent, #1177b3); color: var(--text-muted, #888); }
+.td-paste .td-shots { justify-content: center; margin-top: 6px; }
+
+/* ── Team / org browser ─────────────────────────────────────────── */
+.td-orghead { cursor: pointer; }
+.td-tw { width: 10px; display: inline-block; }
+.td-mrow {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    grid-template-rows: auto auto;
+    column-gap: 8px;
+    align-items: center;
+    padding: 4px 10px;
+    border-bottom: 1px solid var(--ea-border-soft, #2a2a2a);
+}
+.td-mrow:hover { background: rgba(255, 255, 255, 0.05); }
+.td-mrow .td-avatar { grid-row: 1 / span 2; }
+.td-mrow__name { font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.td-mrow__name b { color: var(--text-primary, #e0e0e0); }
+.td-mrow__counts { font-family: ui-monospace, Consolas, monospace; font-size: 9.5px; color: var(--text-muted, #888); white-space: nowrap; }
+.td-inc { color: var(--color-warning, #ff9800); }
+.td-presence {
+    position: absolute;
+    right: -1px; bottom: -1px;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    border: 2px solid var(--ea-bg-content, #212121);
+}
+.td-presence--online  { background: var(--color-success, #3fb950); }
+.td-presence--away    { background: var(--color-warning, #ff9800); }
+.td-presence--busy    { background: var(--color-danger, #c74e4e); }
+.td-presence--offline { background: var(--text-dim, #666); }
+.td-loadbar {
+    grid-column: 2 / span 2;
+    height: 3px;
+    background: var(--ea-bg-well, #0d0d0d);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 3px;
+}
+.td-loadbar__fill { display: block; height: 100%; border-radius: 2px; }
+.td-loadbar__fill--low  { background: var(--color-success, #3fb950); }
+.td-loadbar__fill--mid  { background: var(--color-warning, #ff9800); }
+.td-loadbar__fill--high { background: var(--color-danger, #c74e4e); }
+
+/* ── Dashboards ─────────────────────────────────────────────────── */
+.td-dashgroups { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--ea-pad-loose, 10px); }
+.td-list { list-style: none; margin: 0; padding: 0; }
+.td-list__item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    min-height: var(--ea-row-h, 18px);
+    cursor: pointer;
+    border-bottom: 1px solid var(--ea-border-soft, #2a2a2a);
+}
+.td-list__item:last-child { border-bottom: none; }
+.td-list__item:hover { background: rgba(255, 255, 255, 0.05); }
+.td-list__item .material-symbols-outlined { font-size: 13px; color: var(--ea-accent, #1177b3); }
+
+.td-kpirow { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--ea-pad-snug, 6px); }
+.td-kpi {
+    background: var(--ea-bg-content, #212121);
+    border: 1px solid var(--ea-border, #333);
+    border-radius: 2px;
+    padding: 6px 10px;
+}
+.td-kpi__label { font-size: 9.5px; color: var(--text-muted, #888); text-transform: uppercase; letter-spacing: 0.05em; }
+.td-kpi__value { font-size: 20px; font-weight: 600; color: var(--text-primary, #e0e0e0); margin: 2px 0; font-variant-numeric: tabular-nums; }
+.td-kpi__delta { font-size: 10px; color: var(--text-muted, #888); }
+.td-kpi__delta--good { color: var(--color-success, #3fb950); }
+.td-kpi__delta--bad  { color: var(--color-danger, #c74e4e); }
+.td-dashrow { display: grid; grid-template-columns: 1fr 1fr; gap: var(--ea-pad-snug, 6px); }
+@media (max-width: 1100px) { .td-dashrow { grid-template-columns: 1fr; } }
+.td-dash svg { display: block; width: 100%; height: auto; }
+.td-grid  { stroke: #2a2a2a; stroke-width: 1; }
+.td-axis  { fill: #666; font-size: 9px; font-family: ui-monospace, Consolas, monospace; }
+.td-dlabel { fill: #d4d4d4; font-size: 9px; font-family: ui-monospace, Consolas, monospace; }
+
+/* ── Audit console ──────────────────────────────────────────────── */
+.td-audit {
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 10.5px;
+    padding: 6px 10px;
+    line-height: 1.7;
+    overflow-y: auto;
+    height: 100%;
+    box-sizing: border-box;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   Round 2 — flat inputs, navigator, inspector tabs, workflow controls,
+   top-bar actions, DataTable host sizing.
+   ──────────────────────────────────────────────────────────────────── */
+
+/* Flat EcoAgent-style inputs: recessed well, 1px border, 2px radius.
+   Scoped overrides so shell controls.css can't round/pad them up. */
+.td-page .ea-tin, .td-modal .ea-tin, .td-nav .ea-tin,
+.td-rpanel .ea-tin {
+    background: var(--ea-bg-well, #0d0d0d);
+    color: var(--ea-text, #d4d4d4);
+    border: 1px solid var(--ea-border, #333);
+    border-radius: 2px;
+    padding: 2px 8px;
+    min-height: 20px;
+    font-size: var(--ea-font-body, 11px);
+    font-family: inherit;
+    box-shadow: none;
+    outline: none;
+}
+.td-page select.ea-tin, .td-modal select.ea-tin { padding: 2px 4px; }
+.td-page .ea-tin:hover:not([readonly]):not(:disabled),
+.td-modal .ea-tin:hover:not([readonly]):not(:disabled) { border-color: var(--border-strong, #383838); }
+.td-page .ea-tin:focus, .td-modal .ea-tin:focus,
+.td-rpanel .ea-tin:focus {
+    border-color: var(--ea-accent, #1177b3);
+    box-shadow: 0 0 0 1px var(--ea-accent, #1177b3);
+}
+.td-page .ea-tin[readonly] {
+    background: var(--ea-bg-content, #212121);
+    color: var(--text-muted, #888);
+}
+
+/* Mode banner (new / search) */
+.td-banner {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    background: var(--ea-bg-content, #212121);
+    border: 1px solid var(--ea-border, #333);
+    border-left: 2px solid var(--ea-accent, #1177b3);
+    border-radius: 2px;
+    font-size: var(--ea-font-body, 11px);
+    color: var(--ea-text, #d4d4d4);
+}
+.td-banner .material-symbols-outlined { font-size: 14px; color: var(--ea-accent, #1177b3); }
+.td-banner b { color: var(--text-primary, #e0e0e0); }
+
+/* Top action bar (ticket detail): Save + Cancel float to the far right of
+   the breadcrumb/top row. The leading .td-spacer pushes them over. */
+
+/* Stage-specific workflow actions row — the PROMINENT lifecycle actions.
+   Reads as a call-to-action card (accent left rail, inset well) rather than
+   flat text, so the current/next lifecycle action stands out. */
+.td-stageactions {
+    display: flex;
+    align-items: center;
+    gap: var(--ea-pad-loose, 10px);
+    flex: 0 0 auto;
+    user-select: none;
+    padding: 8px 12px;
+    background: var(--ea-bg-content, #212121);
+    border: 1px solid var(--ea-border, #333);
+    border-left: 2px solid var(--ea-accent, #1177b3);
+    border-radius: 2px;
+}
+.td-stageactions__title {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-primary, #e0e0e0);
+}
+.td-stageactions__title .material-symbols-outlined { font-size: 15px; color: var(--ea-accent, #1177b3); }
+.td-stageactions [data-slot="stageactions"] { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+
+/* Prominent lifecycle action buttons — larger hit area, clear affordance.
+   The first (primary) action is the emphasised next step. */
+.td-stageaction {
+    min-height: 26px;
+    padding: 4px 14px;
+    font-weight: 600;
+}
+.td-stageaction--primary { box-shadow: 0 0 0 1px var(--ea-accent, #1177b3) inset; }
+
+/* Bottom action bar — pinned to the page bottom */
+.td-actionbar {
+    position: sticky;
+    bottom: 0;
+    display: flex;
+    gap: 4px;
+    padding: 6px 0 2px;
+    background: var(--surface-0, #1e1e1e);
+    border-top: 1px solid var(--ea-border-soft, #2a2a2a);
+    z-index: 4;
+    flex: 0 0 auto;
+}
+.td-actionbar .ea-btn { min-width: 76px; }
+
+/* Mask column keeps its own scroll context inside the page */
+.td-mask { display: flex; flex-direction: column; gap: var(--ea-pad-loose, 10px); }
+
+/* DataTable host: let the component size itself inside the group */
+.td-tablehost { min-height: 0; }
+.td-tablehost .data-table-component { border: none; }
+
+/* Top-bar Search / New Ticket actions */
+.td-topbar-actions {
+    display: inline-flex;
+    gap: 4px;
+    align-items: center;
+    margin-right: 8px;
+}
+/* Search and New Bug are a matched pair, so they must READ as a pair:
+   their labels differ in length ("Search" vs "New Bug") and .ea-btn is
+   shrink-to-fit, which rendered them at two different widths. Same
+   min-width + centred content as the .td-floatactions idiom, one
+   notch tighter (84 → 80px) because this is the dense top bar. */
+.td-topbar-actions .ea-btn {
+    min-height: 20px;
+    min-width: 80px;
+    justify-content: center;
+}
+.td-topbar-actions .material-symbols-outlined { font-size: 13px; }
+
+/* ── Navigator panel (panel:left) ───────────────────────────────── */
+.td-nav {
+    height: 100%;
+    overflow-y: auto;
+    font-size: var(--ea-font-body, 11px);
+    color: var(--ea-text, #d4d4d4);
+    user-select: none;
+    padding-bottom: 10px;
+}
+.td-nav__section {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 10px 3px;
+    font-size: 9.5px;
+    font-weight: 600;
+    color: var(--text-muted, #888);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+.td-nav__item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: var(--ea-row-h, 18px);
+    padding: 1px 10px;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+}
+.td-nav__item:hover { background: rgba(255, 255, 255, 0.05); }
+.td-nav__item .material-symbols-outlined { font-size: 13px; color: var(--text-muted, #888); flex: 0 0 auto; }
+.td-nav__item--child { padding-left: 30px; }
+.td-nav__item--folder .material-symbols-outlined { color: var(--ea-accent, #1177b3); }
+.td-nav__item > span:not(.material-symbols-outlined):not(.td-nav__badge) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.td-nav__badge {
+    margin-left: auto;
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 9.5px;
+    color: var(--text-dim, #666);
+    flex: 0 0 auto;
+}
+
+/* ── Inspector panel (panel:right) — tabbed ─────────────────────── */
+.td-rpanel {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    font-size: var(--ea-font-body, 11px);
+    color: var(--ea-text, #d4d4d4);
+}
+.td-rpanel__tabs { flex: 0 0 auto; }
+.td-rpanel__body { flex: 1; min-height: 0; overflow-y: auto; }
+
+.td-notes { display: flex; flex-direction: column; height: 100%; padding: 6px; gap: 4px; box-sizing: border-box; }
+.td-notes textarea { flex: 1; resize: none; }
+
+.td-ai { display: flex; flex-direction: column; height: 100%; }
+.td-ai__log { flex: 1; overflow-y: auto; padding: 6px; display: flex; flex-direction: column; gap: 6px; }
+.td-ai__msg {
+    max-width: 92%;
+    padding: 5px 8px;
+    border-radius: 2px;
+    font-size: 10.5px;
+    line-height: 1.5;
+    border: 1px solid var(--ea-border, #333);
+    background: var(--ea-bg-content, #212121);
+    white-space: pre-wrap;
+}
+.td-ai__msg--user { align-self: flex-end; background: #0d5c8c; border-color: #0d5c8c; color: #fff; }
+.td-ai__form { display: flex; gap: 4px; padding: 6px; border-top: 1px solid var(--ea-border-soft, #2a2a2a); }
+.td-ai__form input { flex: 1; min-width: 0; }
+
+/* Plotly chart hosts */
+.td-plot { height: 180px; padding: 4px 6px; }
+.td-plot .js-plotly-plot, .td-plot .plot-container { height: 100% !important; }
+
+/* DataTable hosts need a definite height — the component's body wrap is
+   flex:1 inside a height:100% wrapper and collapses to 0 otherwise. */
+.td-tablehost { display: flex; flex-direction: column; }
+.td-page > .td-tablehost { flex: 1 1 0; min-height: 260px; }
+.td-group .td-tablehost { height: 260px; }
+.td-dashrow .td-tablehost { height: 168px; }
+
+/* ════════════════════════════════════════════════════════════════════
+   Round 3 — full-height pages, SLA filter rail, broadcast/alert
+   composers.
+   ──────────────────────────────────────────────────────────────────── */
+
+/* td pages get a definite-height column so DataTable bodies (flex:1 in
+   a height:100% wrapper) actually fill the tile — this is the
+   "preview-table-wrap is not full height" fix. */
+.td-shell {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    /* Containing block for the floating page-actions slot below. */
+    position: relative;
+}
+
+/* Floating page actions — the ticket's Save/Cancel, parked over the
+   breadcrumb row instead of eating a mask row of their own.
+   The slot spans the breadcrumb strip's height (26px, locked in
+   host.css) and is click-through when empty so breadcrumb crumbs
+   underneath stay reachable on every other page. */
+.td-shell__actions {
+    position: absolute;
+    top: 0;
+    right: 0;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    padding-right: 8px;
+    z-index: 6;
+    pointer-events: none;
+}
+.td-shell__actions > * { pointer-events: auto; }
+
+/* The nudge itself carries the ticket mask's own background, so it reads
+   as part of the record rather than as breadcrumb chrome. */
+.td-floatactions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 4px;
+    background: var(--surface-0, #1e1e1e);
+    border: 1px solid var(--ea-border, #333);
+    border-radius: 3px;
+    box-shadow: 0 1px 5px rgba(0, 0, 0, 0.5);
+}
+.td-floatactions .ea-btn { min-width: 84px; justify-content: center; }
+.td-shell > .twm-page-shell__breadcrumb { flex: 0 0 auto; }
+.td-shell > .twm-page-shell__content {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+.td-shell .td-page { flex: 1 1 0; min-height: 0; }
+
+/* Broadcast / alert composer rows (bottom tabs + Alerts page) */
+.td-bcast { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.td-bcast > .td-audit { flex: 1; min-height: 0; }
+.td-bcast__composer {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 10px;
+    border-bottom: 1px solid var(--ea-border-soft, #2a2a2a);
+    background: var(--ea-bg-chrome, #1a1a1a);
+    flex: 0 0 auto;
+}
+.td-bcast__composer--page {
+    border: 1px solid var(--ea-border, #333);
+    border-radius: 2px;
+}
+.td-chip--internal { color: var(--color-warning, #ff9800); border-color: #4a4030; }
+
+/* SLA clocks tab — table + right filter rail (data-explorer pattern) */
+.td-slatab {
+    display: flex;
+    height: 100%;
+    min-height: 0;
+}
+.td-slatab__table {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 0;
+    height: auto;
+    padding: 4px 0 0 6px;
+}
+.td-filterrail {
+    flex: 0 0 170px;
+    border-left: 1px solid var(--ea-border-soft, #2a2a2a);
+    background: var(--ea-bg-chrome, #1a1a1a);
+    overflow-y: auto;
+    padding-bottom: 8px;
+}
+.td-filterrail__title {
+    padding: 6px 10px 2px;
+    font-size: 9.5px;
+    font-weight: 600;
+    color: var(--text-muted, #888);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+.td-filterrail__group { padding: 4px 10px 2px; }
+.td-filterrail__label {
+    font-size: 9.5px;
+    color: var(--text-dim, #666);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 2px;
+}
+.td-filterrail .td-check {
+    display: flex;
+    min-height: 17px;
+    font-size: 10.5px;
+    color: var(--ea-text, #d4d4d4);
+}
+
+/* Kill the app-wide `body:not(.in-data) .preview-table-wrap
+   { max-height: 300px }` clamp inside TicketDesk table hosts — the
+   DataTable body must fill the tile. */
+.td-tablehost .preview-table-wrap,
+.td-slatab .preview-table-wrap { max-height: none !important; }
+
+/* ── BugDesk: rendered markdown (bug description + comment bodies) ─── */
+.td-md { font-size: 12.5px; line-height: 1.55; color: var(--ea-text, #d4d4d4); }
+.td-md p { margin: 0 0 8px; }
+.td-md h1, .td-md h2, .td-md h3, .td-md h4, .td-md h5, .td-md h6 {
+    margin: 12px 0 6px; font-weight: 600; line-height: 1.3; color: var(--ea-text, #e6e6e6);
+}
+.td-md h1 { font-size: 16px; }
+.td-md h2 { font-size: 14.5px; }
+.td-md h3 { font-size: 13px; }
+.td-md h4, .td-md h5, .td-md h6 { font-size: 12.5px; }
+.td-md ul { margin: 0 0 8px; padding-left: 20px; }
+.td-md li { margin: 2px 0; }
+.td-md a { color: var(--ea-accent, #2b8fc9); }
+.td-md code {
+    font-family: var(--ea-mono, ui-monospace, monospace); font-size: 11.5px;
+    background: rgba(255, 255, 255, 0.06); padding: 1px 4px; border-radius: 3px;
+}
+.td-md pre.td-code, pre.td-code {
+    font-family: var(--ea-mono, ui-monospace, monospace); font-size: 11.5px;
+    background: rgba(0, 0, 0, 0.28); border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 4px; padding: 8px 10px; margin: 0 0 8px; overflow-x: auto; white-space: pre;
+}
+.td-md pre.td-code code { background: none; padding: 0; }
+
+/* ════════════════════════════════════════════════════════════════════
+   Round 4 — freetext: the bug description and comment bodies must read as
+   authored notes and be selectable / copyable as normal text. The app
+   shell sets user-select:none on chrome (groups, fields, stage bar, nav);
+   here we opt the rendered-markdown bodies back IN so click-drag selects
+   and Ctrl/Cmd-C copies. No overlays or drag handles sit over these.
+   ──────────────────────────────────────────────────────────────────── */
+
+/* 1 — SELECTABLE / COPYABLE. The rendered markdown container (bug
+   description via [data-slot="desc"], and every comment body) is real
+   text the user can select and copy. */
+.td-md,
+.td-md *,
+.td-wentry__text,
+.td-wentry__text * {
+    -webkit-user-select: text;
+    -moz-user-select: text;
+    user-select: text;
+}
+.td-md,
+.td-wentry__text { cursor: text; }
+/* Code blocks/spans stay text-selectable but read as monospace regions. */
+.td-md pre.td-code,
+.td-md code { cursor: text; }
+
+/* 2 — FREETEXT AFFORDANCE. Give the bodies a subtly inset "note" card:
+   a well-background a shade off the page, a thin left accent, comfortable
+   padding + line-height, and a readable measure. Tokens only (--ea-* /
+   existing td- colors) — no hardcoded brand values. */
+
+/* The description is the PRIMARY note. */
+.td-md[data-slot="desc"] {
+    background: var(--ea-bg-well, #0d0d0d);
+    border: 1px solid var(--ea-border, #333);
+    border-left: 2px solid var(--ea-accent, #1177b3);
+    border-radius: 2px;
+    padding: 10px 12px;
+    line-height: 1.6;
+}
+.td-md[data-slot="desc"] > :last-child { margin-bottom: 0; }
+
+/* Comments read as a threaded list of authored notes. The author/date
+   header (`date · author`) already exists; the body becomes an inset
+   note card so the thread scans as distinct freetext entries. */
+.td-wstream { gap: 2px; }
+.td-wentry__text {
+    background: var(--ea-bg-well, #0d0d0d);
+    border: 1px solid var(--ea-border-soft, #2a2a2a);
+    border-left: 2px solid var(--ea-border, #333);
+    border-radius: 2px;
+    padding: 6px 10px;
+    margin-top: 4px;
+    line-height: 1.6;
+}
+.td-wentry__text > :last-child { margin-bottom: 0; }
+
+/* Subtle author-distinguishing tint on the note's left accent, reusing
+   the same colors as the author badges (norman = internal/warning,
+   claude = public/teal). Keeps the badge language consistent. */
+.td-wentry--norman .td-wentry__text { border-left-color: var(--color-warning, #ff9800); }
+.td-wentry--claude .td-wentry__text { border-left-color: #4ec9b0; }
+
+/* Explicit assignee with an inline reassign picker (Bug Record). */
+.td-assignee { display: flex; gap: 6px; align-items: center; }
+.td-assignee select[data-f="assignee"] { flex: 1 1 auto; }
+.td-reassign { flex: 0 0 auto; padding: 4px 8px; display: inline-flex; align-items: center; }
+
+/* ── Bug links ───────────────────────────────────────────────────────────
+   One row per relationship. The relationship reads first ("is blocked by"),
+   then the bug it points at, then that bug's title — so the section scans as
+   a sentence per line. Outgoing links carry an unlink button; inbound ones
+   are stored on the other bug and say so instead. */
+.td-linkrow {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 3px 0;
+    border-bottom: 1px solid var(--ea-border-soft, #2a2a2a);
+}
+.td-linkrow:last-child { border-bottom: 0; }
+.td-linkrow__rel {
+    flex: 0 0 auto;
+    min-width: 108px;
+    color: var(--ea-fg-dim, #9a9a9a);
+    text-transform: lowercase;
+}
+.td-linkrow__title {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.td-linkrow .td-link {
+    flex: 0 0 auto;
+    background: none;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+    color: var(--accent-bright, #1683c4);
+}
+.td-linkrow .td-link:hover { text-decoration: underline; }
+
+/* Add-a-link row: type, target, button. */
+.td-linkadd { display: flex; gap: 6px; align-items: center; margin-top: 8px; }
+.td-linkadd__type { flex: 0 0 auto; min-width: 140px; }
+.td-linkadd__target { flex: 1 1 auto; min-width: 0; }

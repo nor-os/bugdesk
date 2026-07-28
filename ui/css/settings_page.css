@@ -1,0 +1,487 @@
+/* ============================================================================
+   Settings Page
+   ============================================================================
+   Full-page settings editor with category sidebar and scrollable content area.
+   Uses CSS custom properties for theming, BEM naming convention.
+   ============================================================================ */
+
+:root {
+    --settings-bg: var(--surface-0);
+    --settings-surface: var(--surface-1));
+    --settings-surface-hover: rgba(255, 255, 255, 0.04);
+    --settings-border: var(--border-default);
+    --settings-text: var(--text-primary, var(--text-primary));
+    --settings-text-muted: var(--text-muted, var(--text-muted));
+    --settings-primary: var(--accent);
+    --settings-primary-hover: var(--accent-hover));
+    --settings-danger: #e74c3c;
+    --settings-danger-hover: #c0392b;
+}
+
+/* ── Page container ───────────────────────────────────────────────────────── */
+
+.settings-page {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    background: var(--surface-0);
+    color: var(--text-primary);
+    overflow: hidden;
+}
+
+/* ── Embedded (in-tile) two-pane layout ───────────────────────────────────────
+   When mounted inside a WM tile content slot the page is self-contained:
+   the category sidebar and the scrollable content share one host, side by
+   side, instead of relying on the legacy global #fixed-200-settings rail. */
+
+/* The compound selector outranks `.twm-page-shell__content { flex-direction:
+   column }` (host.css, same specificity but later in the cascade) — the tile
+   content slot IS this wrapper, so without the bump the sidebar/pane stack
+   vertically and the content gets pushed down the column. */
+.settings-page--embedded,
+.twm-page-shell__content.settings-page--embedded {
+    flex-direction: row;
+    height: 100%;
+}
+
+.settings-page--embedded .settings-page__sidebar {
+    flex: 0 0 200px;
+    width: 200px;
+    min-width: 200px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-right: 1px solid var(--border-default);
+    background: var(--surface-1);
+}
+
+.settings-page--embedded .settings-page__pane {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* ── Content area (scrollable, centered) ──────────────────────────────────── */
+
+.settings-page__content {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--space-3xl) 40px;
+}
+
+.settings-page__content-inner {
+    max-width: 700px;
+    margin: 0 auto;
+}
+
+/* ── Category header ──────────────────────────────────────────────────────── */
+
+.settings-page__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 28px;
+    padding-bottom: var(--space-xl);
+    border-bottom: 1px solid var(--border-default);
+}
+
+.settings-page__header-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.settings-page__title {
+    font-size: var(--font-size-2xl);
+    font-weight: 600;
+    margin: 0 0 4px 0;
+    color: var(--text-primary);
+}
+
+.settings-page__description {
+    font-size: var(--font-size-md);
+    color: var(--text-muted);
+    margin: 0;
+}
+
+/* ── Reset buttons ────────────────────────────────────────────────────────── */
+
+.settings-page__reset-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: 5px 10px;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-muted);
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: background var(--transition-normal), color var(--transition-normal), border-color var(--transition-normal);
+}
+
+.settings-page__reset-btn:hover {
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-primary);
+    border-color: var(--text-muted);
+}
+
+.settings-page__reset-btn .material-symbols-outlined {
+    font-size: var(--font-size-xl);
+}
+
+/* ── Settings group (sub-section within a category) ───────────────────────── */
+
+.settings-page__group {
+    margin-bottom: 28px;
+}
+
+.settings-page__group:last-child {
+    margin-bottom: 0;
+}
+
+.settings-page__group-title {
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-muted);
+    margin: 0 0 12px 0;
+    padding-bottom: var(--space-md);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* ── Individual setting row ───────────────────────────────────────────────── */
+
+.settings-page__setting {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 0;
+    min-height: 40px;
+}
+
+.settings-page__setting + .settings-page__setting {
+    border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.settings-page__setting-info {
+    flex: 1;
+    min-width: 0;
+    margin-right: var(--space-2xl);
+}
+
+.settings-page__setting-label {
+    font-size: var(--font-size-md);
+    font-weight: 500;
+    color: var(--text-primary);
+    display: block;
+}
+
+.settings-page__setting-desc {
+    font-size: var(--font-size-sm);
+    color: var(--text-muted);
+    margin-top: var(--space-xxs);
+    line-height: 1.4;
+}
+
+.settings-page__setting-control {
+    flex-shrink: 0;
+}
+
+/* ── Modified indicator ───────────────────────────────────────────────────── */
+
+.settings-page__setting--modified .settings-page__setting-label::after {
+    content: '';
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    margin-left: var(--space-sm);
+    vertical-align: middle;
+}
+
+/* ── Toggle switch ────────────────────────────────────────────────────────── */
+
+.settings-toggle {
+    position: relative;
+    width: 36px;
+    height: 20px;
+    border-radius: 10px;
+    background: #555;
+    cursor: pointer;
+    transition: background 0.2s;
+    border: none;
+    padding: 0;
+    outline: none;
+}
+
+.settings-toggle:focus-visible {
+    box-shadow: 0 0 0 2px var(--accent);
+}
+
+.settings-toggle::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--text-bright);
+    transition: transform 0.2s;
+}
+
+.settings-toggle--on {
+    background: var(--accent);
+}
+
+.settings-toggle--on::after {
+    transform: translateX(16px);
+}
+
+/* ── Select dropdown ──────────────────────────────────────────────────────── */
+
+.settings-select {
+    min-width: 180px;
+    padding: 5px 28px 5px 10px;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
+    background: var(--surface-1);
+    color: var(--text-primary);
+    font-size: var(--font-size-md);
+    cursor: pointer;
+    outline: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238f939c' d='M3 5l3 3 3-3'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    transition: border-color var(--transition-normal);
+}
+
+.settings-select:hover {
+    border-color: var(--text-muted);
+}
+
+.settings-select:focus {
+    border-color: var(--accent);
+}
+
+.settings-select option {
+    background: var(--surface-1);
+    color: var(--text-primary);
+}
+
+/* ── Number input ─────────────────────────────────────────────────────────── */
+
+.settings-number {
+    width: 120px;
+    padding: 5px 10px;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
+    background: var(--surface-1);
+    color: var(--text-primary);
+    font-size: var(--font-size-md);
+    font-family: 'JetBrains Mono', 'Consolas', monospace;
+    outline: none;
+    transition: border-color var(--transition-normal);
+}
+
+.settings-number:hover {
+    border-color: var(--text-muted);
+}
+
+.settings-number:focus {
+    border-color: var(--accent);
+}
+
+/* ── Text input ───────────────────────────────────────────────────────────── */
+
+.settings-text-input {
+    width: 280px;
+    max-width: 100%;
+    padding: 5px 10px;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
+    background: var(--surface-1);
+    color: var(--text-primary);
+    font-size: var(--font-size-md);
+    outline: none;
+    transition: border-color var(--transition-normal);
+}
+
+.settings-text-input:hover {
+    border-color: var(--text-muted);
+}
+
+.settings-text-input:focus {
+    border-color: var(--accent);
+}
+
+.settings-text-input::placeholder {
+    color: var(--text-muted);
+    opacity: 0.6;
+}
+
+/* ── Color list (palette editor) ──────────────────────────────────────────── */
+
+.settings-color-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    width: 100%;
+}
+
+.settings-color-list__swatches {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+    align-items: center;
+}
+
+.settings-color-swatch {
+    position: relative;
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-sm);
+    border: 2px solid rgba(255, 255, 255, 0.12);
+    cursor: pointer;
+    transition: border-color var(--transition-normal), transform 0.1s;
+    padding: 0;
+    outline: none;
+}
+
+.settings-color-swatch:hover {
+    border-color: rgba(255, 255, 255, 0.3);
+    transform: scale(1.1);
+}
+
+.settings-color-swatch:focus-visible {
+    box-shadow: 0 0 0 2px var(--accent);
+}
+
+.settings-color-swatch__input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+}
+
+.settings-color-swatch__remove {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: none;
+    background: #e74c3c;
+    color: var(--text-bright);
+    font-size: 10px;
+    line-height: 14px;
+    text-align: center;
+    cursor: pointer;
+    display: none;
+    padding: 0;
+}
+
+.settings-color-swatch:hover .settings-color-swatch__remove {
+    display: block;
+}
+
+.settings-color-list__add-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-sm);
+    border: 2px dashed var(--border-default);
+    background: transparent;
+    color: var(--text-muted);
+    font-size: var(--font-size-2xl);
+    line-height: 24px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: border-color var(--transition-normal), color var(--transition-normal);
+    padding: 0;
+}
+
+.settings-color-list__add-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+/* Color list uses full-width layout since the swatch row needs space */
+.settings-page__setting--color-list {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+.settings-page__setting--color-list .settings-page__setting-control {
+    width: 100%;
+}
+
+/* ── Search results view ──────────────────────────────────────────────────── */
+
+.settings-page__search-results {
+    padding: 0;
+}
+
+.settings-page__search-header {
+    font-size: var(--font-size-md);
+    color: var(--text-muted);
+    margin-bottom: var(--space-xl);
+}
+
+.settings-page__search-result-category {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--accent);
+    background: rgba(14, 99, 156, 0.15);
+    padding: var(--space-xxs) 6px;
+    border-radius: var(--radius-sm);
+    margin-left: var(--space-md);
+    vertical-align: middle;
+}
+
+.settings-page__no-results {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-muted);
+}
+
+.settings-page__no-results .material-symbols-outlined {
+    font-size: 40px;
+    opacity: 0.3;
+    display: block;
+    margin-bottom: var(--space-lg);
+}
+
+/* ── Scrollbar styling (content area) ─────────────────────────────────────── */
+
+.settings-page__content::-webkit-scrollbar {
+    width: 6px;
+}
+
+.settings-page__content::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.settings-page__content::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-sm);
+}
+
+.settings-page__content::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
+}

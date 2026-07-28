@@ -1,0 +1,516 @@
+/**
+ * Managed Window Styles
+ * Styles for draggable/resizable window component with taskbar integration.
+ */
+
+/* ========== Window Container ========== */
+
+.managed-window {
+    position: fixed;
+    background: #1a1a1a;
+    border: 1px solid var(--surface-3);
+    border-radius: 0;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-width: 200px;
+    min-height: 100px;
+    /* Enable transitions for minimize/maximize animations */
+    transition: transform 0.2s ease-out, opacity 0.2s ease-out, box-shadow var(--transition-normal);
+}
+
+.managed-window:focus-within {
+    border-color: #505050;
+}
+
+/* Minimize animation class — targets taskbar item via CSS custom properties */
+.managed-window--minimizing {
+    transform: translate(var(--mw-target-x, 0px), var(--mw-target-y, 100vh)) scale(var(--mw-target-scale, 0.1));
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* Restore animation class — animates from taskbar item position */
+.managed-window--restoring {
+    animation: windowRestore 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes windowRestore {
+    from {
+        transform: translate(var(--mw-target-x, 0px), var(--mw-target-y, 100vh)) scale(var(--mw-target-scale, 0.1));
+        opacity: 0;
+    }
+    to {
+        transform: translate(0px, 0px) scale(1);
+        opacity: 1;
+    }
+}
+
+/* ========== Backdrop (for modal windows) ========== */
+
+.managed-window__backdrop {
+    position: fixed;
+    /* Position between top bar (35px) and bottom bar (20px) */
+    top: 35px;
+    left: 0;
+    right: 0;
+    bottom: 20px;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(2px);
+}
+/* Per-modal overrides of the dim/blur above are set as inline styles by
+   ManagedWindow from its `backdropBlur` / `backdropOpacity` options — not
+   via modifier classes here. */
+
+/* ========== Top Bar ========== */
+
+.managed-window__topbar {
+    height: 28px;
+    min-height: 28px;
+    background: var(--surface-1);
+    border-bottom: 1px solid var(--surface-3);
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    cursor: move;
+    user-select: none;
+    gap: var(--space-sm);
+}
+
+/* Non-draggable windows (modals) */
+.managed-window--no-drag .managed-window__topbar {
+    cursor: default;
+}
+
+.managed-window__icon {
+    font-size: var(--font-size-lg);
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.managed-window__title {
+    flex: 1;
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.managed-window__buttons {
+    display: flex;
+    gap: var(--space-xxs);
+    margin-left: auto;
+}
+
+/* Window buttons - white icons on transparent background */
+/* Use button element + class selector to override global "button" styles from main_new.css */
+button.managed-window__btn {
+    width: 24px;
+    height: 20px;
+    border: none;
+    background: none;
+    background-color: transparent;
+    color: var(--text-bright);
+    cursor: pointer;
+    border-radius: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    outline: none;
+    box-shadow: none;
+    transition: background-color 0.1s, color 0.1s;
+}
+
+/* Focus state - no outline */
+button.managed-window__btn:focus,
+button.managed-window__btn:focus-visible {
+    outline: none;
+    box-shadow: none;
+    background: none;
+    background-color: transparent;
+}
+
+/* Disabled/inactive buttons - gray */
+button.managed-window__btn:disabled,
+button.managed-window__btn--disabled {
+    color: var(--text-dim);
+    cursor: default;
+}
+
+/* Hover state - dark gray background */
+button.managed-window__btn:hover {
+    background: var(--surface-3);
+    background-color: var(--surface-3);
+    color: var(--text-bright);
+}
+
+/* Active state */
+button.managed-window__btn:active {
+    background: #4a4a4a;
+    background-color: #4a4a4a;
+}
+
+/* Close button hover - red */
+button.managed-window__btn--close:hover {
+    background: #c42b1c;
+    background-color: #c42b1c;
+    color: var(--text-bright);
+}
+
+.managed-window__btn svg {
+    width: 10px;
+    height: 10px;
+}
+
+/* Override global path stroke from main_new.css which sets stroke: #2c3e50 on all paths */
+/* Need high specificity to beat: path:not(.connection-path):not(.connection-hitbox) = (0,2,1) */
+.managed-window .managed-window__btn svg path,
+.managed-window .managed-window__btn svg rect,
+button.managed-window__btn svg path,
+button.managed-window__btn svg rect {
+    stroke: var(--text-bright);
+    stroke-width: 1.5;
+}
+
+/* ========== Content Area ========== */
+
+.managed-window__content {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ========== Resize Handles ========== */
+
+.managed-window__resize {
+    position: absolute;
+    z-index: var(--z-sticky);
+}
+
+/* Edge handles */
+.managed-window__resize--n {
+    top: -4px;
+    left: 8px;
+    right: 8px;
+    height: 8px;
+    cursor: n-resize;
+}
+
+.managed-window__resize--s {
+    bottom: -4px;
+    left: 8px;
+    right: 8px;
+    height: 8px;
+    cursor: s-resize;
+}
+
+.managed-window__resize--e {
+    right: -4px;
+    top: 8px;
+    bottom: 8px;
+    width: 8px;
+    cursor: e-resize;
+}
+
+.managed-window__resize--w {
+    left: -4px;
+    top: 8px;
+    bottom: 8px;
+    width: 8px;
+    cursor: w-resize;
+}
+
+/* Corner handles */
+.managed-window__resize--ne {
+    top: -4px;
+    right: -4px;
+    width: 12px;
+    height: 12px;
+    cursor: ne-resize;
+}
+
+.managed-window__resize--nw {
+    top: -4px;
+    left: -4px;
+    width: 12px;
+    height: 12px;
+    cursor: nw-resize;
+}
+
+.managed-window__resize--se {
+    bottom: -4px;
+    right: -4px;
+    width: 12px;
+    height: 12px;
+    cursor: se-resize;
+}
+
+.managed-window__resize--sw {
+    bottom: -4px;
+    left: -4px;
+    width: 12px;
+    height: 12px;
+    cursor: sw-resize;
+}
+
+/* ========== Taskbar in Bottom Bar ========== */
+
+.bar-windows {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: 0 4px;
+    height: 100%;
+}
+
+.bar-windows:empty {
+    display: none;
+}
+
+/* Taskbar dividers */
+.bar-windows__divider {
+    width: 1px;
+    height: 100%;
+    background: var(--surface-3);
+}
+
+.bar-windows__divider--left {
+    margin-right: var(--space-xs);
+}
+
+.bar-windows__divider--right {
+    margin-left: var(--space-xs);
+}
+
+.bar-windows__item {
+    height: 100%;
+    padding: 0 6px;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    font-size: var(--font-size-xs);
+    font-family: inherit;
+    color: var(--text-secondary);
+    cursor: pointer;
+    max-width: 160px;
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    transition: background-color 0.1s, color 0.1s;
+}
+
+.bar-windows__item:hover {
+    /* Solarized blue */
+    background: #268bd2;
+    color: var(--text-bright);
+}
+
+.bar-windows__item:active {
+    background: #1a6aa5;
+}
+
+.bar-windows__item-icon {
+    font-size: var(--font-size-sm);
+    flex-shrink: 0;
+}
+
+.bar-windows__item-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ========== Transitions ========== */
+
+.managed-window:not(:hover) {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+/* ========== macOS-style Shadows ========== */
+
+body.mac-shadows .managed-window {
+    box-shadow:
+        0 1px 3px rgba(0, 0, 0, 0.25),
+        0 4px 12px rgba(0, 0, 0, 0.25),
+        0 16px 32px rgba(0, 0, 0, 0.3),
+        0 32px 64px rgba(0, 0, 0, 0.25);
+}
+
+body.mac-shadows .managed-window:not(:hover) {
+    box-shadow:
+        0 1px 3px rgba(0, 0, 0, 0.2),
+        0 4px 12px rgba(0, 0, 0, 0.2),
+        0 12px 24px rgba(0, 0, 0, 0.22);
+}
+
+/* ========== Import Wizard Content ========== */
+
+.data-page__wizard-content {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
+.data-page__wizard-content .data-page__wizard-steps {
+    border-radius: 0;
+    border-top: none;
+}
+
+.data-page__wizard-content .data-page__wizard-body {
+    flex: 1;
+    overflow-y: auto;
+}
+
+.data-page__wizard-content .data-page__wizard-footer {
+    border-radius: 0;
+}
+
+/* ========== Expression Modal Content ========== */
+
+.expression-modal__window-content {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
+.expression-modal__window-content .expression-modal__meta {
+    padding: var(--space-md) 12px;
+    font-size: var(--font-size-xs);
+    color: var(--text-muted);
+    border-bottom: 1px solid #333;
+    flex-shrink: 0;
+}
+
+.expression-modal__window-content .expression-modal__editor-container {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    padding: 5px;
+}
+
+/* Ensure CodeMirror fills the space */
+.expression-modal__window-content .cm-editor {
+    flex: 1;
+    height: 100%;
+}
+
+.expression-modal__window-content .cm-scroller {
+    overflow: auto;
+}
+
+/* ========== Confirm Dialog Content ========== */
+
+.confirm-dialog__content {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding: var(--space-xl);
+    box-sizing: border-box;
+}
+
+.confirm-dialog__body {
+    flex: 1;
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-lg);
+}
+
+.confirm-dialog__icon {
+    font-size: 32px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.confirm-dialog__message {
+    flex: 1;
+    font-size: var(--font-size-md);
+    color: var(--text-secondary);
+    line-height: 1.5;
+    white-space: pre-wrap;
+    padding-top: var(--space-xs);
+}
+
+.confirm-dialog__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-md);
+    margin-top: var(--space-xl);
+    padding-top: var(--space-lg);
+    border-top: 1px solid #333;
+}
+
+/* Confirm dialog buttons - override global button styles */
+button.confirm-dialog__btn {
+    padding: var(--space-sm) 16px;
+    border: 1px solid #444;
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-sm);
+    font-family: inherit;
+    cursor: pointer;
+    transition: background-color var(--transition-normal), border-color var(--transition-normal);
+}
+
+button.confirm-dialog__btn--cancel {
+    background: var(--surface-2);
+    color: var(--text-secondary);
+}
+
+button.confirm-dialog__btn--cancel:hover {
+    background: var(--surface-3);
+    border-color: #555;
+}
+
+button.confirm-dialog__btn--ok {
+    color: var(--text-bright);
+}
+
+button.confirm-dialog__btn--primary {
+    background: var(--accent);
+    border-color: var(--accent);
+}
+
+button.confirm-dialog__btn--primary:hover {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+}
+
+button.confirm-dialog__btn--danger {
+    background: #c42b1c;
+    border-color: #c42b1c;
+}
+
+button.confirm-dialog__btn--danger:hover {
+    background: #d63a2a;
+    border-color: #d63a2a;
+}
+
+button.confirm-dialog__btn:focus {
+    outline: 2px solid var(--accent-bright);
+    outline-offset: 2px;
+}
+
+.confirm-dialog__select {
+    width: 100%;
+    padding: var(--space-sm) 8px;
+    background: var(--surface-0);
+    color: var(--text-secondary);
+    border: 1px solid #444;
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-md);
+    cursor: pointer;
+}
+
+.confirm-dialog__select:focus {
+    outline: 2px solid var(--accent-bright);
+    outline-offset: 1px;
+    border-color: var(--accent-bright);
+}

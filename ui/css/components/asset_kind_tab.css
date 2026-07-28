@@ -1,0 +1,327 @@
+/* asset_kind_tab.css — Layer 7.1e.
+ *
+ * The editor uses the project-wide chrome (ea-detail-header,
+ * nb-structured-editor__tabs, ea-card, ea-row, ea-form-grid, ea-btn).
+ * Only this file's job is the property-rows table and a couple of
+ * field hints that don't have a place in the shared sheet.
+ */
+
+.ea-asset-kind-tab {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
+/* Override the global `.ea-card { display: flex; overflow: hidden }`
+ * for this tab. The asset kind editor's cards must grow vertically
+ * with their content (form fields, attribute lists, signature pre,
+ * code editor). Three concerns:
+ *
+ *   1. `overflow: visible` — defeat the global clip.
+ *   2. `flex-shrink: 0`    — cards inside the flex-column scroll
+ *      container must NOT shrink below their content. Default
+ *      `flex: 0 1 auto` lets the browser compress them when total
+ *      content exceeds container height; we instead want the
+ *      container to scroll while every card keeps its full size.
+ *   3. `display: block`    — the global rule makes cards flex-column,
+ *      which collides with the form-grid layout inside them. Reset to
+ *      normal block flow.
+ *
+ * Specificity: `.ea-asset-kind-tab .ea-card` (0,0,2) beats `.ea-card`
+ * (0,0,1). */
+.ea-asset-kind-tab .ea-card {
+    overflow: visible;
+    height: auto;
+    flex-shrink: 0;
+    display: block;
+}
+
+/* The global `.ea-btn` rule sets `display: flex` which overrides the
+ * default `[hidden] { display: none }`. Restore the standard meaning
+ * so our `<button hidden>` reset-to-archetype action stays hidden
+ * when deviation is 0. */
+.ea-asset-kind-tab .ea-btn[hidden] {
+    display: none;
+}
+
+/* Force the form inputs onto the project's dark palette. Browsers
+ * give <textarea> / <select> / <input> a white default background
+ * unless explicitly themed; we inherit from the shared ea-input-bg
+ * token so the description box matches the rest of the tab. */
+.ea-asset-kind-tab textarea[data-field],
+.ea-asset-kind-tab textarea[data-tplfield],
+.ea-asset-kind-tab input[data-field]:not([type="checkbox"]),
+.ea-asset-kind-tab input[data-tplfield]:not([type="checkbox"]),
+.ea-asset-kind-tab select[data-field],
+.ea-asset-kind-tab select[data-tplfield] {
+    background: var(--ea-input-bg, #1e1e1e);
+    color: var(--ea-text, #ddd);
+    border: 1px solid var(--ea-border, #444);
+    padding: 0.35em 0.5em;
+    font: inherit;
+    box-sizing: border-box;
+}
+
+.ea-asset-kind-tab textarea[data-field],
+.ea-asset-kind-tab textarea[data-tplfield] {
+    resize: vertical;
+    min-height: 2.6em;
+}
+
+/* Description card — full-width textarea, no flanking columns. */
+.ea-asset-kind-tab__description {
+    width: 100%;
+    min-height: 4em;
+}
+
+/* `ea-row--checkbox`: collapse the row to its natural width and put
+ * the label after the box. Default `ea-row` is a two-column grid
+ * (label / control) which makes the checkbox column stretch — we
+ * don't want that here; a checkbox needs ~1em, not a third of the
+ * form. */
+.ea-asset-kind-tab .ea-row--checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5em;
+    grid-column: 1 / -1;
+    justify-self: start;
+}
+
+.ea-asset-kind-tab .ea-row--checkbox > input[type="checkbox"] {
+    width: auto;
+    margin: 0;
+}
+
+.ea-asset-kind-tab .nb-structured-editor__content {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 0.75em 1em 1.5em;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75em;
+}
+
+
+
+.ea-row__hint {
+    grid-column: 2;
+    color: var(--ea-text-muted, #888);
+    font-size: 0.75em;
+    margin-top: 0.1em;
+}
+
+/* Public API card removed (#123). Contract grading now uses the
+ * shared `live_signature_panel` mounted above the editor — see
+ * `ui/css/ecoagent_extra_modes.css` for `.ea-live-sig__*` rules.
+ * The bespoke `.ea-asset-kind-tab__api-*` classes have been
+ * deleted; the panel renders a real table with status pills
+ * (#112) instead of a row strip with border-left tint. */
+
+/* Relationships card — markets / sectors that can trade or hold this
+ * asset kind, derived from the unified registry. */
+.ea-asset-kind-tab__relationships {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25em;
+    margin-top: 0.25em;
+}
+
+.ea-asset-kind-tab__rel-row {
+    display: grid;
+    grid-template-columns: auto auto 1fr auto auto;
+    gap: 0.5em;
+    align-items: center;
+    padding: 0.25em 0.5em;
+    background: rgba(120, 170, 230, 0.06);
+    border-left: 3px solid #5aa3e8;
+    font-size: 0.85em;
+}
+
+.ea-asset-kind-tab__rel-icon {
+    color: #5aa3e8;
+    font-size: 1em;
+}
+
+.ea-asset-kind-tab__rel-id { font-family: monospace; }
+.ea-asset-kind-tab__rel-label { color: var(--ea-text, #ddd); }
+.ea-asset-kind-tab__rel-why,
+.ea-asset-kind-tab__rel-req {
+    color: var(--ea-text-muted, #888);
+    font-size: 0.85em;
+}
+.ea-asset-kind-tab__rel-req {
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
+/* Layer 8.J2 — "Inherits from <archetype>" badge in the entity header.
+ * Sits between the editable title and the action buttons, with a
+ * deviation % chip whose colour interpolates green → red via inline
+ * `hsl()` so callers don't have to thread the colour through. */
+.ea-archetype-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4em;
+    padding: 0.25em 0.6em;
+    border: 1px solid var(--ea-border, #2a2a2a);
+    background: var(--ea-input-bg, #1e1e1e);
+    font-size: 0.85em;
+}
+
+.ea-archetype-badge[hidden] { display: none; }
+
+.ea-archetype-badge__icon {
+    font-size: 1em;
+    color: var(--ea-text-muted, #888);
+}
+
+.ea-archetype-badge__label {
+    color: var(--ea-text-muted, #888);
+    text-transform: lowercase;
+    letter-spacing: 0.02em;
+}
+
+.ea-archetype-badge__name {
+    color: var(--ea-text, #ddd);
+    background: transparent;
+    padding: 0;
+}
+
+.ea-archetype-badge__pct {
+    font-weight: 600;
+    margin-left: 0.2em;
+    font-variant-numeric: tabular-nums;
+}
+
+/* T6.1 — contract implementation-% chip. Same chrome as the archetype
+ * badge so the two read as siblings in the header, just a different
+ * icon + label. Methods sub-chip uses orange to draw the eye to the
+ * binary "missing required method" condition (R1 — methods are
+ * 100%-or-nothing). */
+.ea-impl-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4em;
+    padding: 0.25em 0.6em;
+    border: 1px solid var(--ea-border, #2a2a2a);
+    background: var(--ea-input-bg, #1e1e1e);
+    font-size: 0.85em;
+}
+.ea-impl-badge[hidden] { display: none; }
+.ea-impl-badge__icon {
+    font-size: 1em;
+    color: var(--ea-text-muted, #888);
+}
+.ea-impl-badge__label {
+    color: var(--ea-text-muted, #888);
+    text-transform: lowercase;
+    letter-spacing: 0.02em;
+}
+.ea-impl-badge__pct {
+    font-weight: 600;
+    margin-left: 0.2em;
+    font-variant-numeric: tabular-nums;
+}
+.ea-impl-badge__methods {
+    margin-left: 0.4em;
+    color: #d18138;
+    font-size: 0.95em;
+}
+
+.ea-asset-kind-tab__signature {
+    margin: 0;
+    padding: 0.5em 0.75em;
+    background: var(--ea-input-bg, #1e1e1e);
+    color: var(--ea-text, #ddd);
+    border: 1px solid var(--ea-border, #2a2a2a);
+    font-family: monospace;
+    font-size: 0.85em;
+    overflow-x: auto;
+    white-space: pre;
+    flex: 1;
+    min-width: 0;
+}
+/* Signature + copy button on one line — copy used to sit in the
+ * card header; moving it next to the signature reads better. */
+.ea-asset-kind-tab__sig-line {
+    display: flex;
+    align-items: stretch;
+    gap: var(--space-xs, 6px);
+}
+.ea-asset-kind-tab__sig-line .ea-icon-btn {
+    flex-shrink: 0;
+}
+
+/* Settings row — currency picker + financial checkbox side-by-side.
+ * Old `ea-form-grid` stacked them vertically; this aligns the two
+ * controls horizontally with a sensible gap. */
+.ea-asset-kind-tab__settings-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-lg, 16px);
+    flex-wrap: wrap;
+}
+.ea-asset-kind-tab__settings-field {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-sm, 8px);
+    color: var(--ea-text-muted);
+    font-size: var(--ea-font-body);
+}
+.ea-asset-kind-tab__settings-field select {
+    background: var(--ea-input-bg, #1e1e1e);
+    color: var(--ea-text, #ddd);
+    border: 1px solid var(--ea-border, #2a2a2a);
+    padding: 4px 8px;
+    font: inherit;
+}
+.ea-asset-kind-tab__settings-check {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs, 6px);
+    color: var(--ea-text-muted);
+    font-size: var(--ea-font-body);
+    cursor: pointer;
+}
+
+.ea-asset-kind-tab__code-card {
+    display: flex;
+    flex-direction: column;
+}
+
+.ea-asset-kind-tab__code-origin {
+    font-size: 0.75em;
+    color: var(--ea-text-muted, #888);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 0.1em 0.5em;
+    border: 1px solid var(--ea-border, #2a2a2a);
+}
+
+.ea-asset-kind-tab__code-origin--override {
+    color: var(--ea-text-accent, #6aa);
+    border-color: var(--ea-text-accent, #6aa);
+}
+
+.ea-asset-kind-tab__code-editor {
+    flex: 1;
+    min-height: 240px;
+    border: 1px solid var(--ea-border, #2a2a2a);
+    margin-top: 0.5em;
+}
+
+.ea-asset-kind-tab__code-fallback {
+    width: 100%;
+    min-height: 240px;
+    background: var(--ea-input-bg, #1e1e1e);
+    color: var(--ea-text, #ddd);
+    border: 0;
+    padding: 0.5em;
+    font-family: monospace;
+    font-size: 0.85em;
+    resize: vertical;
+    box-sizing: border-box;
+}

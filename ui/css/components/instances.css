@@ -1,0 +1,113 @@
+/* instances.css — Agents > Instances (agent_tab.js).
+ * docs/AGENT_INSTANCES_CONTROL.md. A list of the variant's sampled instances +
+ * an inline per-instance override editor that reuses the `.ea-scen-*` override
+ * grid (shared with scenarios / market instances). Square corners. */
+
+.ea-inst__toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-sm) 0 var(--space-md);
+    border-bottom: 1px solid var(--border-default);
+    margin-bottom: var(--space-sm);
+}
+.ea-inst__tb-group { display: flex; align-items: center; gap: var(--space-xs); }
+.ea-inst__tb-right { margin-left: auto; }
+
+/* instance list — a DataTable host. DEFAULT (fallback) layout: a DataTable in
+ * an auto-height `.ea-card` inside the overflow-y:auto editor body, so its
+ * inline `height:100%` wrapper + `flex:1 1 0` scroll body collapse to a 0px
+ * body and the rows never appear. Fall back to content-natural height
+ * (`!important` beats DataTable's inline cssText); the editor body scrolls the
+ * page. The full-height variant below overrides this when the Instances
+ * sub-tab is active. */
+.ea-inst__list { display: block; min-height: 0; margin-bottom: var(--space-sm); }
+.ea-inst__list > .data-table-component { height: auto !important; min-height: 0; }
+.ea-inst__list .preview-table-wrap { flex: 0 0 auto !important; }
+
+/* ── Full-height Instances tab ──────────────────────────────────────────────
+ * agent_tab toggles `.ea-agent-tab-content--instances` on the scroll body when
+ * the Instances sub-tab is active and turns it into a flex column. That gives
+ * the card — and the DataTable inside it — a definite height, so the table
+ * fills the panel and scrolls INTERNALLY instead of the whole page scrolling.
+ * The DataTable is natively height:100% with a `flex:1 1 0` scroll body
+ * (data_table.js); we just undo the content-natural fallback above and let it
+ * fill. The content-area selector carries an extra class so it beats the base
+ * `.ea-agent-editor > .nb-structured-editor__content` rule regardless of
+ * stylesheet load order. */
+.ea-agent-editor > .nb-structured-editor__content.ea-agent-tab-content--instances {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.ea-agent-tab-content--instances > .ea-inst {
+    flex: 1 1 auto;
+    min-height: 0;
+    margin-bottom: 0;
+}
+.ea-agent-tab-content--instances .ea-inst__list {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    overflow: hidden;
+    margin-bottom: 0;
+}
+.ea-agent-tab-content--instances .ea-inst__list > .data-table-component {
+    height: 100% !important;
+    min-height: 0;
+    flex: 1 1 auto;
+}
+.ea-agent-tab-content--instances .ea-inst__list .preview-table-wrap {
+    flex: 1 1 0 !important;
+    min-height: 0;
+    overflow: auto;
+}
+
+/* per-instance override editor. The `--windowed` variant mounts inside a
+ * dashboard window's Parameters section, so it drops the inline-block divider
+ * and top margin it used to carry when it sat below the instances list. */
+.ea-inst__editor:empty { display: none; }
+.ea-inst__editor {
+    margin-top: var(--space-md);
+    padding-top: var(--space-md);
+    border-top: 1px solid var(--border-strong);
+}
+.ea-inst__editor--windowed {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+}
+.ea-inst__editor-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-sm);
+}
+.ea-inst__editor-title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    margin: 0;
+    font-size: var(--font-size-md);
+    color: var(--text-bright);
+}
+.ea-inst__editor-title .material-symbols-outlined { font-size: 18px; color: var(--text-dim); }
+.ea-inst__editor-actions { display: flex; gap: var(--space-xs); flex-wrap: wrap; }
+.ea-inst__editor-note { color: var(--text-muted); font-style: italic; }
+.ea-inst__override-table { width: 100%; }
+
+.ea-inst__chip {
+    font-size: 10px;
+    line-height: 1.4;
+    padding: 0 6px;
+    border-radius: var(--radius-pill);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+.ea-inst__chip--excl {
+    background: color-mix(in srgb, var(--color-danger) 22%, transparent);
+    color: var(--color-danger);
+}

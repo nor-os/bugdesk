@@ -1,0 +1,236 @@
+/* attribute_list_editor.css — generic AttributeSpec list editor.
+ *
+ * The component sets `--cols` on the host element based on the
+ * `showColumns` spec — header strip and row cells share the same
+ * grid template so labels stay aligned with their inputs. Each
+ * cell uses the standard dark-theme tokens; the editor never owns
+ * row chrome (that's SortableList's job).
+ */
+
+.ea-attr-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25em;
+    margin-top: 0.25em;
+}
+
+/* Header strip now sits inside a SortableList row chrome so the
+ * `[handle][content][remove]` flex layout matches each data row
+ * exactly — no more hardcoded `padding: 0 2em` that drifted as soon
+ * as space-md or the icon size changed. The placeholder spans
+ * (`.ea-attr-editor__header-placeholder`) reserve the handle + remove
+ * gutters; the inner `__headers` div is the column-grid that aligns
+ * with each row's `.ea-attr-editor__row` grid. */
+.ea-attr-editor__header-row {
+    background: transparent;
+    border: 1px solid transparent;  /* keep height parity with data rows */
+    cursor: default;
+}
+.ea-attr-editor__header-row:hover {
+    border-color: transparent;
+}
+.ea-attr-editor__header-placeholder {
+    visibility: hidden;
+    pointer-events: none;
+}
+.ea-attr-editor__headers {
+    display: grid;
+    grid-template-columns: var(--cols, 1fr);
+    gap: 0.4em;
+    font-size: 0.75em;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ea-text-muted, #888);
+}
+
+.ea-attr-editor__row {
+    display: grid;
+    grid-template-columns: var(--cols, 1fr);
+    gap: 0.4em;
+    align-items: center;
+    /* Overridden rows append `__attention` + `__revert` siblings. We
+     * pull those out of the grid flow (absolute) so the cells keep
+     * their column tracks regardless of override state — otherwise the
+     * grid auto-creates implicit tracks for the extras and shifts every
+     * column. `position: relative` anchors the absolute children. */
+    position: relative;
+}
+
+.ea-attr-editor__cell {
+    background: var(--ea-input-bg, #1e1e1e);
+    color: var(--ea-text, #ddd);
+    border: 1px solid var(--ea-border, #444);
+    padding: 0.25em 0.4em;
+    font: inherit;
+    box-sizing: border-box;
+    min-width: 0;
+    width: 100%;
+}
+
+/* Native <select> defaults render with light-grey chrome on most
+ * browsers even when the background is set. Force the dark palette
+ * + suppress the OS arrow so the type cell matches the surrounding
+ * dark inputs in both closed AND row-tinted states. */
+.ea-attr-editor select.ea-attr-editor__cell {
+    background-color: var(--ea-input-bg, #1e1e1e);
+    color: var(--ea-text, #ddd);
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background-image: linear-gradient(45deg, transparent 50%, var(--ea-text-muted, #888) 50%),
+                      linear-gradient(135deg, var(--ea-text-muted, #888) 50%, transparent 50%);
+    background-position: calc(100% - 14px) 50%, calc(100% - 10px) 50%;
+    background-size: 4px 4px, 4px 4px;
+    background-repeat: no-repeat;
+    padding-right: 1.5em;
+}
+.ea-attr-editor select.ea-attr-editor__cell option {
+    background: var(--ea-input-bg, #1e1e1e);
+    color: var(--ea-text, #ddd);
+}
+.ea-attr-editor select.ea-attr-editor__cell optgroup {
+    background: var(--ea-bg-chrome, #161616);
+    color: var(--ea-text-muted, #888);
+    font-style: normal;
+}
+
+.ea-attr-editor__cell--readonly {
+    background: transparent;
+    color: var(--ea-text-muted, #888);
+    font-family: monospace;
+    font-size: 0.85em;
+    border: 1px dashed var(--ea-border, #2a2a2a);
+}
+
+.ea-attr-editor__row input[type="checkbox"].ea-attr-editor__cell {
+    width: auto;
+    justify-self: start;
+}
+
+/* Layer 8.J1 — inheritance state. Each row gets one of three modifiers:
+ *
+ *   --inherited:  value matches the parent archetype's default. The
+ *                 row gets a light blue tint AND each input cell tinted
+ *                 the same so the signal reads against the dark theme.
+ *   --overridden: value differs from the parent archetype's default.
+ *                 Solarized orange tint + attention dot on the left +
+ *                 revert button on the right.
+ *   --neutral:    no parent archetype defines this attribute. Default
+ *                 styling.
+ *
+ * Tinting the inputs (not just the row container) is what makes the
+ * signal actually visible in the dark theme — a 0.10 alpha background
+ * behind dark inputs is invisible. */
+
+.ea-attr-editor__row {
+    padding: 0.15em 0.25em;
+    border-left: 3px solid transparent;
+    border-radius: 2px;
+    transition: background 120ms, border-color 120ms;
+}
+
+/* Inherited / matching state — same green as the Public API card's
+ * "matches archetype" rows, so the colour grammar reads consistently
+ * across attributes and methods: green = matches the archetype,
+ * orange = overrides, neutral = no parent involved. */
+.ea-attr-editor__row--inherited {
+    background: rgba(96, 192, 96, 0.15);
+    border-left-color: #60c060;
+}
+
+.ea-attr-editor__row--inherited input.ea-attr-editor__cell {
+    background: rgba(96, 192, 96, 0.08);
+    border-color: rgba(96, 192, 96, 0.40);
+}
+.ea-attr-editor__row--inherited select.ea-attr-editor__cell {
+    /* Native <select> can't render a semi-transparent background
+     * reliably (the OS popup picks up the literal colour as its
+     * backing). Keep the dark base, signal "inherited" via border
+     * accent only. */
+    background-color: var(--ea-input-bg, #1e1e1e);
+    border-color: rgba(96, 192, 96, 0.60);
+}
+
+.ea-attr-editor__row--overridden {
+    background: rgba(204, 120, 65, 0.22);
+    border-left-color: #d18138;
+}
+
+.ea-attr-editor__row--overridden input.ea-attr-editor__cell {
+    background: rgba(204, 120, 65, 0.10);
+    border-color: rgba(209, 129, 56, 0.50);
+    color: #f0c189;
+}
+.ea-attr-editor__row--overridden select.ea-attr-editor__cell {
+    background-color: var(--ea-input-bg, #1e1e1e);
+    border-color: rgba(209, 129, 56, 0.60);
+    color: #f0c189;
+}
+
+/* R7 — variation-override flag treatments. These additively layer on
+ * top of the inheritance grammar (above), so an `optional` inherited
+ * row keeps its green background AND gets the optional border accent.
+ *
+ *  disabled : the archetype declared the slot but turned it off. The
+ *             row is greyed out to make clear it's not carried into
+ *             descendants.
+ *  forced   : variations can't override this slot. Cells appear
+ *             non-editable; the lock icon (added by JS) signals why.
+ *  optional : the value is a suggestion. Green border, NO fill — so
+ *             it's visually distinct from `inherited` (green fill).
+ *             Variations may override without warning.
+ */
+.ea-attr-editor__row--disabled {
+    opacity: 0.55;
+    border-left-color: var(--ea-text-dim, #777);
+}
+.ea-attr-editor__row--forced {
+    border-left-color: #b48be0;        /* soft purple = locked */
+}
+.ea-attr-editor__row--forced input.ea-attr-editor__cell,
+.ea-attr-editor__row--forced select.ea-attr-editor__cell {
+    background-color: rgba(180, 139, 224, 0.08);
+    border-color: rgba(180, 139, 224, 0.40);
+}
+.ea-attr-editor__row--optional {
+    border-left-color: #60c060;        /* same green as inherited, ... */
+    background: transparent;           /* ...but no fill — that's the cue */
+}
+.ea-attr-editor__row--optional input.ea-attr-editor__cell,
+.ea-attr-editor__row--optional select.ea-attr-editor__cell {
+    background-color: var(--ea-input-bg, #1e1e1e);
+    border-color: rgba(96, 192, 96, 0.50);
+}
+
+.ea-attr-editor__attention {
+    /* Positioned in the row's left gutter so it doesn't push the
+     * cells. The row already has `position: relative`. */
+    position: absolute;
+    left: -14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #d18138;            /* solarized orange */
+    font-size: 0.85em;
+    pointer-events: none;
+}
+
+.ea-attr-editor__revert {
+    /* Floats over the right edge of the row, outside the column grid.
+     * Sits ABOVE the trailing remove-button gutter that sortable_list
+     * draws, so it stays visible. */
+    position: absolute;
+    right: 24px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: transparent;
+    border: 0;
+    color: var(--ea-text-muted, #888);
+    cursor: pointer;
+    padding: 0.15em 0.35em;
+    font-size: 1.1em;
+    z-index: 1;
+}
+
+.ea-attr-editor__revert:hover {
+    color: #d18138;
+}
