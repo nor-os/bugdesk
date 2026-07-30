@@ -375,22 +375,28 @@ export class SettingsPage extends PageBase {
     }
 
     // ── Bridge-backed settings (project store, not localStorage) ──────────────
-    // A few settings are read by the Python backend from
-    // config/app_settings.json, so they're fetched/saved through the
-    // pywebview bridge rather than get/setSetting. They render as ordinary
-    // rows within their category but are wired separately.
-
+    // A settings row can be read/written through the pywebview bridge
+    // (`bridgeApi.get_setting`/`set_setting`) instead of localStorage's
+    // get/setSetting — for a value the BACKEND owns, not the browser. It
+    // renders as an ordinary row within its category but is wired
+    // separately (`data-control="bridge-*"`, see `_wireEvents`).
+    //
+    // Currently empty: the one entry this used to carry (`query_row_cap`,
+    // "Max rows from a Python generator" under a Data → Query console
+    // group) governed the row cap for the Python query terminal that lived
+    // in the legacy BottomPanel's Registries browser. That panel was
+    // deleted as dead code (permanently shadowed by ticketdesk's own
+    // Console — see ui/js/tiling/page_stubs.js's doc comment), BugDesk's
+    // C# backend never implemented the `get_setting`/`set_setting` bridge
+    // methods the row depended on, and nothing else in the codebase reads
+    // `query_row_cap` — so it was a settings row with no real effect,
+    // confusing for a bug tracker with no Python query surface. Removed
+    // rather than left in place; the mechanism itself stays (still a
+    // reasonable extension point for a future bridge-backed setting) and
+    // every call site below already handles zero defs gracefully.
     _bridgeDefs(categoryId) {
         if (!this._bridgeApi) return [];
-        const ALL = [{
-            category: 'data', group: 'Query console', path: 'query_row_cap',
-            label: 'Max rows from a Python generator',
-            description: 'Upper bound on how many rows a Python query may pull '
-                + 'from a lazy generator before it’s truncated. Finite results '
-                + '(lists, dicts, .where() / .series()) and SQL are never capped '
-                + '— the table paginates them. Default 50,000.',
-            type: 'number', default: 50000, min: 1, step: 1000,
-        }];
+        const ALL = [];
         return ALL.filter(d => d.category === categoryId);
     }
 
@@ -728,6 +734,25 @@ export class SettingsPage extends PageBase {
         if (value === null && getSetting(path) === null) return;
         setSetting(path, value);
         this._refreshControls();
+        this._maybeShowReloadHint(path);
+    }
+
+    /** A handful of settings (e.g. `bugdesk.humanName`/`agentName`) are read
+     *  once at module-load time by their consumer, so a change here won't
+     *  take effect until the next reload — see core/settings.js's doc
+     *  comment. Rather than hardcoding those paths here, the schema entry
+     *  itself carries `reloadHint: true`; this just surfaces it through the
+     *  same `toast:show` event-bus convention every other async-feedback
+     *  message in this codebase already uses. */
+    _maybeShowReloadHint(path) {
+        const def = getSchema()[path];
+        if (!def?.reloadHint) return;
+        this.eventBus?.emit?.('toast:show', {
+            title: 'Reload to apply',
+            message: `${def.label} is saved — reload BugDesk for it to take effect.`,
+            severity: 'info',
+            durationMs: 3000,
+        });
     }
 
     _debouncedApply(path, getValue) {

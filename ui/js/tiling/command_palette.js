@@ -21,8 +21,8 @@
  * the user actually came for further down the popup.
  */
 
-import { loadAllEntities, resolveTypePrefix } from './entity_sources.js';
-import { getKindMeta } from './kind_taxonomy.js';
+import { entityCatalog } from './entity_sources.js';
+import { taxonomy } from './kind_taxonomy.js';
 import { HelpModal } from '../help/help_modal.js';
 
 const ROOT_ID = 'twm-cmdpal';
@@ -90,7 +90,7 @@ export function createCommandPalette({ wm, api }) {
             // the alias label (passed from `refilter`) when it carries
             // information the taxonomy lookup can't infer.
             const head = typeFilter[0];
-            const meta = getKindMeta(head);
+            const meta = taxonomy.meta(head);
             const label = typeFilterLabel || meta?.label || head;
             chipSlot.innerHTML = `
                 <span class="twm-cmdpal__type-chip" title="Filtering by ${_esc(label)} (${typeFilter.length} kind${typeFilter.length === 1 ? '' : 's'})">
@@ -143,7 +143,7 @@ export function createCommandPalette({ wm, api }) {
             if (typeFilter) return false;
             const m = input.value.match(/^([a-zA-Z][a-zA-Z0-9_-]*):/);
             if (!m) return false;
-            const kinds = resolveTypePrefix(m[1]);
+            const kinds = entityCatalog.resolveTypePrefix(m[1]);
             if (!kinds || kinds.length === 0) return false;
             typeFilter = kinds;
             typeFilterLabel = _titleCase(m[1]);
@@ -208,13 +208,13 @@ export function createCommandPalette({ wm, api }) {
         // Commands are searchable instantly; entity rows are lazy-loaded
         // — the palette stays usable for shortcuts/commands while we wait.
         // The set is rebuilt on every open so the palette reflects
-        // entities the user just added this session (cheap; loadAllEntities
-        // runs every source in parallel).
+        // entities the user just added this session (cheap; entityCatalog's
+        // loadAll runs every source in parallel).
         entities = _decorateIcons(STATIC_COMMANDS.slice());
         refilter();   // paint the resting state (static commands) immediately
         if (api) {
             try {
-                entities = _decorateIcons([...STATIC_COMMANDS, ...await loadAllEntities(api)]);
+                entities = _decorateIcons([...STATIC_COMMANDS, ...await entityCatalog.loadAll(api)]);
                 // Re-filter so the freshly loaded rows show up. Skipped
                 // once the user has moved the selection: clobbering
                 // `active` mid-keyboard-navigation is worse than making
@@ -254,7 +254,7 @@ function _markup() {
 function _decorateIcons(rows) {
     return rows.map((r) => {
         if (r.icon) return r;
-        const meta = getKindMeta(r.kind);
+        const meta = taxonomy.meta(r.kind);
         return { ...r, icon: meta?.icon || 'arrow_right' };
     });
 }

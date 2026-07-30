@@ -876,10 +876,10 @@
 .td-wentry__text > :last-child { margin-bottom: 0; }
 
 /* Subtle author-distinguishing tint on the note's left accent, reusing
-   the same colors as the author badges (norman = internal/warning,
-   claude = public/teal). Keeps the badge language consistent. */
-.td-wentry--norman .td-wentry__text { border-left-color: var(--color-warning, #ff9800); }
-.td-wentry--claude .td-wentry__text { border-left-color: #4ec9b0; }
+   the same colors as the author badges (human = internal/warning,
+   agent = public/teal). Keeps the badge language consistent. */
+.td-wentry--human .td-wentry__text { border-left-color: var(--color-warning, #ff9800); }
+.td-wentry--agent .td-wentry__text { border-left-color: #4ec9b0; }
 
 /* Explicit assignee with an inline reassign picker (Bug Record). */
 .td-assignee { display: flex; gap: 6px; align-items: center; }

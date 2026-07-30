@@ -14,7 +14,7 @@
  * - html/js/workspace_state_machine.js (current implementation needing DI + cleanup).
  */
 
-import { StateMachine } from '../core/state_machine.js';
+import { StateMachine } from '@flexdesk/core';
 
 const STATES = Object.freeze({
     IDLE: 'idle',

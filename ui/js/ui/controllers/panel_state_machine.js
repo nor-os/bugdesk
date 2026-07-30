@@ -23,7 +23,7 @@
  * @module ui/controllers/panel_state_machine
  */
 
-import { StateMachine } from '../../core/state_machine.js';
+import { StateMachine } from '@flexdesk/core';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -53,7 +53,7 @@ export class PanelStateMachine {
     /** @type {StateMachine} */
     #machine;
 
-    /** @type {import('../../core/event_bus.js').default} */
+    /** @type {import('@flexdesk/core').EventBus} */
     #eventBus;
 
     /** @type {object|null} */
@@ -93,7 +93,7 @@ export class PanelStateMachine {
     /**
      * @param {object} config
      * @param {string} config.name                Panel identity ('right', 'bottom', etc.)
-     * @param {import('../../core/event_bus.js').default} config.eventBus
+     * @param {import('@flexdesk/core').EventBus} config.eventBus
      * @param {object}  [config.logger]
      * @param {string}  config.persistenceKey     localStorage key
      * @param {boolean} [config.defaultPinned]     Default pin state when no persisted data exists

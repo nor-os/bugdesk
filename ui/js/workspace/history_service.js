@@ -1,6 +1,3 @@
-import { NodePlatform } from '../nodes/node_platform.js';
-import { ConnectorRouter } from '../nodes/connector_router.js';
-
 const DEFAULT_LIMIT = 200;
 const HISTORY_EVENTS = Object.freeze({
     STATE: 'history:state',
@@ -15,26 +12,14 @@ export class HistoryService {
 
     constructor({
         eventBus,
-        nodePlatform,
-        connectorRouter,
-        nodeRenderer,
         dataManager = null,
-        workspaceResolver,
         logger = null,
         limit = DEFAULT_LIMIT,
-        mountPlot,
-        refreshOutput,
     } = {}) {
         this.eventBus = eventBus;
-        this.nodePlatform = nodePlatform;
-        this.connectorRouter = connectorRouter;
-        this.nodeRenderer = nodeRenderer;
         this.dataManager = dataManager;
-        this.workspaceResolver = typeof workspaceResolver === 'function' ? workspaceResolver : null;
         this.logger = logger;
         this.limit = Number.isFinite(limit) && limit > 0 ? limit : DEFAULT_LIMIT;
-        this.mountPlot = typeof mountPlot === 'function' ? mountPlot : null;
-        this.refreshOutput = typeof refreshOutput === 'function' ? refreshOutput : null;
 
         this.undoStack = [];
         this.redoStack = [];
@@ -46,12 +31,6 @@ export class HistoryService {
     start() {
         if (!this.eventBus) return;
         this.recordingEnabled = false; // enable after initial hydrate
-        this.#subscribe(NodePlatform.EVENTS.CREATED, (payload) => this.#handleNodeCreated(payload));
-        this.#subscribe(NodePlatform.EVENTS.REMOVED, (payload) => this.#handleNodeRemoved(payload));
-        this.#subscribe(NodePlatform.EVENTS.SNAPSHOT_UPDATED, (payload) => this.#handleSnapshotUpdated(payload));
-        this.#subscribe(ConnectorRouter.EVENTS.ADDED, (payload) => this.#handleConnectionAdded(payload));
-        this.#subscribe(ConnectorRouter.EVENTS.REMOVED, (payload) => this.#handleConnectionRemoved(payload));
-        this.#subscribe(ConnectorRouter.EVENTS.GEOMETRY_UPDATED, (payload) => this.#handleConnectionGeometryUpdated(payload));
 
         this.#subscribe('group:created', (payload) => this.#handleGroupCreated(payload));
         this.#subscribe('group:removed', (payload) => this.#handleGroupRemoved(payload));
@@ -193,32 +172,6 @@ export class HistoryService {
                     result = allOk;
                     break;
                 }
-                case 'node:create':
-                    result = direction === 'undo'
-                        ? this.#removeNode(action.snapshot.id)
-                        : this.#restoreNode(action.snapshot, action.connections);
-                    break;
-                case 'node:remove':
-                    result = direction === 'undo'
-                        ? this.#restoreNode(action.snapshot, action.connections)
-                        : this.#removeNode(action.snapshot.id);
-                    break;
-                case 'node:rename':
-                    result = this.#applyRename(action, direction);
-                    break;
-                case 'connection:add':
-                    result = direction === 'undo'
-                        ? this.#removeConnection(action.connection.id)
-                        : this.#restoreConnection(action.connection);
-                    break;
-                case 'connection:remove':
-                    result = direction === 'undo'
-                        ? this.#restoreConnection(action.connection)
-                        : this.#removeConnection(action.connection.id);
-                    break;
-                case 'connection:geometry':
-                    result = this.#applyConnectionGeometry(action, direction);
-                    break;
                 case 'group:create':
                     result = direction === 'undo'
                         ? this.#removeGroup(action.groupData.id)
@@ -238,143 +191,6 @@ export class HistoryService {
             this.isApplying = false;
         }
         return result;
-    }
-
-    #applyRename(action, direction) {
-        const { nodeId, namespaceId, previousName, nextName } = action;
-        const targetName = direction === 'undo' ? previousName : nextName;
-        const record = this.nodePlatform?.getNodeSnapshot?.(nodeId);
-        if (!record) return false;
-        const patch = { config: { ...(record.config || {}), displayName: targetName } };
-        this.nodePlatform.updateNodeSnapshot(nodeId, patch, { reason: 'history:rename', silent: false });
-        return true;
-    }
-
-    #applyConnectionGeometry(action, direction) {
-        const { connectionId, previousGeometry, nextGeometry } = action;
-        const geometry = direction === 'undo' ? previousGeometry : nextGeometry;
-        if (!this.connectorRouter?.updateConnectionGeometry) return false;
-        this.connectorRouter.updateConnectionGeometry(connectionId, geometry, { reason: 'history' });
-        return true;
-    }
-
-    #restoreConnection(connection) {
-        if (!connection || !this.connectorRouter?.addConnection) return false;
-        const exists = this.connectorRouter.getConnection?.(connection.id);
-        if (exists) return true;
-        try {
-            this.connectorRouter.addConnection({ ...connection }, { skipGuards: true });
-            return true;
-        } catch (err) {
-            this.logger?.warn?.('history', 'Failed to restore connection', { connectionId: connection.id, error: err });
-            return false;
-        }
-    }
-
-    #removeConnection(connectionId) {
-        if (!connectionId || !this.connectorRouter?.removeConnection) return false;
-        return this.connectorRouter.removeConnection(connectionId, { reason: 'history' });
-    }
-
-    #restoreNode(snapshot, connections = []) {
-        if (!snapshot || !this.nodePlatform?.createNode || !this.nodeRenderer) return false;
-        const existing = this.nodePlatform.getNodeSnapshot?.(snapshot.id);
-        if (!existing) {
-            const created = this.nodePlatform.createNode({
-                type: snapshot.type,
-                namespaceId: snapshot.namespaceId,
-                snapshot,
-            });
-            if (!created) return false;
-            const workspace = this.workspaceResolver ? this.workspaceResolver(snapshot.namespaceId) : null;
-            if (!workspace) {
-                this.logger?.warn?.('history', 'Workspace not found for node restore', { namespaceId: snapshot.namespaceId });
-            }
-            if (workspace) {
-                this.nodeRenderer.render(created, workspace);
-            }
-            this.refreshOutput?.(created.id);
-        }
-        connections.forEach((conn) => this.#restoreConnection(conn));
-        return true;
-    }
-
-    #removeNode(nodeId) {
-        if (!nodeId || !this.nodePlatform?.removeNode) return false;
-        const snapshot = this.nodePlatform.getNodeSnapshot?.(nodeId);
-        const removed = this.nodePlatform.removeNode(nodeId, { reason: 'history' });
-        if (removed && this.nodeRenderer?.remove) {
-            this.nodeRenderer.remove(nodeId);
-        }
-        if (removed && snapshot) {
-            this.refreshOutput?.(nodeId, { forceDownstream: false });
-        }
-        return Boolean(removed);
-    }
-
-    #handleNodeCreated({ snapshot, connections = [] } = {}) {
-        if (!snapshot) return;
-        this.#push({
-            type: 'node:create',
-            snapshot,
-            connections,
-        });
-    }
-
-    #handleNodeRemoved({ snapshot, connections = [] } = {}) {
-        if (!snapshot) return;
-        this.#push({
-            type: 'node:remove',
-            snapshot,
-            connections,
-        });
-    }
-
-    #handleSnapshotUpdated({ snapshot, previousSnapshot, reason } = {}) {
-        if (!snapshot || !previousSnapshot) return;
-        // Ignore hydration/import noise
-        const reasonText = String(reason || '').toLowerCase();
-        if (reasonText.includes('hydrate') || reasonText.includes('import')) return;
-
-        const prevName = previousSnapshot?.config?.displayName
-            ?? previousSnapshot?.state?.displayName
-            ?? previousSnapshot?.metadata?.title
-            ?? '';
-        const nextName = snapshot?.config?.displayName
-            ?? snapshot?.state?.displayName
-            ?? snapshot?.metadata?.title
-            ?? '';
-
-        if (prevName !== nextName) {
-            this.#push({
-                type: 'node:rename',
-                nodeId: snapshot.nodeId || snapshot.id,
-                namespaceId: snapshot.namespaceId,
-                previousName: prevName,
-                nextName: nextName,
-            });
-        }
-    }
-
-    #handleConnectionAdded(connection = {}) {
-        if (!connection?.id) return;
-        this.#push({ type: 'connection:add', connection });
-    }
-
-    #handleConnectionRemoved({ connection, reason } = {}) {
-        if (reason === 'node-removed') return; // handled as part of node removal action
-        if (!connection?.id) return;
-        this.#push({ type: 'connection:remove', connection });
-    }
-
-    #handleConnectionGeometryUpdated({ id, geometry, previousGeometry } = {}) {
-        if (!id || !geometry || !previousGeometry) return;
-        this.#push({
-            type: 'connection:geometry',
-            connectionId: id,
-            previousGeometry,
-            nextGeometry: geometry,
-        });
     }
 
     #handleGroupCreated({ groupData } = {}) {

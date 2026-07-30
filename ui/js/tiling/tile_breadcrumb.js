@@ -19,7 +19,7 @@
  * that path.
  */
 
-import { getKindMeta, topNavFor } from './kind_taxonomy.js';
+import { taxonomy } from './kind_taxonomy.js';
 
 /** Build a breadcrumb strip element + render initial state. Returns
  *  `{ el, destroy }`. The strip is wired to the WM: clicking a crumb
@@ -94,8 +94,8 @@ function _segments(kind, props) {
 
     // App-global pages (e.g. Settings) sit outside the content hierarchy —
     // render just the page crumb.
-    if (getKindMeta(kind)?.appGlobal) {
-        const meta = getKindMeta(kind);
+    if (taxonomy.meta(kind)?.appGlobal) {
+        const meta = taxonomy.meta(kind);
         segs.push({ icon: meta.icon, label: meta.label, nav: null });
         return segs;
     }
@@ -108,8 +108,8 @@ function _segments(kind, props) {
     // path Agents › <agent> › <pane>, not just the pane.
     const AGENT_PANE = { agent_signature: 'Signature', agent_code: 'Code', agent_flows: 'Flows' };
     if (AGENT_PANE[kind] && props?.id) {
-        const agentsMeta = getKindMeta('agents');
-        const agentMeta = getKindMeta('agent');
+        const agentsMeta = taxonomy.meta('agents');
+        const agentMeta = taxonomy.meta('agent');
         segs.push({
             icon: agentsMeta?.icon || 'group', label: agentsMeta?.label || 'Agents',
             nav: { kind: 'agents', props: {} },
@@ -122,8 +122,8 @@ function _segments(kind, props) {
         return segs;
     }
 
-    const topNav     = topNavFor(kind);
-    const topNavMeta = topNav ? getKindMeta(topNav) : null;
+    const topNav     = taxonomy.topNavFor(kind);
+    const topNavMeta = topNav ? taxonomy.meta(topNav) : null;
     // Home is the root — it has no ancestor to prepend. Same when the
     // kind isn't in the taxonomy at all.
     if (topNav && topNav !== 'home' && topNavMeta) {
@@ -143,8 +143,8 @@ function _segments(kind, props) {
         const dot = props.id.indexOf('.');
         if (dot > 0) {
             const archId   = props.id.slice(0, dot);
-            const archMeta = getKindMeta('market-archetype');
-            const marketMeta = getKindMeta('market');
+            const archMeta = taxonomy.meta('market-archetype');
+            const marketMeta = taxonomy.meta('market');
             segs.push({
                 icon:  archMeta?.icon || 'storefront',
                 label: archId,
@@ -160,7 +160,7 @@ function _segments(kind, props) {
         }
     }
 
-    const meta = getKindMeta(kind);
+    const meta = taxonomy.meta(kind);
     const hasEntity = !!props?.id;
     if (meta) {
         // The kind IS the top-nav (e.g. opening the Archetypes

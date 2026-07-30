@@ -6,8 +6,8 @@
  *   1. Ecosim shell mounts (global-top-bar, .container with workspace
  *      shell + panels, global-bottom-bar).
  *   2. installProjectSelector resolves the active project.
- *   3. installRuntimeControls decorates the original sim-controls DOM.
- *      (BugDesk drops the "Model OK" status indicator entirely.)
+ *      (BugDesk drops the "Model OK" status indicator entirely; there
+ *      never was a sim-controls topbar to decorate, so that step is gone.)
  *   4. We RELOCATE the populated `.sim-controls` (Run cluster, Step,
  *      Pause, Stop, batch toggle) from `.workspace-top-bar` up into
  *      `.global-top-bar .bar-right`. Sim controls now live in the
@@ -21,19 +21,20 @@
  */
 
 import { installProjectSelector } from '../ecoagent/project_selector.js';
-import { installRuntimeControls }  from '../ecoagent/runtime_controls.js';
 
 import { WindowManager } from './wm.js';
 import { createCommandPalette } from './command_palette.js';
 import { installKeymap } from './keymap.js';
 import { installHistoryBack } from './history_nav.js';
-import { registerPageStubs } from './page_stubs.js';
+import { createPageStubsContent } from './page_stubs.js';
 import { showContextMenu } from '../ecoagent/ui/context_menu.js';
 import { openForm } from '../ecoagent/ui/modal.js';
-import { KIND_CATALOG } from './content_registry.js';
-import { topNavFor } from './kind_taxonomy.js';
+import { taxonomy } from './kind_taxonomy.js';
 import { openTileTabMenu } from './tile_tab_menu.js';
 import { HelpModal } from '../help/help_modal.js';
+
+import { createContentRegistry } from '@flexdesk/wm';
+import { createPywebviewHost } from '@flexdesk/host';
 
 export async function installTilingShell({ eventBus, logger, runtime } = {}) {
     const log = logger ?? { info(){}, warn(){}, error(){}, debug(){} };
@@ -44,9 +45,7 @@ export async function installTilingShell({ eventBus, logger, runtime } = {}) {
     catch (err) { console.error('[tiling-shell] project selector threw', err); return null; }
     if (!project) { log.info?.('tiling-shell: no project active, deferring install'); return null; }
 
-    // 2. Decorate the original DOM (Run/Pause/Stop, sim-tick, sim-status).
-    installRuntimeControls({ eventBus, logger: log });
-    // BugDesk: no model/simulation health. Remove the bottom-left status
+    // 2. BugDesk: no model/simulation health. Remove the bottom-left status
     // indicator ("Model OK") entirely rather than decorating it.
     document.getElementById('status-indicator')?.remove();
 
@@ -78,17 +77,6 @@ export async function installTilingShell({ eventBus, logger, runtime } = {}) {
     _trimMenuBar();
     _installHamburgerMenu();
 
-    // 4c. Salvage the right-panel body so AI Assistant + Notes
-    //     (already mounted by the bootstrap into
-    //     `#right-collapsible-content-ai-chat` and `#project-notes-textarea`)
-    //     survive the upcoming `.container` removal. The panel:right
-    //     factory adopts this node into its tile body.
-    const rightPanelBody = document.querySelector('.panel.right .right-panel-body');
-    if (rightPanelBody) {
-        rightPanelBody.remove();
-        window.__twmSalvagedRightPanelBody = rightPanelBody;
-    }
-
     // 5. Delete the entire workspace shell (sidebars, panels, resizers,
     //    bottom panel, fl-bar, fixed-200). Don't hide — remove.
     document.querySelector('.container')?.remove();
@@ -104,15 +92,22 @@ export async function installTilingShell({ eventBus, logger, runtime } = {}) {
     if (top && bottom) document.body.insertBefore(wmHost, bottom);
     else document.body.appendChild(wmHost);
 
-    // 7. Build WM + palette + keymap.
-    registerPageStubs({ api: window.pywebview?.api, eventBus });
-    // BugDesk pages register AFTER the stubs so shared kinds
-    // ('home') resolve to the BugDesk factories. loadData() fetches the
-    // bugs + meta from the bridge and populates the live store BEFORE the
-    // first page renders (wm.load() below) so queues/team/dashboards start
-    // with real data rather than empty arrays.
+    // 7. Build the content registry, then the WM + palette + keymap.
+    //
+    // Content is built as a plain { kind: factory } map and handed to
+    // @flexdesk/wm's createContentRegistry(...) up front — content_registry.js
+    // (the old module-level Map + register() side effect) is gone; see
+    // page_stubs.js / ticketdesk/pages.js for why. BugDesk's own pages are
+    // merged AFTER the stubs so shared kinds ('home', the panel:* kinds)
+    // resolve to the BugDesk factories, exactly as `register()` order used
+    // to guarantee.
+    const pageStubsContent = createPageStubsContent({ api: window.pywebview?.api, eventBus });
+    let ticketDeskContent = {};
+    // loadData() fetches the bugs + meta from the bridge and populates the
+    // live store BEFORE the first page renders (wm.load() below) so
+    // queues/team/dashboards start with real data rather than empty arrays.
     try {
-        const { registerTicketDeskPages } = await import('../ticketdesk/pages.js');
+        const { createTicketDeskContent } = await import('../ticketdesk/pages.js');
         const { loadData } = await import('../ticketdesk/data.js');
         try {
             const { count } = await loadData();
@@ -120,13 +115,27 @@ export async function installTilingShell({ eventBus, logger, runtime } = {}) {
         } catch (err) {
             console.error('[bugdesk] loadData failed — pages will render empty', err);
         }
-        registerTicketDeskPages({ eventBus });
+        ticketDeskContent = createTicketDeskContent({ eventBus });
     } catch (err) {
         console.error('[bugdesk] page registration failed', err);
     }
+    const content = createContentRegistry({ ...pageStubsContent, ...ticketDeskContent });
+
+    // The host port (see @flexdesk/host's createPywebviewHost doc comment —
+    // "the adapter a standalone consumer copies"). `resolvePath` keeps the
+    // WM's desktop-layout persistence landing at the exact same
+    // `.ecoagent/desktops.json` path it always has (the packaged desktops.js
+    // module only ever reads/writes the logical key `desktops`).
+    const host = createPywebviewHost({
+        resolvePath: (key) => `.ecoagent/${key}.json`,
+        logger: log,
+    });
+
     const wm = new WindowManager({
         rootEl: wmHost,
         api: window.pywebview?.api,
+        host,
+        content,
         eventBus,
         ctx: { api: window.pywebview?.api, eventBus,
                onTileContextMenu: (leafId, x, y) => _tileContextMenu(wm, leafId, x, y),
@@ -242,7 +251,7 @@ function _installPageShortcuts() {
     host.innerHTML = '';
     host.classList.remove('global-search-container');
     host.classList.add('twm-top-nav');
-    for (const k of KIND_CATALOG) {
+    for (const k of taxonomy.topNavEntries()) {
         const btn = document.createElement('button');
         btn.className = 'twm-top-nav__btn has-tooltip';
         btn.dataset.kind = k.kind;
@@ -287,8 +296,8 @@ function _syncPageShortcuts(wm) {
     // but a shell is free to render a landing there — BugDesk's Home IS the
     // queue list — so it resolves to the FIRST top-nav entry rather than
     // matching nothing and leaving the strip unlit.
-    const topNavKind = topNavFor(activeKind)
-        || (activeKind === 'home' ? KIND_CATALOG[0]?.kind : null)
+    const topNavKind = taxonomy.topNavFor(activeKind)
+        || (activeKind === 'home' ? taxonomy.topNavEntries()[0]?.kind : null)
         || activeKind;
     host.querySelectorAll('[data-kind]').forEach((b) => {
         b.classList.toggle('twm-top-nav__btn--on', b.dataset.kind === topNavKind);

@@ -20,16 +20,10 @@
     <link href="css/documentation.css" rel="stylesheet" />
     <link href="css/etl_page.css" rel="stylesheet" />
     <link href="css/control_board.css" rel="stylesheet" />
-    <link href="css/results_dashboard.css" rel="stylesheet" />
     <link href="css/results_widgets.css" rel="stylesheet" />
-    <link href="css/mc_progress.css" rel="stylesheet" />
-    <link href="css/etl_progress.css" rel="stylesheet" />
     <link href="css/code.css" rel="stylesheet" />
-    <link href="css/components/godley_table.css" rel="stylesheet" />
     <link href="css/components/calibration.css" rel="stylesheet" />
-    <link href="css/components/slider_field.css" rel="stylesheet" />
     <link href="css/components/caption.css" rel="stylesheet" />
-    <link href="css/global_search.css" rel="stylesheet" />
     <link href="css/zoom_controls.css" rel="stylesheet" />
     <link href="css/components/tabs.css" rel="stylesheet" />
     <link href="css/managed_window.css" rel="stylesheet" />
@@ -52,6 +46,17 @@
     <link href="css/ecoagent_runpage.css" rel="stylesheet" />
     <link href="css/ecoagent_extra_modes.css" rel="stylesheet" />
     <link href="css/godley_table.css" rel="stylesheet" />
+
+    <!-- @flexdesk/wm's own chrome styling (tiles, tabs, command palette,
+         context menu, modal). Loaded BEFORE the tiling shell additions below
+         so those bugdesk-specific overrides keep winning the cascade — same
+         "loaded last so they win over legacy styles" rule those already
+         follow. Only flexdesk.css: bugdesk's own css/tokens.css already
+         defines every --twm-*/etc custom property flexdesk.css reads (a
+         repo-wide variable-name diff came back empty), so loading
+         vendor/flexdesk/tokens.css too would just fight bugdesk's own token
+         values for no benefit. -->
+    <link href="vendor/flexdesk/flexdesk.css" rel="stylesheet" />
 
     <!-- Tiling shell additions (loaded last so they win over legacy styles). -->
     <link href="css/tiling/tile.css" rel="stylesheet" />
@@ -81,7 +86,11 @@
             "@lezer/lr": "./vendor/lezer/lr.js",
             "crelt": "./vendor/crelt.js",
             "style-mod": "./vendor/style-mod.js",
-            "w3c-keyname": "./vendor/w3c-keyname.js"
+            "w3c-keyname": "./vendor/w3c-keyname.js",
+
+            "@flexdesk/core": "./vendor/flexdesk/core.js",
+            "@flexdesk/host": "./vendor/flexdesk/host.js",
+            "@flexdesk/wm": "./vendor/flexdesk/wm.js"
         }
     }
     </script>
@@ -131,6 +140,25 @@
     <!-- Original Ecosim chrome bootstrap + tiling-WM installer. -->
     <script type="module">
         import { bootstrapApplication } from './js/bootstrap/app_bootstrap.js';
+
+        // Resolve the configured author names BEFORE any ticketdesk module is
+        // imported (below and transitively, via install.js's own static
+        // imports) — those modules read window.__BUGDESK_CONFIG__ once, at
+        // module-evaluation time, so it must already be populated by then.
+        // Falls back to generic defaults if the bridge is unreachable.
+        window.__BUGDESK_CONFIG__ = { humanAuthor: 'reviewer', agentAuthor: 'agent' };
+        try {
+            const cfgRes = await fetch('/api/config', { headers: { accept: 'application/json' } });
+            const cfg = cfgRes.ok ? await cfgRes.json() : null;
+            if (cfg?.ok) {
+                window.__BUGDESK_CONFIG__ = {
+                    humanAuthor: cfg.humanAuthor || 'reviewer',
+                    agentAuthor: cfg.agentAuthor || 'agent',
+                };
+            }
+        } catch (err) {
+            console.warn('BugDesk: /api/config unavailable, using defaults', err);
+        }
 
         const root = document.getElementById('ecoagent-root');
         const notifications = document.getElementById('ecoagent-notifications');

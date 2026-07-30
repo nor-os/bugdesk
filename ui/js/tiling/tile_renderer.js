@@ -7,14 +7,18 @@
  * leaf or resizing doesn't re-mount tabs / pages.
  */
 
-import { mount as mountContent } from './content_registry.js';
-
 const SPLITTER_PX = 4;
 
 export class TileRenderer {
-    constructor({ root, tree, ctx, onFocusChange }) {
+    constructor({ root, tree, content, ctx, onFocusChange }) {
+        if (!content || typeof content.mount !== 'function') {
+            throw new Error('TileRenderer: a content registry is required');
+        }
         this.root = root;
         this.tree = tree;
+        // Shell-scoped kind -> factory table (see install.js's
+        // `createContentRegistry` call, from `@flexdesk/wm`).
+        this.content = content;
         this.ctx = ctx || {};
         this.onFocusChange = onFocusChange || (() => {});
         // leafId -> { wrapEl, bodyEl, chromeEl, content, kindKey }
@@ -251,7 +255,7 @@ export class TileRenderer {
             // The trade-off: `content.props` goes stale, so a leaf rebuilt
             // after a desktop round-trip must read the fresh tab props here.
             const activeProps = activeTab?.props ?? leaf.content.props;
-            content = mountContent(leaf.content.kind, body, activeProps, leafCtx);
+            content = this.content.mount(leaf.content.kind, body, activeProps, leafCtx);
             if (content.title) title.textContent = content.title;
         } else {
             body.innerHTML = `<div class="tile-placeholder"><div class="tile-placeholder__hint">empty tile</div></div>`;

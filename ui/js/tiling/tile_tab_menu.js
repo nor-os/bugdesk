@@ -17,7 +17,7 @@
  *   Esc        close
  */
 
-import { getKindMeta } from './kind_taxonomy.js';
+import { taxonomy } from './kind_taxonomy.js';
 
 /**
  * Open the tab list anchored at (x, y) — the top-left of the hamburger
@@ -105,7 +105,7 @@ export function openTileTabMenu({ x, y, tabs, activeIdx = 0, onPick }) {
     };
 
     listEl.innerHTML = list.map((t, i) => {
-        const meta  = getKindMeta(t.kind);
+        const meta  = taxonomy.meta(t.kind);
         const icon  = meta?.icon || 'tab';
         const label = t.title || meta?.label || t.kind || `Tab ${i + 1}`;
         return `

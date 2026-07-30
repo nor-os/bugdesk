@@ -1,13 +1,11 @@
 /**
  * python_query_helpers.js — shared Python helper catalogue + caret
- * parser used by both the KPI expression editor (kpi_tab.js) and the
- * bottom-panel Query terminal (bottom_panel.js).
+ * parser used by the KPI expression editor (kpi_tab.js).
  *
  * The catalogue mirrors `_build_safe_globals` in `ecoagent/sim/kpis.py`
  * — the same FP / aggregation vocabulary the KPI engine and
  * `shell_eval` both speak. Keeping a single source on the JS side
- * means autocomplete + the scope panel agree between the two
- * surfaces.
+ * means autocomplete + the scope panel agree.
  */
 
 export const PYTHON_HELPERS = [

@@ -17,14 +17,12 @@
 import { DesktopManager, saveDesktops, loadDesktops } from './desktops.js';
 import { TileRenderer } from './tile_renderer.js';
 import { makeLeaf } from './tile_tree.js';
-import { mount as mountContent } from './content_registry.js';
-import { parentKindFor, topNavFor, getKindMeta } from './kind_taxonomy.js';
-import { installPanelKeyRouter } from './panel_keys.js';
+import { taxonomy } from './kind_taxonomy.js';
+import { installPanelKeyRouter, PLACEHOLDER_KIND } from '@flexdesk/wm';
 import { ManagedWindow } from '../ui/components/managed_window.js';
 import { showContextMenu } from '../ecoagent/ui/context_menu.js';
 
 const PANEL_KINDS = new Set(['panel:left', 'panel:right', 'panel:bottom']);
-const PLACEHOLDER_KIND = 'window-placeholder';
 
 // ── Never-empty-tile invariant (fixes 7 & 8) ───────────────────────────
 // The shell seeds every fresh desktop with the HOME screen on boot
@@ -48,16 +46,44 @@ const PANEL_TITLES = {
 };
 
 export class WindowManager {
-    constructor({ rootEl, api, ctx, onChange, eventBus }) {
+    constructor({ rootEl, api, ctx, onChange, eventBus, host, content }) {
+        if (!content || typeof content.mount !== 'function') {
+            throw new Error('WindowManager: a content registry is required '
+                + '(createContentRegistry, from @flexdesk/wm)');
+        }
         this.rootEl = rootEl;
+        // Shell-scoped content registry (kind -> factory), built once in
+        // install.js via @flexdesk/wm's createContentRegistry. NOT a module
+        // singleton — content_registry.js (the old module-level Map +
+        // register() pattern) is gone; see install.js for why.
+        this.content = content;
         this.api = api || null;
+        // The host port (see @flexdesk/host's createPywebviewHost). Used
+        // below for desktop-layout persistence. `this.api` stays: the
+        // domain page factories (ticketdesk/pages.js, page_stubs.js) still
+        // read `ctx.api` directly — that coupling is unrelated to this
+        // migration.
+        this.host = host || null;
         this.ctx = ctx || {};
         this.eventBus = eventBus || null;
         this.onChange = onChange || (() => {});
-        this.desktops = new DesktopManager();
+
+        // The leaf a fresh or emptied desktop starts with. Comes from the
+        // taxonomy's root kind, not a bare hardcoded 'home' — see the
+        // never-empty-tile invariant below, which reuses this same spec
+        // for in-flight re-seeds (split/close/promote).
+        this._rootLeaf = () => {
+            const kind = taxonomy.root;
+            return {
+                content: { kind, props: {} },
+                title: taxonomy.meta(kind)?.label || kind,
+            };
+        };
+        this.desktops = new DesktopManager({ seed: this._rootLeaf });
         this.renderer = new TileRenderer({
             root: rootEl,
             tree: this.desktops.active().tree,
+            content,
             ctx: {
                 ...this.ctx,
                 wm: this,
@@ -74,7 +100,7 @@ export class WindowManager {
 
         // Central keyboard router: panels register key handlers and the
         // router dispatches each keydown only to the panel inside the
-        // currently focused leaf (see panel_keys.js). One authority for
+        // currently focused leaf (see @flexdesk/wm's panel_keys module). One authority for
         // "which panel owns the keyboard" instead of every panel guessing
         // from document.activeElement.
         this.panelKeys = installPanelKeyRouter(this);
@@ -127,9 +153,9 @@ export class WindowManager {
 
     // ── Persistence ─────────────────────────────────────────────────
     async load() {
-        const blob = await loadDesktops(this.api);
+        const blob = await loadDesktops(this.host?.state);
         if (blob) {
-            this.desktops = DesktopManager.deserialize(blob);
+            this.desktops = DesktopManager.deserialize(blob, { seed: this._rootLeaf });
             this.renderer.tree = this.desktops.active().tree;
         }
         // Normalize: managed windows don't survive a reload, so any
@@ -156,7 +182,7 @@ export class WindowManager {
         if (this._persistTimer) clearTimeout(this._persistTimer);
         this._persistTimer = setTimeout(async () => {
             this._persistTimer = null;
-            await saveDesktops(this.api, this.desktops.serialize());
+            await saveDesktops(this.host?.state, this.desktops.serialize());
         }, 500);
     }
 
@@ -206,7 +232,7 @@ export class WindowManager {
             // routes via swapToPage so we land on the correct page.
             const leafNow = tree.get(id);
             const curKind = leafNow?.content?.kind;
-            const curTopNav = curKind ? topNavFor(curKind) : null;
+            const curTopNav = curKind ? taxonomy.topNavFor(curKind) : null;
             if (prior.topNav && curTopNav && prior.topNav !== curTopNav) {
                 tree.swapToPage?.(
                     id,
@@ -257,7 +283,7 @@ export class WindowManager {
                 return;
             }
         }
-        const parent = parentKindFor(kind);
+        const parent = taxonomy.parentKindFor(kind);
         if (parent) this.navigateActiveTab(id, parent);
     }
 
@@ -283,7 +309,7 @@ export class WindowManager {
         // Backspace also does something for a drilled-in tab: it closes
         // it. Keep the breadcrumb Back affordance consistent with that.
         if (_isDrilledInKind(kind)) return true;
-        return !!(kind && parentKindFor(kind));
+        return !!(kind && taxonomy.parentKindFor(kind));
     }
 
     /** Persist editor sub-state (e.g. active sub-tab) into the active
@@ -377,7 +403,7 @@ export class WindowManager {
         if (!rec) { this.openInPrimary(kind, props); return; }
         try { rec.mountInfo?.destroy?.(); } catch {}
         rec.contentEl.innerHTML = '';
-        const mountInfo = mountContent(kind, rec.contentEl, props,
+        const mountInfo = this.content.mount(kind, rec.contentEl, props,
             { ...this.ctx, wm: this, windowId: winId });
         rec.mountInfo = mountInfo;
         rec.original = {
@@ -417,9 +443,9 @@ export class WindowManager {
         // default branch initializes a fresh single tab.
         const leaf = tree.get(leafId);
         const currentTopNav = leaf?.content?.kind
-            ? topNavFor(leaf.content.kind) || null
+            ? taxonomy.topNavFor(leaf.content.kind) || null
             : null;
-        const targetTopNav  = topNavFor(kind) || kind;
+        const targetTopNav  = taxonomy.topNavFor(kind) || kind;
         const title = _tabTitle(kind, props);
         tree.swapToPage(leafId,
             { kind, props, title },
@@ -726,7 +752,7 @@ export class WindowManager {
         contentEl.style.cssText = 'display:flex; flex-direction:column; flex:1; min-width:0; min-height:0; height:100%;';
 
         const winId = `twm-mw-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`;
-        const mountInfo = mountContent(original.kind, contentEl, original.props,
+        const mountInfo = this.content.mount(original.kind, contentEl, original.props,
             { ...this.ctx, wm: this, windowId: winId });
         const win = new ManagedWindow({
             id: winId,
@@ -1107,8 +1133,7 @@ export class WindowManager {
         // Remove from current desktop.
         tree.close(focused.id);
         if (!tree.rootId) {
-            const leaf = makeLeaf({ content: { kind: 'home', props: {} }, title: 'Home' });
-            tree.setRoot(leaf);
+            tree.setRoot(makeLeaf(this._rootLeaf()));
         }
         this.renderer.render();
         this._persist();
@@ -1389,7 +1414,7 @@ export class WindowManager {
         contentEl.className = 'twm-window-content';
         contentEl.style.cssText = 'display:flex; flex-direction:column; flex:1; min-width:0; min-height:0; height:100%;';
         const title = _tabTitle(kind, props);
-        const mountInfo = mountContent(kind, contentEl, props,
+        const mountInfo = this.content.mount(kind, contentEl, props,
             { ...this.ctx, wm: this, windowId: winId });
         const win = new ManagedWindow({
             id: winId,
@@ -1521,7 +1546,7 @@ export class WindowManager {
  *  in the taxonomy — are treated as drill-ins too. */
 function _isDrilledInKind(kind) {
     if (!kind || kind === 'home' || kind === HOME_KIND) return false;
-    const meta = getKindMeta(kind);
+    const meta = taxonomy.meta(kind);
     if (meta && meta.isTopNav) return false;
     return true;
 }
@@ -1551,7 +1576,7 @@ function _openerMatches(tabs, activeIdx, want) {
     if (!openerKind || !want?.kind) return false;
     if (openerKind === HOME_KIND) return true;
     if (openerKind !== want.kind
-        && (topNavFor(openerKind) || openerKind) !== (topNavFor(want.kind) || want.kind)) {
+        && (taxonomy.topNavFor(openerKind) || openerKind) !== (taxonomy.topNavFor(want.kind) || want.kind)) {
         return false;
     }
     // Entity pages additionally have to be the SAME entity — landing on

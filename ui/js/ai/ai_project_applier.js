@@ -34,7 +34,7 @@ export class AiProjectApplier {
     /** @type {object|null} */
     #projectModel;
 
-    /** @type {import('../core/event_bus.js').default} */
+    /** @type {import('@flexdesk/core').EventBus} */
     #eventBus;
 
     /** @type {object} */
@@ -43,7 +43,7 @@ export class AiProjectApplier {
     /**
      * @param {object} deps
      * @param {object} [deps.projectModel]  Kept for interface compat.
-     * @param {import('../core/event_bus.js').default} deps.eventBus
+     * @param {import('@flexdesk/core').EventBus} deps.eventBus
      * @param {object} [deps.logger]
      */
     constructor({ projectModel, eventBus, logger }) {

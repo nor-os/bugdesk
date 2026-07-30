@@ -2,27 +2,24 @@
  * About Dialog Component
  * Location: ui/components/about_dialog.js
  *
- * Purpose: Show EcoAgent version, license, GitHub link, and third-party credits.
+ * Purpose: Show BugDesk's version, license, GitHub link, and third-party credits.
  * Uses ManagedWindow modal following the confirm_dialog.js pattern.
  */
 
 import { ManagedWindow } from './managed_window.js';
 
-const GITHUB_URL = 'https://github.com/nor-os/EcoAgent';
-const LICENSE = 'MPL-2.0';
-const VERSION = '0.1';
-const PRODUCT_NAME = 'EcoAgent';
-const TAGLINE = 'Heterogeneous-agent, stock-flow-consistent macroeconomic simulation';
+const GITHUB_URL = 'https://github.com/nor-os/bugdesk';
+const LICENSE = 'MIT';
+const VERSION = '0.1.0';
+const PRODUCT_NAME = 'BugDesk';
+const TAGLINE = 'A local, markdown-backed bug tracker';
 
-const PYTHON_DEPS = [
-    { name: 'NumPy', license: 'BSD-3-Clause', url: 'https://numpy.org' },
-    { name: 'SciPy', license: 'BSD-3-Clause', url: 'https://scipy.org' },
-    { name: 'pandas', license: 'BSD-3-Clause', url: 'https://pandas.pydata.org' },
-    { name: 'pywebview', license: 'BSD-3-Clause', url: 'https://pywebview.flowrl.com' },
-    { name: 'Flask', license: 'BSD-3-Clause', url: 'https://flask.palletsprojects.com' },
+const BACKEND_DEPS = [
+    { name: '.NET SDK', license: 'MIT', url: 'https://github.com/dotnet/sdk' },
 ];
 
 const FRONTEND_DEPS = [
+    { name: 'FlexDesk', license: 'MIT', url: 'https://github.com/nor-os/FlexDesk' },
     { name: 'CodeMirror 6', license: 'MIT', url: 'https://codemirror.net' },
     { name: 'Monaco Editor', license: 'MIT', url: 'https://microsoft.github.io/monaco-editor' },
     { name: 'Plotly.js', license: 'MIT', url: 'https://plotly.com/javascript' },
@@ -75,7 +72,7 @@ function buildDepSection(title, deps) {
 }
 
 /**
- * Show the About EcoAgent dialog.
+ * Show the About BugDesk dialog.
  * @returns {Promise<void>} Resolves when the dialog is closed.
  */
 export function showAboutDialog() {
@@ -99,7 +96,7 @@ export function showAboutDialog() {
 
         const logo = document.createElement('span');
         logo.className = 'about-dialog__logo material-symbols-outlined';
-        logo.textContent = 'account_balance';
+        logo.textContent = 'bug_report';
         header.appendChild(logo);
 
         const title = document.createElement('h2');
@@ -155,7 +152,7 @@ export function showAboutDialog() {
         body.appendChild(projectSection);
 
         // Dependency sections
-        body.appendChild(buildDepSection('Python Backend', PYTHON_DEPS));
+        body.appendChild(buildDepSection('Backend', BACKEND_DEPS));
         body.appendChild(buildDepSection('Frontend JavaScript', FRONTEND_DEPS));
 
         contentEl.appendChild(body);

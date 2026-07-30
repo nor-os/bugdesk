@@ -38,7 +38,6 @@
  * the open queue without a reload.
  */
 
-import { register } from '../tiling/content_registry.js';
 import { mountTileBreadcrumb } from '../tiling/tile_breadcrumb.js';
 import { DataTable } from '../ui/components/data_table.js';
 import { showContextMenu } from '../ecoagent/ui/context_menu.js';
@@ -55,7 +54,7 @@ import {
 } from './links.js';
 import { attachTagInput } from './tag_input.js';
 import {
-    esc, STAGES, TICKETS, TEAM,
+    esc, STAGES, TICKETS, TEAM, HUMAN_AUTHOR, AGENT_AUTHOR,
     fetchBug, patchBug, postComment, createBug, loadData, initials,
     machineStatus, machineType, typeCode, typeLabelOf, humanizeStatus,
 } from './data.js';
@@ -502,7 +501,7 @@ function maskSections(t, mode) {
             ${field('Type', sel('type', ['Bug', 'Regression', 'Task'], typeLabelOf(t.type)), true)}
             ${field('Severity', sel('severity', ['crash', 'high', 'medium', 'low'], t.severity || 'medium'), true)}
             ${field('Subsystem', tin('subsystem', t.subsystem))}
-            ${mode === 'search' ? '' : field('Assignee', `<div class="td-assignee">${sel('assignee', ['norman', 'claude'], t.assignee || 'norman')}<button type="button" class="ea-btn td-reassign" data-a="reassign" title="Reassign this bug">${icon('person_search')}</button></div>`)}
+            ${mode === 'search' ? '' : field('Assignee', `<div class="td-assignee">${sel('assignee', [HUMAN_AUTHOR, AGENT_AUTHOR], t.assignee || HUMAN_AUTHOR)}<button type="button" class="ea-btn td-reassign" data-a="reassign" title="Reassign this bug">${icon('person_search')}</button></div>`)}
             <div class="td-field td-span2"><label>Labels</label>${tin('labels', (t.labels || []).join(', '))}</div>
             ${mode === 'edit' ? field('Created', `<input class="ea-tin td-mono" value="${esc(t.created || '—')}" readonly>`) : ''}
             ${mode === 'edit' ? field('Updated', `<input class="ea-tin td-mono" data-f="updated" value="${esc(t.sla || '—')}" readonly>`) : ''}
@@ -542,7 +541,7 @@ function mountTicket(host, props, ctx) {
     const t = mode === 'edit'
         ? (TICKETS.find((x) => x.id === props?.id) || TICKETS[0])
         : { id: '', bugId: null, pri: 3, type: 'BUG', summary: '', status: 'Open', rawStatus: 'open',
-            sla: '', assignee: 'norman', subsystem: '', severity: 'medium', labels: [], links: [] };
+            sla: '', assignee: HUMAN_AUTHOR, subsystem: '', severity: 'medium', labels: [], links: [] };
 
     if (mode === 'edit' && !t) {
         host.innerHTML = `<div class="tile-placeholder"><div class="tile-placeholder__title">No bug</div>
@@ -573,7 +572,7 @@ function mountTicket(host, props, ctx) {
         <div class="td-mask">${maskSections(t, mode)}
             ${mode === 'edit' ? `
             <section class="td-group">
-                <div class="td-group__title">Comments <span class="td-dim">— posted as norman</span></div>
+                <div class="td-group__title">Comments <span class="td-dim">— posted as ${esc(HUMAN_AUTHOR)}</span></div>
                 <div class="td-group__body" data-slot="comments"></div>
             </section>` : ''}
             <div data-slot="results"></div>
@@ -848,7 +847,7 @@ function mountTicket(host, props, ctx) {
                     severity: fval('severity') || 'medium',
                     type: machineType(fval('type') || 'Bug'),
                     subsystem: fval('subsystem') || 'unsorted',
-                    assignee: fval('assignee') || 'norman',
+                    assignee: fval('assignee') || HUMAN_AUTHOR,
                     labels: fval('labels') ? fval('labels').split(',').map((s) => s.trim()).filter(Boolean) : [],
                     // Relationships staged in the Links section while filing.
                     links: t.links || [],
@@ -897,7 +896,7 @@ function mountTicket(host, props, ctx) {
         type: machineType(fval('type')),
         severity: fval('severity'),
         subsystem: fval('subsystem') || 'unsorted',
-        assignee: fval('assignee') || 'norman',
+        assignee: fval('assignee') || HUMAN_AUTHOR,
         labels: fval('labels') ? fval('labels').split(',').map((s) => s.trim()).filter(Boolean) : [],
     });
 
@@ -913,7 +912,7 @@ function mountTicket(host, props, ctx) {
         renderStages();
         Object.assign(t, {
             summary: bug.title, status: humanizeStatus(bug.status), rawStatus: bug.status,
-            assignee: bug.assignee || 'norman', severity: bug.severity, subsystem: bug.subsystem || 'unsorted',
+            assignee: bug.assignee || HUMAN_AUTHOR, severity: bug.severity, subsystem: bug.subsystem || 'unsorted',
             stage: bug.stage, sla: bug.updated || '', type: typeCode(bug.type), pri: SEV_PRI[bug.severity] || 3,
             labels: Array.isArray(bug.labels) ? bug.labels : [],
             links: Array.isArray(bug.links) ? bug.links : [],
@@ -930,12 +929,12 @@ function mountTicket(host, props, ctx) {
 
     const cmtHost = () => $('[data-slot="comments"]');
     const commentHTML = (c) => `
-        <div class="td-wentry td-wentry--${c.author === 'norman' ? 'norman' : 'claude'}">
+        <div class="td-wentry td-wentry--${c.author === HUMAN_AUTHOR ? 'human' : 'agent'}">
             <span class="td-avatar">${esc(initials(c.author))}</span>
             <div>
                 <div class="td-wentry__head">
                     <b>${esc(c.author)}</b>
-                    <span class="td-chip td-chip--${c.author === 'norman' ? 'internal' : 'public'}">${esc(c.author)}</span>
+                    <span class="td-chip td-chip--${c.author === HUMAN_AUTHOR ? 'internal' : 'public'}">${esc(c.author)}</span>
                     <span class="td-dim td-mono">${esc(c.date)}</span>
                 </div>
                 <div class="td-wentry__text td-md">${md(c.body)}</div>
@@ -953,10 +952,10 @@ function mountTicket(host, props, ctx) {
         const comments = (bug.comments || []).slice().reverse();
         el.innerHTML = `
             <div class="td-composer">
-                <span class="td-avatar">NO</span>
+                <span class="td-avatar">${esc(initials(HUMAN_AUTHOR))}</span>
                 <div class="td-composer__box">
                     <textarea class="ea-tin td-area" rows="2"
-                        placeholder="Add a comment as norman… (Enter posts, Alt+Enter for a new line, paste a screenshot to attach it)"></textarea>
+                        placeholder="Add a comment as ${esc(HUMAN_AUTHOR)}… (Enter posts, Alt+Enter for a new line, paste a screenshot to attach it)"></textarea>
                 </div>
             </div>
             <div class="td-wstream">${comments.length ? comments.map(commentHTML).join('') : '<div class="td-dim">No comments yet.</div>'}</div>`;
@@ -966,7 +965,7 @@ function mountTicket(host, props, ctx) {
             if (!text) { statusLine('Nothing to post.'); return; }
             if (!t.bugId) { statusLine('Local bug — cannot comment.'); return; }
             try {
-                const updated = await postComment(t.bugId, text, 'norman');
+                const updated = await postComment(t.bugId, text, HUMAN_AUTHOR);
                 applyBug(updated); renderDesc(updated); renderComments(updated); renderLinks();
                 statusLine('Comment added.');
             } catch (err) { statusLine(`Comment failed: ${err.message}`); }
@@ -1238,7 +1237,7 @@ function mountTicketBottomPanel(host, props, ctx) {
     for (const t of TICKETS) byStatus[t.rawStatus] = (byStatus[t.rawStatus] || 0) + 1;
     const line = ['open', 'investigation', 'testing', 'closed']
         .map((s) => `${humanizeStatus(s)}: ${byStatus[s] || 0}`).join(' · ');
-    const needs = TICKETS.filter((t) => t.lastCommentAuthor === 'claude').length;
+    const needs = TICKETS.filter((t) => t.lastCommentAuthor === AGENT_AUTHOR).length;
     host.innerHTML = `
         <div class="twm-bp">
             <div class="twm-bp__tabs" role="tablist">
@@ -1246,26 +1245,41 @@ function mountTicketBottomPanel(host, props, ctx) {
             </div>
             <div class="twm-bp__body" role="tabpanel">
                 <div class="td-audit">
-                    <div><span class="td-dim td-mono">—</span> <span class="td-link">bugdesk</span> — markdown bug store is the source of truth (SharpGenerals/bugs/*.md)</div>
+                    <div><span class="td-dim td-mono">—</span> <span class="td-link">bugdesk</span> — markdown bug store is the source of truth (BUGDESK_BUGS)</div>
                     <div><span class="td-dim td-mono">—</span> <span class="td-link">store</span> — ${esc(line)}</div>
-                    <div><span class="td-dim td-mono">—</span> <span class="td-link">needs my reply</span> — ${needs} bug${needs === 1 ? '' : 's'} awaiting norman</div>
+                    <div><span class="td-dim td-mono">—</span> <span class="td-link">needs my reply</span> — ${needs} bug${needs === 1 ? '' : 's'} awaiting ${esc(HUMAN_AUTHOR)}</div>
                 </div>
             </div>
         </div>`;
     return { title: 'Console' };
 }
 
-/* ── registration ───────────────────────────────────────────────── */
+/* ── content map ────────────────────────────────────────────────── */
 
-export function registerTicketDeskPages({ eventBus } = {}) {
+/**
+ * Build BugDesk's own content map — `{ kind: factory }` — for the kinds
+ * this file owns (queues / home / ticket / the three panel kinds).
+ *
+ * Used to call a module-level `register(kind, factory)` from the now-
+ * deleted content_registry.js. install.js now merges this map AFTER
+ * page_stubs.js's (so these entries win for the shared kinds: 'home',
+ * 'panel:left', 'panel:right', 'panel:bottom') and hands the result to
+ * `@flexdesk/wm`'s `createContentRegistry(...)`.
+ */
+export function createTicketDeskContent({ eventBus } = {}) {
     _eventBus = eventBus || null;
     // Pull the user's custom filters. This is deliberately NOT awaited —
-    // registerTicketDeskPages is synchronous and install.js registers pages
-    // right before the first mount. Until the store lands, listFilters() is
-    // [] (the rail shows only builtins and a queue on a custom id resolves
-    // to 'all'); the notify() at the end of loadFilters then re-renders the
-    // rail and every open queue through their onFiltersChanged subscription.
+    // createTicketDeskContent is synchronous and install.js builds the
+    // content map right before the first mount. Until the store lands,
+    // listFilters() is [] (the rail shows only builtins and a queue on a
+    // custom id resolves to 'all'); the notify() at the end of loadFilters
+    // then re-renders the rail and every open queue through their
+    // onFiltersChanged subscription.
     loadFilters().catch((err) => console.warn('[bugdesk] filter store load failed', err));
+
+    const content = {};
+    const register = (kind, factory) => { content[kind] = factory; };
+
     register('queues', shell('queues', mountQueues));
     // WM default leaf is 'home'. A #ticket hash retargets it — used for
     // headless verification of the ticket detail page.
@@ -1276,4 +1290,6 @@ export function registerTicketDeskPages({ eventBus } = {}) {
     register('panel:left', mountTicketNav);
     register('panel:right', mountTicketInspector);
     register('panel:bottom', mountTicketBottomPanel);
+
+    return content;
 }

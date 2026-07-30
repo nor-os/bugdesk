@@ -35,6 +35,8 @@
  * carries `updated`), and lastCommentAuthor collapses null to the sentinel
  * 'none' so "nobody has commented" is a selectable enum option. */
 
+import { HUMAN_AUTHOR, AGENT_AUTHOR } from './data.js';
+
 export const FILTER_FIELDS = [
     { key: 'id', label: 'Bug', type: 'text', get: (t) => t.id || '' },
     { key: 'pri', label: 'Priority', type: 'number', get: (t) => t.pri },
@@ -57,7 +59,7 @@ export const FILTER_FIELDS = [
     { key: 'subsystem', label: 'Subsystem', type: 'text', get: (t) => t.subsystem || '' },
     {
         key: 'assignee', label: 'Assignee', type: 'enum',
-        options: ['norman', 'claude'],
+        options: [HUMAN_AUTHOR, AGENT_AUTHOR],
         get: (t) => t.assignee || '',
     },
     { key: 'labels', label: 'Labels', type: 'set', get: (t) => Array.isArray(t.labels) ? t.labels : [] },
@@ -66,7 +68,7 @@ export const FILTER_FIELDS = [
     { key: 'comments', label: 'Comments', type: 'number', get: (t) => t.comments || 0 },
     {
         key: 'lastCommentAuthor', label: 'Last comment by', type: 'enum',
-        options: ['norman', 'claude', 'none'],
+        options: [HUMAN_AUTHOR, AGENT_AUTHOR, 'none'],
         get: (t) => t.lastCommentAuthor || 'none',
     },
     { key: 'lastCommentDate', label: 'Last comment', type: 'date', get: (t) => t.lastCommentDate || '' },
@@ -414,7 +416,7 @@ export const BUILTIN_FILTERS = [
         key: 'needs-reply', label: 'Needs my reply', icon: 'mark_chat_unread', builtin: true,
         expr: {
             kind: 'group', op: 'AND', children: [
-                { kind: 'clause', field: 'lastCommentAuthor', op: 'is', value: 'claude' },
+                { kind: 'clause', field: 'lastCommentAuthor', op: 'is', value: AGENT_AUTHOR },
                 { kind: 'clause', field: 'status', op: 'is_not', value: 'closed' },
             ],
         },
@@ -445,11 +447,11 @@ export const BUILTIN_FILTERS = [
     },
     {
         key: 'on-me', label: 'On me', icon: 'person', builtin: true,
-        expr: { kind: 'group', op: 'AND', children: [{ kind: 'clause', field: 'assignee', op: 'is', value: 'norman' }] },
+        expr: { kind: 'group', op: 'AND', children: [{ kind: 'clause', field: 'assignee', op: 'is', value: HUMAN_AUTHOR }] },
     },
     {
-        key: 'on-claude', label: 'On Claude', icon: 'smart_toy', builtin: true,
-        expr: { kind: 'group', op: 'AND', children: [{ kind: 'clause', field: 'assignee', op: 'is', value: 'claude' }] },
+        key: 'on-agent', label: `On ${AGENT_AUTHOR}`, icon: 'smart_toy', builtin: true,
+        expr: { kind: 'group', op: 'AND', children: [{ kind: 'clause', field: 'assignee', op: 'is', value: AGENT_AUTHOR }] },
     },
 ];
 

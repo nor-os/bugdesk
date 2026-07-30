@@ -13,11 +13,11 @@
  * - Emit `app:ready` / `app:hydrated` events once subsystems report readiness.
  */
 
-import { getSetting, registerSettingsEventBus } from '../core/settings.js';
+import {
+    getSetting, registerSettings, registerSettingsEventBus, BUGDESK_SETTINGS_SLICE,
+} from '../core/settings.js';
 
-import { EventBus } from '../core/event_bus.js';
-import { LoggingService } from '../core/logging.js';
-import { StateGuardService } from '../core/state_guard.js';
+import { EventBus, LoggingService, StateGuardService } from '@flexdesk/core';
 import { DEFAULT_STATE_GUARD_CONFIG } from '../core/state_guard_config.js';
 import { DataManager } from '../data/data_manager.js';
 import { DataHubService } from '../data/data_hub.js';
@@ -42,30 +42,13 @@ import { NotificationCenter } from '../ui/notification_center.js';
 import { NotificationHistory } from '../ui/components/notification_history.js';
 import { resetTableStore } from '../ui/components/table_state_store.js';
 import { HelpModal } from '../help/help_modal.js';
-import { NotebookPage } from '../ui/pages/notebook/notebook_page.js';
 import { ProjectModel } from '../data/project_model.js';
-import { DataPage } from '../ui/pages/data_page.js';
-import { CalibrationPage } from '../ui/pages/calibration_page.js';
-import { PaperPage } from '../ui/pages/paper/paper_page.js';
-import { openCalibrationModal } from '../ui/components/calibration_modal.js';
-import { openPolicyDesigner } from '../ui/pages/policy_designer/policy_designer_window.js';
-import { openModuleEditorWindow } from '../ui/components/module_editor_window.js';
-import { openModelCodeWindow } from '../ui/components/model_code_window.js';
 import { showAboutDialog } from '../ui/components/about_dialog.js';
-import { SimulationErrorHandler } from '../simulation/error_handler.js';
-import { getStreamingClient } from '../simulation/streaming_client.js';
 import { ApplicationShell } from '../ui/shell/application_shell.js';
 import { WindowChromeController } from '../ui/controllers/window_chrome_controller.js';
-import { loadEtlPlugins } from '../etl/etl_plugin_registry.js';
-import { LOGGING_LEVEL_OVERRIDES, mergeLoggingLevels } from '../config/logging_levels.js';
-import '../ui/components/inline_renamer.js';
+import { mergeLoggingLevels } from '../config/logging_levels.js';
 // Tooltip service - initializes on import, sets up window.LatexTooltip
 import '../ui/utils/tooltip_service.js';
-// Results tile dashboard - auto-registers on import
-import '../results/index.js';
-import { GlobalSearchService } from '../search/global_search_service.js';
-import { GlobalSearchController } from '../search/global_search_controller.js';
-import { AiChatController } from '../ai/ai_chat_controller.js';
 
 import {
     DEFAULT_AUTOSAVE_KEY,
@@ -82,46 +65,16 @@ const APP_EVENTS = Object.freeze({
     DESTROYED: 'app:destroyed',
 });
 
-// LocalStorage key for remembering last active page
-const ACTIVE_PAGE_STORAGE_KEY = 'ecosim.ui.activePage';
-
 const extractFileName = (path) => path.split(/[\\/]/).pop() || path;
-
-/**
- * Get the stored active page from localStorage.
- * @returns {string|null} Stored page key or null if not available
- */
-function getStoredActivePage() {
-    try {
-        return localStorage.getItem(ACTIVE_PAGE_STORAGE_KEY);
-    } catch (e) {
-        // localStorage may be unavailable (private browsing, etc.)
-        return null;
-    }
-}
-
-const PAGE_KEYS = Object.freeze({
-    NOTEBOOK: 'notebook',
-    PAPER: 'paper',
-    DATA: 'data',
-    CALIBRATION: 'calibration',
-});
-
-const DEFAULT_MOUNT_CLASSES = Object.freeze({
-    data: 'ecosim-data',
-    notifications: 'ecosim-notifications',
-});
-
-const VALID_PAGE_KEYS = new Set(Object.values(PAGE_KEYS));
-const PAGE_LABELS = Object.freeze({
-    [PAGE_KEYS.NOTEBOOK]: 'Notebook',
-    [PAGE_KEYS.PAPER]: 'Paper',
-    [PAGE_KEYS.DATA]: 'Data',
-    [PAGE_KEYS.CALIBRATION]: 'Calibration',
-});
 
 export async function bootstrapApplication(options = {}) {
     assertDomEnvironment('bootstrapApplication');
+
+    // Push bugdesk's own settings namespace (ecoagent.*, modules.*) into the
+    // @flexdesk/core shell store BEFORE any getSetting/setSetting call —
+    // required so persistence round-trips correctly (see registerSettings's
+    // doc comment in core/settings.js / @flexdesk/core).
+    registerSettings(BUGDESK_SETTINGS_SLICE);
 
     const config = normalizeOptions(options);
 
@@ -308,14 +261,8 @@ export async function bootstrapApplication(options = {}) {
         eventBus,
         logger: loggingService.scoped('app-shell'),
         dataManager,
-        onNavigate: null, // Will be set after pageRegistry is created
-        pageLabels: PAGE_LABELS,
     });
-    applicationShell.initialize({
-        mounts: {}, // Will be updated after pages are mounted
-        initialPage: config.initialPage,
-        pages: [],
-    });
+    applicationShell.initialize();
 
     // Now resolve mounts from shell-created DOM elements
     const mounts = resolveShellMounts(config.mounts);
@@ -330,66 +277,11 @@ export async function bootstrapApplication(options = {}) {
     });
     notificationHistory.mount();
 
-    const sharedPageDeps = {
-        eventBus,
-        dataManager,
-        notificationCenter,
-    };
-
-    const dataPage = new DataPage({
-        ...sharedPageDeps,
-        logger: loggingService.scoped('page-data'),
-        dataHub,
-        sidebarContainer: document.getElementById('fixed-200-data'),
-    });
-
-    // Shared ProjectModel — used by both NotebookPage and SimulationRunPage
+    // Shared ProjectModel — used across menu actions, Notes, and AI chat
     const projectModel = new ProjectModel({
         eventBus,
         logger: loggingService.scoped('project-model'),
     });
-
-    // Initialize WebSocket streaming client for real-time run/batch events.
-    // It re-dispatches each frame to window.__ecoagentPush — the live run
-    // transport (see streaming_client.js).
-    try {
-        const wsPort = (() => {
-            const p = parseInt(new URLSearchParams(window.location.search).get('wsPort'), 10);
-            return (p > 0 && p < 65536) ? p : 23988;
-        })();
-        const streamingClient = getStreamingClient({ eventBus, port: wsPort });
-        streamingClient.connect();
-        loggingService.scoped('bootstrap')?.info?.('Streaming client initialized');
-    } catch (err) {
-        console.error('[Bootstrap] Streaming client init failed:', err);
-        loggingService.scoped('bootstrap')?.warn?.('Failed to initialize streaming client', { err });
-    }
-
-    // Notebook page mounts into #notebook-main (shell's .panel.left slot for notebook mode).
-    // File navigator mounts into #fixed-200-notebook (shell's sidebar slot for notebook mode).
-    // Both containers are created by ApplicationShell. Mount is deferred to first navigation
-    // so Monaco does not load at startup.
-    const notebookPage = new NotebookPage({
-        ...sharedPageDeps,
-        logger: loggingService.scoped('page-notebook'),
-        project: projectModel,
-    });
-    // Do NOT call notebookPage.mount() here — deferred to first navigation below.
-
-    const paperPage = new PaperPage({
-        ...sharedPageDeps,
-        logger: loggingService.scoped('page-paper'),
-        project: projectModel,
-    });
-
-    // Batch progress UI is owned solely by the BatchWorkersWindow
-    // (ui/js/ecoagent/ui/batch_workers_window.js), installed via the tiling
-    // install step. It listens directly to the `ecoagent:batch:*` bus events
-    // and is opened synchronously from the Run click. The old
-    // BatchProgressTracker (an EcoSim-imported toast + modal that consumed a
-    // separate `streaming:batch-progress` contract) was a SECOND, redundant
-    // owner of the same events — it produced a duplicate progress window plus
-    // a mangled modal. Removed so there is exactly one batch surface.
 
     // Clear dataHub series cache when a run completes to ensure fresh data.
     // (Was wired to the dead `streaming:complete`; the live run-complete
@@ -409,74 +301,11 @@ export async function bootstrapApplication(options = {}) {
         }
     });
 
-    // Simulation Error Handler - translates backend errors to user-friendly messages and auto-selects nodes
-    const simulationErrorHandler = new SimulationErrorHandler({
-        eventBus,
-        notificationCenter,
-        logger: loggingService.scoped('simulation-error'),
-    });
-
-    const calibrationPage = new CalibrationPage({
-        ...sharedPageDeps,
-        logger: loggingService.scoped('page-calibration'),
-        hostBridge: hostBridgeRef.current ?? undefined,
-        dataHub,
-        project: projectModel,
-    });
-
     const disposers = [];
 
-    registerPage(dataPage, mounts.data, PAGE_KEYS.DATA, { log });
-
-    const pageRegistry = createPageRegistry({
-        eventBus,
-        log: loggingService.scoped('pages'),
-    });
-    pageRegistry.add(PAGE_KEYS.NOTEBOOK, notebookPage, mounts.notebookMain);
-    pageRegistry.add(PAGE_KEYS.PAPER, paperPage, mounts.paperMain);
-    pageRegistry.add(PAGE_KEYS.DATA, dataPage, mounts.data);
-
-    // Wire up navigation callback now that pageRegistry exists.
-    // Notebook page is mounted lazily on first navigation so Monaco does not load at startup.
-    let notebookMounted = false;
-    let paperMounted = false;
-    applicationShell.onNavigate = (pageKey) => {
-        if (pageKey === PAGE_KEYS.NOTEBOOK && !notebookMounted) {
-            notebookPage.mount(mounts.notebookMain, {
-                fileNavContainer: mounts.notebookFileNav,
-            });
-            notebookMounted = true;
-        }
-        if (pageKey === PAGE_KEYS.PAPER && !paperMounted) {
-            paperPage.mount(mounts.paperMain, {
-                tocContainer: mounts.paperToc,
-            });
-            paperMounted = true;
-        }
-        pageRegistry.activate(pageKey);
-    };
-    // Pass dataHub, expressionServices so shell can lazy-init ScenarioManagerPage
-    applicationShell.dataHub = dataHub;
-    applicationShell.expressionServices = expressionServices;
-    // Pass PaperPage instance for lazy mounting by shell
-    applicationShell.paperPage = paperPage;
-    // Pass ProjectModel so ETLManagerPage can persist project pipelines
+    // ProjectModel drives Notes (right panel) and the File menu's project
+    // actions — the shell reads it directly for those, no page registry needed.
     applicationShell.projectModel = projectModel;
-
-    // Wire the analysis-tool buttons + toolbar inputs in the top bar.
-    applicationShell._wireSimulationControlButtons();
-
-    // Mount notebook page eagerly if it's the initial page, so that
-    // pageRegistry.activate → onActivated → show() has a fully built layout.
-    // (onNavigate only fires from toolbar clicks, not from pageRegistry.activate)
-    if (config.initialPage === PAGE_KEYS.NOTEBOOK && !notebookMounted) {
-        notebookPage.mount(mounts.notebookMain, {
-            fileNavContainer: mounts.notebookFileNav,
-        });
-        notebookMounted = true;
-    }
-
-    pageRegistry.activate(config.initialPage);
 
     const updateRecentMenu = async () => {
         // EcoAgent's File menu surfaces projects only — workspace.json
@@ -502,8 +331,6 @@ export async function bootstrapApplication(options = {}) {
         eventBus,
         workspaceSaveController,
         workspaceImportController,
-        dataPage,
-        calibrationPage,
         dataManager,
         projectModel,
         hostBridgeRef,
@@ -513,26 +340,6 @@ export async function bootstrapApplication(options = {}) {
     if (menuDisposer) {
         disposers.push(menuDisposer);
     }
-
-    // Handle calibration window open requests (uses ManagedWindow)
-    eventBus.on('tools:calibration:open', (payload) => {
-        openCalibrationModal({ calibrationPage, eventBus, prePopulate: payload?.prePopulate });
-    });
-
-    // Handle policy designer window open requests
-    eventBus.on('tools:policy-designer:open', () => {
-        openPolicyDesigner({
-            eventBus,
-            project: projectModel,
-            notificationCenter,
-            dataManager,
-        });
-    });
-
-    // ── Analysis tools (steady state, bifurcation, impulse response, loop analysis) ──
-    // These were previously in the dead SimulationTopBarController; now wired here
-    // using the notebook page's symbol index + DSL sync.
-    wireAnalysisToolEvents({ eventBus, notebookPage });
 
     const historyService = new HistoryService({
         eventBus,
@@ -686,41 +493,6 @@ export async function bootstrapApplication(options = {}) {
         }
     });
 
-    // Keep shell mode in sync with page activation so fixed-200 shows correct content
-    eventBus.on('view:page:activated', ({ page }) => {
-        if (!applicationShell?.setMode) return;
-        if (page === PAGE_KEYS.DATA) {
-            applicationShell.setMode('database');
-        }
-    });
-
-    // Keep page activation in sync when shell mode changes (toolbar clicks)
-    eventBus.on('shell:mode-changed', ({ mode }) => {
-        let target = null;
-        if (mode === 'database') target = PAGE_KEYS.DATA;
-
-        if (target && pageRegistry.getActive?.() !== target) {
-            try {
-                pageRegistry.activate(target, { source: 'shell' });
-            } catch (error) {
-                log?.warn?.('Failed to sync shell mode to page', { error, mode, target });
-            }
-        }
-    });
-
-    // Generic page navigation event (used by SimulationSettingsTab "View in Data page", etc.)
-    eventBus.on('app:navigate', ({ page, context }) => {
-        const key = normalizePageKey(page);
-        if (!key) return;
-        // Data page requires shell mode switch
-        if (key === PAGE_KEYS.DATA) {
-            applicationShell.setMode('database');
-        }
-        if (pageRegistry.getActive?.() !== key) {
-            pageRegistry.activate(key, context);
-        }
-    });
-
     // Switch to simulation-run mode when a project is opened
     eventBus.on('project:opened', async () => {
         applicationShell.setMode('simulation-run');
@@ -728,86 +500,13 @@ export async function bootstrapApplication(options = {}) {
         // Drop cached DataTable view-state so the next project loads its
         // own persisted sort/filters/column-widths, not the old one's.
         resetTableStore();
-
-        // Clear stale ETL pipelines from previous workspace snapshot, then
-        // load project ETL files (.orchestration + .pipeline) into DataManager.
-        for (const dto of dataManager.listEtlPipelines()) {
-            dataManager.removeEtlPipeline(dto.id);
-        }
-        const etlPaths = [
-            ...projectModel.orchestrationPaths,
-            ...projectModel.pipelinePaths,
-        ];
-        if (etlPaths.length > 0) {
-            const api = window.pywebview?.api;
-            for (const filePath of etlPaths) {
-                try {
-                    const result = await api.project_read_file({
-                        projectPath: projectModel.projectPath,
-                        filePath,
-                    });
-                    if (!result?.ok) continue;
-                    const data = typeof result.content === 'string'
-                        ? JSON.parse(result.content) : result.content;
-                    // Tag with project file path so ETL page can save back
-                    data._filePath = filePath;
-                    dataManager.upsertEtlPipeline(data);
-                } catch (err) {
-                    log?.warn?.(`Failed to load ETL file ${filePath}`, err);
-                }
-            }
-        }
-
-        // Clear stale calibration configs from previous workspace/project,
-        // then load this project's .calibration files (if any).
-        dataManager.calibrationConfigs = [];
-        const calibrationPaths = projectModel.calibrationPaths;
-        if (calibrationPaths.length > 0) {
-            const calibConfigs = [];
-            const api = window.pywebview?.api;
-            for (const filePath of calibrationPaths) {
-                try {
-                    const result = await api.project_read_file({
-                        projectPath: projectModel.projectPath,
-                        filePath,
-                    });
-                    if (!result?.ok) continue;
-                    const data = typeof result.content === 'string'
-                        ? JSON.parse(result.content) : result.content;
-                    calibConfigs.push(data);
-                } catch (err) {
-                    log?.warn?.(`Failed to load calibration file ${filePath}`, err);
-                }
-            }
-            if (calibConfigs.length > 0) {
-                dataManager.calibrationConfigs = calibConfigs;
-            }
-        }
     });
 
-    // Restore the last project early so that every page — including ones that
-    // don't call restoreLastProject themselves (e.g. Paper) — starts with the
-    // project already open.  Must come AFTER the project:opened handler above
-    // so that setMode('simulation-run') and ETL/calibration loading fire.
+    // Restore the last project early so that every page starts with the
+    // project already open. Must come AFTER the project:opened handler above
+    // so that setMode('simulation-run') fires.
     if (!projectModel.isOpen) {
         await projectModel.restoreLastProject();
-    }
-
-    // Mount data page into main data-page container and render sidebar into fixed-200
-    const dataPageContainer = document.getElementById('data-page');
-    const dataSidebarHost = document.getElementById('fixed-200-data');
-    if (dataSidebarHost) {
-        // Ensure sidebar renders into the fixed-200 rail (not inside main content)
-        dataPage.sidebarHost = dataSidebarHost;
-    }
-    if (dataPageContainer) {
-        try {
-            dataPage.mount(dataPageContainer);
-            dataPage.hydrate();
-            window.DataPage = dataPage;
-        } catch (error) {
-            log?.error?.('Failed to mount data page', { error });
-        }
     }
 
     // Initialize window chrome (resize handles, window buttons, drag)
@@ -817,45 +516,12 @@ export async function bootstrapApplication(options = {}) {
     });
     windowChromeController.initialize();
 
-    // Initialize global search - queries project model and symbol index
-    // symbolIndex is a lazy getter because NotebookPage.mount() is deferred
-    const globalSearchService = new GlobalSearchService({
-        projectModel,
-        symbolIndex: { get symbols() { return notebookPage.symbolIndex?.symbols || []; } },
-        logger: loggingService.scoped('global-search'),
-    });
-
-    // Invalidate scenario cache when project or scenario files change
-    const invalidateScenarios = () => globalSearchService.invalidateScenarioCache();
-    eventBus.on('project:opened', invalidateScenarios);
-    eventBus.on('project:file:created', invalidateScenarios);
-    eventBus.on('project:file:deleted', invalidateScenarios);
-    eventBus.on('project:file:renamed', invalidateScenarios);
-    eventBus.on('project:file:saved', (e) => {
-        if (e?.filePath?.endsWith('.scenario')) invalidateScenarios();
-    });
-
-    const globalSearchController = new GlobalSearchController({
-        eventBus,
-        searchService: globalSearchService,
-        logger: loggingService.scoped('global-search-ui'),
-    });
-
-    // Mount global search to bar-center in top bar
-    const barCenter = document.querySelector('.global-top-bar .bar-center');
-    if (barCenter) {
-        globalSearchController.mount(barCenter);
-    } else {
-        console.warn('[Bootstrap] Could not find .global-top-bar .bar-center for global search');
-    }
-
     const hostBridgeDisposer = setupHostBridgeListener({
         hostBridgeRef,
         onResolved: (bridge) => attachHostBridge({
             bridge,
             hostBridgeRef,
             dataHub,
-            dataPage,
             notificationCenter,
             log: loggingService.scoped('host-bridge'),
             symbolRegistry,
@@ -874,7 +540,6 @@ export async function bootstrapApplication(options = {}) {
             bridge: hostBridgeRef.current,
             hostBridgeRef,
             dataHub,
-            dataPage,
             notificationCenter,
             log: loggingService.scoped('host-bridge'),
             symbolRegistry,
@@ -884,28 +549,13 @@ export async function bootstrapApplication(options = {}) {
         });
     }
 
-    // AI Chat Controller
-    const aiChatController = new AiChatController({
-        eventBus,
-        projectModel,
-        historyService,
-        logger: loggingService.scoped('ai-chat'),
-    });
-    aiChatController.initialize();
-
-    // Load ETL plugin definitions from backend and auto-generate config panels
-    await loadEtlPlugins({ logger: loggingService.scoped('etl-plugins') });
-
     eventBus.emit(APP_EVENTS.READY, {
-        pages: pageRegistry.list(),
         timestamp: Date.now(),
     });
 
     await hydrateInitialWorkspace({
         workspaceImportController,
         config,
-        dataPage,
-        calibrationPage,
         eventBus,
         log,
         dataManager,
@@ -928,22 +578,11 @@ export async function bootstrapApplication(options = {}) {
         workspaceImportController,
         workspaceSaveController,
         windowChromeController,
-        globalSearchService,
-        globalSearchController,
-        aiChatController,
-        pages: Object.freeze({
-            [PAGE_KEYS.DATA]: dataPage,
-            [PAGE_KEYS.CALIBRATION]: calibrationPage,
-        }),
         shell: applicationShell,
         mounts,
-        setActivePage: (key, context) => pageRegistry.activate(key, context),
-        getActivePage: () => pageRegistry.getActive(),
         hydrateWorkspace: (source) => hydrateWorkspace({
             workspaceImportController,
             source,
-            dataPage,
-            calibrationPage,
             eventBus,
             log,
             hostBridgeRef,
@@ -955,7 +594,6 @@ export async function bootstrapApplication(options = {}) {
                 bridge,
                 hostBridgeRef,
                 dataHub,
-                dataPage,
                 notificationCenter,
                 log: loggingService.scoped('host-bridge'),
                 symbolRegistry,
@@ -974,10 +612,7 @@ export async function bootstrapApplication(options = {}) {
             });
             workspaceSaveController?.dispose?.();
             notificationCenter?.dispose?.();
-            dataPage?.dispose?.();
-            simulationErrorHandler?.dispose?.();
             windowChromeController?.dispose?.();
-            globalSearchController?.dispose?.();
             applicationShell?.dispose?.();
             eventBus.emit(APP_EVENTS.DESTROYED, { timestamp: Date.now() });
         },
@@ -1042,8 +677,6 @@ function setupMenuActions({
     eventBus,
     workspaceSaveController,
     workspaceImportController,
-    dataPage,
-    calibrationPage,
     dataManager,
     projectModel,
     hostBridgeRef = null,
@@ -1161,8 +794,6 @@ function setupMenuActions({
 
     const handleNew = async () => {
         clearWorkspacePersistedState();
-        // Close the notebook project — NotebookPage reacts to project:closed
-        // and shows its "No project open" empty state
         projectModel?.close?.();
         applicationShell.setMode('notebook');
     };
@@ -1186,8 +817,6 @@ function setupMenuActions({
         await hydrateWorkspace({
             workspaceImportController,
             source: { json, meta: { source: 'menu-open', fileName: file.name } },
-            dataPage,
-            calibrationPage,
             eventBus,
             log: logger,
             hostBridgeRef,
@@ -1211,8 +840,6 @@ function setupMenuActions({
             await hydrateWorkspace({
                 workspaceImportController,
                 source: { json: result.content, meta: { source: 'menu-recent', fileName: name, filePath: result.path } },
-                dataPage,
-                calibrationPage,
                 eventBus,
                 log: logger,
                 hostBridgeRef,
@@ -1427,39 +1054,6 @@ function setupMenuActions({
                 showAboutDialog();
                 return;
             }
-            // Tools menu actions
-            if (actionId === 'menu-tools-steady-state') {
-                eventBus.emit('tools:steady-state:open');
-                return;
-            }
-            if (actionId === 'menu-tools-bifurcation') {
-                eventBus.emit('tools:bifurcation:open');
-                return;
-            }
-            if (actionId === 'menu-tools-impulse-response') {
-                eventBus.emit('tools:impulse-response:open');
-                return;
-            }
-            if (actionId === 'menu-tools-loop-analysis') {
-                eventBus.emit('tools:loop-analysis:open');
-                return;
-            }
-            if (actionId === 'menu-tools-calibration') {
-                eventBus.emit('tools:calibration:open');
-                return;
-            }
-            if (actionId === 'menu-tools-policy-designer') {
-                eventBus.emit('tools:policy-designer:open');
-                return;
-            }
-            if (actionId === 'menu-tools-model-tests') {
-                eventBus.emit('tools:model-tests:open');
-                return;
-            }
-            if (actionId === 'menu-tools-show-model-code') {
-                openModelCodeWindow({ project: projectModel });
-                return;
-            }
             logger?.debug?.('menu', 'Unhandled menu action', { actionId });
         } catch (error) {
             logger?.error?.('menu', 'Menu action failed', { actionId, error });
@@ -1555,8 +1149,6 @@ function clearWorkspacePersistedState() {
 async function hydrateInitialWorkspace({
     workspaceImportController,
     config,
-    dataPage,
-    calibrationPage,
     eventBus,
     log,
     dataManager,
@@ -1591,8 +1183,6 @@ async function hydrateInitialWorkspace({
         return hydrateWorkspace({
             workspaceImportController,
             source: { payload: emptyPayload, meta: { source: 'empty-startup' } },
-            dataPage,
-            calibrationPage,
             eventBus,
             log,
             initialNamespaceId: null,
@@ -1615,8 +1205,6 @@ async function hydrateInitialWorkspace({
     return hydrateWorkspace({
         workspaceImportController,
         source: payloadSource,
-        dataPage,
-        calibrationPage,
         eventBus,
         log,
         initialNamespaceId: config.initialNamespaceId,
@@ -1629,8 +1217,6 @@ async function hydrateInitialWorkspace({
 async function hydrateWorkspace({
     workspaceImportController,
     source,
-    dataPage,
-    calibrationPage,
     eventBus,
     log,
     initialNamespaceId = null,
@@ -1668,8 +1254,6 @@ async function hydrateWorkspace({
             }
         }
 
-        dataPage.hydrate();
-        calibrationPage?.hydrate?.();
         eventBus.emit(APP_EVENTS.HYDRATED, { summary, source: source.meta?.source ?? 'runtime' });
         return summary;
     } catch (error) {
@@ -1683,7 +1267,6 @@ async function attachHostBridge({
     bridge,
     hostBridgeRef,
     dataHub,
-    dataPage,
     notificationCenter,
     log,
     symbolRegistry,
@@ -1731,18 +1314,6 @@ async function attachHostBridge({
                 log?.error?.('Failed to load modules', { error: err });
             });
     }
-
-
-
-    if (typeof dataPage?.refreshDatasets === 'function') {
-        try {
-            dataPage.refreshDatasets({ silent: true, force: true });
-        } catch (error) {
-            log.warn('Failed to refresh datasets after host attach', { error });
-        }
-    }
-
-
     // Only show toast if enabled in settings
     if (getSetting('host.showConnectedToast', false)) {
         notificationCenter?.show?.({
@@ -1826,11 +1397,6 @@ function normalizeOptions(options = {}) {
             ? options.autosaveDebounceMs
             : 2500,
         autosaveStorageKey: options.autosaveStorageKey ?? DEFAULT_AUTOSAVE_KEY,
-        // Restore last active page from localStorage, or use option, or default to notebook.
-        initialPage: normalizePageKey(
-            options.initialPage ?? getStoredActivePage(),
-            PAGE_KEYS.NOTEBOOK
-        ),
         initialNamespaceId: options.initialNamespaceId ?? null,
         workspacePayload: options.workspacePayload ?? null,
         workspaceJSON: options.workspaceJSON ?? null,
@@ -1842,148 +1408,11 @@ function normalizeOptions(options = {}) {
  * This must be called AFTER ApplicationShell.initialize() since shell clears body.
  */
 function resolveShellMounts(overrides = {}) {
-    // Shell creates these elements during mount():
-    // - #data-page for data page content
-    // - #notebook-main for the notebook editor area
-    // - #fixed-200-notebook for the notebook file navigator sidebar
-    // - .toast-container for notifications
-
-    const dataPage = document.getElementById('data-page');
-    const notebookMain = document.getElementById('notebook-main');
-    const notebookFileNav = document.getElementById('fixed-200-notebook');
-    const paperMain = document.getElementById('paper-main');
-    const paperToc = document.getElementById('fixed-200-paper');
     const notifications = document.querySelector('.toast-container') || document.getElementById('toast-container');
 
     return {
-        data: overrides.data || dataPage,
-        notebookMain: overrides.notebookMain || notebookMain,
-        notebookFileNav: overrides.notebookFileNav || notebookFileNav,
-        paperMain: overrides.paperMain || paperMain,
-        paperToc: overrides.paperToc || paperToc,
         notifications: overrides.notifications || notifications,
     };
-}
-
-function createPageRegistry({ eventBus, log }) {
-    const entries = new Map();
-    let activeKey = null;
-
-    return {
-        add(key, page, mount) {
-            const normalizedKey = normalizePageKey(key);
-            if (!page || !mount) {
-                // EcoAgent post-copy patches DELETE some Ecosim
-                // page containers; silently skip those registrations.
-                log?.info?.(`pageRegistry.add: skipping ${normalizedKey} (no container)`);
-                return;
-            }
-            setElementVisibility(mount, false);
-            if (!entries.has(normalizedKey)) {
-                entries.set(normalizedKey, { page, mount });
-            }
-        },
-        activate(key, context = {}) {
-            const normalizedKey = normalizePageKey(key);
-            if (!entries.has(normalizedKey)) {
-                // EcoAgent removed some Ecosim pages — silently
-                // skip activations of those keys (e.g. an initial
-                // page="data" when data is gone) instead of crashing
-                // the bootstrap. The shell defaults to whichever
-                // EcoAgent mode the fl-bar selects next.
-                log?.info?.(`pageRegistry.activate: skipping ${normalizedKey} (not registered)`);
-                return null;
-            }
-            if (activeKey === normalizedKey) {
-                return normalizedKey;
-            }
-
-            const nextEntry = entries.get(normalizedKey);
-            const previousEntry = activeKey ? entries.get(activeKey) : null;
-
-            if (previousEntry) {
-                setElementVisibility(previousEntry.mount, false);
-                previousEntry.page?.onDeactivated?.({ next: normalizedKey, ...context });
-            }
-
-            setElementVisibility(nextEntry.mount, true);
-            nextEntry.page?.onActivated?.({ previous: activeKey, ...context });
-            const previousKey = activeKey;
-            activeKey = normalizedKey;
-
-            // Persist active page to localStorage for restore on reload.
-            try {
-                localStorage.setItem(ACTIVE_PAGE_STORAGE_KEY, normalizedKey);
-            } catch (e) {
-                // localStorage may be unavailable (private browsing, etc.)
-            }
-
-            try {
-                eventBus?.emit?.('view:page:activated', {
-                    page: normalizedKey,
-                    previous: previousKey,
-                });
-            } catch (error) {
-                log?.warn?.('Failed to emit activation event', { error });
-            }
-            return normalizedKey;
-        },
-        list() {
-            return Array.from(entries.keys());
-        },
-        getActive() {
-            return activeKey;
-        },
-    };
-}
-
-function registerPage(page, mount, key, { log }) {
-    if (!page || !mount) {
-        // EcoAgent post-copy patches remove some Ecosim page
-        // containers (data, simulation-run). Treat missing
-        // mount as "this page is absent in this product" and
-        // skip silently rather than aborting bootstrap.
-        log?.info?.(`registerPage: skipping ${key} (no container)`);
-        return;
-    }
-    try {
-        page.mount(mount);
-    } catch (error) {
-        log?.error?.(`Failed to mount page ${key}`, { error });
-        throw error;
-    }
-    setElementVisibility(mount, false);
-}
-
-function setElementVisibility(element, visible) {
-    if (!element) {
-        return;
-    }
-    if (visible) {
-        element.removeAttribute('hidden');
-        element.setAttribute('aria-hidden', 'false');
-        element.classList.remove('is-hidden');
-        element.classList.add('active');
-    } else {
-        element.setAttribute('hidden', 'hidden');
-        element.setAttribute('aria-hidden', 'true');
-        element.classList.add('is-hidden');
-        element.classList.remove('active');
-    }
-}
-
-function normalizePageKey(value, fallback = PAGE_KEYS.NOTEBOOK) {
-    if (!value) {
-        return fallback;
-    }
-    const normalized = String(value).toLowerCase();
-    if (normalized === 'data' || normalized === 'datasets') {
-        return PAGE_KEYS.DATA;
-    }
-    if (!VALID_PAGE_KEYS.has(normalized)) {
-        return fallback;
-    }
-    return normalized;
 }
 
 function assertDomEnvironment(label) {
@@ -2183,335 +1612,4 @@ function convertLegacyToNewFormat(legacy) {
             activeNamespaceId: firstNamespaceId,
         },
     };
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Analysis tool event wiring (steady state, bifurcation, impulse response,
-// loop analysis)
-// ═══════════════════════════════════════════════════════════════════════════
-
-function wireAnalysisToolEvents({ eventBus, notebookPage }) {
-    /**
-     * Extract namespaces, parameters, and stocks from the notebook symbol index.
-     * Returns the data shape expected by the analysis config modals.
-     */
-    function gatherModelInfo() {
-        const symbolIndex = notebookPage?.symbolIndex;
-        if (!symbolIndex) return null;
-
-        const configurables = symbolIndex.getConfigurables();
-        const namespaces = [];
-        const parameters = [];
-        const stocks = [];
-        const observeVariables = [];
-
-        for (const [nsName, group] of Object.entries(configurables)) {
-            const nsId = nsName;
-            namespaces.push({ id: nsId, label: nsName });
-
-            for (const p of (group.parameters || [])) {
-                parameters.push({
-                    name: p.displayName || p.name,
-                    key: p.name,
-                    namespace: nsName,
-                    namespaceId: nsId,
-                    fullName: `${nsName}.${p.name}`,
-                    value: p.defaultValue ?? 0,
-                });
-            }
-
-            for (const s of (group.stocks || [])) {
-                stocks.push({
-                    name: s.displayName || s.name,
-                    key: s.name,
-                    namespace: nsName,
-                    namespaceId: nsId,
-                    fullName: `${nsName}.${s.name}`,
-                    value: s.defaultValue ?? 0,
-                });
-                // Stocks are also observable
-                observeVariables.push({
-                    name: s.displayName || s.name,
-                    key: s.name,
-                    namespace: nsName,
-                    namespaceId: nsId,
-                    fullName: `${nsName}.${s.name}`,
-                });
-            }
-
-            for (const c of (group.constants || [])) {
-                // Constants (variables) are observable
-                observeVariables.push({
-                    name: c.displayName || c.name,
-                    key: c.name,
-                    namespace: nsName,
-                    namespaceId: nsId,
-                    fullName: `${nsName}.${c.name}`,
-                });
-            }
-        }
-
-        return { namespaces, parameters, stocks, observeVariables };
-    }
-
-    /**
-     * Ensure notebook DSL is compiled and synced to backend.
-     * Must be called before any analysis API.
-     */
-    async function ensureDslSynced() {
-        return notebookPage?.syncDslToBackend?.() ?? { ok: false, error: 'Notebook page not available' };
-    }
-
-    function checkNotRunning() {
-        const phase = 'idle';
-        if (phase !== 'idle' && phase !== 'complete' && phase !== 'error') {
-            eventBus.emit('toast:show', {
-                message: 'Cannot run analysis while simulation is running',
-                type: 'warning',
-                duration: 3000,
-            });
-            return false;
-        }
-        return true;
-    }
-
-    // ── Steady State ──────────────────────────────────────────────────────
-    eventBus.on('tools:steady-state:open', async () => {
-        if (!checkNotRunning()) return;
-
-        const info = gatherModelInfo();
-        if (!info || info.namespaces.length === 0) {
-            eventBus.emit('toast:show', { message: 'No namespaces found. Open a project first.', type: 'warning', duration: 3000 });
-            return;
-        }
-
-        const { openSteadyStateConfigModal } = await import('../ui/components/steady_state_config_modal.js');
-        openSteadyStateConfigModal({
-            namespaces: info.namespaces,
-            activeNamespaceId: info.namespaces[0]?.id,
-            onRun: async (namespaceId) => {
-                eventBus.emit('toast:show', { message: 'Finding steady state...', type: 'info', duration: 2000 });
-
-                try {
-                    const syncResult = await ensureDslSynced();
-                    if (!syncResult.ok) {
-                        eventBus.emit('toast:show', { message: syncResult.error || 'DSL sync failed', type: 'error', duration: 5000 });
-                        return;
-                    }
-
-                    const namespaceName = info.namespaces.find(ns => ns.id === namespaceId)?.label || namespaceId;
-                    const api = window.pywebview?.api;
-                    const result = await api?.find_steady_state?.({ namespaceId, namespaceName });
-
-                    if (!result?.ok) {
-                        eventBus.emit('toast:show', { message: result?.error || 'Failed to find steady state', type: 'error', duration: 5000 });
-                        return;
-                    }
-
-                    const { openSteadyStateModal } = await import('../ui/components/steady_state_modal.js');
-                    openSteadyStateModal({
-                        result: result.data,
-                        parameters: info.parameters,
-                        onSetParameter: () => {},
-                        onApply: () => {
-                            eventBus.emit('toast:show', { message: 'Apply from steady state not yet supported in notebook mode', type: 'info', duration: 3000 });
-                        },
-                        onRunFromSteady: () => {
-                            eventBus.emit('toast:show', { message: 'Run from steady state not yet supported in notebook mode', type: 'info', duration: 3000 });
-                        },
-                    });
-                } catch (err) {
-                    console.error('[SteadyState] Analysis failed', err);
-                    eventBus.emit('toast:show', { message: 'Steady state solver error', type: 'error', duration: 3000 });
-                }
-            },
-            onCancel: () => {},
-        });
-    });
-
-    // ── Bifurcation Diagram ───────────────────────────────────────────────
-    eventBus.on('tools:bifurcation:open', async () => {
-        if (!checkNotRunning()) return;
-
-        const info = gatherModelInfo();
-        if (!info || (info.parameters.length === 0 && info.stocks.length === 0)) {
-            eventBus.emit('toast:show', { message: 'No parameters or stocks found. Open a project first.', type: 'warning', duration: 4000 });
-            return;
-        }
-
-        const { openBifurcationConfigModal } = await import('../ui/components/bifurcation_config_modal.js');
-        openBifurcationConfigModal({
-            namespaces: info.namespaces,
-            activeNamespaceId: info.namespaces[0]?.id,
-            parameters: info.parameters,
-            stocks: info.stocks,
-            onRun: async (config) => {
-                const typeLabels = {
-                    one_param: 'one-parameter', two_param: 'two-parameter',
-                    orbit: 'orbit', basin: 'basin of attraction', hysteresis: 'hysteresis',
-                };
-                const typeLabel = typeLabels[config.type] || config.type;
-
-                const api = window.pywebview?.api;
-                const { showComputingWindow } = await import('../ui/components/computing_status_window.js');
-                const status = showComputingWindow({
-                    title: 'Bifurcation Analysis',
-                    message: `Computing ${typeLabel} diagram...`,
-                    icon: 'call_split',
-                    onCancel: () => api?.cancel_analysis?.(),
-                });
-
-                try {
-                    const syncResult = await ensureDslSynced();
-                    if (!syncResult.ok) {
-                        status.close();
-                        eventBus.emit('toast:show', { message: syncResult.error || 'DSL sync failed', type: 'error', duration: 5000 });
-                        return;
-                    }
-
-                    const result = await api?.compute_bifurcation_diagram?.(config);
-                    status.close();
-
-                    if (!result?.ok) {
-                        if (result?.error === 'Cancelled') return;
-                        eventBus.emit('toast:show', { message: result?.error || 'Bifurcation analysis failed', type: 'error', duration: 5000 });
-                        return;
-                    }
-
-                    const { openBifurcationResultsModal } = await import('../ui/components/bifurcation_results_modal.js');
-                    openBifurcationResultsModal({
-                        result: result.data,
-                        onClose: () => eventBus.emit('tools:bifurcation:open'),
-                    });
-
-                    eventBus.emit('toast:show', {
-                        message: `${typeLabel.charAt(0).toUpperCase() + typeLabel.slice(1)} analysis complete`,
-                        type: 'success', duration: 3000,
-                    });
-                } catch (err) {
-                    status.close();
-                    console.error('[Bifurcation] Analysis failed', err);
-                    eventBus.emit('toast:show', { message: 'Bifurcation analysis error', type: 'error', duration: 3000 });
-                }
-            },
-            onCancel: () => {},
-        });
-    });
-
-    // ── Impulse Response ──────────────────────────────────────────────────
-    eventBus.on('tools:impulse-response:open', async () => {
-        if (!checkNotRunning()) return;
-
-        const info = gatherModelInfo();
-        if (!info || (info.parameters.length === 0 && info.stocks.length === 0 && info.observeVariables.length === 0)) {
-            eventBus.emit('toast:show', { message: 'No parameters or variables found. Open a project first.', type: 'warning', duration: 4000 });
-            return;
-        }
-
-        const { openImpulseResponseConfigModal } = await import('../ui/components/impulse_response_config_modal.js');
-        openImpulseResponseConfigModal({
-            namespaces: info.namespaces,
-            activeNamespaceId: info.namespaces[0]?.id,
-            parameters: info.parameters,
-            stocks: info.stocks,
-            observeVariables: info.observeVariables,
-            onRun: async (config) => {
-                const api = window.pywebview?.api;
-                const { showComputingWindow } = await import('../ui/components/computing_status_window.js');
-                const status = showComputingWindow({
-                    title: 'Impulse Response',
-                    message: 'Running baseline + perturbed simulations...',
-                    icon: 'pulse_alert',
-                    onCancel: () => api?.cancel_analysis?.(),
-                });
-
-                try {
-                    const syncResult = await ensureDslSynced();
-                    if (!syncResult.ok) {
-                        status.close();
-                        eventBus.emit('toast:show', { message: syncResult.error || 'DSL sync failed', type: 'error', duration: 5000 });
-                        return;
-                    }
-
-                    const result = await api?.compute_impulse_response?.(config);
-                    status.close();
-
-                    if (!result?.ok) {
-                        if (result?.error === 'Cancelled') return;
-                        eventBus.emit('toast:show', { message: result?.error || 'Impulse response analysis failed', type: 'error', duration: 5000 });
-                        return;
-                    }
-
-                    const { openImpulseResponseResultsModal } = await import('../ui/components/impulse_response_results_modal.js');
-                    openImpulseResponseResultsModal({
-                        result: result.data,
-                        onClose: () => eventBus.emit('tools:impulse-response:open'),
-                    });
-                } catch (err) {
-                    status.close();
-                    console.error('[ImpulseResponse] Analysis failed', err);
-                    eventBus.emit('toast:show', { message: 'Impulse response analysis error', type: 'error', duration: 3000 });
-                }
-            },
-            onCancel: () => {},
-        });
-    });
-
-    // ── Loop Analysis ─────────────────────────────────────────────────────
-    eventBus.on('tools:loop-analysis:open', async () => {
-        if (!checkNotRunning()) return;
-
-        const info = gatherModelInfo();
-        if (!info || info.namespaces.length === 0) {
-            eventBus.emit('toast:show', { message: 'No namespaces found. Open a project first.', type: 'warning', duration: 3000 });
-            return;
-        }
-
-        eventBus.emit('toast:show', { message: 'Analyzing feedback loops...', type: 'info', duration: 30000 });
-
-        try {
-            const syncResult = await ensureDslSynced();
-            if (!syncResult.ok) {
-                eventBus.emit('toast:show', { message: syncResult.error || 'DSL sync failed', type: 'error', duration: 5000 });
-                return;
-            }
-
-            const namespaceName = info.namespaces[0]?.label || 'Main';
-            const api = window.pywebview?.api;
-            const result = await api?.analyze_feedback_loops?.({ namespaceName });
-
-            if (!result?.ok) {
-                eventBus.emit('toast:show', { message: result?.error || 'Loop analysis failed', type: 'error', duration: 5000 });
-                return;
-            }
-
-            const { openLoopAnalysisWindow } = await import('../ui/components/loop_analysis_window.js');
-            openLoopAnalysisWindow({
-                analysisData: result.data,
-                namespaces: info.namespaces,
-                activeNamespaceId: info.namespaces[0]?.id,
-                onNamespaceChange: async (nsId) => {
-                    const nsName = nsId === '__all__'
-                        ? '__all__'
-                        : (info.namespaces.find(n => n.id === nsId)?.label || 'Main');
-                    await ensureDslSynced();
-                    const res = await api?.analyze_feedback_loops?.({ namespaceName: nsName });
-                    return res?.ok ? res.data : null;
-                },
-            });
-
-            const loopCount = result.data?.loops?.length || 0;
-            const hasGains = result.data?.dominance?.time?.length > 0;
-            eventBus.emit('toast:show', {
-                message: hasGains
-                    ? `Found ${loopCount} feedback loops`
-                    : `Found ${loopCount} feedback loops (structural view — run simulation for gains)`,
-                type: 'success',
-                duration: hasGains ? 3000 : 5000,
-            });
-        } catch (err) {
-            console.error('[LoopAnalysis] Failed', err);
-            eventBus.emit('toast:show', { message: 'Loop analysis error', type: 'error', duration: 3000 });
-        }
-    });
 }

@@ -1,9 +1,18 @@
 /**
  * desktops.js — independent tile trees per virtual desktop, persisted
- * per-project in `.ecoagent/desktops.json` via the pywebview bridge.
+ * through the host's `state` capability under the logical key `desktops`
+ * (see `@flexdesk/host`'s `createPywebviewHost({ resolvePath })` — install.js
+ * wires `resolvePath: (key) => \`.ecoagent/${key}.json\`` so this lands at
+ * the exact same `.ecoagent/desktops.json` path it always has).
  *
  * Each desktop = { id, label, tree (TileTree), windows ([]), panels }.
  * Switching desktops swaps the active tree under the renderer.
+ *
+ * Kept local (not swapped for `@flexdesk/wm`'s desktops.js) for one
+ * bugdesk-specific default: the Console (bottom) panel starts CLOSED on a
+ * fresh desktop, where the package's own default starts it open. Everything
+ * else here — the `seed` injection for the root leaf, the host.state
+ * persistence contract — already matches the package's generalized shape.
  */
 
 import { TileTree, makeLeaf } from './tile_tree.js';
@@ -15,12 +24,16 @@ const DEFAULT_PANEL_STATE = {
     bottom: false,
 };
 
-function _makeDesktop(label) {
+/**
+ * `seed()` yields the leaf a fresh (or emptied) desktop starts with. Comes
+ * from the taxonomy's root kind — see wm.js's `_rootLeaf`, which supplies
+ * it. There is deliberately no default here: a silent 'home' fallback
+ * would re-introduce the exact bug this parameter exists to remove (an
+ * embedder with a different ontology getting a kind it never registered).
+ */
+function _makeDesktop(label, seed) {
     const tree = new TileTree();
-    tree.setRoot(makeLeaf({
-        content: { kind: 'home', props: {} },
-        title: 'Home',
-    }));
+    tree.setRoot(makeLeaf(seed()));
     return {
         id: `desk-${Math.random().toString(36).slice(2, 8)}`,
         label,
@@ -33,8 +46,13 @@ function _makeDesktop(label) {
 }
 
 export class DesktopManager {
-    constructor() {
-        this.desktops = [_makeDesktop('1')];
+    /** @param {{seed: () => object}} opts  `seed` builds the root leaf. Required. */
+    constructor({ seed } = {}) {
+        if (typeof seed !== 'function') {
+            throw new Error('DesktopManager: a `seed` function is required (the taxonomy root leaf)');
+        }
+        this.seed = seed;
+        this.desktops = [_makeDesktop('1', seed)];
         this.activeIdx = 0;
     }
 
@@ -49,12 +67,12 @@ export class DesktopManager {
 
     ensureCount(n) {
         while (this.desktops.length < n) {
-            this.desktops.push(_makeDesktop(String(this.desktops.length + 1)));
+            this.desktops.push(_makeDesktop(String(this.desktops.length + 1), this.seed));
         }
     }
 
     addDesktop(label = null) {
-        const d = _makeDesktop(label || String(this.desktops.length + 1));
+        const d = _makeDesktop(label || String(this.desktops.length + 1), this.seed);
         this.desktops.push(d);
         return d;
     }
@@ -72,8 +90,8 @@ export class DesktopManager {
         };
     }
 
-    static deserialize(blob) {
-        const m = new DesktopManager();
+    static deserialize(blob, { seed } = {}) {
+        const m = new DesktopManager({ seed });
         if (!blob || !Array.isArray(blob.desktops) || blob.desktops.length === 0) return m;
         m.desktops = blob.desktops.map((raw) => ({
             id: raw.id || `desk-${Math.random().toString(36).slice(2,8)}`,
@@ -82,13 +100,9 @@ export class DesktopManager {
             windows: [],
             panels: { ...DEFAULT_PANEL_STATE, ...(raw.panels || {}) },
         }));
-        // Empty tree → seed with home so the desktop is usable.
+        // Empty tree → seed with the taxonomy root so the desktop is usable.
         for (const d of m.desktops) {
-            if (!d.tree.rootId) {
-                d.tree.setRoot(makeLeaf({
-                    content: { kind: 'home', props: {} }, title: 'Home',
-                }));
-            }
+            if (!d.tree.rootId) d.tree.setRoot(makeLeaf(seed()));
         }
         m.activeIdx = Math.min(Math.max(0, blob.activeIdx | 0), m.desktops.length - 1);
         return m;
@@ -96,30 +110,27 @@ export class DesktopManager {
 }
 
 /**
- * Persistence helpers. They use the pywebview API if the methods exist
- * on the bridge; otherwise no-op. We don't fail loudly — the WM should
- * remain functional in dev when those methods aren't wired yet.
+ * Persistence helpers. They take a host `state` capability; a host without
+ * one is legal and they no-op. We don't fail loudly — the WM stays functional
+ * against a host that cannot persist.
  */
 
-export async function loadDesktops(api) {
-    if (!api?.workspace_state_read) return null;
+const DESKTOPS_KEY = 'desktops';
+
+export async function loadDesktops(state) {
+    if (!state) return null;
     try {
-        const blob = await api.workspace_state_read({ path: '.ecoagent/desktops.json' });
-        if (!blob) return null;
-        return typeof blob === 'string' ? JSON.parse(blob) : blob;
+        return await state.read(DESKTOPS_KEY);
     } catch (err) {
         console.warn('[desktops] load failed', err);
         return null;
     }
 }
 
-export async function saveDesktops(api, blob) {
-    if (!api?.workspace_state_write) return false;
+export async function saveDesktops(state, blob) {
+    if (!state) return false;
     try {
-        await api.workspace_state_write({
-            path: '.ecoagent/desktops.json',
-            data: JSON.stringify(blob),
-        });
+        await state.write(DESKTOPS_KEY, blob);
         return true;
     } catch (err) {
         console.warn('[desktops] save failed', err);

@@ -15,6 +15,8 @@
  * first page renders (install.js does this before registering the pages).
  */
 
+import { getSetting } from '../core/settings.js';
+
 export const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -26,6 +28,28 @@ export function now() {
 /* Lifecycle stage chevrons. Index === bug.stage:
    0 open · 1 investigation · 2 testing · 3 closed. */
 export const STAGES = ['Open', 'Investigation', 'Testing', 'Closed'];
+
+/* The two configured roles — a human (files/triages/tests through this UI)
+ * and an agent (investigates, typically via the /bugs skill).
+ *
+ * Resolution order, highest precedence first:
+ *   1. the settings store's `bugdesk.humanName` / `bugdesk.agentName` — a
+ *      per-browser override set from Settings → General → Authorship
+ *      (core/settings.js), non-empty string wins.
+ *   2. window.__BUGDESK_CONFIG__ — index.html populates this from
+ *      GET /api/config before this module (or anything that imports it) is
+ *      ever evaluated, so it's already resolved by the time we read it here.
+ *   3. the hardcoded generic fallback ('reviewer' / 'agent').
+ *
+ * Both are still plain consts evaluated ONCE at module load — same
+ * reasoning as the original config-prefetch design (see filters.js's
+ * BUILTIN_FILTERS/FILTER_FIELDS, which embed these values into object
+ * literals built at that same load time) — so a settings change here only
+ * takes effect on the next reload; settings_page.js's `reloadHint` flag on
+ * both schema entries says so in the UI. */
+const _cfg = (typeof window !== 'undefined' && window.__BUGDESK_CONFIG__) || {};
+export const HUMAN_AUTHOR = getSetting('bugdesk.humanName') || _cfg.humanAuthor || 'reviewer';
+export const AGENT_AUTHOR = getSetting('bugdesk.agentName') || _cfg.agentAuthor || 'agent';
 
 /* ── status / type humanisation ─────────────────────────────────── */
 
@@ -97,8 +121,8 @@ export async function createBug(fields) {
     if (!j.ok) throw new Error(j.error || 'create failed');
     return j.bug;
 }
-/** Append a comment. author is "norman" from this (human) UI. */
-export async function postComment(id, body, author = 'norman') {
+/** Append a comment. author defaults to HUMAN_AUTHOR — this UI is the human's. */
+export async function postComment(id, body, author = HUMAN_AUTHOR) {
     const j = await apiPost(`/bugs/${id}/comments`, { author, body });
     if (!j.ok) throw new Error(j.error || 'comment failed');
     return j.bug;
@@ -120,7 +144,7 @@ function mapBug(b) {
         summary: b.title,
         status: humanizeStatus(b.status),
         rawStatus: b.status,
-        assignee: b.assignee || 'norman',
+        assignee: b.assignee || HUMAN_AUTHOR,
         stage: b.stage,          // 0..3 → STAGES chevrons
         subsystem: b.subsystem || 'unsorted',
         severity: b.severity,
@@ -145,11 +169,11 @@ export async function loadData() {
 
     const byAssignee = metaRes.byAssignee || {};
 
-    // TEAM: one row per assignee (claude / norman). `inc` = open bugs,
+    // TEAM: one row per assignee. `inc` = open bugs,
     // `other` = closed, `load` = open relative to the busiest assignee.
     const openByAssignee = {}, closedByAssignee = {};
     for (const t of TICKETS) {
-        const a = t.assignee || 'norman';
+        const a = t.assignee || HUMAN_AUTHOR;
         if (isClosed(t)) closedByAssignee[a] = (closedByAssignee[a] || 0) + 1;
         else openByAssignee[a] = (openByAssignee[a] || 0) + 1;
     }
@@ -168,7 +192,7 @@ export async function loadData() {
             inc,
             other,
             load: Math.round((inc / maxOpen) * 100) / 100,
-            me: name.toLowerCase() === 'norman',
+            me: name.toLowerCase() === HUMAN_AUTHOR.toLowerCase(),
         };
     });
 

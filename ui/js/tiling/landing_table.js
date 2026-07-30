@@ -16,7 +16,7 @@
  */
 
 import { showContextMenu } from '../ecoagent/ui/context_menu.js';
-import { registerPanelKeys } from './panel_keys.js';
+import { registerPanelKeys } from '@flexdesk/wm';
 
 /** Attach the navigation-table interactions to a host element that
  *  contains a `<table>` already rendered by DataTable. Returns a

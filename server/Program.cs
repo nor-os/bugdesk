@@ -2,9 +2,9 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
-// BugDesk bridge: serves the FlexDesk UI and exposes the markdown bug store
-// (SharpGenerals/bugs/*.md) as JSON. The markdown files are the source of truth;
-// this process only reads and writes them.
+// BugDesk bridge: serves the FlexDesk UI and exposes a directory of markdown
+// bug files (BUGDESK_BUGS, default ./bugs) as JSON. The markdown files are the
+// source of truth; this process only reads and writes them.
 
 var builder = WebApplication.CreateBuilder(args);
 var app = builder.Build();
@@ -13,6 +13,14 @@ var app = builder.Build();
 string bugsDir = ResolveBugsDir(app.Environment.ContentRootPath);
 string uiDir = Path.GetFullPath(Path.Combine(app.Environment.ContentRootPath, "..", "ui"));
 app.Logger.LogInformation("BugDesk: bugs={bugs} ui={ui}", bugsDir, uiDir);
+
+// ---- Authorship (configurable — see README "Authorship") ------------------
+// BugDesk's lifecycle assumes exactly two roles: a human who files/triages/tests
+// bugs through this UI, and an agent who investigates them (typically an AI
+// coding assistant driven through the /bugs skill). Neither name is fixed;
+// both default to something generic so a fresh checkout works unconfigured.
+string humanAuthor = Environment.GetEnvironmentVariable("BUGDESK_HUMAN") is { Length: > 0 } h ? h : "reviewer";
+string agentAuthor = Environment.GetEnvironmentVariable("BUGDESK_AGENT") is { Length: > 0 } ag ? ag : "agent";
 
 // ---- Static UI ------------------------------------------------------------
 if (Directory.Exists(uiDir))
@@ -123,7 +131,7 @@ app.MapPost("/api/bugs/{id:int}/comments", async (int id, HttpRequest req) =>
     var path = BugPath(bugsDir, id);
     if (!File.Exists(path)) return Results.Json(new { ok = false, error = "not found" }, json, statusCode: 404);
     var body = await JsonSerializer.DeserializeAsync<Dictionary<string, JsonElement>>(req.Body, json) ?? new();
-    var author = body.TryGetValue("author", out var a) ? a.GetString() : "norman";
+    var author = body.TryGetValue("author", out var a) ? a.GetString() : humanAuthor;
     var comment = body.TryGetValue("body", out var b) ? b.GetString() : "";
     if (string.IsNullOrWhiteSpace(comment)) return Results.Json(new { ok = false, error = "empty comment" }, json, statusCode: 400);
 
@@ -165,7 +173,7 @@ app.MapPost("/api/bugs", async (HttpRequest req) =>
     sb.Append($"severity: {Get("severity", "medium")}\n");
     sb.Append($"type: {Get("type", "bug")}\n");
     sb.Append($"subsystem: {Get("subsystem", "unsorted")}\n");
-    sb.Append($"assignee: {Get("assignee", "norman")}\n");
+    sb.Append($"assignee: {Get("assignee", humanAuthor)}\n");
     sb.Append($"labels: [{labels}]\n");
     sb.Append($"links: [{links}]\n");
     sb.Append($"created: {Today()}\n");
@@ -177,6 +185,12 @@ app.MapPost("/api/bugs", async (HttpRequest req) =>
     await File.WriteAllTextAsync(BugPath(bugsDir, nextId), sb.ToString());
     return Results.Json(new { ok = true, bug = LoadOne(bugsDir, nextId) }, json);
 });
+
+// The client fetches this once, before it renders anything, so every "who is
+// posting this comment" / "on me" / "on the agent" default reflects the
+// configured names instead of a hardcoded pair. See ui/index.html.
+app.MapGet("/api/config", () =>
+    Results.Json(new { ok = true, humanAuthor, agentAuthor }, json));
 
 app.MapGet("/api/meta", () =>
 {
@@ -225,10 +239,13 @@ app.Run();
 static string ResolveBugsDir(string contentRoot)
 {
     var env = Environment.GetEnvironmentVariable("BUGDESK_BUGS");
-    if (!string.IsNullOrEmpty(env) && Directory.Exists(env)) return Path.GetFullPath(env);
-    var rel = Path.GetFullPath(Path.Combine(contentRoot, "..", "..", "SharpGenerals", "bugs"));
-    if (Directory.Exists(rel)) return rel;
-    return "/mnt/c/Users/Norman/repos/SharpGenerals/bugs";
+    if (!string.IsNullOrEmpty(env)) return Path.GetFullPath(env);
+    // Self-contained default: a top-level bugs/ directory alongside server/ and
+    // ui/. Created on first run (see attachDir below, whose CreateDirectory
+    // call also creates this whole parent chain). Point BUGDESK_BUGS elsewhere
+    // — e.g. a bugs/ folder tracked inside your own project's repo — to use a
+    // different store.
+    return Path.GetFullPath(Path.Combine(contentRoot, "..", "bugs"));
 }
 
 // UI-owned state (custom filters, ...). Unlike the bug store this is created on
@@ -314,7 +331,7 @@ class Bug
     public string Severity { get; set; } = "medium";
     public string Type { get; set; } = "bug";
     public string Subsystem { get; set; } = "unsorted";
-    public string Assignee { get; set; } = "norman";
+    public string Assignee { get; set; } = "";
     public List<string> Labels { get; set; } = new();
 
     /// <summary>
@@ -354,12 +371,12 @@ class Bug
         lastCommentDate = Comments.Count > 0 ? Comments[^1].Date : null
     };
 
-    // "### 2026-07-27 · claude", optionally followed by a parenthetical note and/or the
+    // "### 2026-07-27 · agent", optionally followed by a parenthetical note and/or the
     // _(imported)_ marker. The author stops at '(' deliberately: a header written as
-    // "· claude (fixed)" used to parse its author as the whole string "claude (fixed)", which is
-    // not "claude", so the bug silently vanished from the "Needs my reply" filter with nothing
-    // anywhere reporting a problem. Authors are claude|norman per bugs/SCHEMA.md; anything after
-    // the name is a note, not part of the identity.
+    // "· agent (fixed)" used to parse its author as the whole string "agent (fixed)", which is
+    // not "agent", so the bug silently vanished from the "Needs my reply" filter with nothing
+    // anywhere reporting a problem. Authors are free-form strings (see BUGDESK_HUMAN/BUGDESK_AGENT
+    // in the README); anything after the name is a note, not part of the identity.
     static readonly Regex CommentHdr = new(@"^###\s+(?<date>\S+)\s+·\s+(?<author>[^\r\n_(]+?)\s*(?:\([^)\r\n]*\))?\s*(?:_\(imported\)_)?\s*$", RegexOptions.Multiline);
 
     public static Bug? Parse(string path)

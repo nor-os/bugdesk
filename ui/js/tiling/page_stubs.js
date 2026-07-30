@@ -1,18 +1,28 @@
 /**
- * page_stubs.js — content factories the tiling shell registers.
+ * page_stubs.js — content factories for the tiling shell.
  *
- * Real page modules (`home`, `sfc`, `markets`, `agents`, `analytics`,
- * `settings`) lift the existing workspace-tab factories so we don't
- * reimplement them. Entity-level kinds (`sector`, `agent`, `market`, …)
- * mount the matching detail tab. Anything we haven't ported yet falls
- * back to a stub.
+ * Real page modules (`sfc`, `markets`, `agents`, `analytics`, `settings`)
+ * lift the existing workspace-tab factories so we don't reimplement them.
+ * Entity-level kinds (`sector`, `agent`, `market`, …) mount the matching
+ * detail tab. Anything we haven't ported yet falls back to a stub.
+ *
+ * `home`, `panel:left`, `panel:right` and `panel:bottom` are NOT registered
+ * here anymore — ticketdesk/pages.js owns all four (queue list, filter
+ * rail, Team inspector, Console), and install.js merges ticketdesk's map
+ * in AFTER this one, so a registration here for any of those four kinds
+ * would only ever be shadowed. `settings` is the one kind of the original
+ * five that ticketdesk does NOT register, so it's the only one still real.
+ *
+ * Used to call a module-level `register(kind, factory)` (content_registry.js's
+ * old side-effecting pattern). content_registry.js is gone — replaced by
+ * `@flexdesk/wm`'s `createContentRegistry(map)`, a per-shell instance built
+ * from a plain object handed to it up-front — so this module now BUILDS and
+ * returns that `{ kind: factory }` map instead of registering into a
+ * singleton. install.js merges this with ticketdesk/pages.js's map and
+ * passes the result to `createContentRegistry(...)`.
  */
 
-import { register } from './content_registry.js';
 import { makeLoadingOverlay } from './loading_overlay.js';
-import { mountNavPanel } from './nav_panel.js';
-import { installObjectExplorer } from '../ecoagent/object_explorer.js';
-import { mountHomePage } from './home_page.js';
 import { mountMarketsLanding } from './markets_landing.js';
 import { mountScenariosLanding } from './scenarios_landing.js';
 import { mountKpisLanding } from './kpis_landing.js';
@@ -25,7 +35,6 @@ import { mountTileBreadcrumb } from './tile_breadcrumb.js';
 import { SettingsPage } from '../ui/pages/settings_page.js';
 
 import { makeHomeTab }            from '../ecoagent/tabs/home_tab.js';
-import { makeProjectSetupTab }    from '../ecoagent/tabs/project_setup_tab.js';
 import { makeSfcLandingTab }      from '../ecoagent/tabs/sfc_landing_tab.js';
 import { makeSfcOverviewTab }     from '../ecoagent/tabs/sfc_overview_tab.js';
 import { makeSectorTab }          from '../ecoagent/tabs/sector_tab.js';
@@ -67,7 +76,20 @@ function mountSettings(content, api, eventBus) {
     };
 }
 
-export function registerPageStubs({ api, eventBus }) {
+/**
+ * Build bugdesk's page-content map: `{ kind: factory }`, merged by
+ * install.js (with ticketdesk/pages.js's map) and handed to
+ * `@flexdesk/wm`'s `createContentRegistry(...)`.
+ *
+ * Internally this still reads as a series of `register(kind, factory)`
+ * calls — unchanged from before the content_registry.js extraction — but
+ * `register` is now a local closure writing into `content` instead of a
+ * side-effecting call into a deleted module-level singleton Map.
+ */
+export function createPageStubsContent({ api, eventBus }) {
+    const content = {};
+    const register = (kind, factory) => { content[kind] = factory; };
+
     // Workspace-tab factories all take (hostEl, entityId, ctx). The ctx
     // wants { logger, workspaceTabs, eventBus }; we route their openTab
     // calls into the WM via a shim built from the surrounding ctx.
@@ -258,14 +280,9 @@ export function registerPageStubs({ api, eventBus }) {
         };
     };
 
-    // Home = merged project-settings + entity-overview header (counts
-    // of sectors / agents / markets / scenarios / dashboards).
-    // The dense entity-table from the legacy home is still reachable
-    // as the 'entities' kind via the palette.
-    // Home uses the page-shell wrapper too so it carries the same
-    // breadcrumb chrome as every other page.
-    register('home', stubPageFactory('home', (content, props, ctx) =>
-        mountHomePage(content, props, { ...ctx, eventBus })));
+    // 'home' is NOT registered here — ticketdesk/pages.js's queue-list
+    // factory owns it (see file doc comment). The dense entity-table from
+    // the legacy home is still reachable as the 'entities' kind via the palette.
     register('entities', tabFactory('entities', makeHomeTab));
 
     register('sfc',           tabFactory('sfc',          makeSfcLandingTab));
@@ -414,157 +431,12 @@ export function registerPageStubs({ api, eventBus }) {
         return { title: `${props.originalTitle || props.originalKind} (window)` };
     });
 
-    // Panel content kinds.
-    register('panel:left', (host, _props, ctx) => {
-        const nav = mountNavPanel(host, { wm: ctx.wm, eventBus, api });
-        return { title: 'Navigator', destroy: () => nav?.destroy?.() };
-    });
+    // panel:left / panel:right / panel:bottom are NOT registered here —
+    // ticketdesk/pages.js owns all three (filter rail, Team inspector,
+    // Console) and install.js's merge always prefers its versions (see
+    // file doc comment). The legacy nav panel, right-panel salvage, and
+    // rich BottomPanel wrapper that used to live here were dead code
+    // (permanently shadowed) and have been removed.
 
-    register('panel:right', (host, _props, ctx) => {
-        host.innerHTML = '';
-        const wrapper = document.createElement('div');
-        wrapper.className = 'panel right twm-panel-right';
-        // Adopt the salvaged right-panel-body (Notes + AI Assistant +
-        // any Parameters sections that the bootstrap mounted). Falls
-        // back to a fresh empty body when it's been consumed already
-        // (e.g. mounted onto another desktop's panel:right tile).
-        const salvaged = window.__twmSalvagedRightPanelBody;
-        if (salvaged && !salvaged.isConnected) {
-            wrapper.appendChild(salvaged);
-        } else {
-            const empty = document.createElement('div');
-            empty.className = 'right-panel-body';
-            wrapper.appendChild(empty);
-        }
-        host.appendChild(wrapper);
-        const tryMount = () => {
-            if (!host.isConnected) {
-                requestAnimationFrame(tryMount);
-                return;
-            }
-            try { installObjectExplorer({ eventBus, logger: null, wm: ctx?.wm }); }
-            catch (err) { console.error('[panel:right] object explorer failed', err); }
-        };
-        requestAnimationFrame(tryMount);
-        return { title: 'Inspector' };
-    });
-
-    register('panel:bottom', (host, props, ctx) => mountBottomPanel(host, eventBus, props, ctx));
-}
-
-/** Tiling-shell wrapper for the rich legacy `BottomPanel`. We keep our
- *  flat tab strip on top and host the legacy panel's per-tab paint
- *  methods in the body. The legacy class was tightly coupled to the
- *  Ecosim chrome (FSM, toggle button, .left-bottom observer) so we
- *  bypass `show()` entirely and drive `_paintActiveTab()` directly. */
-function mountBottomPanel(host, eventBus, props = {}, ctx = {}) {
-    const TABS = [
-        { id: 'sfc',         label: 'SFC',         icon: 'account_balance' },
-        { id: 'population',  label: 'Population',  icon: 'groups' },
-        { id: 'run-console', label: 'Run Console', icon: 'terminal' },
-        { id: 'bus',         label: 'Bus',         icon: 'hub' },
-        { id: 'registries',  label: 'Registries',  icon: 'table_view' },
-        { id: 'relations',   label: 'Relations',   icon: 'account_tree' },
-        { id: 'watch',       label: 'Watch',       icon: 'visibility' },
-    ];
-    // View-state (active tab + Registries-browser selection) is persisted
-    // PER DESKTOP into this tile's WM tab props — each desktop is an
-    // independent workspace, so switching a panel's tab on one desktop
-    // must not bleed into another. `updateActiveTabProps` writes into the
-    // leaf's `tabs[active].props` (serialized in desktops.json) and is the
-    // same canonical store editor tiles use via the `updateProps` shim.
-    // Falls back to the legacy global localStorage store only when this
-    // tile isn't wired to a WM leaf (defensive — shouldn't happen).
-    const persistState = (ctx?.wm && ctx?.leafId)
-        ? (state) => {
-            try { ctx.wm.updateActiveTabProps(ctx.leafId, state); }
-            catch (err) { console.warn('[bp] persist view-state failed', err); }
-        }
-        : null;
-    const _validTab = (id) => TABS.some((t) => t.id === id);
-    let activeId = _validTab(props?.tab) ? props.tab : 'run-console';
-
-    host.innerHTML = `
-        <div class="twm-bp">
-            <div class="twm-bp__tabs" role="tablist"></div>
-            <div class="twm-bp__body ea-agents-bottom-host" role="tabpanel"></div>
-        </div>
-    `;
-    const tabsEl = host.querySelector('.twm-bp__tabs');
-    const bodyEl = host.querySelector('.twm-bp__body');
-
-    const renderTabs = () => {
-        tabsEl.innerHTML = TABS.map((t) => `
-            <button type="button" class="twm-bp__tab${t.id === activeId ? ' twm-bp__tab--on' : ''}"
-                    data-tab="${t.id}">
-                <span class="material-symbols-outlined">${t.icon}</span>
-                <span>${t.label}</span>
-            </button>
-        `).join('');
-    };
-
-    // Lazy-import the legacy BottomPanel — pulls in Monaco / Plotly only
-    // when this tile is mounted, not on every project load.
-    let bp = null;
-    const bpReady = (async () => {
-        try {
-            const mod = await import('../ecoagent/bottom_panel.js');
-            // Seed the panel's view-state from this tile's persisted props
-            // (per-desktop) and route its saves back to the same store, so
-            // it no longer shares a single global tab across desktops.
-            bp = new mod.BottomPanel({ eventBus, viewState: props, persistState });
-            // Bypass `show()` — it touches the legacy FSM, the
-            // toggle button, and a MutationObserver against .left-bottom
-            // that don't exist in the tiling shell.
-            bp._pageActive = true;
-            bp._host = bodyEl;
-            bp._wireEvents();
-            await bp._loadArchetypes?.();
-            // Honor the tab the rich panel restored from its view-state.
-            activeId = bp._activeTabId || activeId;
-            renderTabs();
-            bp._paintActiveTab();
-        } catch (err) {
-            console.error('[bp] failed to mount rich panel', err);
-            bodyEl.innerHTML = `<div class="twm-bp-pane">
-                <div class="twm-bp-pane__placeholder">
-                    Bottom panel failed to load — see console.
-                </div>
-            </div>`;
-        }
-    })();
-
-    tabsEl.addEventListener('click', async (ev) => {
-        const btn = ev.target.closest('[data-tab]');
-        if (!btn) return;
-        if (activeId === btn.dataset.tab) return;
-        activeId = btn.dataset.tab;
-        renderTabs();
-        await bpReady;
-        if (!bp) return;
-        bp._activeTabId = activeId;
-        bp._paintActiveTab();
-        bp._saveBpState?.();   // persist the last-opened tab across reloads
-    });
-
-    renderTabs();
-
-    return {
-        title: 'Console',
-        destroy: () => {
-            try { bp?._unwireEvents?.(); } catch {}
-            try { bp?._disposeQueryEditor?.(); } catch {}
-            try { bp?._disposeWatchEditor?.(); } catch {}
-            try { bp?._sfcOverviewTab?.dispose?.(); } catch {}
-            // `_unwireEvents` only covers run/tick/project listeners; the
-            // constructor also installs a `ecoagent:bottom-panel:activate-tab`
-            // handler. Detach it here so it doesn't leak across mounts.
-            try {
-                if (bp?._onActivateTab) {
-                    eventBus?.off?.('ecoagent:bottom-panel:activate-tab',
-                        bp._onActivateTab);
-                }
-            } catch {}
-        },
-    };
+    return content;
 }

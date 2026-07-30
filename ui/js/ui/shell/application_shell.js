@@ -9,14 +9,11 @@
 
 import { ValidationStatus } from '../components/validation_status.js';
 import { installOverlayScrollbar, installWorkspaceScrollbars, installTabsScrollbars, installCollapsibleScrollbars } from '../utils/overlay_scrollbar.js';
-import { SettingsPage } from '../pages/settings_page.js';
-import { ETLManagerPage } from '../pages/etl_manager_page.js';
 import { WindowTaskbar } from '../components/window_taskbar.js';
 import { ManagedWindow } from '../components/managed_window.js';
 import { PanelStateMachine } from '../controllers/panel_state_machine.js';
 import { usesCustomWindowChrome } from '../controllers/window_chrome_controller.js';
 import { getSetting, setSetting } from '../../core/settings.js';
-import { openSolverSettingsModal } from '../components/solver_settings_modal.js';
 
 export class ApplicationShell {
     constructor(options = {}) {
@@ -76,8 +73,6 @@ export class ApplicationShell {
         this._wireDebugButton();
         this._syncDebugIndicator();
         this._wireHistoryEvents();
-        // NOTE: _wireSimulationControlButtons() is called externally from bootstrap
-        // AFTER simulationController is assigned to the shell.
 
         // Bottom panel starts disabled; _switchMode() enables for ETL
         this._bottomPanelFSM.supportsCollapse = true;
@@ -244,12 +239,9 @@ export class ApplicationShell {
         container.appendChild(this._buildFixedLeft());
         container.appendChild(this._buildFixed200());
 
-        // Workspace column holds the simulation top bar plus both panels
+        // Workspace column holds both panels
         const workspaceShell = document.createElement('div');
         workspaceShell.className = 'workspace-shell';
-
-        // Simulation controls bar sits below the global top bar and above both panels
-        workspaceShell.appendChild(this._buildWorkspaceTopBar());
 
         // Main workspace area
         const workspaceMain = document.createElement('div');
@@ -268,47 +260,6 @@ export class ApplicationShell {
         document.body.appendChild(container);
         this.container = container;
         this.elements.container = container;
-    }
-
-    _buildWorkspaceTopBar() {
-        const simTopBar = document.createElement('div');
-        simTopBar.className = 'top-bar workspace-top-bar';
-
-        simTopBar.innerHTML = `
-            <!-- Simulation Controls -->
-            <div class="sim-controls">
-                <div class="menu-bar" style="font-variation-settings: 'FILL' 0, 'wght' 100, 'GRAD' 0, 'opsz' 48;">
-                    <button class="has-tooltip" data-tooltip="Run Simulation" id="start-button"><span class="material-symbols-outlined control-icon control-icon--play">play_arrow</span></button>
-                    <button class="has-tooltip" data-tooltip="Pause" id="pause-button"><span class="material-symbols-outlined control-icon control-icon--pause">pause</span></button>
-                    <button class="has-tooltip" data-tooltip="Stop" id="stop-button"><span class="material-symbols-outlined control-icon control-icon--stop">stop</span></button>
-                    </div></div>
-
-            
-
-            <!-- Time Display -->
-            <div class="time-display">
-                <span class="time-label">t:</span>
-                <span id="current-time-display" class="time-value">—</span>
-            </div>
-        `;
-
-        // Breadcrumb container (hidden by default — flow mode shows sim controls)
-        const breadcrumbContainer = document.createElement('div');
-        breadcrumbContainer.className = 'topbar-breadcrumb';
-        breadcrumbContainer.style.display = 'none';
-        simTopBar.appendChild(breadcrumbContainer);
-
-        // Notebook toolbar slot (hidden by default — shown only in notebook mode)
-        const notebookToolbarSlot = document.createElement('div');
-        notebookToolbarSlot.id = 'notebook-toolbar-slot';
-        notebookToolbarSlot.style.display = 'none';
-        notebookToolbarSlot.style.flex = '1';
-        simTopBar.appendChild(notebookToolbarSlot);
-
-        this.elements.simTopBar = simTopBar;
-        this.elements.topBarBreadcrumb = breadcrumbContainer;
-        this.elements.notebookToolbarSlot = notebookToolbarSlot;
-        return simTopBar;
     }
 
     /**
@@ -403,13 +354,6 @@ export class ApplicationShell {
         fixed200.className = 'panel fixed-200';
         fixed200.dataset.activeContent = 'notebook';
 
-        fixed200.innerHTML = `
-            <div id="fixed-200-settings" data-panel-content="settings" class="settings-browser-panel" style="display:none;"></div>
-            <div id="fixed-200-etl" data-panel-content="etl" class="scenario-browser-panel" style="display:none;"></div>
-            <div id="fixed-200-notebook" data-panel-content="notebook" class="notebook-browser-panel"></div>
-            <div id="fixed-200-paper" data-panel-content="paper" style="display:none; height:100%; overflow:hidden;"></div>
-        `;
-
         this.elements.fixed200 = fixed200;
         return fixed200;
     }
@@ -420,16 +364,8 @@ export class ApplicationShell {
     _buildPanelLeft() {
         const panelLeft = document.createElement('div');
         panelLeft.className = 'panel left';
-        
+
         panelLeft.innerHTML = `
-            <!-- ETL Manager Page (managed by etl_manager_page.js) -->
-            <div id="etl-manager-page" class="etl-manager-page" style="display:none"></div>
-            <!-- Settings Page (managed by settings_page.js) -->
-            <div id="settings-page" class="settings-page" style="display:none"></div>
-            <!-- Notebook Page (managed by notebook/notebook_page.js via app_bootstrap.js) -->
-            <div id="notebook-main" class="notebook-main"></div>
-            <!-- Paper Page (managed by paper/paper_page.js via app_bootstrap.js) -->
-            <div id="paper-main" class="paper-main" style="display:none"></div>
             <!-- ETL bottom panel -->
             <div class="vertical-resizer" id="vertical-resizer" style="display:none"></div>
             <div class="left-bottom" style="display:none">
@@ -899,7 +835,6 @@ export class ApplicationShell {
                 if (settingsPageEl) settingsPageEl.style.display = '';
                 if (settingsContent) settingsContent.style.display = 'flex';
                 if (fixed200) fixed200.dataset.activeContent = 'settings';
-                this._ensureSettingsPage();
                 this.settingsPage?.show?.();
                 this.settingsPage?.onActivated?.();
                 this.eventBus?.emit?.('view:page:activated', { page: 'settings' });
@@ -910,7 +845,6 @@ export class ApplicationShell {
                 if (etlManagerPageEl) etlManagerPageEl.style.display = '';
                 if (etlContent) etlContent.style.display = 'flex';
                 if (fixed200) fixed200.dataset.activeContent = 'etl';
-                this.#ensureETLManagerPage();
                 this.etlManagerPage?.show?.();
                 this.etlManagerPage?.onActivated?.();
                 this.eventBus?.emit?.('view:page:activated', { page: 'etl' });
@@ -949,31 +883,6 @@ export class ApplicationShell {
     }
 
     /**
-     * Ensure the Functions page is instantiated and mounted
-     */
-    /**
-     * Ensure the Settings page is instantiated and mounted
-     */
-    _ensureSettingsPage() {
-        if (this.settingsPage) return;
-
-        const container = document.getElementById('settings-page');
-        if (!container) {
-            this.logger?.warn?.('[ApplicationShell] Settings page container not found');
-            return;
-        }
-
-        this.settingsPage = new SettingsPage({
-            eventBus: this.eventBus,
-            dataManager: this.dataManager,
-            notificationCenter: window.NotificationCenter || null,
-            logger: this.logger,
-        });
-
-        this.settingsPage.mount(container);
-    }
-
-    /**
      * Ensure the Scenario Manager page is instantiated and mounted
      */
     async #ensureSimulationRunPage() {
@@ -986,33 +895,6 @@ export class ApplicationShell {
         this._simulationRunMounted = true;
     }
 
-    /**
-     * Ensure the ETL pipeline editor page is instantiated and mounted.
-     */
-    #ensureETLManagerPage() {
-        if (this.etlManagerPage) return;
-
-        const container = document.getElementById('etl-manager-page');
-        if (!container) {
-            this.logger?.warn?.('[ApplicationShell] ETL manager page container not found');
-            return;
-        }
-
-        this.etlManagerPage = new ETLManagerPage({
-            eventBus: this.eventBus,
-            dataManager: this.dataManager,
-            notificationCenter: window.NotificationCenter || null,
-            logger: this.logger,
-            hostBridge: window.pywebview?.api || null,
-            projectModel: this.projectModel || null,
-        });
-
-        this.etlManagerPage.mount(container);
-    }
-
-    /**
-     * Ensure the Notebook page is instantiated and mounted.
-     */
     /**
      * Return the visible "top area" element for the current mode.
      * In flow mode this is `.left-top` (canvas + tabs); in ETL mode
@@ -1645,202 +1527,6 @@ export class ApplicationShell {
      * @param {string} str - String to escape
      * @returns {string} Escaped string
      */
-    /**
-     * Wire simulation control buttons (play/pause/stop) and solver settings.
-     * Manages button enabled/disabled state based on simulation phase.
-     */
-    _wireSimulationControlButtons() {
-        // Run / Pause / Stop are owned by runtime_controls (→ world_run_async
-        // over the WebSocket); this wires only the analysis-tool buttons +
-        // toolbar inputs.
-
-        // Cache DOM elements
-        const steadyStateBtn = document.getElementById('steady-state-button');
-        const bifurcationBtn = document.getElementById('bifurcation-button');
-        const impulseBtn = document.getElementById('impulse-response-button');
-        const calibrationBtn = document.getElementById('calibration-button');
-        const policyDesignerBtn = document.getElementById('policy-designer-button');
-        const loopAnalysisBtn = document.getElementById('loop-analysis-button');
-        const modelTestsBtn = document.getElementById('model-tests-button');
-        const cellWidthToggleBtn = document.getElementById('cell-width-toggle-btn');
-        const solverSettingsBtn = document.getElementById('solver-settings-btn');
-        const scenarioSelect = document.getElementById('sim-scenario-select-top');
-        const scenarioConfigBtn = document.getElementById('scenario-config-btn');
-        const scenarioSaveBtn = document.getElementById('scenario-save-btn');
-        const scenarioSaveAsBtn = document.getElementById('scenario-save-as-btn');
-        const solverSelect = document.getElementById('sim-solver-method-top');
-        const t0Input = document.getElementById('sim-t0-top');
-        const t1Input = document.getElementById('sim-t1-top');
-        const dtInput = document.getElementById('sim-dt-top');
-
-        // Solver tolerance state
-        let solverSettings = { rtol: 1e-3, atol: 1e-6 };
-
-        // ── Button click handlers ──
-        const bind = (btn, handler) => {
-            if (!btn) return;
-            const wrapped = () => { handler()?.catch?.((err) => this.logger?.warn?.('[SimControlButtons] Action failed', err)); };
-            btn.addEventListener('click', wrapped);
-        };
-
-        // Tools buttons emit events (handled by bootstrap menu actions or dedicated windows)
-        bind(steadyStateBtn, async () => { this.eventBus?.emit?.('tools:steady-state:open'); });
-        bind(bifurcationBtn, async () => { this.eventBus?.emit?.('tools:bifurcation:open'); });
-        bind(impulseBtn, async () => { this.eventBus?.emit?.('tools:impulse-response:open'); });
-        bind(calibrationBtn, () => { this.eventBus?.emit?.('tools:calibration:open'); });
-        bind(policyDesignerBtn, () => { this.eventBus?.emit?.('tools:policy-designer:open'); });
-        bind(loopAnalysisBtn, async () => { this.eventBus?.emit?.('tools:loop-analysis:open'); });
-        bind(modelTestsBtn, async () => { this.eventBus?.emit?.('tools:model-tests:open'); });
-
-        // Cell width toggle
-        if (cellWidthToggleBtn) {
-            bind(cellWidthToggleBtn, () => {
-                const containers = document.querySelectorAll('.notebook-editor-container');
-                const current = containers[0]?.dataset.cellWidthMode || 'fixed';
-                const next = current === 'fixed' ? 'full' : 'fixed';
-                for (const c of containers) c.dataset.cellWidthMode = next;
-                const icon = cellWidthToggleBtn.querySelector('.material-symbols-outlined');
-                if (icon) icon.textContent = next === 'full' ? 'width_full' : 'width_normal';
-                setSetting('notebook.cellWidthMode', next);
-            });
-        }
-
-        // Solver settings modal
-        if (solverSettingsBtn) {
-            solverSettingsBtn.addEventListener('click', () => {
-                openSolverSettingsModal({
-                    rtol: solverSettings.rtol,
-                    atol: solverSettings.atol,
-                    onSave: ({ rtol, atol }) => {
-                        solverSettings.rtol = rtol;
-                        solverSettings.atol = atol;
-                    },
-                });
-            });
-        }
-
-        // Scenario select — uses project file paths as option values
-        if (scenarioSelect) {
-            scenarioSelect.addEventListener('change', async (event) => {
-                const scenarioPath = event?.target?.value || '';
-                if (!scenarioPath) return;
-                this.eventBus?.emit?.('scenario:topbar:selected', { scenarioPath });
-
-                // Sync toolbar solver/time to the selected scenario's settings
-                if (pm) {
-                    if (!pm.getOpenFile(scenarioPath)) await pm.openFile(scenarioPath);
-                    const sf = pm.getOpenFile(scenarioPath)?.content;
-                    if (sf) {
-                        const solver = sf.solver || {};
-                        const time = sf.time || {};
-                        const method = solver.method || solver.solverMethod;
-                        if (solverSelect && method) solverSelect.value = method;
-                        if (t0Input && Number.isFinite(time.t0)) t0Input.value = time.t0;
-                        if (t1Input && Number.isFinite(time.t1)) t1Input.value = time.t1;
-                        if (dtInput && Number.isFinite(time.dt)) dtInput.value = time.dt;
-                        if (Number.isFinite(solver.rtol)) solverSettings.rtol = solver.rtol;
-                        if (Number.isFinite(solver.atol)) solverSettings.atol = solver.atol;
-                    }
-                }
-            });
-        }
-
-        // Scenario config/save/save-as buttons emit events for the scenario system
-        bind(scenarioConfigBtn, () => { this.eventBus?.emit?.('scenario:config:open'); });
-        bind(scenarioSaveBtn, () => { this.eventBus?.emit?.('scenario:save:current'); });
-        bind(scenarioSaveAsBtn, () => { this.eventBus?.emit?.('scenario:save-as:open'); });
-
-        // Time settings: values are read at run time via collectRunPayload().
-        // No active sync needed — the inputs are the source of truth for the next run.
-
-        // ── Populate scenario dropdown from project files ──
-        const pm = this.projectModel;
-
-        const populateScenarioDropdown = (selectedPath) => {
-            if (!scenarioSelect) return;
-            scenarioSelect.replaceChildren();
-            const files = pm?.files ?? [];
-            const scenarios = files.filter(f => f.type === 'scenario');
-            if (scenarios.length === 0) {
-                const placeholder = document.createElement('option');
-                placeholder.value = '';
-                placeholder.textContent = 'No scenarios available';
-                placeholder.disabled = true;
-                placeholder.selected = true;
-                scenarioSelect.appendChild(placeholder);
-                return;
-            }
-            for (const s of scenarios) {
-                const opened = pm.getOpenFile(s.path);
-                const label = opened?.content?.name
-                    ?? s.path.split('/').pop().replace('.scenario', '')
-                        .replace(/[_-]/g, ' ')
-                        .replace(/\b\w/g, c => c.toUpperCase());
-                const opt = document.createElement('option');
-                opt.value = s.path;
-                opt.textContent = label;
-                scenarioSelect.appendChild(opt);
-            }
-            const effectivePath = selectedPath
-                ?? pm?.manifest?.settings?.defaultScenario
-                ?? null;
-            if (effectivePath) {
-                scenarioSelect.value = effectivePath;
-            }
-            // Fall back to first option if effectivePath didn't match any option
-            if (!scenarioSelect.value && scenarios.length > 0) {
-                scenarioSelect.selectedIndex = 0;
-            }
-
-            // Sync toolbar solver/time from the selected scenario's settings
-            const activePath = scenarioSelect.value;
-            if (activePath && pm) {
-                const sf = pm.getOpenFile(activePath)?.content;
-                if (sf) {
-                    const sv = sf.solver || {};
-                    const tm = sf.time || {};
-                    const method = sv.method || sv.solverMethod;
-                    if (solverSelect && method) solverSelect.value = method;
-                    if (t0Input && Number.isFinite(tm.t0)) t0Input.value = tm.t0;
-                    if (t1Input && Number.isFinite(tm.t1)) t1Input.value = tm.t1;
-                    if (dtInput && Number.isFinite(tm.dt)) dtInput.value = tm.dt;
-                    if (Number.isFinite(sv.rtol)) solverSettings.rtol = sv.rtol;
-                    if (Number.isFinite(sv.atol)) solverSettings.atol = sv.atol;
-                }
-            }
-        };
-
-        // Hydrate from current state
-        if (pm?.isOpen) populateScenarioDropdown(null);
-
-        // ── Bus subscriptions for live updates ──
-        if (this.eventBus) {
-            const subscribe = (name, handler) => {
-                const disposer = this.eventBus.on(name, handler);
-                if (disposer) this._busSubscriptions.push(disposer);
-            };
-
-            // Rebuild dropdown when project opens/closes or files change
-            subscribe('project:opened', () => populateScenarioDropdown(null));
-            subscribe('project:closed', () => populateScenarioDropdown(null));
-            subscribe('project:files:changed', () => {
-                const currentPath = scenarioSelect?.value || null;
-                populateScenarioDropdown(currentPath);
-            });
-
-            // When a run starts, sync the dropdown to show the running scenario
-            subscribe('streaming:started', ({ scenarioName }) => {
-                if (!scenarioSelect || !scenarioName) return;
-                for (const opt of scenarioSelect.options) {
-                    if (opt.textContent === scenarioName) {
-                        scenarioSelect.value = opt.value;
-                        break;
-                    }
-                }
-            });
-        }
-    }
-
     _escapeHtml(str) {
         if (str == null) return '';
         return String(str)

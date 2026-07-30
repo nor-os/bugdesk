@@ -9,30 +9,22 @@
  * - Keyboard navigation (Escape to close)
  */
 
-import { getHelpService, HELP_TOPICS } from './help_service.js';
+import { getHelpService } from './help_service.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Category Display Names
 // ═══════════════════════════════════════════════════════════════════════════
+//
+// BugDesk's whole help registry is small enough to live in one category —
+// see help_service.js's HELP_TOPICS (Getting Started, Lifecycle &
+// Authorship, Filters, Keyboard shortcuts).
 
 const CATEGORY_LABELS = {
-    basics:        'Getting started',
-    sfc:           'SFC',
-    markets:       'Markets',
-    agents:        'Agents',
-    analytics:     'Analytics',
-    observability: 'Observability',
-    ai:            'AI assistant',
+    basics: 'Getting started',
 };
 
 const CATEGORY_ICONS = {
-    basics:        'school',
-    sfc:           'account_balance',
-    markets:       'storefront',
-    agents:        'group',
-    analytics:     'monitoring',
-    observability: 'visibility',
-    ai:            'smart_toy',
+    basics: 'school',
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -227,8 +219,8 @@ export class HelpModal {
 
         content.innerHTML = `
             <div class="help-index">
-                <h1>EcoAgent Help</h1>
-                <p>Welcome to EcoAgent! Select a topic from the sidebar or browse the categories below.</p>
+                <h1>BugDesk Help</h1>
+                <p>Welcome to BugDesk! Select a topic from the sidebar or browse the categories below.</p>
 
                 <div class="help-index__grid">
                     ${categories.map(category => {
