@@ -6,6 +6,8 @@ coding agent edits directly and a human triages through a tiling UI — no API
 round-trip, no `gh`-token authorship ambiguity, git-tracked alongside the code
 they describe.
 
+![BugDesk's queue view: a filterable bug list with priority/status/assignee columns, a filter rail on the left, and a team inspector on the right](screenshot.png)
+
 ```
 bugdesk/
   server/   C# bridge (.NET 10 minimal API): serves ui/ + JSON API over the store
