@@ -13,7 +13,8 @@ bugdesk/
   server/   C# bridge (.NET 10 minimal API): serves ui/ + JSON API over the store
   ui/       Tiling shell + bug-tracker UI, depending on the FlexDesk package
   skills/   /bugs — a Claude Code skill that teaches an agent the file format
-  run.sh    dotnet run wrapper
+  run.sh    dotnet run wrapper (Linux/macOS/WSL)
+  run.ps1   dotnet run wrapper (Windows PowerShell)
 ```
 
 `ui/` depends on [FlexDesk](https://github.com/nor-os/FlexDesk) (vendored at
@@ -41,6 +42,15 @@ your own project's repo to keep bug history alongside the code.
 ./run.sh --seed                # + pre-seed an empty bug store with 10 example bugs
 BUGDESK_BUGS=/path/to/bugs ./run.sh
 BUGDESK_HUMAN=alice BUGDESK_AGENT=claude ./run.sh
+```
+
+On Windows, `run.ps1` is the same wrapper for PowerShell (5.1 or 7):
+
+```powershell
+.\run.ps1                     # http://127.0.0.1:8766, bugs in .\bugs
+.\run.ps1 --seed              # + pre-seed an empty bug store with 10 example bugs
+$env:BUGDESK_BUGS='C:\path\to\bugs'; .\run.ps1
+$env:BUGDESK_HUMAN='alice'; $env:BUGDESK_AGENT='claude'; .\run.ps1
 ```
 
 `--seed` copies the sample bugs from `examples/bugs/` into the store the first
