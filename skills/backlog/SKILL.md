@@ -258,8 +258,11 @@ acceptance criteria before you write any code; they are the definition of done
 and they are frequently more specific than the description.
 
 **Done** — go through the acceptance criteria and tick the ones that now hold
-(`- [ ]` → `- [x]`). If any remain unticked, the item is **not** done — either
-finish them, or say in a comment why the criterion changed and get it amended.
+(`- [ ]` → `- [x]`). Edit the line in place; the human ticks the very same
+boxes through the UI's checklist, so keep one criterion per line and leave the
+surrounding text alone. If any remain unticked, the item is **not** done —
+either finish them, or say in a comment why the criterion changed and get it
+amended.
 Then set `status: review` (someone else checks) or `done` when you're closing
 out work you were explicitly asked to close.
 

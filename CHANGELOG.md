@@ -34,7 +34,11 @@ several people can work one repo without overwriting each other on every pull.
 sequence so `parent: 7` is unambiguous, and a `phase` milestone label carried
 on epics that stories and tasks inherit.
 
-- `## Acceptance criteria` as a first-class section, counted and rendered.
+- `## Acceptance criteria` as a first-class section — rendered as a **checklist
+  you tick**, with add / rename / remove / reorder-free editing in place and the
+  markdown editor one click away. `POST /api/backlog/{id}/criteria` applies one
+  addressed operation to one line, so prose or sub-bullets the checklist never
+  parsed survive a tick.
 - Full CRUD over `/api/backlog`, with the listing returned in **tree order**
   (depth is a function of the whole store, so the bridge resolves it once
   rather than every client re-deriving it).

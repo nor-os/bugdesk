@@ -345,8 +345,8 @@
 .bd-childrow:last-child { border-bottom: none; }
 .bd-childrow__title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* The acceptance-criteria editor. Refinement is mostly the act of writing
-   this box, so it opens at a workable size rather than one line. */
+/* Acceptance criteria — a real checklist, ticked in place. The markdown editor
+   is still one click away for bulk edits. */
 .bd-acceptance textarea { min-height: 130px; font-family: var(--font-family-mono, ui-monospace, monospace); }
 .bd-acceptance__foot {
     display: flex;
@@ -354,6 +354,79 @@
     gap: 8px;
     margin-top: 6px;
 }
+
+.bd-crit-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.bd-crit-row {
+    display: grid;
+    grid-template-columns: 16px 1fr 20px;
+    align-items: baseline;
+    gap: 8px;
+    padding: 3px 2px;
+    border-bottom: 1px solid var(--ea-border-soft, #2a2a2a);
+}
+.bd-crit-row:last-child { border-bottom: none; }
+.bd-crit-row__box {
+    width: 13px;
+    height: 13px;
+    margin: 0;
+    accent-color: var(--color-success, #3fb950);
+    cursor: pointer;
+    align-self: center;
+}
+/* A bare <button> picks up main_new.css's accent fill; this is a text row that
+   happens to be clickable, so it resets to look like the text it holds. */
+.bd-crit-row__text {
+    font: inherit;
+    text-align: left;
+    color: var(--text-body, #d4d4d4);
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: text;
+    line-height: 1.45;
+}
+.bd-crit-row__text:hover {
+    background: none;
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 2px;
+}
+.bd-crit-row--done .bd-crit-row__text {
+    color: var(--text-muted, #888);
+    text-decoration: line-through;
+}
+.bd-crit-row__rm {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    padding: 0;
+    color: transparent;      /* revealed on hover — one per row is a lot of noise */
+    cursor: pointer;
+    align-self: center;
+}
+.bd-crit-row__rm .material-symbols-outlined { font-size: 14px; }
+.bd-crit-row:hover .bd-crit-row__rm,
+.bd-crit-row__rm:focus-visible { color: var(--text-muted, #888); }
+.bd-crit-row__rm:hover { background: none; color: var(--color-danger, #c74e4e); }
+.bd-crit-row__edit { width: 100%; }
+
+.bd-crit-add {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+    color: var(--text-dim, #666);
+}
+.bd-crit-add .material-symbols-outlined { font-size: 15px; }
+.bd-crit-add__input { flex: 1; }
+
+.bd-crit-empty { padding: 4px 2px; }
 
 /* "What is still missing before this counts as refined" — the same rules the
    /backlog skill applies, shown rather than hidden behind a disabled button. */

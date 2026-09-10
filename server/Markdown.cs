@@ -176,6 +176,91 @@ static class Md
             : text.TrimEnd() + "\n\n" + block;
     }
 
+    static readonly Regex ChecklistLine = new(@"^(?<indent>\s*)(?<bullet>[-*])\s+\[(?<box>[ xX])\]\s?(?<text>.*)$");
+
+    /// <summary>
+    /// Edit ONE checklist line inside a <c>## Heading</c> section, addressed by
+    /// its position among that section's checklist items.
+    /// <para>
+    /// Line surgery rather than "rebuild the section from a list of items"
+    /// because the section is hand-authored markdown: it may carry a sentence
+    /// of context above the list, a nested sub-bullet, a blank line the author
+    /// wanted. Regenerating it from parsed items would silently delete all of
+    /// that the first time anyone ticked a box.
+    /// </para>
+    /// </summary>
+    /// <param name="op">toggle | edit | remove | add</param>
+    /// <param name="index">which checklist item (ignored by <c>add</c>)</param>
+    /// <param name="value">the new text for <c>edit</c>/<c>add</c>; "1"/"0" for <c>toggle</c></param>
+    /// <returns>the whole document, or null when the op cannot apply.</returns>
+    public static string? EditChecklist(string text, string heading, string op, int index, string value)
+    {
+        var at = text.IndexOf(heading, StringComparison.OrdinalIgnoreCase);
+        if (at < 0) return null;
+        var bodyStart = at + heading.Length;
+        var next = NextH2.Match(text, bodyStart);
+        var bodyEnd = next.Success ? next.Index : text.Length;
+
+        var body = text[bodyStart..bodyEnd];
+        var lines = body.Split('\n').ToList();
+
+        // Positions of the checklist items, so `index` means the Nth checkbox
+        // rather than the Nth line — which is what the UI counted.
+        var items = new List<int>();
+        for (int i = 0; i < lines.Count; i++)
+            if (ChecklistLine.IsMatch(lines[i])) items.Add(i);
+
+        if (op == "add")
+        {
+            var line = $"- [ ] {value.Trim()}";
+            if (items.Count > 0)
+            {
+                lines.Insert(items[^1] + 1, line);
+            }
+            else
+            {
+                // A section holding only the "_(not refined yet)_" placeholder
+                // is empty in every sense that matters — replace it rather than
+                // leaving it above the first real criterion.
+                var kept = lines.Where(l => !Regex.IsMatch(l.Trim(), @"^_\(.*\)_$")).ToList();
+                while (kept.Count > 0 && kept[^1].Trim().Length == 0) kept.RemoveAt(kept.Count - 1);
+                while (kept.Count > 0 && kept[0].Trim().Length == 0) kept.RemoveAt(0);
+                // Blank line after the heading and before whatever follows the
+                // section: this is committed markdown people read in a diff, and
+                // a heading welded to its first bullet reads as a mistake even
+                // though it parses.
+                lines = new List<string> { "" };
+                if (kept.Count > 0) { lines.AddRange(kept); lines.Add(""); }
+                lines.Add("");
+                lines.Add(line);
+                lines.Add("");
+                lines.Add("");
+            }
+        }
+        else
+        {
+            if (index < 0 || index >= items.Count) return null;
+            var li = items[index];
+            var m = ChecklistLine.Match(lines[li]);
+            if (op == "remove")
+            {
+                lines.RemoveAt(li);
+            }
+            else if (op == "toggle")
+            {
+                var box = value is "1" or "true" ? "x" : " ";
+                lines[li] = $"{m.Groups["indent"].Value}{m.Groups["bullet"].Value} [{box}] {m.Groups["text"].Value}";
+            }
+            else if (op == "edit")
+            {
+                lines[li] = $"{m.Groups["indent"].Value}{m.Groups["bullet"].Value} [{m.Groups["box"].Value}] {value.Trim()}";
+            }
+            else return null;
+        }
+
+        return text[..bodyStart] + string.Join('\n', lines) + text[bodyEnd..];
+    }
+
     /// <summary>
     /// Append a <c>### date · author</c> comment and bump <c>updated</c>. Creates the
     /// <c>## Comments</c> section when the record has none yet.

@@ -582,23 +582,89 @@ function mountItem(host, props, ctx) {
 
     /* ── acceptance criteria ────────────────────────────────────── */
 
+    /**
+     * Acceptance criteria as a REAL checklist, not markdown you have to hand-edit.
+     *
+     * Each row is a checkbox you tick, and each edit is one addressed operation
+     * on one line (`POST /api/backlog/{id}/criteria`) rather than a rewrite of
+     * the whole section. That matters because the section is hand-authored
+     * markdown that may carry a sentence of context or a nested sub-bullet —
+     * regenerating it from the parsed rows would delete all of that the first
+     * time anyone ticked a box.
+     *
+     * The markdown view is still one click away, for bulk edits and for anything
+     * a checklist cannot express.
+     */
+    let acceptanceRaw = false;      // showing the markdown editor instead
+
+    const criterion = (c, i) => `
+        <li class="bd-crit-row${c.done ? ' bd-crit-row--done' : ''}">
+            <input type="checkbox" class="bd-crit-row__box" data-crit-toggle="${i}"
+                   ${c.done ? 'checked' : ''}
+                   aria-label="${esc(c.text)}">
+            <button type="button" class="bd-crit-row__text" data-crit-edit="${i}"
+                    title="Click to edit">${esc(c.text)}</button>
+            <button type="button" class="bd-crit-row__rm" data-crit-remove="${i}"
+                    title="Remove" aria-label="Remove criterion">${icon('close')}</button>
+        </li>`;
+
     const renderAcceptance = () => {
         const el = $('[data-slot="acceptance"]');
         try { acceptanceEditor?.destroy(); } catch { /* first render */ }
         acceptanceEditor = null;
+
+        const list = item.criteria || [];
+        const done = list.filter((c) => c.done).length;
+
+        if (acceptanceRaw) {
+            el.innerHTML = `
+                <textarea class="ea-tin td-area" data-f="acceptance"
+                    placeholder="- [ ] one checkable outcome per line"></textarea>
+                <div class="bd-acceptance__foot">
+                    <button class="ea-btn" data-a="save-acceptance">${icon('save')} Save</button>
+                    <button class="ea-btn" data-a="acceptance-list">${icon('checklist')} Back to checklist</button>
+                </div>`;
+            const ta = el.querySelector('textarea');
+            // A placeholder body means "nothing authored yet" — showing the
+            // literal "_(not refined yet)_" invites saving it back as content.
+            ta.value = /^_\(.*\)_$/.test((item.acceptance || '').trim()) ? '' : (item.acceptance || '');
+            acceptanceEditor = attachMarkdownEditor(ta, { onStatus: statusLine, minHeight: 130 });
+            return;
+        }
+
         el.innerHTML = `
-            <textarea class="ea-tin td-area" data-f="acceptance"
-                placeholder="- [ ] one checkable outcome per line"></textarea>
+            ${list.length
+                ? `<ul class="bd-crit-list">${list.map(criterion).join('')}</ul>`
+                : `<div class="td-dim bd-crit-empty">No acceptance criteria yet${
+                    item.type === 'task' ? ' — a task usually inherits its story\'s.' : '.'}</div>`}
+            <div class="bd-crit-add">
+                ${icon('add')}
+                <input class="ea-tin bd-crit-add__input" data-crit-new
+                       placeholder="Add a criterion — one checkable outcome">
+            </div>
             <div class="bd-acceptance__foot">
-                <button class="ea-btn" data-a="save-acceptance">${icon('save')} Save criteria</button>
-                <span class="td-dim">${criteriaCell(
-                    (item.criteria || []).filter((c) => c.done).length, (item.criteria || []).length)}</span>
+                <span class="td-dim">${criteriaCell(done, list.length)}</span>
+                <span class="td-spacer"></span>
+                <button class="ea-btn ea-btn--small" data-a="acceptance-raw">${icon('edit_note')} Edit as markdown</button>
             </div>`;
-        const ta = el.querySelector('textarea');
-        // A placeholder body means "nothing authored yet" — showing the literal
-        // "_(not refined yet)_" in an editor invites saving it back as content.
-        ta.value = /^_\(.*\)_$/.test((item.acceptance || '').trim()) ? '' : (item.acceptance || '');
-        acceptanceEditor = attachMarkdownEditor(ta, { onStatus: statusLine, minHeight: 130 });
+    };
+
+    /** One addressed edit, then repaint from what the bridge says it now is. */
+    const criteriaOp = async (op, index, value) => {
+        try {
+            const res = await fetch(`/api/backlog/${item.id}/criteria`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json', accept: 'application/json' },
+                body: JSON.stringify({ op, index, value }),
+            });
+            const j = await res.json().catch(() => null);
+            if (!res.ok || !j?.ok) throw new Error(j?.error || `HTTP ${res.status}`);
+            apply(j.item);
+            await broadcast();
+        } catch (err) {
+            statusLine(`Criteria update failed: ${err?.message || err}`);
+            renderAcceptance();   // put the checkbox back where the file says it is
+        }
     };
 
     /* ── children ───────────────────────────────────────────────── */
@@ -736,7 +802,57 @@ function mountItem(host, props, ctx) {
     host.addEventListener('input', (e) => { if (e.target.matches('[data-f]:not([readonly])')) setDirty(true); });
     host.addEventListener('change', (e) => { if (e.target.matches('[data-f]:not([readonly])')) setDirty(true); });
 
+    // Checklist interaction. Delegated, because renderAcceptance replaces the
+    // whole list on every change.
+    const onCriteriaChange = (e) => {
+        const box = e.target.closest('[data-crit-toggle]');
+        if (!box) return;
+        criteriaOp('toggle', Number(box.dataset.critToggle), box.checked ? '1' : '0');
+    };
+    host.addEventListener('change', onCriteriaChange);
+
+    /** Turn a criterion into an input in place. Enter or blur commits; Escape
+     *  restores. Editing text is rare next to ticking, so it stays out of the
+     *  way until asked for rather than living as a permanent input. */
+    const editCriterion = (btn, index) => {
+        const input = document.createElement('input');
+        input.className = 'ea-tin bd-crit-row__edit';
+        input.value = btn.textContent.trim();
+        let settled = false;
+        const commit = (save) => {
+            if (settled) return;
+            settled = true;
+            const text = input.value.trim();
+            if (save && text && text !== btn.textContent.trim()) criteriaOp('edit', index, text);
+            else renderAcceptance();
+        };
+        input.addEventListener('keydown', (ev) => {
+            if (ev.key === 'Enter') { ev.preventDefault(); commit(true); }
+            else if (ev.key === 'Escape') { ev.preventDefault(); commit(false); }
+        });
+        input.addEventListener('blur', () => commit(true));
+        btn.replaceWith(input);
+        input.focus();
+        input.select();
+    };
+
+    const onCriteriaKey = (e) => {
+        const add = e.target.closest('[data-crit-new]');
+        if (!add || e.key !== 'Enter') return;
+        e.preventDefault();
+        const text = add.value.trim();
+        if (!text) return;
+        add.value = '';
+        criteriaOp('add', -1, text);
+    };
+    host.addEventListener('keydown', onCriteriaKey);
+
     const onClick = async (e) => {
+        const critEdit = e.target.closest('[data-crit-edit]');
+        if (critEdit) { editCriterion(critEdit, Number(critEdit.dataset.critEdit)); return; }
+        const critRm = e.target.closest('[data-crit-remove]');
+        if (critRm) { await criteriaOp('remove', Number(critRm.dataset.critRemove), ''); return; }
+
         const goto = e.target.closest('[data-goto]');
         if (goto) {
             const target = ITEMS.find((x) => Number(x.id) === Number(goto.dataset.goto));
@@ -750,7 +866,9 @@ function mountItem(host, props, ctx) {
         const act = e.target.closest('[data-a]')?.dataset.a;
         if (act === 'save') await save();
         else if (act === 'cancel') await cancel();
-        else if (act === 'save-acceptance') await saveAcceptance();
+        else if (act === 'save-acceptance') { await saveAcceptance(); acceptanceRaw = false; renderAcceptance(); }
+        else if (act === 'acceptance-raw') { acceptanceRaw = true; renderAcceptance(); }
+        else if (act === 'acceptance-list') { acceptanceRaw = false; renderAcceptance(); }
         else if (act === 'addchild') {
             const created = await openNewItem({
                 kind: item.type === 'epic' ? 'story' : 'task',
@@ -773,7 +891,11 @@ function mountItem(host, props, ctx) {
 
     return {
         title: itemLabel(ITEMS.find((x) => Number(x.id) === id)) || `Item ${id}`,
-        destroy: destroyWidgets,
+        destroy: () => {
+            host.removeEventListener('change', onCriteriaChange);
+            host.removeEventListener('keydown', onCriteriaKey);
+            destroyWidgets();
+        },
     };
 }
 

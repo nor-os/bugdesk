@@ -422,6 +422,46 @@ app.MapPost("/api/backlog/{id:int}", async (int id, HttpRequest req) =>
     return Results.Json(new { ok = true, item = FullItem(reloaded, reloaded.First(i => i.Id == id)) }, json);
 });
 
+// Acceptance criteria as a real checklist. One line at a time, addressed by
+// its position among the section's checkboxes, so ticking a box rewrites that
+// box and nothing else — the section is hand-authored markdown and may carry
+// context the UI never parsed.
+app.MapPost("/api/backlog/{id:int}/criteria", async (int id, HttpRequest req) =>
+{
+    var all = LoadBacklog(backlogDir);
+    var item = all.FirstOrDefault(i => i.Id == id);
+    if (item is null) return Results.Json(new { ok = false, error = "not found" }, json, statusCode: 404);
+    var path = Path.Combine(backlogDir, item.FileName);
+
+    var body = await JsonSerializer.DeserializeAsync<Dictionary<string, JsonElement>>(req.Body, json) ?? new();
+    var op = body.TryGetValue("op", out var o) ? (o.GetString() ?? "").ToLowerInvariant() : "";
+    var index = body.TryGetValue("index", out var ix) && ix.ValueKind == JsonValueKind.Number ? ix.GetInt32() : -1;
+    var value = body.TryGetValue("value", out var v)
+        ? (v.ValueKind == JsonValueKind.String ? v.GetString() ?? "" : v.ToString())
+        : "";
+
+    if (op is not ("toggle" or "edit" or "remove" or "add"))
+        return Results.Json(new { ok = false, error = "op must be toggle, edit, remove or add" }, json, statusCode: 400);
+    if (op is "add" or "edit" && value.Trim().Length == 0)
+        return Results.Json(new { ok = false, error = "a criterion needs some text" }, json, statusCode: 400);
+
+    var text = await File.ReadAllTextAsync(path);
+    // The section is created on demand: an item that has never been refined has
+    // no "## Acceptance criteria" heading, and adding the first criterion is
+    // exactly how it acquires one.
+    if (op == "add" && !text.Contains("## Acceptance criteria", StringComparison.OrdinalIgnoreCase))
+        text = Md.SetSection(text, "## Acceptance criteria", "");
+
+    var next = Md.EditChecklist(text, "## Acceptance criteria", op, index, value);
+    if (next is null)
+        return Results.Json(new { ok = false, error = $"no criterion at position {index}" }, json, statusCode: 400);
+
+    await File.WriteAllTextAsync(path, Md.SetFrontmatter(next, "updated", Md.Today()));
+
+    var reloaded = LoadBacklog(backlogDir);
+    return Results.Json(new { ok = true, item = FullItem(reloaded, reloaded.First(i => i.Id == id)) }, json);
+});
+
 app.MapPost("/api/backlog/{id:int}/comments", async (int id, HttpRequest req) =>
 {
     var all = LoadBacklog(backlogDir);

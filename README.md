@@ -70,6 +70,12 @@ UI lists exactly which of those checks a `draft` still fails, and
 five rules. They are defined once, in
 `ui/js/ticketdesk/backlog_data.js`'s `REFINEMENT_RULES`.
 
+**Acceptance criteria are a checklist you tick**, not markdown you hand-edit —
+add, rename, remove and tick rows in place, with the markdown editor one click
+away for bulk edits. Each change is one addressed operation on one line rather
+than a rewrite of the section, so a sentence of context or a nested sub-bullet
+that the checklist never parsed survives the first time anyone ticks a box.
+
 ## Run
 
 ```bash
@@ -171,6 +177,7 @@ Same-origin JSON, backed by the markdown files:
 | POST | `/api/backlog` | create; id assigned server-side, parent validated |
 | POST | `/api/backlog/{id}` | update frontmatter, `## Description` or `## Acceptance criteria` |
 | POST | `/api/backlog/{id}/comments` | append a comment |
+| POST | `/api/backlog/{id}/criteria` | tick / add / edit / remove one acceptance criterion |
 | GET  | `/api/backlog/meta` | counts by status/type/assignee, the phase vocabulary, and the per-type lifecycle ladders |
 | GET  | `/api/config` | resolved names, whether a profile exists, the profiles there are |
 | POST | `/api/config/user` | adopt a profile by name (what the first-run screen posts) |
