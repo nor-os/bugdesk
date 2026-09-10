@@ -332,6 +332,27 @@ The queue's left rail filters on the fields the summary API exposes — notably
 **"Needs my reply"** = bugs whose last comment was the agent's
 (`lastCommentAuthor == <agentAuthor>`), so the human hasn't responded yet.
 
+## Finished work gets out of the way
+
+A store accumulates closed records for ever. After a year they are most of it,
+and a surface that lists them alongside live work buries the handful of things
+you were actually looking for. So closed work — `done` and `dropped`, and a
+`closed` bug — is **hidden by default on the surfaces you go to in order to act
+on something**, and reachable on the ones you go to in order to look something
+up:
+
+| surface | closed work |
+|---|---|
+| the **search dialog** (parent, add-a-child, tracker Search) | hidden, with a **Closed** chip that brings it back. The count says how many were held back, so the chip is discoverable exactly when it would help |
+| the **search page** | not searched, with an **Include closed** checkbox. Asking for `closed` in the Status field still wins — somebody who typed it means it |
+| the left rail's **Projects** / **Work packages** tree | finished ones are not listed, and the badges count open items only |
+| the rail's **Done** / **Closed** view | unchanged. It is the one place whose whole job is to answer "what did we finish" |
+| **Everything** | unchanged |
+
+The item a field currently points at is never hidden, whatever its status —
+a picker that cannot show you what the field holds is a picker that makes the
+field look empty.
+
 ## Who has what
 
 The right-hand Inspector lists everyone with work in the store you are looking

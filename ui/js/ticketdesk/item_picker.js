@@ -6,6 +6,11 @@
  * meant typing "EPIC-0001" — the id you opened the picker to look up. This is a
  * search: type any part of a reference or title, filter by type, pick.
  *
+ * FINISHED WORK IS HIDDEN until the Closed chip is ticked. A store accumulates
+ * closed items forever — after a year they are most of it — and a picker is a
+ * place you go to find something to act on. The count says how many were held
+ * back, so the chip is discoverable at the moment it would help.
+ *
  * The type filter is PRESELECTED to what can legally hold the thing being
  * parented — projects for an epic, epics and projects for a story — because
  * that is the answer nine times in ten, and it is still loosened with one click
@@ -20,7 +25,8 @@
 
 import { esc } from './data.js';
 import {
-    ALL_TYPES, ITEMS, TYPES, TYPE_ICON, TYPE_LABEL, childTypesFor, parentTypesFor, typeLabelOf,
+    ALL_TYPES, ITEMS, TYPES, TYPE_ICON, TYPE_LABEL,
+    childTypesFor, isClosedItem, parentTypesFor, typeLabelOf,
 } from './backlog_data.js';
 
 const icon = (name) => `<span class="material-symbols-outlined">${name}</span>`;
@@ -70,6 +76,11 @@ export function openItemPicker({
 
     return new Promise((resolve) => {
         const active = new Set(types.length ? types : chipTypes);
+        // Finished work is hidden until asked for. A picker is a place you go to
+        // find something to ACT on, and a store accumulates closed items
+        // forever — after a year they are most of it, and they push the three
+        // live ones you were looking for off the screen.
+        let includeClosed = false;
         let query = '';
         let cursor = 0;                 // index into the rendered result list
         let results = [];
@@ -91,6 +102,12 @@ export function openItemPicker({
                                 data-type="${t}" aria-pressed="${active.has(t)}">
                             ${icon(TYPE_ICON[t])}${esc(typeLabelOf(t))}
                         </button>`).join('')}
+                    <span class="td-spacer"></span>
+                    <button type="button" class="bd-picker__chip bd-picker__chip--closed"
+                            data-closed="1" aria-pressed="false"
+                            title="Finished work is hidden by default">
+                        ${icon('check_circle')}Closed
+                    </button>
                     <span class="bd-picker__count" data-slot="count"></span>
                 </div>
                 <ul class="bd-picker__list" data-slot="list" role="listbox"></ul>
@@ -117,7 +134,9 @@ export function openItemPicker({
             resolve(value);
         };
 
-        const matches = () => {
+        /** Rows of the right type, not blocked, matching the query. `closed`
+         *  is applied separately so the count can say how many it removed. */
+        const candidates = () => {
             const q = query.trim().toLowerCase();
             return ITEMS.filter((i) => {
                 if (!active.has(i.type)) return false;
@@ -127,10 +146,24 @@ export function openItemPicker({
             });
         };
 
+        // The item ALREADY chosen is never hidden, whatever its status: a
+        // picker that cannot show you what the field currently holds is a
+        // picker that makes the field look empty.
+        const hidden = (i) => isClosedItem(i) && Number(i.id) !== Number(current);
+
+        const matches = () => {
+            const all = candidates();
+            return includeClosed ? all : all.filter((i) => !hidden(i));
+        };
+
         const render = () => {
             results = matches();
             cursor = Math.max(0, Math.min(cursor, results.length - 1));
-            countEl.textContent = `${results.length} item${results.length === 1 ? '' : 's'}`;
+            // Say how many were held back, so the chip is discoverable at the
+            // moment it would help rather than being a control nobody notices.
+            const held = includeClosed ? 0 : candidates().filter(hidden).length;
+            countEl.textContent = `${results.length} item${results.length === 1 ? '' : 's'}`
+                + (held ? ` · ${held} closed hidden` : '');
             listEl.innerHTML = results.length
                 ? results.map((i, n) => `
                     <li class="bd-picker__row${n === cursor ? ' bd-picker__row--on' : ''}${
@@ -141,9 +174,11 @@ export function openItemPicker({
                         <span class="bd-picker__title">${esc(i.title)}</span>
                         <span class="bd-picker__meta">${esc(i.phaseLabel || '')}</span>
                     </li>`).join('')
-                : `<li class="bd-picker__empty">${query.trim()
-                    ? 'Nothing matches that.'
-                    : 'No items of the selected types.'}</li>`;
+                : `<li class="bd-picker__empty">${
+                    (!includeClosed && candidates().some(hidden))
+                        ? 'Nothing open matches that — try Closed.'
+                        : query.trim() ? 'Nothing matches that.'
+                        : 'No items of the selected types.'}</li>`;
             listEl.querySelector('.bd-picker__row--on')?.scrollIntoView({ block: 'nearest' });
         };
         render();
@@ -158,6 +193,15 @@ export function openItemPicker({
         overlay.addEventListener('click', (e) => {
             // Clicking the backdrop cancels; clicking the dialog must not.
             if (e.target === overlay) { close(null); return; }
+            const closedChip = e.target.closest('[data-closed]');
+            if (closedChip) {
+                includeClosed = !includeClosed;
+                closedChip.classList.toggle('bd-picker__chip--on', includeClosed);
+                closedChip.setAttribute('aria-pressed', String(includeClosed));
+                cursor = 0;
+                render();
+                return;
+            }
             const chip = e.target.closest('[data-type]');
             if (chip) {
                 const t = chip.dataset.type;

@@ -46,7 +46,7 @@ import {
 import {
     ALL_TYPES, ITEMS, PHASES, TRACKER, TYPES, TYPE_ICON,
     DUE_LABEL, collapsibleIds, dueState, duePhrase, fetchItem, humanizeItemStatus,
-    isGated, itemLabel, itemRef, ladderFor, loadBacklog, parentTypesFor,
+    isClosedItem, isGated, itemLabel, itemRef, ladderFor, loadBacklog, parentTypesFor,
     patchItem, postItemComment,
     REFINEMENT_RULES, refinementGaps, stageActions, stageOf, treeRows,
     typeLabelOf,
@@ -1155,6 +1155,12 @@ function mountItem(host, props, ctx) {
  *   "Work packages"  phases → their epics, as a navigable tree
  *                    (TRACKER mode: "Projects" instead — see trackerSection)
  *
+ * The bottom section lists only OPEN work packages, and counts only open items
+ * inside them. The rail is a place you navigate FROM, and a finished project is
+ * not somewhere you are going; a count that includes everything ever closed
+ * under it grows without bound and stops meaning anything actionable. Finished
+ * work is reachable through the Done view and through search.
+ *
  * The third one is the point. A flat list of views tells you what STATE things
  * are in; the backlog's actual shape is phase → epic → story → task, and the
  * rail is where you navigate that shape rather than scroll it. Clicking an epic
@@ -1195,8 +1201,8 @@ export function mountBacklogRail(host, ctx) {
      * be reachable.
      */
     const projects = () => {
-        const list = ITEMS.filter((i) => i.type === 'project');
-        const loose = ITEMS.filter((i) => !i.projectRef && i.type !== 'project');
+        const list = ITEMS.filter((i) => i.type === 'project' && !isClosedItem(i));
+        const loose = ITEMS.filter((i) => !i.projectRef && i.type !== 'project' && !isClosedItem(i));
         return { list, loose };
     };
 
@@ -1204,7 +1210,7 @@ export function mountBacklogRail(host, ctx) {
      *  Phases come from the store's live vocabulary, so a phase whose epics are
      *  all done still lists — you navigate to finished work too. */
     const workPackages = () => {
-        const epics = ITEMS.filter((i) => i.type === 'epic');
+        const epics = ITEMS.filter((i) => i.type === 'epic' && !isClosedItem(i));
         const groups = new Map(PHASES.map((p) => [p, []]));
         const loose = [];
         for (const e of epics) {
@@ -1218,14 +1224,23 @@ export function mountBacklogRail(host, ctx) {
         return out;
     };
 
-    /** Items in an epic's whole subtree — the number the epic row shows, since
-     *  "5" next to a work package means five things in it, not five children. */
-    const subtreeCount = (ref) => ITEMS.filter((i) => i.epicRef === ref).length;
+    /**
+     * Items in an epic's whole subtree — the number the epic row shows, since
+     * "5" next to a work package means five things in it, not five children.
+     *
+     * OPEN items only, and the tree itself lists only unfinished work packages.
+     * The rail is a place you navigate FROM: a finished epic is not somewhere
+     * you are going, and a count that includes everything ever closed under it
+     * grows without bound and stops meaning anything you can act on. Closed
+     * work is reachable through the Done view and through search.
+     */
+    const subtreeCount = (ref) =>
+        ITEMS.filter((i) => i.epicRef === ref && !isClosedItem(i)).length;
 
     /** The same for a project, and how many of those are late — which is the
      *  number a manager is actually scanning the rail for. */
     const projectCounts = (ref) => {
-        const inside = ITEMS.filter((i) => i.projectRef === ref);
+        const inside = ITEMS.filter((i) => i.projectRef === ref && !isClosedItem(i));
         return { total: inside.length, late: inside.filter((i) => i.dueState === 'overdue').length };
     };
 
@@ -1264,7 +1279,7 @@ export function mountBacklogRail(host, ctx) {
                         <span class="td-nav__badge">${total}</span>
                     </div>`;
                 }).join('')
-                : '<div class="td-nav__item"><span class="td-dim">No projects yet</span></div>'}
+                : '<div class="td-nav__item"><span class="td-dim">No open projects</span></div>'}
             ${loose.length
                 ? `<div class="td-nav__item td-nav__item--phase" data-loose="1" role="button" tabindex="0"
                         title="Work that belongs to no project">
@@ -1307,7 +1322,7 @@ export function mountBacklogRail(host, ctx) {
                             <span>${esc(e.title)}</span>
                             <span class="td-nav__badge">${subtreeCount(e.ref)}</span>
                         </div>`).join('')}`).join('')
-                : '<div class="td-nav__item"><span class="td-dim">No epics yet</span></div>'}`}
+                : '<div class="td-nav__item"><span class="td-dim">No open work packages</span></div>'}`}
         </div>`;
     };
 

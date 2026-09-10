@@ -540,6 +540,38 @@ await t('the delete flow sees the same subtree the bridge deletes', async () => 
     assert.deepEqual(descendantsOf(3), [], 'a leaf claims descendants');
 });
 
+// The picker reads the LIVE store, so these belong after the fixture above
+// rather than up with the hierarchy rules, which are pure functions.
+await t('the picker hides finished work, and says how much', async () => {
+    // A store accumulates closed items for ever; after a year they are most of
+    // it, and they push the live ones you were looking for off the screen.
+    const done = picker.openItemPicker({});
+    await tick();
+    const refs = () => [...document.querySelectorAll('.bd-picker__ref')].map((e) => e.textContent);
+    // TASK-0003 is `done` in the fixture; everything else is open.
+    assert.ok(!refs().includes('TASK-0003'), `closed item listed: ${refs().join(', ')}`);
+    assert.match(document.querySelector('[data-slot="count"]').textContent, /1 closed hidden/);
+
+    // ...and the chip brings them back.
+    document.querySelector('[data-closed]').click();
+    assert.ok(refs().includes('TASK-0003'), 'the Closed chip did not reveal it');
+    assert.ok(!/closed hidden/.test(document.querySelector('[data-slot="count"]').textContent));
+
+    document.querySelector('.bd-picker [data-a="cancel"]').click();
+    assert.equal(await done, null);
+});
+
+await t('the item already chosen is never hidden, whatever its status', async () => {
+    // Otherwise the field it is filling looks empty the moment the record it
+    // points at is closed.
+    const done = picker.openItemPicker({ current: 3 });
+    await tick();
+    const refs = [...document.querySelectorAll('.bd-picker__ref')].map((e) => e.textContent);
+    assert.ok(refs.includes('TASK-0003'), 'the current value was filtered out');
+    document.querySelector('.bd-picker [data-a="cancel"]').click();
+    await done;
+});
+
 const { createTrackerContent } = await import(join(UI, 'ticketdesk', 'tracker_pages.js'));
 
 /* A WM stand-in that models the one thing these assertions are about: tiles

@@ -604,6 +604,12 @@
 }
 .bd-picker__chip .material-symbols-outlined { font-size: 13px; }
 .bd-picker__chip:hover { color: var(--text-primary, #e0e0e0); background: var(--surface-2, #2d2d2d); }
+/* The Closed chip is a different KIND of filter from the type chips — it does
+   not narrow what you are looking for, it widens the pile you look in — so it
+   sits apart and reads as off until ticked. */
+.bd-picker__chip--closed { margin-left: auto; }
+.bd-picker__chip--closed:not(.bd-picker__chip--on) { opacity: 0.7; border-style: dashed; }
+
 .bd-picker__chip--on {
     color: #fff;
     background: var(--accent, #0e639c);

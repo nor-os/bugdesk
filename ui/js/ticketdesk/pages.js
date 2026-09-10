@@ -55,7 +55,7 @@ import {
     LINK_TYPES, linkTypeDef, formatLink, outgoingLinks, incomingLinks, validateNewLink,
 } from './links.js';
 import { attachTagInput } from './tag_input.js';
-import { ITEMS } from './backlog_data.js';
+import { ITEMS, isClosedItem } from './backlog_data.js';
 import { watchRecord } from './live.js';
 import {
     esc, STAGES, TICKETS, TEAM, HUMAN_AUTHOR, AGENT_AUTHOR, assigneeOptions,
@@ -639,7 +639,11 @@ function mountTicket(host, props, ctx) {
                 <button class="ea-btn" data-a="gosearch">${icon('search')} Search bugs</button>`
             : `
                 <button class="ea-btn ea-btn--primary" data-a="dosearch">${icon('search')} Search</button>
-                <button class="ea-btn" data-a="reset">Reset</button>`}
+                <button class="ea-btn" data-a="reset">Reset</button>
+                <span class="td-spacer"></span>
+                <label class="td-check" title="Finished work is left out by default">
+                    <input type="checkbox" data-f="includeClosed"> Include closed
+                </label>`}
         </div>`}
     </div>`;
 
@@ -815,7 +819,15 @@ function mountTicket(host, props, ctx) {
         const doSearch = () => {
             const text = (fval('summary') + ' ' + fval('desc')).trim().toLowerCase();
             const status = fval('status'), type = fval('type'), subsystem = fval('subsystem').toLowerCase();
+            // Finished work is left out unless asked for. A store accumulates
+            // closed records forever, and after a year they are most of what a
+            // bare search returns — burying the handful of live ones the search
+            // was for. Asking for a status explicitly still wins: somebody who
+            // typed "closed" into the Status field means it.
+            const closedWanted = host.querySelector('[data-f="includeClosed"]')?.checked
+                || (status && status !== '(any)' && status === 'closed');
             const bugs = TICKETS.filter((tk) => {
+                if (!closedWanted && tk.rawStatus === 'closed') return false;
                 if (text && !tk.summary.toLowerCase().includes(text)) return false;
                 if (subsystem && !String(tk.subsystem || '').toLowerCase().includes(subsystem)) return false;
                 if (status && status !== '(any)' && tk.status !== status) return false;
@@ -831,6 +843,7 @@ function mountTicket(host, props, ctx) {
             // them: an unset field means "don't care", not "bugs only".
             const wantsBugFields = (status && status !== '(any)') || (type && type !== '(any)');
             const items = wantsBugFields ? [] : ITEMS.filter((i) => {
+                if (!closedWanted && isClosedItem(i)) return false;
                 if (text && !String(i.title || '').toLowerCase().includes(text)) return false;
                 if (subsystem && !String(i.subsystem || '').toLowerCase().includes(subsystem)) return false;
                 return true;
@@ -842,7 +855,10 @@ function mountTicket(host, props, ctx) {
 
             const matches = [...bugs, ...items];
             disposeResults();
-            resultsEl.innerHTML = `<section class="td-group"><div class="td-group__title">Results — ${bugs.length} bug${bugs.length === 1 ? '' : 's'}${items.length ? `, ${items.length} backlog item${items.length === 1 ? '' : 's'}` : ''}</div><div class="td-tablehost"></div></section>`;
+            const heldBugs = closedWanted ? 0 : TICKETS.filter((tk) => tk.rawStatus === 'closed').length;
+            const heldItems = closedWanted ? 0 : ITEMS.filter(isClosedItem).length;
+            const held = heldBugs + heldItems;
+            resultsEl.innerHTML = `<section class="td-group"><div class="td-group__title">Results — ${bugs.length} bug${bugs.length === 1 ? '' : 's'}${items.length ? `, ${items.length} backlog item${items.length === 1 ? '' : 's'}` : ''}${held ? ` <span class="td-dim">· ${held} closed not searched</span>` : ''}</div><div class="td-tablehost"></div></section>`;
             // Bug id is column 0 here (no Pri column), so the menu's row →
             // id mapping differs from the queue's; the two share nothing but
             // the idea.

@@ -113,6 +113,30 @@ One document-level listener pair serves every tile, rather than per-tile wiring:
 tiles are created, destroyed and repainted constantly, and a drop target bound to
 a tile element stops working the first time that tile repaints.
 
+**Finished work gets out of the way.** A store accumulates closed records for
+ever; after a year they are most of it, and a surface that lists them alongside
+live work buries the handful of things you were looking for. Closed work —
+`done`, `dropped`, and a `closed` bug — is now hidden on the surfaces you go to
+in order to ACT on something, and untouched on the ones whose job is to look
+something up:
+
+- the **search dialog** (choosing a parent, adding an existing child, the
+  tracker's Search) hides it behind a **Closed** chip, and the result count says
+  how many were held back so the chip is discoverable exactly when it would help;
+- the **search page** does not search it, with an **Include closed** checkbox —
+  though asking for `closed` in the Status field still wins, because somebody
+  who typed it means it;
+- the left rail's **Projects** / **Work packages** tree lists only unfinished
+  ones, and its badges count only open items. The rail is a place you navigate
+  FROM: a finished project is not somewhere you are going, and a count that
+  includes everything ever closed under it grows without bound.
+
+The **Done** / **Closed** rail view is deliberately unchanged — it is the one
+surface whose whole job is to answer "what did we finish" — and so is
+**Everything**. The item a field currently points at is never hidden either,
+whatever its status: a picker that cannot show what the field holds makes the
+field look empty.
+
 **Deleting a record**, in tracker mode. A tracker is one person's follow-up list
 and is not in a repo, so `dropped` is not the only sensible answer and
 `git checkout` is not available if you regret one. Offered on the ticket page and

@@ -100,6 +100,19 @@ export const humanizeItemStatus = (s) => STATUS_LABEL[s]
 export const machineItemStatus = (label) => STATUS_MACHINE[label]
     || String(label || '').toLowerCase().replace(/\s+/g, '-');
 
+/**
+ * Is this item finished with?
+ *
+ * ONE definition, because several surfaces now hide these by default — the
+ * search dialog, the search page, the rail's project tree and its counts — and
+ * a closed item that is hidden in one place and listed in another reads as a
+ * bug in whichever place the user notices second.
+ *
+ * `dropped` counts. It is off every ladder, but "decided against" is finished
+ * with in exactly the sense that matters here: nobody is going to do it.
+ */
+export const isClosedItem = (i) => i?.status === 'done' || i?.status === 'dropped';
+
 /** Index of a status within its OWN type's ladder, or -1 for anything off it
  *  (`dropped`, or a status the type never uses). */
 export const stageOf = (item) => ladderFor(item?.type).indexOf(item?.status);
