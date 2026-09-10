@@ -65,6 +65,28 @@ export function openModified(wm, kind, props) {
 /* ── dragging a row out ──────────────────────────────────────────── */
 
 /**
+ * Make one table CELL a drag handle for its row.
+ *
+ * THE CELL, not the row, and this is not a stylistic choice. DataTable calls
+ * `renderCell(td, …)` while the `td` is still detached — it is appended to its
+ * `<tr>` afterwards — so `td.parentElement` is null at that moment and
+ * `td.parentElement.draggable = true` silently did nothing at all. That is
+ * exactly how drag-and-drop shipped not working from either table while working
+ * fine on the dashboard, whose rows carry `draggable` in their markup.
+ *
+ * Called for EVERY column, so the whole row is a drag handle rather than just
+ * the reference cell — nobody aims for a particular column to start a drag.
+ *
+ * @param {HTMLElement} td
+ * @param {string|number} key  what identifies the row to the resolver
+ */
+export function markDragCell(td, key) {
+    if (!td || key === undefined || key === null || key === '') return;
+    td.draggable = true;
+    td.dataset.dragKey = String(key);
+}
+
+/**
  * Make the rows inside `host` draggable, and describe what is being dragged.
  *
  * Delegated rather than per-row: every one of these lists re-renders its rows
@@ -154,9 +176,11 @@ export function installRecordDropTargets({ wm } = {}) {
     };
 
     const onDragOver = (ev) => {
-        // `types` is readable during dragover; `getData` is not, which is why
-        // the check is on the type rather than on the payload.
-        if (!ev.dataTransfer?.types?.includes(RECORD_MIME)) return;
+        // `types` is readable during dragover where `getData` is not — but it is
+        // a plain array in some engines and a DOMStringList in others, and
+        // DOMStringList has no `.includes`. Calling it directly threw, which
+        // meant no preventDefault and therefore no drop, silently.
+        if (!Array.from(ev.dataTransfer?.types || []).includes(RECORD_MIME)) return;
         const hit = tileUnder(ev.target);
         if (!hit) { clear(); return; }
         ev.preventDefault();

@@ -113,7 +113,45 @@ One document-level listener pair serves every tile, rather than per-tile wiring:
 tiles are created, destroyed and repainted constantly, and a drop target bound to
 a tile element stops working the first time that tile repaints.
 
+**Deleting a record**, in tracker mode. A tracker is one person's follow-up list
+and is not in a repo, so `dropped` is not the only sensible answer and
+`git checkout` is not available if you regret one. Offered on the ticket page and
+from the right-click menu on the dashboard and the ticket list; a shared backlog
+still says drop it, with a comment, because the decision not to build something
+is worth keeping.
+
+- Deleting something **with work under it asks first**: keep the descendants
+  (they take the deleted item's own parent, so the tree closes over the gap) or
+  delete the subtree, named in the confirmation. The bridge refuses a bare
+  `DELETE` of anything with descendants — 409 with the count — so the question
+  cannot be skipped by accident.
+- **Nothing is unlinked.** Files move to `trash/` in BugDesk's config directory,
+  which is out of git's way in both modes and — importantly — out of the *store*
+  directory the file watcher is pointed at.
+
+**Clicking a name in the Inspector shows that person's active work.** A panel
+that says "bo — 7 in flight" and does nothing when you click it has told you the
+least interesting half of what it knows. It opens the same set the count is of,
+in whichever store the panel is currently reporting on.
+
 ### Fixed
+
+- **Drag-and-drop did not work from either table.** `DataTable` calls
+  `renderCell(td, …)` while the cell is still DETACHED — it is appended to its
+  `<tr>` afterwards — so `td.parentElement` was `null` and marking the row
+  through it silently did nothing. It shipped working on the Tracker dashboard,
+  whose rows carry `draggable` in their markup, and broken everywhere a table is
+  used. Every *cell* is now the drag handle, which also means you no longer have
+  to aim for a particular column. The test builds a cell the way DataTable does
+  and fails against the old code.
+- **A drop could be refused outright depending on the browser.**
+  `dataTransfer.types` is a plain array in some engines and a `DOMStringList` in
+  others, and `DOMStringList` has no `.includes` — the call threw, so nothing
+  called `preventDefault`, so no drop was ever accepted. Silently.
+- **`PROJ-*.md` was never watched.** The file watcher listed the three original
+  prefixes by hand, so a project record created or changed outside BugDesk never
+  reached an open browser while every other type did. It is driven off
+  `BacklogItem.Prefixes` now, so a fifth type cannot be half-added.
 
 - **The Children list showed a green circle with "Done" in it, under the list.**
   A regression from the tracker commit: `.bd-childrow` declares five grid

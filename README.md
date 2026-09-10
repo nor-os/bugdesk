@@ -332,6 +332,13 @@ The queue's left rail filters on the fields the summary API exposes — notably
 **"Needs my reply"** = bugs whose last comment was the agent's
 (`lastCommentAuthor == <agentAuthor>`), so the human hasn't responded yet.
 
+## Who has what
+
+The right-hand Inspector lists everyone with work in the store you are looking
+at, weighted by what is still in flight. **Clicking a name opens that person's
+active work** — the same set the row's own count is of, so the number and the
+list it opens can never disagree about what it meant.
+
 ## Filters
 
 Both stores share one filter engine (`ui/js/ticketdesk/filter_engine.js`): a
@@ -418,7 +425,8 @@ side, a bug and the story it blocks, somebody's overdue list and the one item
 you are about to ask them about.
 
 Two gestures for that, in the bug queue, the ticket list and the Tracker
-dashboard alike:
+dashboard alike — and every cell of a row is a drag handle, so you do not have
+to aim for a particular column:
 
 | gesture | what happens |
 |---|---|
@@ -633,6 +641,33 @@ invisible to every other question on the page.
 
 Every row opens the item; every heading opens the same set as a filtered list;
 right-click gives "everything on this person" and "everything in this project".
+
+### Deleting
+
+A tracker is one person's follow-up list, so a mis-filed ticket is noise rather
+than history — and unlike a backlog, **it is not in a repo**, so `dropped` is not
+the only sensible answer and `git checkout` is not available if you regret one.
+
+Delete is offered **in tracker mode only**: on the ticket page, and from the
+right-click menu on the Tracker dashboard and the ticket list. In a shared
+backlog the answer is still `dropped`, with a comment saying why — the decision
+not to build something is worth keeping, and somebody will ask about it later.
+
+**Deleting something with work under it asks first**, because there are two
+defensible answers and no safe default:
+
+| | |
+|---|---|
+| **keep what is under it** | the descendants take the deleted item's own parent, so the tree closes over the gap instead of scattering its children to the root |
+| **delete everything** | the item and its whole subtree, named in the confirmation before it goes |
+
+The bridge refuses a bare `DELETE` of anything with descendants (409, with the
+count) precisely so that question cannot be skipped by accident.
+
+**Nothing is unlinked.** The files move to `trash/` inside BugDesk's own config
+directory — `~/.bugdesk/<project>/config/trash/` for a tracker, `.bugdesk/trash/`
+in a repo — which is out of git's way in both cases, and out of the *store*
+directory, which the file watcher is pointed at.
 
 ### Keeping it current with an agent
 

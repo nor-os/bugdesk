@@ -35,6 +35,7 @@ import { shell, statusLine } from './pages.js';
 import { esc, HUMAN_AUTHOR } from './data.js';
 import { openNewItem } from './new_item.js';
 import { installRecordDragSource, isModifiedOpen, openModified } from './record_dnd.js';
+import { confirmDelete } from './delete_item.js';
 import { assigneeExpr, dueStateExpr, projectExpr } from './backlog_filters.js';
 import {
     DUE_SOON_DAYS, ITEMS, TYPE_ICON,
@@ -328,6 +329,8 @@ function mountTracker(host, props, ctx) {
               disabled: !model.projectRef },
             { separator: true },
             { label: 'Copy reference', icon: 'content_copy', action: 'copy' },
+            { separator: true },
+            { label: 'Delete…', icon: 'delete', action: 'delete', danger: true },
         ], (action) => {
             if (action === 'open') openItem(model.id);
             else if (action === 'window') {
@@ -337,6 +340,9 @@ function mountTracker(host, props, ctx) {
                 openBoard({ expr: assigneeExpr(model.assignee), label: model.assignee ? `On ${model.assignee}` : 'Nobody on it' });
             } else if (action === 'project' && model.projectRef) {
                 openBoard({ expr: projectExpr(model.projectRef), label: model.projectRef });
+            } else if (action === 'delete') {
+                confirmDelete(model, { onStatus: statusLine })
+                    .then((done) => { if (done) { _eventBus?.emit?.('backlog:changed', {}); render(); } });
             } else if (action === 'copy') {
                 navigator.clipboard.writeText(itemRef(model))
                     .then(() => statusLine(`Copied ${itemRef(model)}.`))

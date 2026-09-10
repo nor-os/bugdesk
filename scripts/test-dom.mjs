@@ -530,6 +530,16 @@ await t('the store derives an owning project for every descendant', () => {
     assert.equal(byId.get(2).ref, 'STORY-0002');
 });
 
+await t('the delete flow sees the same subtree the bridge deletes', async () => {
+    // The client computes descendants to WORD the confirmation ("PROJ-0001 has
+    // 4 items under it"); the bridge computes them again to act. The two have
+    // to agree, or the dialog understates what is about to go.
+    const { descendantsOf } = await import(join(UI, 'ticketdesk', 'delete_item.js'));
+    assert.deepEqual(descendantsOf(1).map((i) => i.id).sort(), [2, 3, 4, 5]);
+    assert.deepEqual(descendantsOf(2).map((i) => i.id), [3]);
+    assert.deepEqual(descendantsOf(3), [], 'a leaf claims descendants');
+});
+
 const { createTrackerContent } = await import(join(UI, 'ticketdesk', 'tracker_pages.js'));
 
 /* A WM stand-in that models the one thing these assertions are about: tiles
@@ -725,6 +735,60 @@ await t('the setting is read at CALL time, not at module load', () =>
     // A gesture that needs a reload before it obeys a preference is a gesture
     // people stop trusting.
     assert.equal(dnd.modifierOpenMode(), 'window'));
+
+await t('a cell is marked draggable while it is still DETACHED', () => {
+    // THE BUG: DataTable calls renderCell(td, ...) BEFORE appending the td to
+    // its <tr>, so `td.parentElement` is null at that moment. Marking the row
+    // through the cell's parent silently did nothing, and drag shipped working
+    // on the dashboard (whose rows carry `draggable` in their markup) and
+    // broken in both tables. The test builds the cell the way DataTable does.
+    const td = document.createElement('td');
+    assert.equal(td.parentElement, null, 'the fixture is not reproducing the bug');
+    dnd.markDragCell(td, 'BUG-0042');
+    assert.equal(td.draggable, true, 'the cell is not draggable');
+    assert.equal(td.dataset.dragKey, 'BUG-0042');
+
+    // ...and only once it is in a row does the delegated resolver find it.
+    const tr = document.createElement('tr');
+    tr.appendChild(td);
+    const inner = document.createElement('span');
+    td.appendChild(inner);
+    assert.equal(inner.closest('[data-drag-key]')?.dataset.dragKey, 'BUG-0042');
+});
+
+await t('a row with no key is left alone', () => {
+    const td = document.createElement('td');
+    dnd.markDragCell(td, '');
+    assert.equal(td.draggable, false);
+    dnd.markDragCell(td, undefined);
+    assert.equal(td.draggable, false);
+});
+
+await t('a DOMStringList of types is accepted, not thrown on', () => {
+    // `dataTransfer.types` is a plain array in some engines and a DOMStringList
+    // in others, and DOMStringList has no `.includes` — calling it directly
+    // threw, which meant no preventDefault and therefore no drop, silently.
+    const wm = {
+        desktops: { active: () => ({ tree: { get: () => ({ content: { kind: 'backlog' } }) } }) },
+        navigate: () => {},
+    };
+    const targets = dnd.installRecordDropTargets({ wm });
+    const tile = document.createElement('div');
+    tile.className = 'twm-leaf';
+    tile.dataset.leafId = 'leafA';
+    tile.innerHTML = '<div class="twm-leaf__body"></div>';
+    document.body.appendChild(tile);
+
+    // A types collection with no `.includes`, as older engines hand over.
+    const listy = { length: 1, 0: dnd.RECORD_MIME, item: (i) => [dnd.RECORD_MIME][i] };
+    Object.defineProperty(listy, Symbol.iterator, { value: [dnd.RECORD_MIME][Symbol.iterator] });
+    const dt = { ...makeTransfer(), types: listy };
+    const over = fire(tile.querySelector('.twm-leaf__body'), 'dragover', dt);
+    assert.equal(over.defaultPrevented, true, 'the drop was refused on a DOMStringList');
+
+    targets.destroy();
+    tile.remove();
+});
 
 await t('dragging a dashboard row carries what would open it', () => {
     const board2 = mountDashboard();

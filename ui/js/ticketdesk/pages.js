@@ -40,7 +40,7 @@
 
 import { mountTileBreadcrumb } from '../tiling/tile_breadcrumb.js';
 import { activeTopNavKind } from '../tiling/kind_taxonomy.js';
-import { installRecordDragSource, isModifiedOpen, openModified } from './record_dnd.js';
+import { installRecordDragSource, isModifiedOpen, markDragCell, openModified } from './record_dnd.js';
 import { DataTable } from '../ui/components/data_table.js';
 import { showContextMenu } from '../ecoagent/ui/context_menu.js';
 import {
@@ -423,20 +423,15 @@ function mountQueues(host, props, ctx) {
         contextMenuItems,
         onContextMenuAction,
         renderCell: (td, value, colIdx, rowIdx, row) => {
+            // Every cell is a drag handle, carrying the row's bug id. Marked on
+            // the CELL because DataTable renders it detached — see markDragCell
+            // in ./record_dnd.js for why that matters.
+            markDragCell(td, row[QUEUE_ID_COL]);
             if (colIdx === 0) {
                 td.innerHTML = `<span class="td-pri-cell"><span class="td-pri td-pri--${value}" title="Priority ${value}"></span><span class="td-dim">P${value}</span></span>`;
                 return true;
             }
-            if (colIdx === 1) {
-                // Every cell runs through here; the id column always exists, so
-                // it is where the row is marked draggable. Set on the <tr>
-                // rather than by a listener, because DataTable rebuilds these
-                // rows wholesale on every sort, filter and live update.
-                const tr = td.parentElement;
-                if (tr) { tr.draggable = true; tr.dataset.dragId = String(row[QUEUE_ID_COL]); }
-                td.innerHTML = `<span class="td-mono td-link">${esc(value)}</span>`;
-                return true;
-            }
+            if (colIdx === 1) { td.innerHTML = `<span class="td-mono td-link">${esc(value)}</span>`; return true; }
             if (colIdx === 2) { td.innerHTML = `<span class="td-chip">${esc(value)}</span>`; return true; }
             return false;
         },
@@ -458,7 +453,7 @@ function mountQueues(host, props, ctx) {
 
     // Drag a row onto any tile to display it there. See ./record_dnd.js.
     const drag = installRecordDragSource(host, (el) => {
-        const id = el?.closest?.('[data-drag-id]')?.dataset.dragId;
+        const id = el?.closest?.('[data-drag-key]')?.dataset.dragKey;
         if (!id) return null;
         const model = TICKETS.find((x) => String(x.id) === String(id));
         return { kind: 'ticket', props: { id, label: ticketLabel(model) || id }, label: `#${id}` };
@@ -1400,7 +1395,8 @@ function mountTicketNav(host, props, ctx) {
 
 function memberRow(m) {
     return `
-    <div class="td-mrow" title="${esc(m.name)} — ${m.presence}, load ${Math.round(m.load * 100)}%">
+    <div class="td-mrow" data-member="${esc(m.name)}" role="button" tabindex="0"
+         title="${esc(m.name)} — ${m.inc} in flight. Click to see them.">
         <span class="td-avatar">${m.initials}<span class="td-presence td-presence--${m.presence}"></span></span>
         <span class="td-mrow__name">${m.me ? `<b>${esc(m.name)} (you)</b>` : esc(m.name)}</span>
         <span class="td-mrow__counts"><span class="td-inc">${m.inc} ${esc(m.openLabel || 'open')}</span> · ${m.other} ${esc(m.doneLabel || 'closed')}</span>
@@ -1437,8 +1433,14 @@ function backlogTeam(items) {
 function mountTicketInspector(host, props, ctx) {
     const getWm = () => ctx?.wm || window.__twm?.wm || null;
 
+    // Which store the rows are about, remembered from the last paint — a click
+    // has to route to the same store the number was counted from, and the
+    // top nav can move between the two.
+    let showing = 'bugs';
+
     const render = async () => {
         const backlog = ['backlog', 'tracker'].includes(activeTopNavKind(getWm()));
+        showing = backlog ? 'backlog' : 'bugs';
         let rows = [];
         let empty = '';
         if (backlog) {
@@ -1468,11 +1470,53 @@ function mountTicketInspector(host, props, ctx) {
     };
     render();
 
+    /**
+     * Clicking a name shows that person's work.
+     *
+     * A panel that says "bo — 7 in flight" and does nothing when you click the
+     * row is a panel that has told you the least interesting half of what it
+     * knows. The number is the summary; the seven items are the answer.
+     *
+     * ACTIVE work only, in both stores — the row's own count is of things in
+     * flight, so the list it opens has to be the same set, or the header and the
+     * body disagree about what "7" meant.
+     */
+    const showMember = async (name) => {
+        const wm = getWm();
+        if (!wm || !name) return;
+        if (showing === 'backlog') {
+            const { assigneeExpr } = await import('./backlog_filters.js');
+            wm.openInPrimary('backlog', { expr: assigneeExpr(name), label: `On ${name}` });
+        } else {
+            const { assigneeExpr } = await import('./filters.js');
+            wm.openInPrimary('queues', { expr: assigneeExpr(name), label: `On ${name}` });
+        }
+    };
+
+    const onClick = (e) => {
+        const row = e.target.closest('[data-member]');
+        if (row) showMember(row.dataset.member);
+    };
+    const onKey = (e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        const row = e.target.closest('[data-member]');
+        if (!row) return;
+        e.preventDefault();
+        showMember(row.dataset.member);
+    };
+    host.addEventListener('click', onClick);
+    host.addEventListener('keydown', onKey);
+
     const sub = _eventBus?.on?.('wm:changed', render);
     const backlogSub = _eventBus?.on?.('backlog:changed', render);
     return {
         title: 'Inspector',
-        destroy: () => { sub?.dispose?.(); backlogSub?.dispose?.(); },
+        destroy: () => {
+            sub?.dispose?.();
+            backlogSub?.dispose?.();
+            host.removeEventListener('click', onClick);
+            host.removeEventListener('keydown', onKey);
+        },
     };
 }
 

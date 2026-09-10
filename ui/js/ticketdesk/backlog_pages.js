@@ -31,7 +31,8 @@ import { attachTagInput } from './tag_input.js';
 import { attachSelect } from './select_field.js';
 import { watchRecord } from './live.js';
 import { attachParentPicker, childTypesFor, openItemPicker } from './item_picker.js';
-import { installRecordDragSource, isModifiedOpen, openModified } from './record_dnd.js';
+import { installRecordDragSource, isModifiedOpen, markDragCell, openModified } from './record_dnd.js';
+import { confirmDelete } from './delete_item.js';
 import { openFilterEditor } from './filter_editor.js';
 import { openNewItem } from './new_item.js';
 import { onFiltersChanged } from './filter_store.js';
@@ -275,6 +276,11 @@ function mountBacklogBoard(host, props, ctx) {
                 // than hidden — the menu keeps one shape whichever row you hit.
                 { label: 'Add child…', icon: 'add', action: 'add-child',
                   disabled: !model || childTypesFor(model.type).length === 0 },
+                ...(TRACKER ? [
+                    { separator: true },
+                    { label: 'Delete…', icon: 'delete', action: 'delete',
+                      disabled: !model, danger: true },
+                ] : []),
                 { separator: true },
                 { label: refs.length > 1 ? `Copy ${refs.length} references` : 'Copy reference',
                   icon: 'content_copy', action: 'copy-ref', disabled: !refs.length },
@@ -301,6 +307,15 @@ function mountBacklogBoard(host, props, ctx) {
                     });
                     break;
                 }
+                case 'delete':
+                    if (model) {
+                        const done = await confirmDelete(model, { onStatus: statusLine });
+                        if (done) {
+                            _eventBus?.emit?.('backlog:changed', {});
+                            refresh();
+                        }
+                    }
+                    break;
                 case 'copy-ref':
                     if (refs.length) {
                         try {
@@ -315,14 +330,11 @@ function mountBacklogBoard(host, props, ctx) {
         },
         renderCell: (td, value, colIdx, rowIdx, row) => {
             const model = byRef.get(row[REF_COL]);
+            // Every cell is a drag handle, carrying the row's reference. Marked
+            // on the CELL because DataTable renders it detached — see
+            // markDragCell in ./record_dnd.js for why that matters.
+            markDragCell(td, row[REF_COL]);
             if (colIdx === REF_COL) {
-                // Every cell of a row runs through here; the reference column is
-                // the one that always exists, so it is where the row is marked
-                // draggable. Set on the <tr> itself rather than by a listener,
-                // because DataTable rebuilds these rows wholesale on every sort,
-                // filter and live update.
-                const tr = td.parentElement;
-                if (tr) { tr.draggable = true; tr.dataset.dragRef = row[REF_COL]; }
                 td.innerHTML = `<span class="bd-item__ref">${esc(value)}</span>`;
                 return true;
             }
@@ -368,7 +380,7 @@ function mountBacklogBoard(host, props, ctx) {
 
     // Drag a row onto any tile to display it there. See ./record_dnd.js.
     const drag = installRecordDragSource(host, (el) => {
-        const ref = el?.closest?.('[data-drag-ref]')?.dataset.dragRef;
+        const ref = el?.closest?.('[data-drag-key]')?.dataset.dragKey;
         const model = ref ? byRef.get(ref) : null;
         return model
             ? { kind: 'item', props: { id: String(model.id), label: itemLabel(model) }, label: model.ref }
@@ -473,7 +485,12 @@ function mountItem(host, props, ctx) {
         </div>
         <div class="td-mask">
             <section class="td-group">
-                <div class="td-group__title">Backlog Item</div>
+                <div class="td-group__title">${TRACKER ? 'Ticket' : 'Backlog Item'}
+                    ${TRACKER ? `<span class="td-group__actions">
+                        <button class="ea-btn ea-btn--small ea-btn--danger" data-a="delete"
+                                title="Delete this record">${icon('delete')} Delete</button>
+                    </span>` : ''}
+                </div>
                 <div class="td-group__body td-grid2" data-slot="record"></div>
             </section>
             <section class="td-group">
@@ -977,6 +994,19 @@ function mountItem(host, props, ctx) {
         } catch (err) { statusLine(`Save failed: ${err?.message || err}`); }
     };
 
+    /** Delete, then leave — the page is about a record that no longer exists,
+     *  and a live-update banner announcing our own deletion on top of it is
+     *  worse than a tile that has moved on. */
+    const removeThis = async () => {
+        const done = await confirmDelete(item, { onStatus: statusLine });
+        if (!done) return;
+        live.dispose();
+        await broadcast();
+        const p = { filter: DEFAULT_FILTER };
+        if (ctx.wm?.navigate) ctx.wm.navigate('backlog', p, { ctx, dest: 'origin' });
+        else ctx.wm?.openInPrimary?.('backlog', p);
+    };
+
     const cancel = async () => {
         try { apply(await fetchItem(id)); statusLine('Reverted unsaved changes.'); }
         catch (err) { statusLine(`Revert failed: ${err?.message || err}`); }
@@ -1065,6 +1095,7 @@ function mountItem(host, props, ctx) {
         if (wf && !wf.disabled) { await moveTo(wf.dataset.wf); return; }
 
         const act = e.target.closest('[data-a]')?.dataset.a;
+        if (act === 'delete') { await removeThis(); return; }
         if (act === 'save') await save();
         else if (act === 'cancel') await cancel();
         else if (act === 'save-acceptance') { await saveAcceptance(); acceptanceRaw = false; renderAcceptance(); }

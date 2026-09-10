@@ -57,9 +57,12 @@ sealed class StoreWatcher : IDisposable
     {
         _log = log;
         Watch(bugsDir, "BUG-*.md");
-        Watch(backlogDir, "EPIC-*.md");
-        Watch(backlogDir, "STORY-*.md");
-        Watch(backlogDir, "TASK-*.md");
+        // One watcher per prefix, and the list has to be the SAME one the store
+        // knows about — PROJ-*.md was missing, so a project record created or
+        // changed outside BugDesk never reached an open browser at all, while
+        // every other type did. Driven off BacklogItem.Prefixes now, so a fifth
+        // type cannot be half-added.
+        foreach (var prefix in BacklogItem.Prefixes.Values) Watch(backlogDir, $"{prefix}-*.md");
         // The collaborator roster is committed too, so it arrives on a pull like
         // any record does.
         var projectDir = Path.GetDirectoryName(projectFile);
@@ -104,6 +107,23 @@ sealed class StoreWatcher : IDisposable
     {
         lock (_gate) _ourWrites[Path.GetFullPath(path)] = Hash(content);
     }
+
+    /// <summary>
+    /// Remember that WE removed this file, so its disappearance is not reported
+    /// back to us as somebody else's edit.
+    /// <para>
+    /// A deletion carries no content, so the SHA-256 trick <see cref="Note"/>
+    /// uses has nothing to compare — this records a sentinel the flush treats as
+    /// "ours" when the file turns out to be gone. Other browsers still get the
+    /// event: it is only the process that did the deleting that already knows.
+    /// </para>
+    /// </summary>
+    public void NoteDeletion(string path)
+    {
+        lock (_gate) _ourWrites[Path.GetFullPath(path)] = DeletedSentinel;
+    }
+
+    const string DeletedSentinel = "\u0000deleted";
 
     static string Hash(string content) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(content)));
@@ -152,7 +172,14 @@ sealed class StoreWatcher : IDisposable
             }
             else
             {
-                lock (_gate) _ourWrites.Remove(path);
+                lock (_gate)
+                {
+                    // Our own delete (see NoteDeletion) — the file is gone
+                    // because we removed it, and this process already knows.
+                    var mine = _ourWrites.TryGetValue(path, out var m) && m == DeletedSentinel;
+                    _ourWrites.Remove(path);
+                    if (mine) continue;
+                }
             }
 
             changed.Add(new ChangedFile(name, StoreOf(name), IdOf(name), !exists));

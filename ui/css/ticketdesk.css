@@ -926,3 +926,14 @@
 .td-linkadd { display: flex; gap: 6px; align-items: center; margin-top: 8px; }
 .td-linkadd__type { flex: 0 0 auto; min-width: 140px; }
 .td-linkadd__target { flex: 1 1 auto; min-width: 0; }
+
+
+/* A team row is now a button — clicking a name opens that person's active
+   work (see mountTicketInspector). Say so with the cursor and a hover, or the
+   affordance is invisible and nobody ever finds it. */
+.td-mrow[data-member] { cursor: pointer; border-radius: 2px; }
+.td-mrow[data-member]:hover { background: rgba(255, 255, 255, 0.05); }
+.td-mrow[data-member]:focus-visible {
+    outline: 1px solid var(--accent-bright, #007acc);
+    outline-offset: -1px;
+}

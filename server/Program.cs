@@ -591,6 +591,87 @@ app.MapPost("/api/backlog/{id:int}/criteria", async (int id, HttpRequest req) =>
     return Results.Json(new { ok = true, item = FullItem(reloaded, reloaded.First(i => i.Id == id)) }, json);
 });
 
+// ---- Deleting a record -----------------------------------------------------
+// The one destructive operation in the API, and the only one that needs an
+// answer about what happens to what was underneath it.
+//
+// `children=cascade` deletes the whole subtree; `children=promote` keeps the
+// descendants and hands them the deleted item's own parent, so the tree closes
+// over the gap instead of scattering. Called with neither on an item that HAS
+// descendants, it refuses and reports the count — that is a decision the caller
+// has to make, and guessing either way loses somebody's work or leaves a mess.
+//
+// NOTHING IS UNLINKED. The file moves to a `trash/` folder in BugDesk's own
+// config directory — never inside the store, which the watcher is pointed at. A bug store
+// lives in a git repo and a delete there is one `git checkout` from coming back,
+// but a TRACKER's store deliberately lives outside any repo (see
+// ResolveTrackerBase), so an unlink there is final — and this is a personal
+// follow-up list where a mis-click costs a project with everything under it.
+app.MapDelete("/api/backlog/{id:int}", async (int id, HttpRequest req) =>
+{
+    var all = LoadBacklog(backlogDir);
+    var item = all.FirstOrDefault(i => i.Id == id);
+    if (item is null) return Results.Json(new { ok = false, error = "not found" }, json, statusCode: 404);
+
+    var kids = Descendants(all, id);
+    var howChildren = (req.Query["children"].ToString() ?? "").Trim().ToLowerInvariant();
+    if (kids.Count > 0 && howChildren is not ("cascade" or "promote"))
+    {
+        return Results.Json(new
+        {
+            ok = false,
+            error = $"#{id} has {kids.Count} item{(kids.Count == 1 ? "" : "s")} under it — "
+                  + "pass children=cascade to delete them too, or children=promote to keep them",
+            descendants = kids.Count,
+            children = all.Count(i => i.Parent == id),
+        }, json, statusCode: 409);
+    }
+
+    // BESIDE the store, never inside it: the watcher is pointed at the store
+    // directory, so a file moved into a `.trash/` within it reads as a brand-new
+    // record — our own delete would announce itself to every open browser as an
+    // arrival. It also keeps out of git, in both modes: in a repo the config
+    // directory is already self-ignoring, and a tracker is not in a repo at all.
+    var trash = Path.Combine(configDir, "trash");
+    Directory.CreateDirectory(trash);
+    var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+
+    var doomed = new List<BacklogItem> { item };
+    if (howChildren == "cascade") doomed.AddRange(kids.Select(k => all.First(i => i.Id == k)));
+
+    var promoted = new List<int>();
+    if (howChildren == "promote")
+    {
+        // Direct children only: everything deeper keeps the parent it has, and
+        // the subtree travels with the child rather than being flattened.
+        foreach (var child in all.Where(i => i.Parent == id))
+        {
+            var path = Path.Combine(backlogDir, child.FileName);
+            var text = Md.SetFrontmatter(await File.ReadAllTextAsync(path), "parent",
+                item.Parent > 0 ? item.Parent.ToString() : "");
+            await WriteRecord(path, Md.SetFrontmatter(text, "updated", Md.Today()));
+            promoted.Add(child.Id);
+        }
+    }
+
+    foreach (var doom in doomed)
+    {
+        var from = Path.Combine(backlogDir, doom.FileName);
+        if (!File.Exists(from)) continue;
+        watcher.NoteDeletion(from);
+        File.Move(from, Path.Combine(trash, $"{stamp}-{doom.FileName}"), overwrite: true);
+    }
+
+    app.Logger.LogInformation("BugDesk: deleted {n} record(s) to {trash}", doomed.Count, trash);
+    return Results.Json(new
+    {
+        ok = true,
+        deleted = doomed.Select(d => d.Id).ToList(),
+        promoted,
+        trash,
+    }, json);
+});
+
 app.MapPost("/api/backlog/{id:int}/comments", async (int id, HttpRequest req) =>
 {
     var all = LoadBacklog(backlogDir);
@@ -1105,6 +1186,27 @@ static List<int> Ancestors(List<BacklogItem> all, int id)
         cur = all.FirstOrDefault(i => i.Id == cur)?.Parent ?? 0;
     }
     return chain;
+}
+
+/// Every id BELOW `id`, at any depth. The set a cascade deletes, and the set a
+/// bare delete refuses to strand.
+static List<int> Descendants(List<BacklogItem> all, int id)
+{
+    var out_ = new List<int>();
+    var seen = new HashSet<int> { id };
+    var queue = new Queue<int>();
+    queue.Enqueue(id);
+    while (queue.Count > 0)
+    {
+        var parent = queue.Dequeue();
+        foreach (var child in all.Where(i => i.Parent == parent))
+        {
+            if (!seen.Add(child.Id)) continue;   // a cycle survived some hand edit
+            out_.Add(child.Id);
+            queue.Enqueue(child.Id);
+        }
+    }
+    return out_;
 }
 
 /// The item's own phase, or the nearest ancestor's. Epics carry the label;

@@ -135,6 +135,15 @@ export const BUILTIN_FILTERS = [
  * Thin bindings so nothing in the bug UI has to pass 'bugs' around, or know
  * that the backlog's filters share the same list underneath. */
 
+/** Everything still open on one person. What the Inspector's rows navigate to:
+ *  a name is only useful if clicking it shows you the work behind the number. */
+export const assigneeExpr = (name) => ({
+    kind: 'group', op: 'AND', children: [
+        { kind: 'clause', field: 'status', op: 'none_of', value: ['closed'] },
+        { kind: 'clause', field: 'assignee', op: 'is', value: name || '' },
+    ],
+});
+
 export const listFilters = () => storeList(SCOPE);
 export const getFilter = (id) => storeGet(id, BUILTIN_FILTERS);
 export const saveFilter = (filter) => storeSave(filter, SCOPE);
