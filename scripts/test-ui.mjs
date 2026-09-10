@@ -431,6 +431,84 @@ t('the default mode has no Tracker chip', () =>
     // runs in its own process — the mode is read once, at module load.
     assert.deepEqual(taxonomyDefault.topNavEntries().map((e) => e.kind), ['queues', 'backlog']));
 
+/* ── the docs against the code ───────────────────────────────────────
+ *
+ * The skills are what an agent reads INSTEAD of this code — they exist so the
+ * markdown files can be driven with no server running — so a lifecycle that
+ * drifts between the two is not a stale doc, it is an agent confidently making
+ * transitions the bridge rejects, or refusing ones it would accept.
+ *
+ * The ASCII ladder diagram in each skill is parsed and compared to LADDERS
+ * here. Same reasoning as REFINEMENT_RULES living in one place and the skill
+ * quoting it: one definition, and something that fails when a copy wanders.
+ */
+
+console.log('\ndocs match the lifecycles');
+
+const { readFileSync } = await import('node:fs');
+const skillText = (...parts) => readFileSync(join(ROOT, 'skills', ...parts), 'utf8');
+
+/** Parse "STORY  draft ──▶ refined ──▶ ..." into ['draft','refined',...]. */
+const ladderFromDiagram = (text, label) => {
+    const line = text.split('\n').find((l) => l.startsWith(label + ' '));
+    if (!line) return null;
+    return line.slice(label.length).split(/[^a-z-]+/).filter(Boolean);
+};
+
+const backlogSkill = skillText('backlog', 'SKILL.md');
+
+t('every backlog type\'s diagram matches its real ladder', () => {
+    for (const type of data.ALL_TYPES) {
+        const drawn = ladderFromDiagram(backlogSkill, type.toUpperCase());
+        assert.ok(drawn, `skills/backlog/SKILL.md draws no ladder for ${type}`);
+        assert.deepEqual(drawn, data.LADDERS[type],
+            `the ${type} ladder in skills/backlog/SKILL.md has drifted`);
+    }
+});
+
+t('the handback states the skill names are legal for their types', () => {
+    // "story -> review", "task -> done": the sequence tells an agent exactly
+    // where to leave something, and a state its type does not have would be
+    // rejected by the bridge at the moment the work is finished.
+    for (const [type, status] of [['story', 'review'], ['task', 'done'], ['epic', 'done']]) {
+        assert.ok(data.LADDERS[type].includes(status),
+            `the skill hands a ${type} back as '${status}', which is not on its ladder`);
+    }
+});
+
+t('the skill still says a task is never refined and a project never reviewed', () => {
+    assert.ok(!data.LADDERS.task.includes('refined'));
+    assert.ok(!data.LADDERS.project.includes('refined'));
+    assert.ok(!data.LADDERS.project.includes('review'));
+    assert.ok(!data.LADDERS.epic.includes('review'));
+    assert.match(backlogSkill, /A task is never `refined`/);
+    assert.match(backlogSkill, /An epic is never `review`/);
+});
+
+t('every file prefix the skills name matches the code', () => {
+    for (const [type, prefix] of Object.entries(data.TYPE_PREFIX)) {
+        assert.match(backlogSkill, new RegExp(`\\b${prefix}-`),
+            `skills/backlog/SKILL.md never mentions the ${type} prefix ${prefix}-`);
+    }
+});
+
+t('both working skills carry the claim-first sequence', () => {
+    // The user asked for one protocol across both stores. Two skills that
+    // describe it differently is the same drift as two ladders.
+    for (const [name, text] of [['bugs', skillText('bugs', 'SKILL.md')],
+                                ['backlog', backlogSkill]]) {
+        assert.match(text, /Working on an? (bug|item) — the sequence/,
+            `skills/${name}/SKILL.md has no working sequence`);
+        assert.match(text, /COMMIT AND PUSH/, `skills/${name}/SKILL.md never says to push`);
+        assert.match(text, /CLAIM/, `skills/${name}/SKILL.md never says to claim`);
+    }
+});
+
+t('the backlog skill gates work on refinement', () => {
+    assert.match(backlogSkill, /REFINE FIRST/);
+    assert.match(backlogSkill, /does not get worked on/);
+});
+
 /* ── live updates ────────────────────────────────────────────────────
  *
  * The event payload is what decides whether an open record silently refreshes

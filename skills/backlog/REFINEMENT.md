@@ -3,6 +3,10 @@
 Refinement is the one operation in the backlog that has a **definition**, not
 just a convention. Everything else is judgment; this is a gate.
 
+It is a gate in the literal sense too: **an unrefined item does not get worked
+on.** See "Working on an item — the sequence" in [SKILL.md](SKILL.md) — this
+pass is step 0 of it, and it is pushed on its own before anything is claimed.
+
 ```
 /backlog refine                 refine the draft items that are ready to be refined
 /backlog refine <ref>           refine one item
@@ -135,9 +139,24 @@ For each item you're refining:
 
    That comment is the record of a decision. "Refined." on its own is not.
 
-7. **Report back** in one block: what you refined, what you split, and what is
+7. **Commit and push it, on its own** — ahead of claiming anything:
+
+   ```
+   STORY-0007: refined
+
+   3 acceptance criteria, 5 points, parented to EPIC-0001
+   ```
+
+   Separate from the work because it is a different kind of decision, and the
+   one the human is most likely to want to change. An agent that writes its own
+   acceptance criteria and then satisfies them has marked its own homework;
+   pushing them first, on their own, is what keeps that honest.
+
+8. **Report back** in one block: what you refined, what you split, and what is
    still `draft` and why. The last list is the useful one — it is the agenda
-   for the next conversation with the human.
+   for the next conversation with the human. **Say what criteria you wrote** —
+   if the user is there, this is their moment to correct them, before anything
+   has been built against them.
 
 ## When NOT to refine
 

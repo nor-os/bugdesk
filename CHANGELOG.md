@@ -61,6 +61,45 @@ they are simply not *offered* outside tracker mode.
 - `examples/tracker/` and `--tracker --seed`, so the dashboard has something to
   be late about on a first run.
 
+**A required working sequence in `/bugs` and `/backlog`.** Both skills now claim
+an item before touching anything, and the claim is **pushed before the work
+starts**:
+
+```
+[refine first, if it isn't refined]   backlog only
+claim      status + assignee -> the agent
+commit and push                       ← the record alone
+do the work
+hand back  status + assignee -> the human, with a comment
+commit and push
+```
+
+The stores are committed and shared, so until a claim is pushed nothing
+anywhere says the item is taken — it sits in `open`, or in `refined`, which
+explicitly means *anyone can pick this up*. The claim commit is the
+announcement; a rejected push is how the agent finds out it lost the race,
+rather than discovering it in a merge conflict hours later. Losing that race is
+an instruction to stop, not an obstacle to route around.
+
+**Refinement is a gate.** An unrefined epic or story is refined first, in its
+own commit, pushed ahead of the claim — the bridge would allow `draft` →
+`in-progress` (the ladder check tests membership, not adjacency), and nothing
+but this rule stops it. A task has no `refined` state of its own, so the gate
+falls on its **parent story**. Separating the refinement commit is the point:
+an agent that writes its own acceptance criteria and then satisfies them has
+marked its own homework, and pushing them first is the human's moment to
+correct them.
+
+The backlog skill also gained the `project` level it was missing — the fourth
+prefix, its ladder, and how to treat one it meets in a tracker-written store.
+
+**A drift guard for the skills.** The ASCII lifecycle diagrams in
+`skills/backlog/SKILL.md` are parsed and compared to `LADDERS`, and the handback
+states the sequence names are checked against the ladder each type actually
+walks. The skills are what an agent reads *instead of* the code, so a drifted
+diagram is not a stale doc — it is an agent confidently making transitions the
+bridge rejects.
+
 ### Changed
 
 - **One BugDesk directory, not a directory and a file that look like duplicates.**

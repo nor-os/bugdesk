@@ -21,6 +21,8 @@ filesystem edits and the UI agree instantly).
 /bugs show <id>                print one bug: frontmatter + description + comments
 /bugs new <title>              file a new bug (status: open, assignee: the human)
 /bugs comment <id> <text>      append a comment as the agent
+/bugs start <id>               CLAIM it: investigation + assignee you, committed and pushed
+/bugs done <id>                hand it back: testing + assignee the human, committed and pushed
 /bugs status <id> <status>     move a bug to open|investigation|testing|closed
 /bugs reassign <id> <who>      change assignee
 ```
@@ -167,14 +169,78 @@ open ──▶ investigation ⇄ testing ──▶ closed
 ```
 
 `open` is entry-only — nothing ever moves back to it. `closed` is only reached
-from `testing`. A typical agent workflow:
+from `testing`. How you move a bug through it is not a matter of taste — see
+the next section.
 
-1. Pick up an `open` bug: set `status: investigation`, `assignee: <agent>`.
-2. Investigate, fix, comment with what you found and what you changed.
-3. Ready for the human to verify: set `status: testing`, `assignee: <human>`.
-   This is what makes it show up in their "needs my reply" / testing queue.
-4. If they reopen it (`status: investigation` again, often with a comment
-   explaining what's still wrong), go back to step 2.
+## Working on a bug — the sequence
+
+**This is required, and it is required in this order.** Every step, every bug,
+however small the fix.
+
+```
+1.  CLAIM       status: investigation   assignee: <agent>
+2.  COMMIT AND PUSH        ← the record only, before any work exists
+3.  DO THE WORK            commit as you normally would
+4.  HAND BACK   status: testing         assignee: <human>   + a comment
+5.  COMMIT AND PUSH
+```
+
+**Why the claim is pushed before you start.** The bug store is committed and
+shared — that is the whole point of it. Until your claim is *pushed*, nothing
+anywhere says the bug is taken: the human sees it sitting in `open`, another
+agent picks it up, and two of you fix the same thing in different ways. The
+claim commit is the announcement, and pushing it is what makes it true for
+anybody but you. A claim you kept locally until the end announced nothing.
+
+It also means **a rejected push is how you find out you lost the race.** If step
+2 is rejected, `git pull --rebase` and look at the record again. If it now shows
+somebody else as `assignee` with `status: investigation`, they got there first —
+**stop, do not work on it, and say so.** That is the protocol working, not a
+problem to route around.
+
+### The steps in detail
+
+**1. Claim.** Set `status: investigation`, `assignee: <agent>`, `updated:`
+today. Nothing else. If the bug is *already* `investigation` and already
+assigned to you, you have claimed it — skip to step 3 rather than writing a
+no-op commit.
+
+If it is assigned to **somebody else** and not `closed`, do not take it. Ask
+first; they may be mid-way through it with nothing pushed yet.
+
+**2. Commit and push.** This commit contains the record file and nothing else:
+
+```
+BUG-0042: taking this on
+
+status: open -> investigation, assignee -> <agent>
+```
+
+If the repo has no remote, commit and skip the push — say so once, so the user
+knows the claim is local and the race window is still open.
+
+**3. Do the work.** Commit it however the repo normally commits work. The
+record does not change here.
+
+**4. Hand back.** Set `status: testing`, `assignee: <human>`, and **append a
+comment** saying what you found and what you changed. The status is what puts it
+in their testing queue; the comment is what lets them verify it without reading
+the diff. A handback with no comment is a bug they have to re-investigate to
+review.
+
+If you could not fix it, do **not** move it to `testing` — `testing` means
+"there is something here to verify". Leave it in `investigation`, comment with
+what you learned and what is blocking, and reassign to the human only if you
+need something from them.
+
+**5. Commit and push.** The record change, plus any work not already committed.
+
+### When not to follow it
+
+Only when the user says so — "don't commit this yet", "just look, don't touch
+the record". Follow that, and say plainly that the bug is unclaimed so they know
+the state it is in. The *size* of a change is never a reason to skip the claim:
+a one-line fix collides with somebody else's one-line fix exactly as badly.
 
 ## Operations
 
@@ -212,6 +278,11 @@ acceptance criteria and an estimate is a backlog item, not a bug of type task.
 - Don't invent a third author name — there are exactly two configured roles.
 - Don't derive `assignee` from `status` in your head and skip setting it —
   always write it explicitly, per bug, per transition.
+- **Don't start work before the claim is pushed**, and don't batch the claim
+  into the commit that carries the fix. A claim that arrives with the work
+  announced nothing to anyone.
+- **Don't work on a bug somebody else has claimed** because the fix looks
+  obvious to you. Ask them.
 - Don't renumber or reuse an `id`, even for a bug you're deleting/replacing.
 - Don't restart or require the BugDesk server for any of this — it's optional
   tooling for the human, not a dependency of the file format.

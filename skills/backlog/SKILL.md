@@ -28,8 +28,8 @@ field optional for half the rows.
 /backlog plan <phase>             lay out a phase: its epics, and what each still needs
 /backlog breakdown <epic>         split a work package into stories (and stories into tasks)
 /backlog refine [ref|phase]       run refinement (epics + stories) — see REFINEMENT.md
-/backlog start <ref>              take an item: status in-progress, assignee you
-/backlog done <ref>               finish an item: check criteria, status review or done
+/backlog start <ref>              CLAIM it: in-progress + assignee you, committed and pushed
+/backlog done <ref>               hand it back: review or done + the human, committed and pushed
 /backlog comment <ref> <text>     append a comment as the agent
 /backlog status <ref> <status>    move along the lifecycle
 /backlog assign <ref> <who>       change assignee
@@ -98,14 +98,23 @@ One file per item. The prefix carries the type; the number is the id:
 
 ```
 backlog/
-  EPIC-0001.md
+  PROJ-0001.md      only in tracker mode — see below
+  EPIC-0004.md
   STORY-0007.md
   TASK-0031.md
 ```
 
-**IDs are one sequence shared by all three prefixes.** The next id is
+**IDs are one sequence shared by all four prefixes.** The next id is
 `max(existing id across every prefix) + 1`, never "next story number". That is
 what makes `parent: 7` unambiguous without also naming a type.
+
+**`PROJ` is a fourth level above epics.** BugDesk offers it only in *tracker*
+mode — a follow-up tracker for work handed to other people, driven by the
+sibling [`/tracker`](../tracker/SKILL.md) skill — but it is a legal record in
+any store, so you may meet one here. Read it, respect it as an ancestor, and
+leave the tracker's own conventions (target dates, `reporter`) to that skill.
+Note the prefix is `PROJ`, not `PROJECT`: never derive a reference by
+upper-casing the type.
 
 ```markdown
 ---
@@ -144,9 +153,10 @@ Refined: 3 criteria, 5 points, parented to EPIC-0001.
 
 Field notes:
 
-- **type**: `epic | story | task`. Must agree with the filename prefix — if
-  they ever disagree, **the filename wins** (that is what the server does), so
-  fix the frontmatter, never the other way round.
+- **type**: `epic | story | task` (plus `project`, in a tracker store). Must
+  agree with the filename prefix — if they ever disagree, **the filename wins**
+  (that is what the server does), so fix the frontmatter, never the other way
+  round.
 - **status**: `draft | refined | in-progress | review | done`, plus the
   off-ladder terminal `dropped`. **Which of these an item may hold depends on
   its type** — see Lifecycle.
@@ -220,10 +230,11 @@ is the work nobody can start.
 
 ## Lifecycle
 
-The status **vocabulary** is shared by all three types. The **ladder** each type
+The status **vocabulary** is shared by every type. The **ladder** each type
 walks is not:
 
 ```
+PROJECT draft ──────────────▶ in-progress ──────────────▶ done
 EPIC    draft ──▶ refined ──▶ in-progress ──────────────▶ done
 STORY   draft ──▶ refined ──▶ in-progress ──▶ review ──▶ done
 TASK    draft ──────────────▶ in-progress ──────────────▶ done
@@ -241,7 +252,10 @@ TASK    draft ──────────────▶ in-progress ──�
 | `dropped` | decided against. Off every ladder; keep the file and say why in a comment. |
 
 **An epic is never `review`.** An epic is not reviewed as a unit — its stories
-are, one at a time. A status nobody can act on is worse than no status.
+are, one at a time. A status nobody can act on is worse than no status. **A
+project is neither `refined` nor `review`**, for both reasons at once: it is a
+container with no acceptance criteria of its own, and what gets reviewed is the
+work inside it.
 
 **A task is never `refined`.** A task inherits its parent story's acceptance
 criteria, so there is nothing about it to refine: no criteria of its own, no
@@ -258,6 +272,119 @@ because nobody decided it was done.
 `refined` is the only transition with a **precondition** — see REFINEMENT.md.
 Every other move is a judgment call. Never delete an item to cancel it; drop
 it, with a comment giving the reason. A deleted file loses the decision.
+
+## Working on an item — the sequence
+
+**This is required, and it is required in this order.** Every step, every item.
+
+```
+0.  REFINE FIRST   if it is not refined yet — and it is not optional
+      COMMIT AND PUSH
+1.  CLAIM          status: in-progress   assignee: <agent>
+2.  COMMIT AND PUSH            ← the record only, before any work exists
+3.  DO THE WORK                commit as you normally would
+4.  HAND BACK      status: per the table below   assignee: <human>   + a comment
+5.  COMMIT AND PUSH
+```
+
+**Why the claim is pushed before you start.** The backlog is committed and
+shared — that is the whole point of it. Until your claim is *pushed*, nothing
+anywhere says the item is taken: it sits in `refined`, which explicitly means
+*anyone can pick this up*, and somebody does. The claim commit is the
+announcement, and pushing it is what makes it true for anybody but you.
+
+It also means **a rejected push is how you find out you lost the race.** If a
+push is rejected, `git pull --rebase` and re-read the record. If it now shows
+somebody else as `assignee` with `status: in-progress`, they got there first —
+**stop, do not work on it, and say so.**
+
+### 0. Refinement is a gate, not a nicety
+
+**An item that is not refined does not get worked on.** Refine it first, as its
+own step, with its own commit — and only then claim it.
+
+| the item | the gate |
+|---|---|
+| **epic** or **story** in `draft` | refine it: [REFINEMENT.md](REFINEMENT.md), then `status: refined` |
+| **task** in `draft` | a task never passes through `refined` — it inherits its story's acceptance criteria, so **the gate is on its parent story.** If the parent is not refined, refine the parent. If the task has no parent at all, that is the refinement problem: resolve it before working. |
+| **project** | not worked on directly. Work on the things inside it. |
+
+The bridge will *let* you go straight from `draft` to `in-progress` — the ladder
+check tests membership, not adjacency — so nothing stops you but this rule.
+Follow it anyway. Acceptance criteria are the definition of done, and work
+started before anybody wrote them is work whose completion is a matter of
+opinion.
+
+**Refinement gets its own commit, pushed on its own**, ahead of the claim:
+
+```
+STORY-0007: refined
+
+3 acceptance criteria, 5 points, parented to EPIC-0001
+```
+
+Separate because it is a different kind of decision from doing the work, and it
+is the one the human is most likely to want to change. **Say what you wrote** —
+if they are there, that is their moment to correct the criteria, before you have
+built anything against them. An agent that writes its own acceptance criteria
+and then satisfies them has marked its own homework; pushing them first, on
+their own, is what keeps that honest.
+
+If you cannot refine it — the outcome is unclear, nobody has said what done
+means — **stop and ask.** Do not refine it into something plausible so the
+sequence can continue.
+
+### 1–2. Claim, commit, push
+
+Set `status: in-progress`, `assignee: <agent>`, `updated:` today. Nothing else.
+Commit the record on its own and push it:
+
+```
+STORY-0007: taking this on
+
+status: refined -> in-progress, assignee -> <agent>
+```
+
+Already `in-progress` and already yours? You have claimed it — skip to the work
+rather than writing a no-op commit. Assigned to **somebody else** and not
+finished? Do not take it; ask.
+
+If the repo has no remote, commit and skip the push — say so once, so the user
+knows the claim is local and the race window is still open.
+
+### 3–5. Work, hand back, push
+
+Read the acceptance criteria before you write any code: they are the definition
+of done and they are frequently more specific than the description. As outcomes
+start to hold, tick them (`- [ ]` → `- [x]`) — in place, one criterion per line,
+leaving the surrounding text alone, because the human ticks the very same boxes
+through the UI's checklist.
+
+Where it goes when you are finished:
+
+| type | status | assignee | why |
+|---|---|---|---|
+| **story** | `review` | the human | somebody other than the builder checks the criteria |
+| **task** | `done` | the human | a task has no review of its own; it returns to the person who will review the story it belongs to |
+| **epic** | — | — | an epic is not finished by hand. It reaches `done` when its last story does |
+
+**Finishing the last task under a story? Move the story on too.** A story whose
+tasks are all `done` but which is still sitting in `in-progress` is a story
+nobody is going to review, and the tree stops meaning anything.
+
+**Any criterion still unticked means the item is not done.** Either finish it,
+or say in a comment why the criterion changed and get it amended — do not hand
+back an item whose definition of done you quietly moved.
+
+Always **append a comment** with the handback: what you built, what you ticked,
+and anything you decided along the way. The status routes it; the comment is
+what lets the reviewer verify it without reading the diff.
+
+### When not to follow it
+
+Only when the user says so — "don't commit this yet", "just draft it". Follow
+that, and say plainly that the item is unclaimed so they know the state it is
+in. The *size* of a change is never a reason to skip the claim.
 
 ## Operations
 
@@ -285,18 +412,13 @@ an unrefined story are a plan for work nobody has agreed on yet.
 **Refine** — see [REFINEMENT.md](REFINEMENT.md). This is the operation the
 skill exists for. Epics and stories only; tasks have no `refined` state.
 
-**Start** — set `status: in-progress` and `assignee: <you>`. Read the
-acceptance criteria before you write any code; they are the definition of done
-and they are frequently more specific than the description.
+**Start** — the claim step of the sequence above: refine first if it is not
+refined, then `status: in-progress`, `assignee: <you>`, committed and **pushed
+before you begin**.
 
-**Done** — go through the acceptance criteria and tick the ones that now hold
-(`- [ ]` → `- [x]`). Edit the line in place; the human ticks the very same
-boxes through the UI's checklist, so keep one criterion per line and leave the
-surrounding text alone. If any remain unticked, the item is **not** done —
-either finish them, or say in a comment why the criterion changed and get it
-amended.
-Then set `status: review` (someone else checks) or `done` when you're closing
-out work you were explicitly asked to close.
+**Done** — the handback step of the sequence above: tick what now holds, move to
+`review` (a story) or `done` (a task), reassign to the human, comment, commit
+and push.
 
 **Comment / status / assign** — as in `/bugs`: append per the header rule, edit
 the frontmatter line in place, and bump `updated`.
@@ -327,6 +449,13 @@ write the direction you're asserting.
   remember the sequence is shared across all three prefixes.
 - Don't create tasks under an unrefined story, or stories under an epic you
   haven't read.
+- **Don't start work before the claim is pushed**, and don't batch the claim
+  into the commit that carries the work. A claim that arrives with the work
+  announced nothing to anyone.
+- **Don't work around the refinement gate** by going `draft` → `in-progress`.
+  The bridge allows it; this skill does not.
+- **Don't refine an item into something plausible** so you can get on with it.
+  If nobody has said what done means, ask.
 - Don't mark something `refined` that doesn't pass the checks in
   REFINEMENT.md. The UI shows the user exactly which checks failed, so a status
   you can't justify is visible immediately.

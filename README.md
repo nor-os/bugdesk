@@ -575,16 +575,41 @@ there to correct it, is the most dangerous thing in this repo:
 
 ## Claude Code integration
 
-BugDesk ships two skills that teach Claude the file formats, the lifecycles,
+BugDesk ships three skills that teach Claude the file formats, the lifecycles,
 and how to read/write the stores directly — no server or API calls required,
 just the markdown files:
 
-- [`skills/tracker/SKILL.md`](skills/tracker/SKILL.md) — `/tracker`, including
-  the source→update pass in [`INTAKE.md`](skills/tracker/INTAKE.md)
 - [`skills/bugs/SKILL.md`](skills/bugs/SKILL.md) — `/bugs`
 - [`skills/backlog/SKILL.md`](skills/backlog/SKILL.md) — `/backlog`, including
   `/backlog refine`, whose playbook is
   [`REFINEMENT.md`](skills/backlog/REFINEMENT.md)
+- [`skills/tracker/SKILL.md`](skills/tracker/SKILL.md) — `/tracker`, including
+  the source→update pass in [`INTAKE.md`](skills/tracker/INTAKE.md)
+
+### The working sequence
+
+Both `/bugs` and `/backlog` follow the same **claim-first sequence**, and it is
+required rather than suggested:
+
+```
+[refine first, if it isn't refined]   backlog only — and it is a gate, not a nicety
+claim      status + assignee -> the agent
+commit and push                       ← the record alone, before any work exists
+do the work
+hand back  status + assignee -> the human, with a comment
+commit and push
+```
+
+**The claim is pushed before the work starts** because the stores are committed
+and shared. Until it is pushed, nothing says the item is taken — it sits in
+`open` or `refined` (which explicitly means *anyone can pick this up*) and
+somebody else does. The claim commit is the announcement, and a rejected push is
+how the agent finds out it lost the race rather than discovering it in a merge
+conflict three hours later.
+
+Refinement gets its own commit ahead of the claim, because an agent that writes
+its own acceptance criteria and then satisfies them has marked its own homework.
+Pushing them first, on their own, is the human's moment to correct them.
 
 Install them into whichever project Claude will be working in (not necessarily
 this repo — BugDesk is usually a sibling tool pointed at your project's own
