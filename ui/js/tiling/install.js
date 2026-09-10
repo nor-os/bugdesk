@@ -198,7 +198,7 @@ export async function installTilingShell({ eventBus, logger, runtime } = {}) {
     // a single desktop labeled "WORK" (below), but the bar lets the user
     // add and switch between multiple desktops again.
     _installDesktopBar(wm);
-    _installUserChip(wm);
+    _installUserChip(wm, eventBus);
     _wirePageShortcuts(wm);
 
     await wm.load();
@@ -706,31 +706,43 @@ function _installTopBarResponsive() {
  * able to check at a glance before you comment as somebody else. Clicking it
  * opens the setting that changes it.
  */
-function _installUserChip(wm) {
+function _installUserChip(wm, eventBus) {
     const host = document.querySelector('#global-bottom-bar .bar-left')
               ?? document.querySelector('.global-bottom-bar .bar-left')
               ?? document.querySelector('#global-bottom-bar .bar-right')
               ?? document.querySelector('.global-bottom-bar');
     if (!host || host.querySelector('#twm-user-chip')) return;
 
-    const cfg = window.__BUGDESK_CONFIG__ || {};
-    const name = cfg.humanAuthor || 'reviewer';
-
     const btn = document.createElement('button');
     btn.id = 'twm-user-chip';
     btn.className = 'twm-user-chip has-tooltip';
     btn.type = 'button';
-    btn.dataset.tooltip = `Signed in as ${name} — click to change who you are`;
     btn.dataset.tooltipPlacement = 'top';
-    btn.setAttribute('aria-label', `Signed in as ${name}. Change your name.`);
-    btn.innerHTML = `<span class="material-symbols-outlined">person</span><span>${
-        String(name).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
-    }</span>`;
+
+    // Painted from the LIVE config rather than from a value captured at boot.
+    // This chip is the one thing on screen that always claims to say who you
+    // are, so it is the first place a name change has to show up — and it used
+    // to be the last, because it read a snapshot nobody refreshed. Changing
+    // your name left the corner saying the old one, which is what "does not
+    // take effect" looked like.
+    const paint = () => {
+        const name = (window.__BUGDESK_CONFIG__ || {}).humanAuthor || 'reviewer';
+        btn.dataset.tooltip = `Signed in as ${name} — click to change who you are`;
+        btn.setAttribute('aria-label', `Signed in as ${name}. Change your name.`);
+        btn.innerHTML = `<span class="material-symbols-outlined">person</span><span>${
+            String(name).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+        }</span>`;
+    };
+    paint();
+
     btn.addEventListener('click', () => {
         import('../ticketdesk/first_run.js')
-            .then((m) => m.openIdentityDialog({ eventBus: window.__ecoagent?.eventBus }))
+            .then((m) => m.openIdentityDialog({ eventBus: eventBus ?? window.__ecoagent?.eventBus }))
             .catch((err) => console.error('[bugdesk] identity dialog failed', err));
     });
+    // Emitted by first_run.js's applyIdentity, whichever surface made the change
+    // — the dialog, or the Settings row's write-through.
+    eventBus?.on?.('bugdesk:identity-changed', paint);
     host.insertBefore(btn, host.firstChild);
 }
 

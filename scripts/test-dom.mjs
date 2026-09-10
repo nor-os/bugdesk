@@ -95,6 +95,14 @@ console.log('\nSettings › Collaborators');
 const settings = await import(join(UI, 'core', 'settings.js'));
 settings.registerSettings(settings.BUGDESK_SETTINGS_SLICE);
 
+// A STALE browser-local name, seeded before anything imports ticketdesk/data.js
+// — which is the only moment it could win. `__BUGDESK_CONFIG__` above says the
+// profile on disk is `alice`; this says somebody typed `stale-bob` into
+// Settings once, long ago. The profile has to win, and the rest of this file
+// then runs as proof that nothing downstream picked the stale value up.
+settings.setSetting('bugdesk.humanName', 'stale-bob');
+settings.setSetting('bugdesk.agentName', 'stale-bob_agent');
+
 await t('the setting is registered under General › Authorship', () => {
     const row = settings.getSettingsByCategory('general')
         .find((r) => r.path === 'bugdesk.collaborators');
@@ -334,6 +342,95 @@ await t('parent and child rules are exact mirrors', () => {
                 `${parent} offers a ${child} child, but a ${child} may not sit under a ${parent}`);
         }
     }
+});
+
+/* ── who you are ─────────────────────────────────────────────────────
+ *
+ * "Change your name" wrote the profile on disk and nothing on screen moved,
+ * which is indistinguishable from a broken button. Two separate causes, both
+ * regression-tested here:
+ *
+ *   1. the browser-local setting OUTRANKED the profile, permanently — so once
+ *      anyone had typed a name into Settings, no later change could ever take
+ *      effect, not even across a reload;
+ *   2. nothing applied a confirmed change to the running page.
+ */
+
+console.log('\nIdentity');
+
+const identity = await import(join(UI, 'ticketdesk', 'first_run.js'));
+const ticketData = await import(join(UI, 'ticketdesk', 'data.js'));
+
+await t('the profile on disk outranks a stale browser-local name', () => {
+    // The bug: this asserted 'stale-bob', through every reload, for ever.
+    assert.equal(ticketData.HUMAN_AUTHOR, 'alice');
+    assert.equal(ticketData.AGENT_AUTHOR, 'alice_agent');
+});
+
+await t('the stored setting is still the fallback when no bridge answered', () => {
+    // Precedence, not deletion: with no `__BUGDESK_CONFIG__` the local value is
+    // the only thing left that knows who you are.
+    const slot = 'bugdesk.humanName';
+    assert.equal(settings.getSetting(slot), 'stale-bob');
+});
+
+await t('applying an identity re-points the config every module reads', async () => {
+    await identity.applyIdentity(
+        { humanAuthor: 'carol', agentAuthor: 'carol_agent', user: 'carol' });
+    assert.equal(window.__BUGDESK_CONFIG__.humanAuthor, 'carol');
+    assert.equal(window.__BUGDESK_CONFIG__.agentAuthor, 'carol_agent');
+});
+
+await t('...and mirrors it into Settings, so no stale value can be left behind', () => {
+    assert.equal(settings.getSetting('bugdesk.humanName'), 'carol');
+    assert.equal(settings.getSetting('bugdesk.agentName'), 'carol_agent');
+});
+
+await t('...and announces it, so the chip in the corner can repaint', async () => {
+    const seen = [];
+    const bus = { emit: (name, payload) => seen.push([name, payload]) };
+    await identity.applyIdentity({ humanAuthor: 'dave', agentAuthor: 'dave_agent' }, { eventBus: bus });
+    assert.deepEqual(seen.map(([n]) => n), ['bugdesk:identity-changed']);
+    assert.equal(seen[0][1].humanAuthor, 'dave');
+});
+
+await t('an unchanged name reports no change, so nothing offers a pointless reload', async () => {
+    const { humanChanged, agentChanged } = await identity.applyIdentity(
+        { humanAuthor: 'dave', agentAuthor: 'dave_agent' });
+    assert.equal(humanChanged, false);
+    assert.equal(agentChanged, false);
+});
+
+await t('renaming only the agent still counts as a change', async () => {
+    // This used to be compared by PROFILE SLUG, which does not move when you
+    // rename the agent or fix the capitalisation of your own name — so the
+    // reload offer silently never appeared for either.
+    const { humanChanged, agentChanged } = await identity.applyIdentity(
+        { humanAuthor: 'dave', agentAuthor: 'claude' });
+    assert.equal(humanChanged, false);
+    assert.equal(agentChanged, true);
+});
+
+await t('the write-through does not echo a change that came from the bridge', async () => {
+    // applyIdentity mirrors the confirmed pair into Settings, which fires the
+    // settings:changed events the write-through listens to. Without a guard
+    // that is a second POST of what the server just told us, and a "signed in
+    // as…" toast at somebody who did not just sign in.
+    const posts = [];
+    const realFetchLocal = globalThis.fetch;
+    put('fetch', async (url, opts) => {
+        posts.push(JSON.parse(opts.body));
+        return { ok: true, json: async () => ({ ok: true, humanAuthor: 'dave', agentAuthor: 'claude' }) };
+    });
+    const handlers = new Map();
+    const bus = {
+        on: (name, fn) => { handlers.set(name, fn); return { dispose() {} }; },
+        emit: () => {},
+    };
+    identity.installAuthorshipWriteThrough({ eventBus: bus, getSetting: settings.getSetting });
+    await handlers.get('settings:bugdesk.humanName:changed')();
+    put('fetch', realFetchLocal);
+    assert.deepEqual(posts, [], `posted ${JSON.stringify(posts)}`);
 });
 
 /* ── the Tracker dashboard ───────────────────────────────────────────

@@ -33,13 +33,23 @@ export const STAGES = ['Open', 'Investigation', 'Testing', 'Closed'];
  * and an agent (investigates, typically via the /bugs skill).
  *
  * Resolution order, highest precedence first:
- *   1. the settings store's `bugdesk.humanName` / `bugdesk.agentName` — a
- *      per-browser override set from Settings → General → Authorship
- *      (core/settings.js), non-empty string wins.
- *   2. window.__BUGDESK_CONFIG__ — index.html populates this from
+ *   1. window.__BUGDESK_CONFIG__ — index.html populates this from
  *      GET /api/config before this module (or anything that imports it) is
  *      ever evaluated, so it's already resolved by the time we read it here.
+ *      This is THE PROFILE ON DISK, and it is the source of truth.
+ *   2. the settings store's `bugdesk.humanName` / `bugdesk.agentName` — a
+ *      per-browser value set from Settings → General → Authorship
+ *      (core/settings.js). A FALLBACK, for a run with no reachable bridge.
  *   3. the hardcoded generic fallback ('reviewer' / 'agent').
+ *
+ * THE SETTING USED TO WIN, and that was a bug with no floor to it. The setting
+ * is browser-local and permanent; the profile is what "Change your name" and
+ * the first-run gate write, and what GET /api/config reports to the skills. So
+ * once anyone had typed a name into Settings, every later name change wrote the
+ * profile, updated the bridge, updated the skills — and the UI went on signing
+ * comments with the stale localStorage value, through every reload, with
+ * nothing anywhere reporting a problem. Identity has one source of truth, and
+ * it is the one on disk that other people's tools can also read.
  *
  * Both are still plain consts evaluated ONCE at module load — same
  * reasoning as the original config-prefetch design (see filters.js's
@@ -48,8 +58,8 @@ export const STAGES = ['Open', 'Investigation', 'Testing', 'Closed'];
  * takes effect on the next reload; settings_page.js's `reloadHint` flag on
  * both schema entries says so in the UI. */
 const _cfg = (typeof window !== 'undefined' && window.__BUGDESK_CONFIG__) || {};
-export const HUMAN_AUTHOR = getSetting('bugdesk.humanName') || _cfg.humanAuthor || 'reviewer';
-export const AGENT_AUTHOR = getSetting('bugdesk.agentName') || _cfg.agentAuthor || 'agent';
+export const HUMAN_AUTHOR = _cfg.humanAuthor || getSetting('bugdesk.humanName') || 'reviewer';
+export const AGENT_AUTHOR = _cfg.agentAuthor || getSetting('bugdesk.agentName') || 'agent';
 
 /* ── the shared roster ───────────────────────────────────────────────
  *

@@ -81,6 +81,39 @@ they are simply not *offered* outside tracker mode.
 
 ### Fixed
 
+- **"Change your name" did not take effect.** Reported as "this feature has not
+  been developed properly yet", and that was fair — three faults stacked on one
+  button, none of them on the server, which had been writing the profile
+  correctly all along.
+
+  The one with no floor to it: `bugdesk.humanName` in the browser's own storage
+  **outranked the profile on disk**. So once anyone had typed a name into
+  Settings › General › Authorship, every later change wrote the profile, updated
+  the bridge and updated what the skills read — while the UI went on signing
+  comments with the stale local value, through every reload, permanently, with
+  nothing anywhere reporting a problem. Identity now has one source of truth:
+  the profile, which is the copy other people's tools can also read. The stored
+  value stays as the fallback for a run with no reachable bridge, and every
+  confirmed change is mirrored into it so it cannot go stale again.
+
+  The one that made it look broken: **nothing applied a confirmed change to the
+  running page.** In particular the chip in the bottom-left corner — the thing
+  the README calls the piece of state you most need to be able to check at a
+  glance — was painted at boot from a snapshot nobody ever refreshed, so you
+  changed your name and the corner still said the old one. A change now
+  re-points the config every module reads, mirrors the Settings rows, and
+  announces itself so the chip repaints.
+
+  And the one that hid the reload offer: it was gated on the profile **slug**
+  changing, which does not move when you fix the capitalisation of your own name
+  or rename only the agent. It compares the names now.
+
+- **The dialog claimed success when `BUGDESK_HUMAN` was set.** That variable
+  outranks the profile on the server, so a name typed into the dialog was
+  written to disk and then ignored on every boot — and the dialog said "Now
+  &lt;old name&gt;" and moved on. It says what is actually happening instead, and
+  names the one thing that changes it.
+
 - **The Parent picker's display was visibly larger than every control beside
   it.** It is an `<input>`, and an input does not inherit the page font — it
   takes the browser's own (~13.3px Arial). Now matched to the choice control it

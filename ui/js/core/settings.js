@@ -44,14 +44,21 @@
  * of settings here — not enough to earn its own sidebar entry the way
  * `ecoagent` used to.
  *
- * These are NOT browser-only overrides any more. Since the per-user profile
- * landed (server/UserConfig.cs), `first_run.js`'s
- * `installAuthorshipWriteThrough` mirrors every change here into the profile
- * on disk. It has to: the setting is browser-local, so without the write-
- * through the UI would sign comments with the new name while
- * `GET /api/config` — the thing the /bugs and /backlog skills read — still
- * reported the old one, and the two surfaces would disagree about the
- * user's identity with nothing anywhere reporting a problem.
+ * These are NOT browser-only overrides any more, and they are no longer the
+ * authority either. Since the per-user profile landed (server/UserConfig.cs),
+ * THE PROFILE ON DISK is the source of truth for who you are: it is what the
+ * first-run gate and "Change your name" write, and what `GET /api/config`
+ * reports to the /bugs, /backlog and /tracker skills. These two rows are an
+ * editor for it, not a second copy of it —
+ * `first_run.js`'s `installAuthorshipWriteThrough` mirrors every change here
+ * into the profile, and `ticketdesk/data.js` reads the profile FIRST, falling
+ * back to the stored value only when no bridge answered.
+ *
+ * The precedence used to run the other way, and there was no floor to it: the
+ * stored value is browser-local and permanent, so once anyone had typed a name
+ * here, every later change made anywhere else wrote the profile, updated the
+ * bridge, updated the skills — and the UI went on signing comments with the
+ * stale local value through every reload, with nothing reporting a problem.
  *
  * Changing the name therefore SWITCHES PROFILE (creating one if the name is
  * new) rather than renaming you in place. That is the honest reading in a

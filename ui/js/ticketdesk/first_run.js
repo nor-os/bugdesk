@@ -173,6 +173,67 @@ export async function resolveIdentity() {
 }
 
 /**
+ * Adopt the identity the bridge just confirmed, everywhere it is visible NOW.
+ *
+ * A name change used to write the profile and stop there, which is why it read
+ * as doing nothing: `HUMAN_AUTHOR` is resolved once at module load, so no page
+ * picks it up, and the one always-visible indicator — the chip in the
+ * bottom-left corner that the README calls "the piece of state you most need to
+ * be able to check at a glance" — was rendered at boot from a snapshot nobody
+ * ever refreshed. You changed your name, and the corner still said the old one.
+ *
+ * So this does the three things that make a change observable without a reload:
+ *
+ *   1. re-points `window.__BUGDESK_CONFIG__`, which is what every module reads
+ *      at load and what the next page to mount will therefore see;
+ *   2. mirrors the pair into the settings store, so Settings › General ›
+ *      Authorship shows the truth rather than whatever was typed there once;
+ *   3. announces it, so the chip repaints.
+ *
+ * What it CANNOT do is retro-fit the constants already baked into filter
+ * expressions built at module-evaluation time. That is what the reload offer is
+ * for, and why it is offered rather than assumed.
+ *
+ * @param {object} cfg  a `/api/config`-shaped payload
+ * @returns {{humanChanged: boolean, agentChanged: boolean}}
+ */
+export async function applyIdentity(cfg, { eventBus } = {}) {
+    const before = (typeof window !== 'undefined' && window.__BUGDESK_CONFIG__) || {};
+    const humanChanged = (cfg.humanAuthor || '') !== (before.humanAuthor || '');
+    const agentChanged = (cfg.agentAuthor || '') !== (before.agentAuthor || '');
+
+    if (typeof window !== 'undefined') {
+        window.__BUGDESK_CONFIG__ = {
+            ...before,
+            humanAuthor: cfg.humanAuthor || before.humanAuthor,
+            agentAuthor: cfg.agentAuthor || before.agentAuthor,
+            collaborators: Array.isArray(cfg.collaborators) ? cfg.collaborators : before.collaborators,
+            assignees: Array.isArray(cfg.assignees) ? cfg.assignees : before.assignees,
+        };
+    }
+
+    // Keep the Settings rows honest. They are an EDITOR for the profile, not a
+    // second copy of it, so they must never be left holding a name the profile
+    // has moved on from — that stale value is the whole bug this fixes.
+    try {
+        const { setSetting, getSetting } = await import('../core/settings.js');
+        if (getSetting('bugdesk.humanName') !== (cfg.humanAuthor || '')) {
+            setSetting('bugdesk.humanName', cfg.humanAuthor || '');
+        }
+        if (getSetting('bugdesk.agentName') !== (cfg.agentAuthor || '')) {
+            setSetting('bugdesk.agentName', cfg.agentAuthor || '');
+        }
+    } catch (err) {
+        console.warn('BugDesk: could not mirror the identity into settings', err);
+    }
+
+    eventBus?.emit?.('bugdesk:identity-changed', {
+        humanAuthor: cfg.humanAuthor, agentAuthor: cfg.agentAuthor, user: cfg.user,
+    });
+    return { humanChanged, agentChanged };
+}
+
+/**
  * Keep Settings › General › Authorship and the per-user profile in agreement.
  *
  * Without this the two drift in the worst possible way: the setting is
@@ -198,20 +259,34 @@ export function installAuthorshipWriteThrough({ eventBus, getSetting } = {}) {
         // A blank name means "use the server default" — there is no profile to
         // select, and posting an empty name would just be rejected.
         if (!name) return;
+        const agent = String(getSetting('bugdesk.agentName') || '').trim();
+        // Already what the bridge told us? Then this change came FROM the
+        // bridge — applyIdentity mirrors every confirmed identity back into
+        // these two rows — and posting it again would be a pointless round trip
+        // that toasts "signed in as…" at somebody who did not just sign in.
+        const live = (typeof window !== 'undefined' && window.__BUGDESK_CONFIG__) || {};
+        if (name === (live.humanAuthor || '') && agent === (live.agentAuthor || '')) return;
         try {
             const res = await fetch('/api/config/user', {
                 method: 'POST',
                 headers: { 'content-type': 'application/json', accept: 'application/json' },
-                body: JSON.stringify({
-                    name,
-                    agentName: String(getSetting('bugdesk.agentName') || '').trim(),
-                }),
+                body: JSON.stringify({ name, agentName: agent }),
             });
             const j = await res.json().catch(() => null);
             if (!res.ok || !j?.ok) throw new Error(j?.error || `HTTP ${res.status}`);
+            if (j.envLocked) {
+                eventBus.emit?.('toast:show', {
+                    type: 'error',
+                    message: `BUGDESK_HUMAN is set, so BugDesk keeps signing as ${j.humanAuthor}.`
+                           + ' Your profile was saved; unset the variable and restart to use it.',
+                });
+                return;
+            }
+            await applyIdentity(j, { eventBus });
             eventBus.emit?.('toast:show', {
                 type: 'info',
-                message: `Signed in as ${name}. Reload BugDesk for it to take effect everywhere.`,
+                message: `Signed in as ${j.humanAuthor}. Reload BugDesk for saved filters and`
+                       + ' the "On me" views to follow.',
             });
         } catch (err) {
             eventBus.emit?.('toast:show', {
@@ -250,21 +325,45 @@ export const agentNameFor = (human) => {
 };
 
 export async function openIdentityDialog({ eventBus } = {}) {
-    const { openForm } = await import('../ecoagent/ui/modal.js');
     const cfg = window.__BUGDESK_CONFIG__ || {};
     let lastName = cfg.humanAuthor || '';
 
     let profiles = [];
-    let current = null;
+    let envLocked = false;
     try {
         const res = await fetch('/api/config', { headers: { accept: 'application/json' } });
         const j = res.ok ? await res.json() : null;
-        if (j?.ok) { profiles = Array.isArray(j.profiles) ? j.profiles : []; current = j.user; }
+        if (j?.ok) {
+            profiles = Array.isArray(j.profiles) ? j.profiles : [];
+            envLocked = !!j.envLocked;
+            lastName = j.humanAuthor || lastName;
+        }
     } catch (err) {
         console.warn('BugDesk: could not list profiles', err);
     }
 
+    // BUGDESK_HUMAN outranks the profile on the server (see UserStore.HumanAuthor),
+    // so a name typed here would be written to disk and then ignored on every
+    // boot. The dialog used to accept it anyway and report success — say what is
+    // actually happening instead, and name the one thing that fixes it.
+    if (envLocked) {
+        const { openForm } = await import('../ecoagent/ui/modal.js');
+        await openForm({
+            title: 'Your name comes from the environment',
+            submitLabel: 'Close',
+            fields: [{
+                name: 'note', label: 'Signed in as', type: 'text', readonly: true,
+                hint: 'BUGDESK_HUMAN is set for this server, and it outranks the saved'
+                    + ' profile. Unset it (and BUGDESK_AGENT) and restart BugDesk to'
+                    + ' choose a name here.',
+            }],
+            defaults: { note: `${cfg.humanAuthor || ''} · agent ${cfg.agentAuthor || ''}` },
+        });
+        return null;
+    }
+
     const known = profiles.map((p) => p.name).filter(Boolean);
+    const { openForm } = await import('../ecoagent/ui/modal.js');
     const result = await openForm({
         title: 'Who is working here?',
         submitLabel: 'Use this name',
@@ -319,16 +418,28 @@ export async function openIdentityDialog({ eventBus } = {}) {
         const j = await res.json().catch(() => null);
         if (!res.ok || !j?.ok) throw new Error(j?.error || `HTTP ${res.status}`);
 
-        // The author names are resolved once, at module-evaluation time, and
-        // baked into the filter expressions — so a reload is genuinely required
-        // rather than merely tidy. Say so instead of leaving the UI signing
-        // comments with the old name.
-        const changed = (j.user || '') !== (current || '');
+        // Make it true in THIS page before saying anything about it: the config
+        // snapshot every module reads, the Settings rows, and the chip in the
+        // corner. Without this the dialog wrote a file and nothing on screen
+        // moved, which is indistinguishable from a broken button.
+        const { humanChanged, agentChanged } = await applyIdentity(j, { eventBus });
+
+        if (!humanChanged && !agentChanged) {
+            eventBus?.emit?.('toast:show', { type: 'info', message: `Still ${j.humanAuthor}.` });
+            return j;
+        }
+
+        // What a reload still buys: HUMAN_AUTHOR/AGENT_AUTHOR are baked into the
+        // filter expressions built at module-evaluation time, so "On me" and
+        // "Needs my reply" go on meaning the old person until the page reloads.
+        // Compare the NAMES, not the profile slug — the slug is unchanged when
+        // you fix the capitalisation of your own name or rename just the agent,
+        // and those used to silently skip the offer.
         eventBus?.emit?.('toast:show', {
             type: 'info',
-            message: `Now ${j.humanAuthor}. Reload BugDesk for it to take effect everywhere.`,
+            message: `Now ${j.humanAuthor}. Reload for the saved filters and "On me" to follow.`,
         });
-        if (changed && window.confirm(
+        if (window.confirm(
             `Signed in as ${j.humanAuthor}. Reload now so every view uses the new name?`)) {
             window.location.reload();
         }
