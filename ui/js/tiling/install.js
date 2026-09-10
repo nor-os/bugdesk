@@ -29,7 +29,7 @@ import { installHistoryBack } from './history_nav.js';
 import { createPageStubsContent } from './page_stubs.js';
 import { showContextMenu } from '../ecoagent/ui/context_menu.js';
 import { openForm } from '../ecoagent/ui/modal.js';
-import { taxonomy } from './kind_taxonomy.js';
+import { taxonomy, activeTopNavKind } from './kind_taxonomy.js';
 import { openTileTabMenu } from './tile_tab_menu.js';
 import { HelpModal } from '../help/help_modal.js';
 
@@ -325,9 +325,9 @@ function _installTicketActions(wm) {
     const wrap = document.createElement('div');
     wrap.className = 'td-topbar-actions';
     wrap.innerHTML = `
-        <button class="ea-btn" data-td="search" title="Bug search — a mask whose entered data becomes the criteria">
+        <button class="ea-btn" data-td="search" title="Search bugs">
             <span class="material-symbols-outlined">search</span> Search</button>
-        <button class="ea-btn ea-btn--primary" data-td="item" title="File anything — bug, regression, chore, epic, story or task">
+        <button class="ea-btn ea-btn--primary" data-td="item" title="New item">
             <span class="material-symbols-outlined">add</span> New Item</button>`;
     wrap.addEventListener('click', async (e) => {
         const btn = e.target.closest('[data-td]');
@@ -432,7 +432,7 @@ function _installHamburgerMenu() {
         items.push({
             label: 'Change your name…',
             icon: 'badge',
-            action: 'twm-open-settings',
+            action: 'twm-change-name',
         });
         const rect = ham.getBoundingClientRect();
         showContextMenu(rect.left, rect.bottom, items, (action) => {
@@ -442,6 +442,15 @@ function _installHamburgerMenu() {
             }
             if (action === 'twm-open-settings') {
                 window.__twm?.wm?.openInPrimary?.('settings');
+                return;
+            }
+            if (action === 'twm-change-name') {
+                // A dialog, not the Settings page: opened in the primary tile
+                // from a focused side tile, the page change happened somewhere
+                // the user was not looking and read as "nothing happened".
+                import('../ticketdesk/first_run.js')
+                    .then((m) => m.openIdentityDialog({ eventBus: window.__ecoagent?.eventBus }))
+                    .catch((err) => console.error('[bugdesk] identity dialog failed', err));
                 return;
             }
             document.getElementById(action)?.click();
@@ -662,13 +671,17 @@ function _installUserChip(wm) {
     btn.id = 'twm-user-chip';
     btn.className = 'twm-user-chip has-tooltip';
     btn.type = 'button';
-    btn.dataset.tooltip = `Signed in as ${name} — click to change`;
+    btn.dataset.tooltip = `Signed in as ${name} — click to change who you are`;
     btn.dataset.tooltipPlacement = 'top';
     btn.setAttribute('aria-label', `Signed in as ${name}. Change your name.`);
     btn.innerHTML = `<span class="material-symbols-outlined">person</span><span>${
         String(name).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
     }</span>`;
-    btn.addEventListener('click', () => wm.openInPrimary('settings'));
+    btn.addEventListener('click', () => {
+        import('../ticketdesk/first_run.js')
+            .then((m) => m.openIdentityDialog({ eventBus: window.__ecoagent?.eventBus }))
+            .catch((err) => console.error('[bugdesk] identity dialog failed', err));
+    });
     host.insertBefore(btn, host.firstChild);
 }
 

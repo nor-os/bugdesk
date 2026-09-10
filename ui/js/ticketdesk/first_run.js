@@ -46,10 +46,8 @@ export function askForName(cfg) {
                 </div>
                 <h1 class="bd-firstrun__title" id="bd-firstrun-title">Who's working here?</h1>
                 <p class="bd-firstrun__lede">
-                    Your name goes on the bugs you file, the comments you write and the
-                    items you take. Everyone on this repo shares the bug and backlog
-                    stores — but not their name, filters or window layout, which stay in
-                    a git-ignored file of your own.
+                    Your name goes on the bugs you file, the comments you write and
+                    the items you take.
                 </p>
 
                 ${profiles.length ? `
@@ -78,10 +76,8 @@ export function askForName(cfg) {
                                spellcheck="false" maxlength="60"
                                placeholder="${esc(cfg?.agentAuthor || 'agent')}" />
                         <p class="bd-firstrun__hint">
-                            Whatever your AI coding assistant signs its comments as. It must
-                            match the <code>BUGDESK_AGENT</code> the <code>/bugs</code> and
-                            <code>/backlog</code> skills resolve, or the "On agent" and
-                            "Needs my reply" views won't recognise its comments.
+                            What your AI coding assistant signs its comments as. Must match
+                            <code>BUGDESK_AGENT</code>.
                         </p>
                     </details>
 
@@ -93,9 +89,8 @@ export function askForName(cfg) {
                 </form>
 
                 <p class="bd-firstrun__foot">
-                    Saved to <code>${esc(cfg?.configDir || '.bugdesk')}</code>, which
-                    ignores itself in git. Change it later in Settings › General ›
-                    Authorship.
+                    Saved to <code>${esc(cfg?.configDir || '.bugdesk')}</code>.
+                    You can change it later.
                 </p>
             </div>`;
 
@@ -231,4 +226,85 @@ export function installAuthorshipWriteThrough({ eventBus, getSetting } = {}) {
         eventBus.on('settings:bugdesk.agentName:changed', push),
     ];
     return { dispose: () => subs.forEach((s) => s?.dispose?.()) };
+}
+
+/**
+ * "Change your name" — the same question the first-run gate asks, asked again.
+ *
+ * The hamburger entry and the bottom-bar chip used to route to
+ * Settings › General › Authorship. That is a page, opened in the PRIMARY tile,
+ * so from a focused side tile it looked like the click did nothing at all —
+ * and an item labelled with an ellipsis promises a dialog anyway.
+ *
+ * Writes straight through to the profile, like the gate does, so the UI and
+ * `GET /api/config` cannot disagree about who you are. Entering a different
+ * name SWITCHES profile (creating it if new) rather than renaming you in
+ * place — identities own their own filters.
+ */
+export async function openIdentityDialog({ eventBus } = {}) {
+    const { openForm } = await import('../ecoagent/ui/modal.js');
+    const cfg = window.__BUGDESK_CONFIG__ || {};
+
+    let profiles = [];
+    let current = null;
+    try {
+        const res = await fetch('/api/config', { headers: { accept: 'application/json' } });
+        const j = res.ok ? await res.json() : null;
+        if (j?.ok) { profiles = Array.isArray(j.profiles) ? j.profiles : []; current = j.user; }
+    } catch (err) {
+        console.warn('BugDesk: could not list profiles', err);
+    }
+
+    const known = profiles.map((p) => p.name).filter(Boolean);
+    const result = await openForm({
+        title: 'Who is working here?',
+        submitLabel: 'Use this name',
+        fields: [
+            { name: 'name', label: 'Your name', type: 'select', create: true,
+              required: true, options: known,
+              placeholder: 'type a name, or pick one you have used here',
+              hint: known.length > 1
+                  ? 'A different name switches to that profile, with its own saved filters.'
+                  : '' },
+            { name: 'agentName', label: 'Agent name', type: 'text',
+              placeholder: cfg.agentAuthor || 'agent',
+              hint: 'What your AI coding assistant signs its comments as. Must match BUGDESK_AGENT.' },
+        ],
+        defaults: {
+            name: cfg.humanAuthor || '',
+            agentName: cfg.agentAuthor === 'agent' ? '' : (cfg.agentAuthor || ''),
+        },
+    });
+    if (!result) return null;
+
+    const name = String(result.name || '').trim();
+    if (!name) return null;
+
+    try {
+        const res = await fetch('/api/config/user', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', accept: 'application/json' },
+            body: JSON.stringify({ name, agentName: String(result.agentName || '').trim() }),
+        });
+        const j = await res.json().catch(() => null);
+        if (!res.ok || !j?.ok) throw new Error(j?.error || `HTTP ${res.status}`);
+
+        // The author names are resolved once, at module-evaluation time, and
+        // baked into the filter expressions — so a reload is genuinely required
+        // rather than merely tidy. Say so instead of leaving the UI signing
+        // comments with the old name.
+        const changed = (j.user || '') !== (current || '');
+        eventBus?.emit?.('toast:show', {
+            type: 'info',
+            message: `Now ${j.humanAuthor}. Reload BugDesk for it to take effect everywhere.`,
+        });
+        if (changed && window.confirm(
+            `Signed in as ${j.humanAuthor}. Reload now so every view uses the new name?`)) {
+            window.location.reload();
+        }
+        return j;
+    } catch (err) {
+        eventBus?.emit?.('toast:show', { type: 'error', message: `Could not save your name: ${err?.message || err}` });
+        return null;
+    }
 }

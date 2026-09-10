@@ -252,6 +252,11 @@ export function createPageStubsContent({ api, eventBus }) {
     /** Stub page with a breadcrumb at the top. Used for kinds that
      *  don't have a workspace-tab factory yet but still want the same
      *  chrome around their placeholder content. */
+    /** Escape for the interpolations below. Was referenced but never defined —
+     *  every one of these templates threw a ReferenceError at render time. */
+    const _esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
     const stubPageFactory = (kind, render) => (host, props, ctx) => {
         host.classList.add('twm-page-shell');
         host.innerHTML = '';

@@ -40,11 +40,14 @@ import {
 } from './backlog_filters.js';
 import {
     ITEMS, PHASES, TYPES, TYPE_ICON,
-    collapsibleIds, fetchItem, humanizeItemStatus, isGated,
+    collapsibleIds, fetchItem, humanizeItemStatus, isGated, parentOptions,
     itemLabel, itemRef, ladderFor, loadBacklog, patchItem, postItemComment,
     REFINEMENT_RULES, refinementGaps, stageActions, stageOf, treeRows,
     typeLabelOf,
 } from './backlog_data.js';
+
+/** Set by createBacklogContent at registration, before any mount runs. */
+let _eventBus = null;
 
 const md = renderMarkdown;
 const icon = (name) => `<span class="material-symbols-outlined">${name}</span>`;
@@ -153,9 +156,9 @@ function mountBacklogBoard(host, props, ctx) {
             <button class="ea-btn" data-a="savefilter">${icon('filter_alt')} Save as filter</button>
             <span class="bd-newgroup">
                 <span class="td-dim">New</span>
-                <button class="ea-btn" data-a="new-epic" title="New epic — a work package">${icon('workspaces')} Epic</button>
-                <button class="ea-btn ea-btn--primary" data-a="new-story" title="New story — one deliverable outcome">${icon('article')} Story</button>
-                <button class="ea-btn" data-a="new-task" title="New task — a step under a story">${icon('check_box_outline_blank')} Task</button>
+                <button class="ea-btn" data-a="new-epic" title="New epic">${icon('workspaces')} Epic</button>
+                <button class="ea-btn ea-btn--primary" data-a="new-story" title="New story">${icon('article')} Story</button>
+                <button class="ea-btn" data-a="new-task" title="New task">${icon('check_box_outline_blank')} Task</button>
             </span>
         </div>
         <div class="td-tablehost"></div>
@@ -998,8 +1001,6 @@ export function mountBacklogRail(host, ctx) {
 }
 
 /* ── content map ─────────────────────────────────────────────────── */
-
-let _eventBus = null;
 
 /**
  * Build the backlog's `{ kind: factory }` map. Merged by install.js alongside

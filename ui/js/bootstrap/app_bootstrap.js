@@ -1178,19 +1178,10 @@ async function hydrateInitialWorkspace({
         log.info('TicketDesk: skipping Ecosim workspace hydration');
         return null;
     }
-    if (false) {
-        const emptyPayload = buildEmptyWorkspacePayload();
-        return hydrateWorkspace({
-            workspaceImportController,
-            source: { payload: emptyPayload, meta: { source: 'empty-startup' } },
-            eventBus,
-            log,
-            initialNamespaceId: null,
-            hostBridgeRef,
-            dataManager,
-            projectModel,
-        });
-    }
+    // (An `if (false)` block hydrating an empty workspace payload stood here.
+    // It was disabled when TicketDesk dropped the Ecosim graph workspace — the
+    // `!source` branch above returns before it could ever matter — so it was
+    // dead in two independent ways. Removed rather than left as a decoy.)
 
     // Check if source is in legacy format and convert
     if (isLegacyWorkspaceFormat(source)) {

@@ -302,7 +302,7 @@ function mountQueues(host, props, ctx) {
             <span class="bd-newgroup">
                 <span class="td-dim">New</span>
                 <button class="ea-btn ea-btn--primary" data-a="newbug"
-                        title="New bug — the full mask, with a markdown editor and link staging">${icon('bug_report')} Bug</button>
+                        title="File a new bug">${icon('bug_report')} Bug</button>
             </span>
         </div>
         <div class="td-tablehost"></div>
@@ -1281,31 +1281,93 @@ function mountTicketNav(host, props, ctx) {
     };
 }
 
-/* ── panel:right — Inspector (TEAM only) ────────────────────────── */
+/* ── panel:right — Inspector ─────────────────────────────────────────
+ *
+ * Who is carrying what, for whichever store you are in. It used to read the bug
+ * store only, so on the Backlog page — or on any project that files feature work
+ * before it has bugs — it rendered a header and nothing else, with no
+ * indication whether that meant "nobody is assigned" or "this panel is broken".
+ *
+ * It follows the top nav for the same reason the left rail does: one navigation
+ * axis, and no panel quietly answering a question about the store you are not
+ * looking at. */
 
 function memberRow(m) {
     return `
     <div class="td-mrow" title="${esc(m.name)} — ${m.presence}, load ${Math.round(m.load * 100)}%">
         <span class="td-avatar">${m.initials}<span class="td-presence td-presence--${m.presence}"></span></span>
         <span class="td-mrow__name">${m.me ? `<b>${esc(m.name)} (you)</b>` : esc(m.name)}</span>
-        <span class="td-mrow__counts"><span class="td-inc">${m.inc} open</span> · ${m.other} closed</span>
+        <span class="td-mrow__counts"><span class="td-inc">${m.inc} ${esc(m.openLabel || 'open')}</span> · ${m.other} ${esc(m.doneLabel || 'closed')}</span>
         <span class="td-loadbar"><span class="td-loadbar__fill td-loadbar__fill--${loadClass(m.load)}" style="width:${Math.round(m.load * 100)}%"></span></span>
     </div>`;
 }
 
+/** The backlog's equivalent of data.js's TEAM: one row per assignee, weighted
+ *  by the items still in flight. Built here rather than in backlog_data.js
+ *  because the shape it produces exists only to feed memberRow. */
+function backlogTeam(items) {
+    const open = {}, done = {};
+    for (const i of items) {
+        const who = i.assignee || '';
+        if (!who) continue;                       // unassigned is not a person
+        if (i.status === 'done' || i.status === 'dropped') done[who] = (done[who] || 0) + 1;
+        else open[who] = (open[who] || 0) + 1;
+    }
+    const names = Array.from(new Set([...Object.keys(open), ...Object.keys(done)])).sort();
+    const maxOpen = Math.max(1, ...names.map((n) => open[n] || 0));
+    return names.map((name) => ({
+        name,
+        initials: initials(name),
+        presence: (open[name] || 0) > 0 ? 'online' : 'away',
+        inc: open[name] || 0,
+        other: done[name] || 0,
+        openLabel: 'in flight',
+        doneLabel: 'done',
+        load: Math.round(((open[name] || 0) / maxOpen) * 100) / 100,
+        me: name.toLowerCase() === HUMAN_AUTHOR.toLowerCase(),
+    }));
+}
+
 function mountTicketInspector(host, props, ctx) {
-    const online = TEAM.filter((m) => m.presence !== 'offline').length;
-    host.innerHTML = `
-        <div class="td-rpanel">
-            <div class="twm-bp__tabs td-rpanel__tabs">
-                <button class="twm-bp__tab twm-bp__tab--on">Team</button>
-            </div>
-            <div class="td-rpanel__body">
-                <div class="td-nav__section">Assignees <span class="td-nav__badge">${online}/${TEAM.length} active</span></div>
-                ${TEAM.map(memberRow).join('')}
-            </div>
-        </div>`;
-    return { title: 'Inspector' };
+    const getWm = () => ctx?.wm || window.__twm?.wm || null;
+
+    const render = async () => {
+        const backlog = activeTopNavKind(getWm()) === 'backlog';
+        let rows = [];
+        let empty = '';
+        if (backlog) {
+            const { ITEMS } = await import('./backlog_data.js');
+            rows = backlogTeam(ITEMS);
+            empty = ITEMS.length
+                ? 'No backlog item has an assignee yet.'
+                : 'No backlog items yet.';
+        } else {
+            rows = TEAM;
+            empty = TICKETS.length ? 'No bug has an assignee yet.' : 'No bugs yet.';
+        }
+        const active = rows.filter((m) => m.presence !== 'offline').length;
+        host.innerHTML = `
+            <div class="td-rpanel">
+                <div class="twm-bp__tabs td-rpanel__tabs">
+                    <button class="twm-bp__tab twm-bp__tab--on">${backlog ? 'Backlog team' : 'Bug team'}</button>
+                </div>
+                <div class="td-rpanel__body">
+                    <div class="td-nav__section">Assignees
+                        <span class="td-nav__badge">${active}/${rows.length} active</span></div>
+                    ${rows.length
+                        ? rows.map(memberRow).join('')
+                        : `<div class="td-nav__item"><span class="td-dim">${esc(empty)}</span></div>`}
+                </div>
+            </div>`;
+    };
+    render();
+
+    const sub = _eventBus?.on?.('wm:changed', render);
+    const backlogSub = _eventBus?.on?.('backlog:changed', render);
+    return {
+        title: 'Inspector',
+        destroy: () => { sub?.dispose?.(); backlogSub?.dispose?.(); },
+    };
 }
 
 /* ── panel:bottom — Console (hidden by default) ─────────────────── */

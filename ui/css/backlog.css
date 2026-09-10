@@ -252,13 +252,23 @@
 .bd-item--context .bd-item__title,
 .bd-item--context .bd-item__ref { opacity: 0.55; }
 
+/* Rendered on a bare <button> (the ancestry line, the children rows, the
+   task's "inherits from" note). main_new.css styles bare `button` with a solid
+   --accent-bright fill and white text, so without this reset a reference reads
+   as blue-on-blue. It is a link, not a button, and has to look like one. */
 .bd-item__ref {
     font-family: var(--font-family-mono, ui-monospace, monospace);
     font-size: 10.5px;
     color: #1486cf;
+    background: none;
+    border: none;
+    padding: 0;
     cursor: pointer;
 }
-.bd-item__ref:hover { text-decoration: underline; }
+.bd-item__ref:hover {
+    background: none;
+    text-decoration: underline;
+}
 
 .bd-type {
     display: inline-flex;
@@ -427,3 +437,8 @@
     border-color: var(--border-strong, #383838);
 }
 .twm-user-chip .material-symbols-outlined { font-size: 13px; }
+
+/* Adaptive form rows (openForm's onFieldChange). `.ea-modal__row` is a grid, so
+   the `hidden` attribute alone loses to it — display has to be forced. */
+.ea-modal__form .ea-modal__row[hidden],
+.ea-modal__form .ea-modal__section[hidden] { display: none !important; }

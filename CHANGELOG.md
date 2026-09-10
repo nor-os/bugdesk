@@ -126,6 +126,39 @@ invisible, since the app boots perfectly well on last release's code.
 
 ### Fixed
 
+- **The top-nav chip stopped highlighting.** `install.js` called
+  `activeTopNavKind(wm)` without importing it — an edit whose import half never
+  landed. Every sync threw a `ReferenceError`, so no chip ever lit.
+- **Backlog item pages threw on render.** `parentOptions` moved out with the
+  create form and the item page's Parent select still called it. It now lives in
+  `backlog_data.js`, where both the item page and the New item dialog read one
+  definition.
+- **References rendered blue-on-blue.** `main_new.css` styles bare `button` with
+  a solid accent fill; `.bd-item__ref` set a link colour but no background, so
+  every epic/story reference on the item page was blue text on a blue button.
+- **The Inspector was empty and silent.** It only ever read the bug store, so on
+  the Backlog page — or on a project that files feature work before it has bugs
+  — it rendered a header and nothing else. It now follows the top nav, shows
+  backlog assignees when you are in the backlog, and says which of "no records"
+  or "no assignees" it means.
+- **"Change your name" did nothing visible.** It routed to the Settings page,
+  opened in the *primary* tile — from a focused side tile the change happened
+  somewhere the user was not looking. It is a dialog now, as its ellipsis
+  promised, and the bottom-bar chip opens the same one.
+- **The New item form now follows the Type select.** A bug is asked for a
+  severity; a story for a parent and an estimate; an epic for the phase its
+  descendants inherit. It used to show every field of both stores at once,
+  under headings reading "If it is a bug" — which a "New epic" dialog has no
+  business asking. `openForm` gained an `onFieldChange` hook for this; the
+  fields are built once and irrelevant rows hidden, because rebuilding on every
+  change would discard whatever had already been typed.
+- Copy that explained the implementation rather than the control has been
+  removed from tooltips, hints and the first-run screen.
+- `page_stubs.js` referenced an `_esc` it never defined — pre-existing, and it
+  threw on every `window-placeholder` render (any tile promoted to a window).
+- Removed an `if (false)` block in `app_bootstrap.js`, dead since TicketDesk
+  dropped the Ecosim workspace.
+
 - **Tile layouts never persisted.** `workspace_state_read`/`_write` fell
   through to the permissive `/api/{**rest}` catch-all, which answers a *read*
   with `{ok:true}` — so the window manager received that object where a saved
@@ -139,6 +172,16 @@ invisible, since the app boots perfectly well on last release's code.
 - A backlog item's type could not be changed: `BacklogItem.Parse` treats the
   filename as authoritative, so writing `type:` alone was a no-op that looked
   like it worked. The file is renamed now.
+
+### Tooling
+
+- `npm test` — the module-graph check, eslint, and 42 unit tests over the filter
+  engine, the tree builder, the lifecycle ladders and the top-nav derivation.
+- `scripts/check-graph.mjs` verifies every import resolves and every named
+  import is really exported. eslint's `no-undef` catches the opposite mistake —
+  a name used with **no** import at all — which the graph check cannot see
+  because there is nothing to resolve. That is the bug that broke the top-nav
+  highlight, and the reason the linter was added.
 
 ### Notes
 

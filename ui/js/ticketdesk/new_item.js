@@ -10,12 +10,16 @@
  *     Bug · Regression · Chore   →  bugs/BUG-NNNN.md
  *     Epic · Story · Task        →  backlog/{EPIC,STORY,TASK}-NNNN.md
  *
- * Picking the type picks the store. Nothing else in the form changes shape,
- * because `openForm` builds its fields once and the select can be changed
- * afterwards — a form that showed only the fields the INITIAL type wanted would
- * silently drop the severity off every bug filed from the "Story" button. The
- * two grouped sections say which fields apply to which; the irrelevant ones are
- * dropped on submit rather than written as empty strings.
+ * Picking the type picks the store.
+ *
+ * The form FOLLOWS the Type select. A bug is asked for a severity; a story for
+ * a parent and an estimate; an epic for the phase its descendants inherit. The
+ * fields are all built once and the irrelevant rows hidden, because rebuilding
+ * the form on every change would discard whatever had already been typed.
+ *
+ * The select itself is scoped by the caller: opened from the backlog's "Epic"
+ * button it offers Epic/Story/Task and never mentions bugs, since that item is
+ * not going to be one. Only the top bar's untyped entry point offers all six.
  *
  * The full-page bug mask still exists and is still richer (markdown editor,
  * link staging) — the Bugs page's own "New Bug" button opens that. This dialog
@@ -25,7 +29,7 @@
 import { openForm } from '../ecoagent/ui/modal.js';
 import { statusLine } from './pages.js';
 import { AGENT_AUTHOR, HUMAN_AUTHOR, createBug, loadData } from './data.js';
-import { ITEMS, PHASES, createItem, itemRef, loadBacklog } from './backlog_data.js';
+import { PHASES, createItem, itemRef, loadBacklog, parentOptions } from './backlog_data.js';
 
 /**
  * The Type select. `store` routes the create; `value` is what that store's
@@ -36,7 +40,7 @@ import { ITEMS, PHASES, createItem, itemRef, loadBacklog } from './backlog_data.
  * the record lives, and putting it next to the backlog's Task is exactly the
  * confusion the rename removed.
  */
-const KINDS = [
+export const KINDS = [
     { id: 'bug', label: 'Bug', store: 'bugs', value: 'bug' },
     { id: 'regression', label: 'Regression', store: 'bugs', value: 'regression' },
     { id: 'chore', label: 'Chore', store: 'bugs', value: 'task' },
@@ -45,12 +49,6 @@ const KINDS = [
     { id: 'task', label: 'Task', store: 'backlog', value: 'task' },
 ];
 const kindById = (id) => KINDS.find((k) => k.id === id) || KINDS[0];
-
-/** Items that may legally hold a new one of `kind`: stories hang off epics,
- *  tasks off stories (or an epic directly, when a task needs no story). */
-const parentOptions = () => ITEMS
-    .filter((i) => i.type !== 'task')
-    .map((i) => ({ value: String(i.id), label: `${i.ref} — ${i.title}` }));
 
 /** The combobox hands back whatever was typed — "EPIC-0004 — Auth" and "4" must
  *  both resolve to 4. */
@@ -80,46 +78,85 @@ const toList = (v) => clean(v) ? clean(v).split(',').map((s) => s.trim()).filter
  *          cancelled or the create failed (the failure is reported on the
  *          status line, not thrown at the caller).
  */
+/**
+ * Which fields each kind actually has. The form is built once with the union
+ * and rows are shown or hidden from here as the Type select changes — a form
+ * rebuilt on every change would throw away whatever the user had already typed.
+ */
+export const FIELDS_FOR = {
+    bug:        { severity: true },
+    regression: { severity: true },
+    chore:      { severity: true },
+    // An epic carries the milestone label its descendants inherit, and has no
+    // parent of its own.
+    epic:       { phase: true, points: true },
+    story:      { parent: true, points: true },
+    task:       { parent: true, points: true },
+};
+const ADAPTIVE = ['severity', 'parent', 'phase', 'points'];
+
 export async function openNewItem({ kind = '', parent = 0, phase = '' } = {}) {
     const preset = kind ? kindById(kind) : null;
-    const parents = parentOptions();
+    // Scope the TYPE SELECT to the store the preselection implies: a dialog
+    // opened from the backlog's "Epic" button has no business offering to file
+    // a bug. Only the top bar's untyped entry point offers all six.
+    const store = preset ? preset.store : null;
+    const kinds = store ? KINDS.filter((k) => k.store === store) : KINDS;
+    const parents = parentOptions('task');
+
+    // Headings only earn their place when the form spans both stores; a scoped
+    // dialog has nothing to distinguish.
+    const sections = !store;
 
     const result = await openForm({
         title: preset ? `New ${preset.label.toLowerCase()}` : 'New item',
         submitLabel: 'Create',
         fields: [
             { name: 'kind', label: 'Type', type: 'select', required: true,
-              options: KINDS.map((k) => ({ value: k.id, label: k.label })),
-              hint: 'Bug, Regression and Chore are filed as bugs; Epic, Story and Task go to the backlog.' },
+              options: kinds.map((k) => ({ value: k.id, label: k.label })),
+              ...(sections ? { hint: 'Bug, Regression and Chore go to the bug store; Epic, Story and Task to the backlog.' } : {}) },
             { name: 'title', label: 'Title', type: 'text', required: true,
-              placeholder: 'What is wrong, or what should this deliver?' },
+              placeholder: store === 'bugs' ? 'What is wrong?'
+                  : store === 'backlog' ? 'What outcome does this deliver?'
+                  : 'What is wrong, or what should this deliver?' },
             { name: 'assignee', label: 'Assignee', type: 'select',
               options: ['', HUMAN_AUTHOR, AGENT_AUTHOR] },
             { name: 'subsystem', label: 'Subsystem', type: 'text', placeholder: 'unsorted' },
             { name: 'labels', label: 'Labels', type: 'text', placeholder: 'comma, separated' },
 
-            { section: 'If it is a bug' },
+            ...(sections ? [{ section: 'Bug', name: '__sec_bug' }] : []),
             { name: 'severity', label: 'Severity', type: 'select',
               options: ['crash', 'high', 'medium', 'low'] },
 
-            { section: 'If it is backlog work' },
+            ...(sections ? [{ section: 'Backlog work', name: '__sec_backlog' }] : []),
             { name: 'parent', label: 'Parent', type: 'select', create: true,
               options: parents,
               placeholder: parents.length ? 'pick an item…' : 'no parent available yet',
-              hint: 'For a story or task. Leave empty to file it loose — refinement is where it gets placed.' },
+              hint: 'Leave empty to file it without one.' },
             { name: 'phase', label: 'Phase', type: 'select', create: true,
               options: PHASES, placeholder: 'e.g. foundation',
-              hint: 'For an epic: the milestone it belongs to. Its stories and tasks inherit it.' },
+              hint: 'Stories and tasks inherit it.' },
             { name: 'points', label: 'Estimate', type: 'text', placeholder: 'e.g. 3' },
 
             { name: 'description', label: 'Description', type: 'textarea', rows: 5 },
         ],
         defaults: {
-            kind: preset ? preset.id : KINDS[0].id,
+            kind: preset ? preset.id : kinds[0].id,
             parent: parent ? String(parent) : '',
             phase,
             assignee: '',
             severity: 'medium',
+        },
+        // The form follows the Type select: a bug is asked for a severity, a
+        // story for a parent and an estimate, an epic for a phase. Fired once on
+        // open too, so a preselected type is reflected before the first click.
+        onFieldChange: (name, value, api) => {
+            const chosen = FIELDS_FOR[api.get('kind')] || {};
+            for (const f of ADAPTIVE) api.setVisible(f, !!chosen[f]);
+            if (sections) {
+                api.setVisible('__sec_bug', !!chosen.severity);
+                api.setVisible('__sec_backlog', !!(chosen.parent || chosen.phase || chosen.points));
+            }
         },
     });
     if (!result || !clean(result.title)) return null;

@@ -7,9 +7,14 @@
     "type": "module",
     "scripts": {
         "sync:flexdesk": "node scripts/sync-flexdesk.mjs",
-        "check:flexdesk": "node scripts/sync-flexdesk.mjs --check"
+        "check:flexdesk": "node scripts/sync-flexdesk.mjs --check",
+        "check:graph": "node scripts/check-graph.mjs",
+        "lint": "eslint ui/js scripts",
+        "test": "node scripts/check-graph.mjs && eslint ui/js scripts && node scripts/test-ui.mjs"
     },
     "devDependencies": {
-        "flexdesk": "^0.2.0"
+        "eslint": "^9.39.5",
+        "flexdesk": "^0.2.0",
+        "globals": "^17.12.0"
     }
 }

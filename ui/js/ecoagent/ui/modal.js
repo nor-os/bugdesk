@@ -42,7 +42,19 @@ import { ManagedWindow } from '../../ui/components/managed_window.js';
 
 let _modalSeq = 1;
 
-export function openForm({ title, fields = [], defaults = {}, submitLabel = 'OK' } = {}) {
+/**
+ * @param {object}    o
+ * @param {Function?} o.onFieldChange  `(name, value, api)` — called after any
+ *   field changes, and ONCE on open so the form starts consistent. `api` is
+ *   `{ setVisible(name, on), get(name), set(name, value) }`, addressing fields
+ *   and named sections by name.
+ *
+ *   This exists because a form whose Type select spans two record kinds must
+ *   show the fields of the kind actually chosen. Rebuilding the form on every
+ *   change would lose what the user had already typed, so the fields are all
+ *   built once and the irrelevant rows are hidden.
+ */
+export function openForm({ title, fields = [], defaults = {}, submitLabel = 'OK', onFieldChange = null } = {}) {
     return new Promise((resolve) => {
         // Build the form body — same markup as the legacy overlay,
         // minus the outer .ea-modal wrapper (ManagedWindow owns the
@@ -114,6 +126,41 @@ export function openForm({ title, fields = [], defaults = {}, submitLabel = 'OK'
             const el = body.querySelector(`[name="${f.name}"]`);
             el?.addEventListener('input', () => clearFieldError(f.name));
             el?.addEventListener('change', () => clearFieldError(f.name));
+        }
+
+        // Adaptive fields. Hidden rows keep their values — they are simply not
+        // asked about — and the caller drops the ones its chosen kind does not
+        // use when it reads the result.
+        if (typeof onFieldChange === 'function') {
+            const rowOf = (name) => body.querySelector(`[data-field-row="${name}"]`);
+            const api = {
+                setVisible(name, on) {
+                    const row = rowOf(name);
+                    if (row) row.hidden = !on;
+                },
+                get(name) {
+                    const el = body.querySelector(`[name="${name}"]`);
+                    if (!el) return undefined;
+                    return el.type === 'checkbox' ? !!el.checked : el.value;
+                },
+                set(name, value) {
+                    const el = body.querySelector(`[name="${name}"]`);
+                    if (!el) return;
+                    if (el.type === 'checkbox') el.checked = !!value;
+                    else el.value = value == null ? '' : String(value);
+                },
+            };
+            const fire = (name) => {
+                try { onFieldChange(name, api.get(name), api); }
+                catch (err) { console.error('[modal] onFieldChange threw', err); }
+            };
+            for (const f of formFields) {
+                const el = body.querySelector(`[name="${f.name}"]`);
+                el?.addEventListener('change', () => fire(f.name));
+            }
+            // Once on open, so a preselected value is reflected immediately
+            // rather than only after the user touches something.
+            fire(null);
         }
 
         body.querySelector('form').addEventListener('submit', async (e) => {
@@ -432,7 +479,10 @@ function _wireComboboxHint(host, f) {
 
 function _renderEntry(f, value) {
     if (f && f.section != null) {
-        return `<div class="ea-modal__section">${_esc(f.section)}</div>`;
+        // A named section is addressable by `setVisible`, so a heading can be
+        // hidden along with the group it introduces.
+        const attr = f.name ? ` data-field-row="${f.name}"` : '';
+        return `<div class="ea-modal__section"${attr}>${_esc(f.section)}</div>`;
     }
     return _renderField(f, value);
 }

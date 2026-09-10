@@ -374,6 +374,21 @@ export function treeRows(match, collapsed = new Set()) {
     return rows;
 }
 
+/**
+ * Items that may legally be the parent of a new/edited item of `type`: stories
+ * hang off epics, tasks off stories (or an epic directly, when a task needs no
+ * story around it). An epic has no parent at all, so it gets an empty list.
+ *
+ * Lives here rather than in a page because BOTH the item page's Parent select
+ * and the New item dialog need it, and they were about to hold two copies with
+ * two chances to disagree about what may hold what.
+ */
+export const parentOptions = (type) => ITEMS
+    .filter((i) => (type === 'story' ? i.type === 'epic'
+                  : type === 'task' ? i.type !== 'task'
+                  : false))
+    .map((i) => ({ value: String(i.id), label: `${i.ref} — ${i.title}` }));
+
 /** Every id in the current store that could be collapsed — what "collapse all"
  *  needs, without the caller walking the tree itself. */
 export const collapsibleIds = () => {
