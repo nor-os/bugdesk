@@ -103,31 +103,41 @@ export async function installTilingShell({ eventBus, logger, runtime } = {}) {
     // to guarantee.
     const pageStubsContent = createPageStubsContent({ api: window.pywebview?.api, eventBus });
     let ticketDeskContent = {};
-    // loadData() fetches the bugs + meta from the bridge and populates the
-    // live store BEFORE the first page renders (wm.load() below) so
-    // queues/team/dashboards start with real data rather than empty arrays.
+    let backlogContent = {};
+    // loadData()/loadBacklog() fetch both stores from the bridge and populate
+    // the live stores BEFORE the first page renders (wm.load() below) so
+    // queues/backlog/team start with real data rather than empty arrays.
+    //
+    // The two loads are independent, so they run together and each reports its
+    // own failure: a broken backlog store must not leave the bug queue empty,
+    // and vice versa — that is precisely what a shared try/catch would do.
     try {
         const { createTicketDeskContent } = await import('../ticketdesk/pages.js');
+        const { createBacklogContent } = await import('../ticketdesk/backlog_pages.js');
         const { loadData } = await import('../ticketdesk/data.js');
-        try {
-            const { count } = await loadData();
-            log.info?.('bugdesk: loaded', { bugs: count });
-        } catch (err) {
-            console.error('[bugdesk] loadData failed — pages will render empty', err);
-        }
+        const { loadBacklog } = await import('../ticketdesk/backlog_data.js');
+        const [bugs, backlog] = await Promise.allSettled([loadData(), loadBacklog()]);
+        if (bugs.status === 'fulfilled') log.info?.('bugdesk: loaded', { bugs: bugs.value.count });
+        else console.error('[bugdesk] loadData failed — the queue will render empty', bugs.reason);
+        if (backlog.status === 'fulfilled') log.info?.('bugdesk: loaded', { backlog: backlog.value.count });
+        else console.error('[bugdesk] loadBacklog failed — the backlog will render empty', backlog.reason);
+
         ticketDeskContent = createTicketDeskContent({ eventBus });
+        backlogContent = createBacklogContent({ eventBus });
     } catch (err) {
         console.error('[bugdesk] page registration failed', err);
     }
-    const content = createContentRegistry({ ...pageStubsContent, ...ticketDeskContent });
+    const content = createContentRegistry({ ...pageStubsContent, ...ticketDeskContent, ...backlogContent });
 
     // The host port (see @flexdesk/host's createPywebviewHost doc comment —
-    // "the adapter a standalone consumer copies"). `resolvePath` keeps the
-    // WM's desktop-layout persistence landing at the exact same
-    // `.ecoagent/desktops.json` path it always has (the packaged desktops.js
-    // module only ever reads/writes the logical key `desktops`).
+    // "the adapter a standalone consumer copies"). The bridge implements
+    // workspace_state_read/write against the CURRENT USER's profile directory
+    // (server/UserConfig.cs), so a tile layout follows the person rather than
+    // the checkout — and, unlike before, actually survives a reload: these two
+    // calls used to fall through to the permissive catch-all, which answered a
+    // read with `{ok:true}` and lost every layout ever saved.
     const host = createPywebviewHost({
-        resolvePath: (key) => `.ecoagent/${key}.json`,
+        resolvePath: (key) => `${key}.json`,
         logger: log,
     });
 
@@ -196,6 +206,19 @@ export async function installTilingShell({ eventBus, logger, runtime } = {}) {
     _syncPageShortcuts(wm);
 
     window.__twm = { wm, palette };
+
+    // Settings › General › Authorship writes through to the per-user profile,
+    // so the name the UI signs comments with and the name GET /api/config
+    // reports to the skills can never disagree. See first_run.js.
+    try {
+        const [{ installAuthorshipWriteThrough }, { getSetting }] = await Promise.all([
+            import('../ticketdesk/first_run.js'),
+            import('../core/settings.js'),
+        ]);
+        installAuthorshipWriteThrough({ eventBus, getSetting });
+    } catch (err) {
+        log.warn?.('authorship write-through failed to install', { err });
+    }
 
     // Watch for external project-file edits (text editor, git pull,
     // etc.) and surface them as a top-of-page banner with [Reload].
@@ -315,11 +338,22 @@ function _installTicketActions(wm) {
     wrap.innerHTML = `
         <button class="ea-btn" data-td="search" title="Bug search — same mask, entered data becomes criteria">
             <span class="material-symbols-outlined">search</span> Search</button>
+        <button class="ea-btn" data-td="item" title="New backlog item — epic, story or task">
+            <span class="material-symbols-outlined">workspaces</span> New Item</button>
         <button class="ea-btn ea-btn--primary" data-td="new" title="New bug — same mask, entered data creates the bug (local only)">
             <span class="material-symbols-outlined">add</span> New Bug</button>`;
-    wrap.addEventListener('click', (e) => {
+    wrap.addEventListener('click', async (e) => {
         const btn = e.target.closest('[data-td]');
         if (!btn) return;
+        if (btn.dataset.td === 'item') {
+            // A backlog item is created through a form, not a page: unlike a
+            // bug it has almost no free text, and the one thing that matters —
+            // where it hangs in the tree — is a picker.
+            const { openBacklogCreate } = await import('../ticketdesk/backlog_pages.js');
+            const created = await openBacklogCreate({ type: 'story' });
+            if (created) wm.openInPrimary('backlog', { view: 'board' });
+            return;
+        }
         if (btn.dataset.td === 'new') wm.openInPrimary('ticket', { mode: 'new', label: 'New Bug' });
         // Search always opens as a NEW TAB, never in place. openInPrimary swaps the primary tile's
         // page, so hitting Search would take over whatever you were reading - and searching is

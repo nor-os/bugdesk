@@ -1,0 +1,15 @@
+{
+    "name": "bugdesk",
+    "version": "0.2.0",
+    "private": true,
+    "description": "Local, markdown-backed bug tracker and backlog over a directory of BUG-/EPIC-/STORY-/TASK-*.md files.",
+    "license": "MIT",
+    "type": "module",
+    "scripts": {
+        "sync:flexdesk": "node scripts/sync-flexdesk.mjs",
+        "check:flexdesk": "node scripts/sync-flexdesk.mjs --check"
+    },
+    "devDependencies": {
+        "flexdesk": "^0.2.0"
+    }
+}

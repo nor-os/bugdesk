@@ -72,7 +72,10 @@ let _eventBus = null;
 const icon = (name) => `<span class="material-symbols-outlined">${name}</span>`;
 const loadClass = (l) => l < 0.6 ? 'low' : l < 0.85 ? 'mid' : 'high';
 
-function statusLine(msg) {
+/** The one status line, in the bottom bar. Exported because the backlog pages
+ *  report through the same strip — two "where did that message go" surfaces
+ *  would be one too many. */
+export function statusLine(msg) {
     const el = document.getElementById('sim-status');
     if (el) el.textContent = msg;
 }
@@ -86,7 +89,7 @@ function statusLine(msg) {
  *  over the breadcrumb strip. Pages that want it (the ticket mask's
  *  Save/Cancel) render into `ctx.pageActions`; the rest leave it empty and
  *  it stays click-through. */
-function shell(kind, mountFn) {
+export function shell(kind, mountFn) {
     return (host, props, ctx) => {
         host.classList.add('twm-page-shell', 'td-shell');
         host.innerHTML = '';
@@ -1103,13 +1106,70 @@ function navFilterRow(f, custom) {
         </div>`;
 }
 
+/**
+ * The left panel — a two-store rail behind one `panel:left` kind.
+ *
+ * A panel kind can only be registered once, and BugDesk now has two things that
+ * want to live there: the bug queue's filters and the backlog's views. Rather
+ * than pick one, the panel carries both bodies behind a tab strip, and follows
+ * the focused tile: land on a backlog page and the rail is showing Backlog by
+ * the time you look at it. Explicitly clicking a tab pins it — following the
+ * focus is a convenience, not something that should fight you.
+ */
 function mountTicketNav(host, props, ctx) {
     const open = (kind, p) => ctx.wm?.openInPrimary?.(kind, p);
     const openFilter = (f) => open('queues', { filter: f.key || f.id, label: f.label });
 
-    const render = () => {
+    const BACKLOG_KINDS = new Set(['backlog', 'item']);
+    let tab = 'bugs';
+    let pinned = false;          // set once the user picks a tab by hand
+    let backlogRail = null;      // the Backlog body's controller, mounted lazily
+
+    host.classList.add('bd-rail');
+    host.innerHTML = `
+        <div class="bd-railtabs" role="tablist">
+            <button class="bd-railtab bd-railtab--on" data-tab="bugs" role="tab">Bugs</button>
+            <button class="bd-railtab" data-tab="backlog" role="tab">Backlog</button>
+        </div>
+        <div class="bd-rail__body" data-slot="railbody"></div>`;
+    const body = host.querySelector('[data-slot="railbody"]');
+
+    const showTab = async (next) => {
+        if (next === tab && body.childElementCount) return;
+        tab = next;
+        host.querySelectorAll('[data-tab]').forEach((b) =>
+            b.classList.toggle('bd-railtab--on', b.dataset.tab === tab));
+        try { backlogRail?.destroy(); } catch { /* not mounted */ }
+        backlogRail = null;
+        body.innerHTML = '';
+        if (tab === 'bugs') { renderFilters(); return; }
+        // Imported lazily so the bug rail — the thing on screen at boot — never
+        // waits on the backlog module to parse.
+        const { mountBacklogRail } = await import('./backlog_pages.js');
+        backlogRail = mountBacklogRail(body, ctx);
+    };
+
+    host.querySelector('.bd-railtabs').addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-tab]');
+        if (!btn) return;
+        pinned = true;
+        showTab(btn.dataset.tab);
+    });
+
+    // Follow the focused tile until the user expresses a preference.
+    const followFocus = () => {
+        if (pinned) return;
+        const tree = ctx.wm?.desktops?.active?.()?.tree;
+        const focused = tree?.focusedLeafId ? tree.get(tree.focusedLeafId) : null;
+        const kind = focused?.content?.kind;
+        if (!kind || String(kind).startsWith('panel:')) return;
+        showTab(BACKLOG_KINDS.has(kind) ? 'backlog' : 'bugs');
+    };
+    const focusSub = _eventBus?.on?.('wm:changed', followFocus);
+
+    const renderFilters = () => {
         const custom = listFilters();
-        host.innerHTML = `
+        body.innerHTML = `
         <div class="td-nav">
             <div class="td-nav__section">Filters</div>
             ${BUILTIN_FILTERS.map((f) => navFilterRow(f, false)).join('')}
@@ -1122,10 +1182,12 @@ function mountTicketNav(host, props, ctx) {
             </div>
         </div>`;
     };
-    render();
+    renderFilters();
+    followFocus();
     // listFilters() hands back the LIVE array, so a full re-render is the
-    // whole update — never cache a copy of it.
-    const unsub = onFiltersChanged(render);
+    // whole update — never cache a copy of it. Only repaint when the filter
+    // rail is the one on screen; the Backlog tab has no filters to show.
+    const unsub = onFiltersChanged(() => { if (tab === 'bugs') renderFilters(); });
 
     const newFilter = () => openFilterEditor({ tickets: TICKETS, onSaved: openFilter });
 
@@ -1155,7 +1217,7 @@ function mountTicketNav(host, props, ctx) {
         }
     };
 
-    host.addEventListener('click', (e) => {
+    body.addEventListener('click', (e) => {
         if (e.target.closest('[data-new]')) { newFilter(); return; }
         const row = e.target.closest('[data-filter]');
         if (!row) return;
@@ -1167,7 +1229,7 @@ function mountTicketNav(host, props, ctx) {
     // Keyboard: the rows are role="button", so Enter/Space must activate
     // them like a click. The action buttons are native <button>s and need
     // nothing (their click handler above already covers them).
-    host.addEventListener('keydown', (e) => {
+    body.addEventListener('keydown', (e) => {
         if (e.key !== 'Enter' && e.key !== ' ') return;
         if (e.target.closest('.td-nav__action')) return;
         if (e.target.matches('[data-new]')) { e.preventDefault(); newFilter(); return; }
@@ -1177,7 +1239,7 @@ function mountTicketNav(host, props, ctx) {
         runAction('open', row.dataset.filter, !!row.dataset.custom);
     });
 
-    host.addEventListener('contextmenu', (e) => {
+    body.addEventListener('contextmenu', (e) => {
         const row = e.target.closest('[data-filter]');
         if (!row) return;
         e.preventDefault();
@@ -1200,7 +1262,14 @@ function mountTicketNav(host, props, ctx) {
             (action) => runAction(action, row.dataset.filter, custom));
     });
 
-    return { title: 'Filters', destroy: () => unsub() };
+    return {
+        title: 'Filters',
+        destroy: () => {
+            unsub();
+            focusSub?.dispose?.();
+            try { backlogRail?.destroy(); } catch { /* not mounted */ }
+        },
+    };
 }
 
 /* ── panel:right — Inspector (TEAM only) ────────────────────────── */

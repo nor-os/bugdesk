@@ -66,6 +66,7 @@
     <link href="css/ticketdesk.css" rel="stylesheet" />
     <link href="css/ticketdesk_filters.css" rel="stylesheet" />
     <link href="css/ticketdesk_md.css" rel="stylesheet" />
+    <link href="css/backlog.css" rel="stylesheet" />
 
     <link rel="stylesheet" href="vendor/katex/katex.min.css" />
     <script defer src="vendor/katex/katex.min.js"></script>
@@ -141,24 +142,25 @@
     <script type="module">
         import { bootstrapApplication } from './js/bootstrap/app_bootstrap.js';
 
-        // Resolve the configured author names BEFORE any ticketdesk module is
-        // imported (below and transitively, via install.js's own static
-        // imports) — those modules read window.__BUGDESK_CONFIG__ once, at
-        // module-evaluation time, so it must already be populated by then.
-        // Falls back to generic defaults if the bridge is unreachable.
-        window.__BUGDESK_CONFIG__ = { humanAuthor: 'reviewer', agentAuthor: 'agent' };
-        try {
-            const cfgRes = await fetch('/api/config', { headers: { accept: 'application/json' } });
-            const cfg = cfgRes.ok ? await cfgRes.json() : null;
-            if (cfg?.ok) {
-                window.__BUGDESK_CONFIG__ = {
-                    humanAuthor: cfg.humanAuthor || 'reviewer',
-                    agentAuthor: cfg.agentAuthor || 'agent',
-                };
-            }
-        } catch (err) {
-            console.warn('BugDesk: /api/config unavailable, using defaults', err);
-        }
+        // Resolve WHO IS USING THIS before any ticketdesk module is imported
+        // (below and transitively, via install.js's own static imports) — those
+        // modules read window.__BUGDESK_CONFIG__ once, at module-evaluation
+        // time, and filters.js bakes the two names into filter expressions built
+        // at that same moment. So the identity step has to complete first, and
+        // on a first run that means BLOCKING on the name prompt: asking
+        // afterwards would leave every one of those constants holding the
+        // pre-answer default until a reload.
+        //
+        // resolveIdentity() only prompts when the bridge reports
+        // `configured: false` — i.e. no per-user profile and no BUGDESK_HUMAN.
+        // An unreachable bridge falls back to the generic defaults without
+        // prompting; see first_run.js.
+        const { resolveIdentity } = await import('./js/ticketdesk/first_run.js');
+        const cfg = await resolveIdentity();
+        window.__BUGDESK_CONFIG__ = {
+            humanAuthor: cfg.humanAuthor || 'reviewer',
+            agentAuthor: cfg.agentAuthor || 'agent',
+        };
 
         const root = document.getElementById('ecoagent-root');
         const notifications = document.getElementById('ecoagent-notifications');

@@ -34,15 +34,29 @@
  * getSetting/setSetting call (registration order matters — see
  * `registerSettings`'s doc comment).
  *
- * `bugdesk.humanName` / `bugdesk.agentName` are BugDesk's own addition: a
- * per-browser override of the server's `BUGDESK_HUMAN` / `BUGDESK_AGENT`
- * author names (see README.md's "Authorship" section). Both default to
- * `''` ("use the server default"). They live under the shell's own
- * `general` category (@flexdesk/core's CATEGORIES already has one, order
- * 10 — "Workspace behavior and notifications" fits an identity setting
- * fine) rather than a new bugdesk-only category, since there's exactly
- * one group ("Authorship") of settings here — not enough to earn its own
- * sidebar entry the way `ecoagent` used to.
+ * `bugdesk.humanName` / `bugdesk.agentName` are BugDesk's own addition: the
+ * editable form of WHO YOU ARE (see README.md's "Who you are" and
+ * "Authorship" sections). Both default to `''` ("use whatever the server
+ * resolved"). They live under the shell's own `general` category
+ * (@flexdesk/core's CATEGORIES already has one, order 10 — "Workspace
+ * behavior and notifications" fits an identity setting fine) rather than a
+ * new bugdesk-only category, since there's exactly one group ("Authorship")
+ * of settings here — not enough to earn its own sidebar entry the way
+ * `ecoagent` used to.
+ *
+ * These are NOT browser-only overrides any more. Since the per-user profile
+ * landed (server/UserConfig.cs), `first_run.js`'s
+ * `installAuthorshipWriteThrough` mirrors every change here into the profile
+ * on disk. It has to: the setting is browser-local, so without the write-
+ * through the UI would sign comments with the new name while
+ * `GET /api/config` — the thing the /bugs and /backlog skills read — still
+ * reported the old one, and the two surfaces would disagree about the
+ * user's identity with nothing anywhere reporting a problem.
+ *
+ * Changing the name therefore SWITCHES PROFILE (creating one if the name is
+ * new) rather than renaming you in place. That is the honest reading in a
+ * repo several people share: the field selects an identity, and identities
+ * own their own filters.
  *
  * `ui/js/ticketdesk/data.js` reads both once, at module-evaluation time
  * (same "resolve once at load" design as its `HUMAN_AUTHOR`/`AGENT_AUTHOR`
@@ -108,13 +122,13 @@ export const BUGDESK_SETTINGS_SLICE = {
         'bugdesk.humanName': {
             type: 'text', category: 'general', group: 'Authorship',
             label: 'Your name',
-            description: 'Overrides the server\'s default human author for comments and bugs you create — the name shown as assignee and comment author. Leave blank to use the server\'s BUGDESK_HUMAN default. Takes effect after you reload BugDesk.',
+            description: 'The name shown as assignee and comment author on everything you file. Saved to your per-user profile beside the store, so it follows you rather than this browser. Entering a different name switches BugDesk to that person\'s profile (creating it if it is new), along with their saved filters. Leave blank to use the server\'s BUGDESK_HUMAN default. Takes effect after you reload BugDesk.',
             defaultValue: '', placeholder: '(server default)', reloadHint: true,
         },
         'bugdesk.agentName': {
             type: 'text', category: 'general', group: 'Authorship',
             label: 'Agent name',
-            description: 'Overrides the server\'s default agent author. Less likely to need changing per browser than "Your name", but kept configurable for consistency. Leave blank to use the server\'s BUGDESK_AGENT default. Takes effect after you reload BugDesk.',
+            description: 'Whatever your AI coding assistant signs its comments as. It must match the BUGDESK_AGENT the /bugs and /backlog skills resolve, or the "On agent" and "Needs my reply" views will not recognise its comments. Saved to your profile alongside your own name. Leave blank to use the server\'s BUGDESK_AGENT default. Takes effect after you reload BugDesk.',
             defaultValue: '', placeholder: '(server default)', reloadHint: true,
         },
     },

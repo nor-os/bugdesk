@@ -2,3 +2,12 @@ bin/
 obj/
 *.user
 state/
+
+# `npm install` pulls flexdesk down; `npm run sync:flexdesk` copies its dist
+# into ui/vendor/flexdesk/, which IS committed (the UI has no build step and is
+# served straight off disk — see scripts/sync-flexdesk.mjs).
+node_modules/
+
+# Per-user config lives beside the bug store, not here, and ignores itself.
+# This entry only matters when BugDesk is pointed at its own repo.
+.bugdesk/

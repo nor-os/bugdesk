@@ -25,8 +25,9 @@ import { createTaxonomy } from '@flexdesk/wm';
 export const taxonomy = createTaxonomy({
     root: 'home',
     kinds: {
-        // BugDesk taxonomy — the ONLY top-nav is Queues. `home` maps to the
-        // Queues landing (WM default leaf); `ticket` is a sub-page of Queues.
+        // BugDesk taxonomy — two top-navs, one per store. `home` maps to the
+        // Queues landing (WM default leaf); `ticket` is a sub-page of Queues,
+        // `item` a sub-page of Backlog.
         home: { label: 'Home', icon: 'home' },
 
         queues: {
@@ -34,6 +35,16 @@ export const taxonomy = createTaxonomy({
             isTopNav: true, order: 20,
         },
         ticket: { label: 'Bug', icon: 'bug_report', topNav: 'queues' },
+
+        // The second store: epics → stories → tasks. `item` covers all three
+        // types rather than getting a kind each — they share one page, one
+        // route and one id space, and three kinds would only make the
+        // breadcrumb and the palette pick between synonyms.
+        backlog: {
+            label: 'Backlog', shortLabel: 'Bkl', icon: 'workspaces',
+            isTopNav: true, order: 30,
+        },
+        item: { label: 'Item', icon: 'article', topNav: 'backlog' },
 
         // Settings reachable from the hamburger; no top-nav slot. App-global
         // (localStorage-backed, openable with no project loaded), so its
