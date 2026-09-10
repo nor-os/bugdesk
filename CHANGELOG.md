@@ -112,6 +112,29 @@ One document-level listener pair serves every tile, rather than per-tile wiring:
 tiles are created, destroyed and repainted constantly, and a drop target bound to
 a tile element stops working the first time that tile repaints.
 
+**Ctrl+K is global fulltext search.** The palette was an entity picker inherited
+from the application BugDesk was built out of: it matched the LABELS of things
+the bridge could list, which here meant bug titles and nothing else — no backlog,
+no descriptions, no comments. So it could find neither of the two things people
+actually search for: a phrase somebody wrote in a thread, and anything at all in
+the second store. A search box that cannot find what you remember is worse than
+none, because you try it first.
+
+- A new `GET /api/search?q=` scans both stores over what is really in the files:
+  reference, title, description, acceptance criteria, every comment, plus labels,
+  subsystem, phase, status and assignee. Server-side because the list endpoints
+  return summaries — a client-side search can only ever match the columns it was
+  handed.
+- Terms are **ANDed but need not share a field**: one may be in the title and the
+  other in a comment, which is how people narrow a search. A reference beats a
+  title beats a body beats a comment, and ties break on most recently updated.
+- **Every result carries a snippet** of where it matched, with the terms marked
+  and the field named. A list of titles cannot tell three bugs about "the
+  importer" apart; the one you want is the one whose comment mentions the
+  timeout.
+- Replies are ordinal-checked, so a slow answer to `im` cannot land on top of a
+  fast answer to `importer`.
+
 ### Changed
 
 - **Settings only offers what BugDesk actually does.** `@flexdesk/core` registers

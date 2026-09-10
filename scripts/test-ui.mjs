@@ -744,6 +744,49 @@ t('an entity request still wins', () => {
     assert.equal(active.props.id, '9');
 });
 
+/* ── the palette's snippet highlighting ─────────────────────────────
+ *
+ * The one piece of the search that lives in the browser, and the one that can
+ * inject markup if it gets the order wrong: the snippet is somebody's comment,
+ * so it can contain anything at all.
+ */
+
+console.log('\nsearch highlighting');
+
+const { highlight } = await import(TILING + 'command_palette.js');
+
+t('a term is marked', () =>
+    assert.equal(highlight('the importer timed out', 'importer'),
+        'the <mark>importer</mark> timed out'));
+t('marking is case-insensitive but keeps the original case', () =>
+    assert.equal(highlight('The Importer', 'importer'), 'The <mark>Importer</mark>'));
+t('every term is marked', () =>
+    assert.equal(highlight('importer timed out', 'out importer'),
+        '<mark>importer</mark> timed <mark>out</mark>'));
+t('a longer term is not broken up by a shorter one', () => {
+    // "port" inside "importer" must not split the mark for "importer".
+    const out = highlight('the importer', 'port importer');
+    assert.equal((out.match(/<mark>/g) || []).length, 1, out);
+    assert.match(out, /<mark>importer<\/mark>/);
+});
+t('markup in the snippet is escaped, not rendered', () => {
+    // A comment is prose somebody typed; it can contain anything.
+    const out = highlight('<img src=x onerror=alert(1)> boom', 'boom');
+    assert.ok(!out.includes('<img'), `unescaped markup: ${out}`);
+    assert.match(out, /&lt;img/);
+    assert.match(out, /<mark>boom<\/mark>/);
+});
+t('a term made of markup cannot inject through the mark', () => {
+    const out = highlight('a <b>b</b> c', '<b>');
+    assert.ok(!/<b>/.test(out), `unescaped tag survived: ${out}`);
+    assert.match(out, /<mark>&lt;b&gt;<\/mark>/);
+});
+t('an empty query marks nothing', () =>
+    assert.equal(highlight('nothing to mark', ''), 'nothing to mark'));
+t('a regex-special term is matched literally', () =>
+    // "c++" or "a.b" must not be compiled as a pattern.
+    assert.equal(highlight('the c++ path', 'c++'), 'the <mark>c++</mark> path'));
+
 /* ── live updates ────────────────────────────────────────────────────
  *
  * The event payload is what decides whether an open record silently refreshes

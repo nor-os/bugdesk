@@ -323,6 +323,8 @@ Same-origin JSON, backed by the markdown files:
 | POST | `/api/project/collaborators` | replace the roster (what the Settings editor saves) |
 | POST | `/api/project/collaborator` | add or update one person, without sending the whole roster |
 | POST | `/api/attachments` | upload one image (base64), returns its `/attachments/…` URL |
+| GET  | `/api/search` | fulltext across both stores — titles, descriptions, criteria and comments — ranked, with a snippet |
+| DELETE | `/api/backlog/{id}` | delete a record to `trash/`; `?children=cascade\|promote` decides what happens to what was under it |
 | GET  | `/api/events` | Server-Sent Events: records changed on disk by anything but BugDesk |
 
 Every other `/api/<method>` returns `{ok:true,result:{ok:true}}` so the shell
@@ -460,6 +462,29 @@ sits beside the list the new record will appear in:
 |---|---|
 | Bugs | **Bug** — opens the full mask, with a markdown editor and link staging |
 | Backlog | **[Project ·] Epic · Story · Task** — the page, preselected and titled for the type |
+
+## Search
+
+**Ctrl+K is global fulltext search**, across both stores and over what is
+actually *in* the files — the title and the reference, yes, but also the
+description, the acceptance criteria and every comment. That last one is the
+point: the thing you remember about a bug three weeks later is usually a phrase
+somebody wrote in a thread, not its summary line.
+
+Each result says **where** it matched and shows a snippet of it, with your terms
+marked. A list of titles cannot tell three bugs about "the importer" apart; the
+one you want is the one whose comment mentions the timeout, and the row says so.
+
+Terms are ANDed but need not share a field — one may be in the title and the
+other in a comment, which is how people actually narrow a search. A reference
+beats a title beats a body beats a comment, and ties break on most recently
+updated.
+
+The matching happens on the **bridge** (`GET /api/search?q=`), because the list
+endpoints return summaries: a client-side search can only ever match the columns
+it was given. Every record is read and scanned per query — a store is a few
+hundred markdown files a human triages by hand, and when that stops being true
+the endpoint is where an index goes.
 
 ## Opening things without losing your place
 

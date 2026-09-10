@@ -694,6 +694,71 @@ app.MapPost("/api/backlog/{id:int}/comments", async (int id, HttpRequest req) =>
     return Results.Json(new { ok = true, item = FullItem(reloaded, reloaded.First(i => i.Id == id)) }, json);
 });
 
+// ---- Search ----------------------------------------------------------------
+// FULLTEXT, across BOTH stores, over what is actually IN the files — the title
+// and the reference, yes, but also the description, the acceptance criteria and
+// every comment. That is the difference between a search and a title filter:
+// the thing you remember about a bug three weeks later is usually a phrase
+// somebody wrote in a comment, not its summary line.
+//
+// Server-side because the browser does not have the bodies. The list endpoints
+// return summaries — deliberately, they feed tables — so a client-side search
+// can only ever match the columns. Here the records are already parsed.
+//
+// Small-store assumptions, stated so nobody is surprised later: every record is
+// read and scanned on every query. A store is a few hundred markdown files a
+// human triages by hand; when that stops being true this wants an index, and
+// the endpoint is the place to put one.
+app.MapGet("/api/search", (string? q, int? limit) =>
+{
+    var terms = (q ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .Select(t => t.ToLowerInvariant()).ToArray();
+    if (terms.Length == 0)
+        return Results.Json(new { ok = true, query = q ?? "", count = 0, results = Array.Empty<object>() }, json);
+
+    var take = Math.Clamp(limit ?? 40, 1, 200);
+    var hits = new List<SearchHit>();
+
+    foreach (var bug in LoadAll(bugsDir))
+    {
+        var doc = new SearchDoc(
+            Store: "bugs", Id: bug.Id, Ref: $"BUG-{bug.Id:D4}", Type: bug.Type,
+            Title: bug.Title, Status: bug.Status, Assignee: bug.Assignee, Updated: bug.Updated,
+            Description: bug.Description,
+            Extra: string.Join(' ', bug.Labels.Concat(new[] { bug.Subsystem, bug.Severity })),
+            Comments: bug.Comments);
+        if (Match(doc, terms) is { } hit) hits.Add(hit);
+    }
+
+    var all = LoadBacklog(backlogDir);
+    foreach (var item in all)
+    {
+        var doc = new SearchDoc(
+            Store: "backlog", Id: item.Id, Ref: $"{BacklogItem.Prefixes.GetValueOrDefault(item.Type, "TASK")}-{item.Id:D4}",
+            Type: item.Type, Title: item.Title, Status: item.Status, Assignee: item.Assignee,
+            Updated: item.Updated, Description: item.Description,
+            Extra: string.Join(' ', item.Labels.Concat(new[] { item.Subsystem, item.Phase, item.Points, item.Acceptance })),
+            Comments: item.Comments);
+        if (Match(doc, terms) is { } hit) hits.Add(hit);
+    }
+
+    // Best field first, then most recently touched — what you were working on
+    // is what you are most likely looking for.
+    var results = hits
+        .OrderBy(h => h.Rank)
+        .ThenByDescending(h => h.Doc.Updated, StringComparer.Ordinal)
+        .Take(take)
+        .Select(h => new
+        {
+            store = h.Doc.Store, id = h.Doc.Id, @ref = h.Doc.Ref, type = h.Doc.Type,
+            title = h.Doc.Title, status = h.Doc.Status, assignee = h.Doc.Assignee,
+            updated = h.Doc.Updated, where = h.Where, snippet = h.Snippet,
+        })
+        .ToList();
+
+    return Results.Json(new { ok = true, query = q, count = hits.Count, results }, json);
+});
+
 // ---- Identity -------------------------------------------------------------
 // The client fetches this once, before it renders anything, so every "who is
 // posting this comment" / "on me" / "on the agent" default reflects the
@@ -1127,6 +1192,84 @@ static string ResolveStateDir(string contentRoot)
     var env = Environment.GetEnvironmentVariable("BUGDESK_STATE");
     if (!string.IsNullOrEmpty(env)) return Path.GetFullPath(env);
     return Path.GetFullPath(Path.Combine(contentRoot, "state"));
+}
+
+// ---- search helpers ---------------------------------------------------------
+
+/// <summary>
+/// Does this record match EVERY term, and if so, where best?
+///
+/// <para>
+/// Every term must appear somewhere (AND), because two words are how a person
+/// narrows a search — "sso revoke" should not return everything about SSO. But
+/// they need not appear in the SAME field: one may be in the title and the
+/// other in a comment, and requiring both in one place would rule out most of
+/// what a person is actually looking for.
+/// </para>
+///
+/// <para>
+/// The RANK is where the FIRST term landed, best field wins: a reference beats
+/// a title beats a body beats a comment. That is roughly how specific each is —
+/// typing "BUG-0042" means the bug, typing a phrase from a comment means
+/// "somewhere in here somebody said this".
+/// </para>
+/// </summary>
+static SearchHit? Match(SearchDoc doc, string[] terms)
+{
+    var comments = string.Join('\n', doc.Comments.Select(c => $"{c.Author} {c.Body}"));
+    var fields = new (int Rank, string Where, string Text)[]
+    {
+        (0, "reference", doc.Ref),
+        (1, "title", doc.Title),
+        (2, "description", doc.Description),
+        (3, "comment", comments),
+        (4, "field", $"{doc.Extra} {doc.Status} {doc.Assignee}"),
+    };
+
+    var best = int.MaxValue;
+    var where = "field";
+    string? snippetSource = null;
+
+    foreach (var term in terms)
+    {
+        var found = false;
+        foreach (var f in fields)
+        {
+            if (f.Text.Contains(term, StringComparison.OrdinalIgnoreCase))
+            {
+                found = true;
+                if (f.Rank < best) { best = f.Rank; where = f.Where; snippetSource = f.Text; }
+                break;
+            }
+        }
+        if (!found) return null;      // AND: one missing term is no match
+    }
+
+    return new SearchHit(doc, best, where, Snippet(snippetSource ?? doc.Title, terms[0]));
+}
+
+/// <summary>
+/// A line of context around the match, so a result says WHY it matched.
+/// <para>
+/// A list of titles cannot: three bugs about "the importer" look identical, and
+/// the one you want is the one whose comment mentions the timeout. The window is
+/// widened to whitespace at both ends so it never cuts a word in half.
+/// </para>
+/// </summary>
+static string Snippet(string text, string term, int window = 120)
+{
+    var flat = text.Replace('\n', ' ').Replace('\r', ' ').Trim();
+    while (flat.Contains("  ")) flat = flat.Replace("  ", " ");
+    if (flat.Length <= window) return flat;
+
+    var at = flat.IndexOf(term, StringComparison.OrdinalIgnoreCase);
+    if (at < 0) return flat[..window].TrimEnd() + "…";
+
+    var start = Math.Max(0, at - window / 3);
+    var end = Math.Min(flat.Length, start + window);
+    if (start > 0) { var sp = flat.IndexOf(' ', start); if (sp > 0 && sp < at) start = sp + 1; }
+    if (end < flat.Length) { var sp = flat.LastIndexOf(' ', end - 1); if (sp > at + term.Length) end = sp; }
+    return (start > 0 ? "…" : "") + flat[start..end].Trim() + (end < flat.Length ? "…" : "");
 }
 
 // ---- helpers --------------------------------------------------------------
