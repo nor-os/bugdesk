@@ -366,34 +366,25 @@
 }
 .bd-gaps--met li::before { content: '●'; color: var(--color-success, #3fb950); }
 
-/* ── Rail: the Bugs / Backlog switch ────────────────────────────── */
+/* ── Rail ────────────────────────────────────────────────────────────
+   No tab strip: which rail you get follows the TOP NAV (see
+   activeTopNavKind in tiling/kind_taxonomy.js), so there is one navigation
+   axis rather than two that can contradict each other. */
 
-.bd-railtabs {
-    display: flex;
-    flex: 0 0 auto;
-    border-bottom: 1px solid var(--ea-border-soft, #2a2a2a);
-}
-.bd-railtab {
-    flex: 1;
-    padding: 5px 8px;
-    font: inherit;
-    font-size: 10.5px;
-    font-weight: var(--font-weight-semibold, 600);
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: var(--text-muted, #888);
-    background: transparent;
-    border: none;
-    border-bottom: 2px solid transparent;
-    cursor: pointer;
-}
-.bd-railtab:hover { color: var(--text-primary, #e0e0e0); }
-.bd-railtab--on {
-    color: var(--text-primary, #e0e0e0);
-    border-bottom-color: var(--accent-bright, #007acc);
-}
 .bd-rail { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 .bd-rail__body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+
+/* Epic / Story / Task, grouped under one "New" label so three buttons read as
+   one control rather than three unrelated ones. */
+.bd-newgroup {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding-left: 6px;
+    margin-left: 2px;
+    border-left: 1px solid var(--ea-border-soft, #2a2a2a);
+}
+.bd-newgroup > .td-dim { margin-right: 2px; }
 
 /* Dropped is off every ladder, so it renders as an extra terminal chevron
    rather than pretending to be a stage number. */

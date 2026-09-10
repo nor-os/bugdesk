@@ -303,26 +303,10 @@ function _wirePageShortcuts(wm) {
 function _syncPageShortcuts(wm) {
     const host = document.querySelector('.global-top-bar .bar-center.twm-top-nav');
     if (!host) return;
-    const tree = wm.desktops.active().tree;
-    // The FOCUSED content tile is what the user is looking at; the primary
-    // leaf is only a fallback. Reading the primary alone is why the chip went
-    // dark when the user moved between tiles — the tile they were in was not
-    // the one being asked.
-    const focusedId = tree.focusedLeafId;
-    const focusedKind = focusedId ? tree.get(focusedId)?.content?.kind : null;
-    const usable = focusedKind && !focusedKind.startsWith('panel:')
-        && focusedKind !== 'window-placeholder';
-    const primaryId = tree.primaryLeafId();
-    const activeKind = usable ? focusedKind
-        : (primaryId ? tree.get(primaryId)?.content?.kind : null);
-    // topNavFor maps an entity kind onto its owning top-nav category
-    // (e.g. `ticket` → `queues`). HOME is seeded by the WM as its own kind
-    // but a shell is free to render a landing there — BugDesk's Home IS the
-    // queue list — so it resolves to the FIRST top-nav entry rather than
-    // matching nothing and leaving the strip unlit.
-    const topNavKind = taxonomy.topNavFor(activeKind)
-        || (activeKind === 'home' ? taxonomy.topNavEntries()[0]?.kind : null)
-        || activeKind;
+    // Shared with the left rail (see kind_taxonomy.js's activeTopNavKind) so the
+    // lit chip and the rail below it can never disagree about which store the
+    // user is in.
+    const topNavKind = activeTopNavKind(wm);
     host.querySelectorAll('[data-kind]').forEach((b) => {
         b.classList.toggle('twm-top-nav__btn--on', b.dataset.kind === topNavKind);
     });

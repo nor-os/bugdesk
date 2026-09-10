@@ -103,8 +103,15 @@ invisible, since the app boots perfectly well on last release's code.
   questions to ask of the same records. An existing file is folded into the
   profile of whoever upgrades and then renamed aside, so the next colleague to
   run BugDesk does not inherit a stranger's filters.
-- The left panel carries both rails behind a Bugs/Backlog tab strip, following
-  the focused tile until you pick a tab by hand.
+- The left panel serves both stores through one `panel:left` kind, and which
+  rail you get **follows the top nav** — the same `activeTopNavKind(wm)` that
+  decides which chip is lit. It has no switch of its own: a rail with its own
+  tabs is a second, competing answer to a question the top bar has already
+  answered, and the two can then disagree (BACKLOG lit above, bug filters
+  below).
+- Creating a backlog item lives on the backlog page, not in the rail — the rail
+  navigates, and all three types (**epic, story and task**) are creatable
+  there. "New epic" is gone from the rail.
 - `--seed` seeds each store independently: a repo that already tracks bugs but
   has no backlog still gets seeded backlog examples.
 - `server/Program.cs` split into `Markdown.cs`, `Bug.cs`, `BacklogItem.cs` and

@@ -64,3 +64,44 @@ export const taxonomy = createTaxonomy({
         },
     },
 });
+
+/**
+ * Which TOP-NAV section the user is currently in — the lit chip in the top bar,
+ * and therefore which store everything else should be talking about.
+ *
+ * The FOCUSED content tile is what the user is looking at; the primary leaf is
+ * only a fallback. Reading the primary alone is why the chip went dark when the
+ * user moved between tiles — the tile they were in was not the one being asked.
+ * Panels are skipped: the left rail asking "which section am I in" must not get
+ * the answer "the left rail".
+ *
+ * `home` is seeded by the WM as its own kind, but a shell is free to render a
+ * landing there — BugDesk's Home IS the bug queue — so it resolves to the FIRST
+ * top-nav entry rather than matching nothing.
+ *
+ * Lives here, taking the WM as a parameter, because two callers need to agree on
+ * it exactly: install.js lights the chip, and the left rail decides which body
+ * to show. A second copy of this derivation is a rail that contradicts the chip
+ * above it.
+ *
+ * @returns {string|null} a top-nav kind, or null when nothing is resolvable yet.
+ */
+export function activeTopNavKind(wm) {
+    const tree = wm?.desktops?.active?.()?.tree;
+    if (!tree) return null;
+
+    const focusedId = tree.focusedLeafId;
+    const focusedKind = focusedId ? tree.get(focusedId)?.content?.kind : null;
+    const usable = focusedKind
+        && !String(focusedKind).startsWith('panel:')
+        && focusedKind !== 'window-placeholder';
+
+    const primaryId = tree.primaryLeafId?.();
+    const activeKind = usable ? focusedKind : (primaryId ? tree.get(primaryId)?.content?.kind : null);
+    if (!activeKind) return null;
+
+    return taxonomy.topNavFor(activeKind)
+        || (activeKind === 'home' ? taxonomy.topNavEntries()[0]?.kind : null)
+        || activeKind
+        || null;
+}

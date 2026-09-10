@@ -232,15 +232,20 @@ questions to ask of the same records.
 
 ## The left rail
 
-One panel, two bodies behind a **Bugs / Backlog** tab strip — a panel kind can
-only be registered once, so the alternative to tabs was picking a winner. It
-follows whichever page you're looking at until you click a tab yourself, at
-which point it stays put.
+One panel serving both stores, and **which rail you get follows the top nav** —
+there is no switch in the rail itself. A panel kind can only be registered once,
+so the alternative was picking a winner; tabs would have been a second,
+competing answer to a question the top bar has already answered, free to
+contradict it (BACKLOG lit above, bug filters below). The chip and the rail read
+the same `activeTopNavKind(wm)`, so they cannot disagree.
 
 The Backlog side carries **Views** (the builtins), **My filters**, and **Work
 packages** — phases and their epics as a navigable tree. Clicking an epic scopes
 the board to that whole subtree, which is the same ad-hoc `epic is …`
 expression the tree's own "Show only this work package" produces.
+
+The rail navigates; it does not create. Epics, stories and tasks are all filed
+from the backlog page's toolbar, next to the thing they will appear in.
 
 ## Hierarchy
 

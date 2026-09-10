@@ -234,8 +234,12 @@ function mountBacklogBoard(host, props, ctx) {
             <button class="ea-btn" data-a="expand" title="Expand every item">${icon('unfold_more')}</button>
             <button class="ea-btn" data-a="collapse" title="Collapse every item">${icon('unfold_less')}</button>
             <button class="ea-btn" data-a="savefilter">${icon('filter_alt')} Save as filter</button>
-            <button class="ea-btn" data-a="new-epic">${icon('workspaces')} Epic</button>
-            <button class="ea-btn ea-btn--primary" data-a="new-story">${icon('add')} Story</button>
+            <span class="bd-newgroup">
+                <span class="td-dim">New</span>
+                <button class="ea-btn" data-a="new-epic" title="New epic — a work package">${icon('workspaces')} Epic</button>
+                <button class="ea-btn ea-btn--primary" data-a="new-story" title="New story — one deliverable outcome">${icon('article')} Story</button>
+                <button class="ea-btn" data-a="new-task" title="New task — a step under a story">${icon('check_box_outline_blank')} Task</button>
+            </span>
         </div>
         <div class="td-tablehost"></div>
     </div>`;
@@ -423,6 +427,7 @@ function mountBacklogBoard(host, props, ctx) {
         }),
         'new-epic': async () => { if (await openCreateForm({ type: 'epic' })) refresh(); },
         'new-story': async () => { if (await openCreateForm({ type: 'story' })) refresh(); },
+        'new-task': async () => { if (await openCreateForm({ type: 'task' })) refresh(); },
     };
     host.querySelector('.td-page__bar').addEventListener('click', (e) => {
         const btn = e.target.closest('[data-a]');
@@ -960,9 +965,6 @@ export function mountBacklogRail(host, ctx) {
                             <span class="td-nav__badge">${subtreeCount(e.ref)}</span>
                         </div>`).join('')}`).join('')
                 : '<div class="td-nav__item"><span class="td-dim">No epics yet</span></div>'}
-            <div class="td-nav__item" data-new-epic="1" role="button" tabindex="0">
-                ${icon('add')}<span class="td-dim">New epic</span>
-            </div>
         </div>`;
     };
     render();
@@ -1009,7 +1011,7 @@ export function mountBacklogRail(host, ctx) {
         }
     };
 
-    const activate = async (el, target) => {
+    const activate = (el, target) => {
         if (el.dataset.epic) { open({ expr: epicExpr(el.dataset.epic), label: el.dataset.epic }); return; }
         if (el.dataset.phase !== undefined && el.classList.contains('td-nav__item--phase')) {
             const phase = el.dataset.phase;
@@ -1018,7 +1020,6 @@ export function mountBacklogRail(host, ctx) {
                 : { expr: { kind: 'group', op: 'AND', children: [{ kind: 'clause', field: 'phase', op: 'is_empty' }] }, label: 'No phase' });
             return;
         }
-        if (el.dataset.newEpic) { if (await openCreateForm({ type: 'epic' })) render(); return; }
         if (el.dataset.new) { newFilter(); return; }
         if (el.dataset.filter) {
             const btn = target?.closest?.('.td-nav__action');
@@ -1027,13 +1028,13 @@ export function mountBacklogRail(host, ctx) {
     };
 
     const onClick = (e) => {
-        const row = e.target.closest('[data-filter],[data-epic],[data-phase],[data-new],[data-new-epic]');
+        const row = e.target.closest('[data-filter],[data-epic],[data-phase],[data-new]');
         if (row) activate(row, e.target);
     };
     const onKey = (e) => {
         if (e.key !== 'Enter' && e.key !== ' ') return;
         if (e.target.closest('.td-nav__action')) return;   // native button, already handled
-        const row = e.target.closest('[data-filter],[data-epic],[data-phase],[data-new],[data-new-epic]');
+        const row = e.target.closest('[data-filter],[data-epic],[data-phase],[data-new]');
         if (!row) return;
         e.preventDefault();
         activate(row, null);

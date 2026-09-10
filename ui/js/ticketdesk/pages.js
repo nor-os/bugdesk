@@ -39,6 +39,7 @@
  */
 
 import { mountTileBreadcrumb } from '../tiling/tile_breadcrumb.js';
+import { activeTopNavKind } from '../tiling/kind_taxonomy.js';
 import { DataTable } from '../ui/components/data_table.js';
 import { showContextMenu } from '../ecoagent/ui/context_menu.js';
 import {
@@ -1108,66 +1109,54 @@ function navFilterRow(f, custom) {
 }
 
 /**
- * The left panel — a two-store rail behind one `panel:left` kind.
+ * The left panel — one `panel:left` kind serving both stores.
  *
- * A panel kind can only be registered once, and BugDesk now has two things that
- * want to live there: the bug queue's filters and the backlog's views. Rather
- * than pick one, the panel carries both bodies behind a tab strip, and follows
- * the focused tile: land on a backlog page and the rail is showing Backlog by
- * the time you look at it. Explicitly clicking a tab pins it — following the
- * focus is a convenience, not something that should fight you.
+ * A panel kind can only be registered once, and BugDesk has two things that want
+ * to live there: the bug queue's filters and the backlog's views. The rail does
+ * NOT offer its own switch between them. Which one you get follows the TOP NAV
+ * — the same `activeTopNavKind(wm)` that decides which chip is lit — because a
+ * rail with its own tabs is a second, competing answer to a question the top bar
+ * has already answered, and the two can then disagree: BACKLOG lit above, bug
+ * filters below.
+ *
+ * So there is one navigation axis, at the top, and the rail is a consequence of
+ * it.
  */
 function mountTicketNav(host, props, ctx) {
     const open = (kind, p) => ctx.wm?.openInPrimary?.(kind, p);
     const openFilter = (f) => open('queues', { filter: f.key || f.id, label: f.label });
 
-    const BACKLOG_KINDS = new Set(['backlog', 'item']);
-    let tab = 'bugs';
-    let pinned = false;          // set once the user picks a tab by hand
+    // ctx.wm is threaded in by the renderer; the global is the escape hatch for
+    // a mount that runs before that happens (same fallback tile_breadcrumb uses).
+    const getWm = () => ctx?.wm || window.__twm?.wm || null;
+
+    let shown = null;            // 'bugs' | 'backlog'
     let backlogRail = null;      // the Backlog body's controller, mounted lazily
 
     host.classList.add('bd-rail');
-    host.innerHTML = `
-        <div class="bd-railtabs" role="tablist">
-            <button class="bd-railtab bd-railtab--on" data-tab="bugs" role="tab">Bugs</button>
-            <button class="bd-railtab" data-tab="backlog" role="tab">Backlog</button>
-        </div>
-        <div class="bd-rail__body" data-slot="railbody"></div>`;
+    host.innerHTML = '<div class="bd-rail__body" data-slot="railbody"></div>';
     const body = host.querySelector('[data-slot="railbody"]');
 
-    const showTab = async (next) => {
-        if (next === tab && body.childElementCount) return;
-        tab = next;
-        host.querySelectorAll('[data-tab]').forEach((b) =>
-            b.classList.toggle('bd-railtab--on', b.dataset.tab === tab));
+    const show = async (next) => {
+        if (next === shown && body.childElementCount) return;
+        shown = next;
         try { backlogRail?.destroy(); } catch { /* not mounted */ }
         backlogRail = null;
         body.innerHTML = '';
-        if (tab === 'bugs') { renderFilters(); return; }
+        if (next === 'bugs') { renderFilters(); return; }
         // Imported lazily so the bug rail — the thing on screen at boot — never
         // waits on the backlog module to parse.
         const { mountBacklogRail } = await import('./backlog_pages.js');
         backlogRail = mountBacklogRail(body, ctx);
     };
 
-    host.querySelector('.bd-railtabs').addEventListener('click', (e) => {
-        const btn = e.target.closest('[data-tab]');
-        if (!btn) return;
-        pinned = true;
-        showTab(btn.dataset.tab);
-    });
-
-    // Follow the focused tile until the user expresses a preference.
-    const followFocus = () => {
-        if (pinned) return;
-        const tree = ctx.wm?.desktops?.active?.()?.tree;
-        const focused = tree?.focusedLeafId ? tree.get(tree.focusedLeafId) : null;
-        const kind = focused?.content?.kind;
-        if (!kind || String(kind).startsWith('panel:')) return;
-        showTab(BACKLOG_KINDS.has(kind) ? 'backlog' : 'bugs');
+    /** Follow the top nav. An unresolvable section (nothing focused yet) leaves
+     *  whatever is already showing rather than flickering back to Bugs. */
+    const syncToTopNav = () => {
+        const topNav = activeTopNavKind(getWm());
+        if (!topNav) { if (!shown) show('bugs'); return; }
+        show(topNav === 'backlog' ? 'backlog' : 'bugs');
     };
-    const focusSub = _eventBus?.on?.('wm:changed', followFocus);
-
     const renderFilters = () => {
         const custom = listFilters();
         body.innerHTML = `
@@ -1183,12 +1172,17 @@ function mountTicketNav(host, props, ctx) {
             </div>
         </div>`;
     };
-    renderFilters();
-    followFocus();
-    // listFilters() hands back the LIVE array, so a full re-render is the
-    // whole update — never cache a copy of it. Only repaint when the filter
-    // rail is the one on screen; the Backlog tab has no filters to show.
-    const unsub = onFiltersChanged(() => { if (tab === 'bugs') renderFilters(); });
+    // Subscribe only once `renderFilters` is initialised — `show()` calls it,
+    // and a `wm:changed` arriving in between would hit it in the temporal dead
+    // zone.
+    syncToTopNav();
+    const focusSub = _eventBus?.on?.('wm:changed', syncToTopNav);
+
+    // listFilters() hands back the LIVE array, so a full re-render is the whole
+    // update — never cache a copy of it. Only repaint when the BUG rail is the
+    // one on screen; the backlog rail keeps its own subscription for its own
+    // filters.
+    const unsub = onFiltersChanged(() => { if (shown === 'bugs') renderFilters(); });
 
     const newFilter = () => openFilterEditor({
         model: MODEL, scope: SCOPE, items: TICKETS, onSaved: openFilter });
