@@ -692,6 +692,27 @@ const leafOnBacklog = () => {
     return { t, id, leaf };
 };
 
+t('a background tab is appended WITHOUT switching to it', () => {
+    // The difference the Ctrl-click setting is supposed to make. An ordinary
+    // click already opens a record and takes you to it; `transient` — which is
+    // what this used — only means "not archived", so the tab arrived and took
+    // the screen exactly as a plain click does.
+    const tree = new TileTree();
+    const root = makeLeaf({ content: { kind: 'queues', props: {} }, title: 'Bugs' });
+    tree.setRoot(root);
+    const id = root.id;
+
+    tree.appendLeafTab(id, { kind: 'ticket', props: { id: '1' } }, '#1', { background: true });
+    assert.equal(root.tabs.length, 2, 'the tab was not appended');
+    assert.equal(root.activeTabIdx, 0, 'the background tab took the screen');
+    assert.equal(root.tabs[root.activeTabIdx].kind, 'queues', 'the list stopped being what you see');
+
+    // ...and an ordinary one still comes to the front.
+    tree.appendLeafTab(id, { kind: 'ticket', props: { id: '2' } }, '#2');
+    assert.equal(root.activeTabIdx, 2);
+    assert.equal(root.tabs[root.activeTabIdx].props.id, '2');
+});
+
 t('a request carrying props is honoured, not dropped', () => {
     // THE BUG: `wantsTarget` was `props.id != null || kind !== targetTopNav`.
     // Opening the backlog board with a FILTER carries neither — no id, and

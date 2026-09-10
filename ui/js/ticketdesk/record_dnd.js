@@ -48,9 +48,10 @@ export const isModifiedOpen = (ev) => !!(ev && (ev.ctrlKey || ev.metaKey) && !ev
 /**
  * Open a record the way a modified click asks for.
  *
- * `window` promotes it to a floating window; `tab` puts it in a tab of the
- * primary tile WITHOUT switching to it (`transient`), which is what "without
- * closing the current view" means — the list you are reading stays in front.
+ * `window` promotes it to a floating window; `tab` appends a tab to the primary
+ * tile WITHOUT switching to it — which is the entire difference between this
+ * gesture and an ordinary click, since a plain click already opens the record
+ * and takes you straight to it.
  *
  * @param {object} wm
  * @param {string} kind   'ticket' | 'item'
@@ -58,8 +59,14 @@ export const isModifiedOpen = (ev) => !!(ev && (ev.ctrlKey || ev.metaKey) && !ev
  */
 export function openModified(wm, kind, props) {
     if (!wm) return;
-    if (modifierOpenMode() === 'tab') wm.navigate?.(kind, props, { dest: 'main', newTab: true, transient: true });
-    else wm.navigate?.(kind, props, { dest: 'window' });
+    if (modifierOpenMode() === 'tab') {
+        // BACKGROUND. An ordinary click already opens a record and takes you to
+        // it; the whole difference this gesture makes is that the list you are
+        // reading stays in front and the record waits in a tab.
+        wm.navigate?.(kind, props, { dest: 'main', newTab: true, background: true });
+    } else {
+        wm.navigate?.(kind, props, { dest: 'window' });
+    }
 }
 
 /* ── dragging a row out ──────────────────────────────────────────── */

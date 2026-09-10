@@ -104,8 +104,7 @@ what triage mostly is — two records side by side.
 - **Ctrl-click** (⌘ on a Mac) opens a record in a floating window, or in a
   background tab — **Settings › General › Records**. Both answers are reasonable
   and the difference is about how someone works, so it is a setting rather than a
-  decision made for everybody. The tab case is `transient`: added but not
-  switched to, which is what "without closing the current view" has to mean.
+  decision made for everybody.
 - **Shift-click is deliberately untouched.** It is the table's range-select and
   the one selection gesture with nowhere else to go.
 
@@ -114,6 +113,30 @@ tiles are created, destroyed and repainted constantly, and a drop target bound t
 a tile element stops working the first time that tile repaints.
 
 ### Changed
+
+- **Settings only offers what BugDesk actually does.** `@flexdesk/core` registers
+  a schema written for a different application — a simulation IDE with ETL
+  pipelines, an AI assistant, an autosaving editor, a projects directory — and
+  BugDesk inherited the whole of it while reading almost none of it. An Auto-Save
+  section over a store that has no autosave is not a harmless leftover: it is the
+  app promising something it does not do, with no way for the user to tell which
+  of the rows in front of them are real. Down from ~25 rows across five
+  categories to 13 across three.
+
+  It is an allow-list, and a test keeps it honest in **both** directions: every
+  offered setting must be read somewhere in `ui/js` (or be an action button), and
+  every setting the app reads must be offered — or named in `HIDDEN_SETTINGS`
+  with the reason. `modules.autoCreateDefaults` is the one entry there: it *is*
+  read on boot, by a module loader looking for an EcoSim modules directory a bug
+  tracker does not have, and its row read "create the default Economy module".
+  The bar for a settings row is not "some code branches on it", it is "the user
+  can observe the difference".
+
+- **Settings dropdowns are the app's own control**, not the browser's. A bare
+  `<select>` is drawn by the platform, so it ignored the app's tokens entirely —
+  a light popup over a dark UI on most of them — and it was the one control on
+  that page that did not look like the app it is part of. The `<select>` stays as
+  the value carrier, so the page's existing read/write wiring needed no changes.
 
 - **The Collaborators editor is a real managed window**, with the app's own
   chrome, drag, resize, focus trap and z-stacking, instead of a hand-rolled
@@ -266,6 +289,14 @@ least interesting half of what it knows. It opens the same set the count is of,
 in whichever store the panel is currently reporting on.
 
 ### Fixed
+
+- **"Open in a background tab" was not in the background.** It used the WM's
+  `transient` flag, which in this codebase means "not archived" — not "not
+  switched to". `appendLeafTab` activates the tab it appends, so Ctrl-click
+  opened the record and took you straight to it, which is exactly what an
+  ordinary click already does: the setting made no observable difference. Tabs
+  can now be appended without stealing the screen or the tile's focus, which is
+  the entire point of the gesture.
 
 - **Clicking a name in the Inspector did nothing** — the actual cause, found on
   the third report. The panel repainted on every `wm:changed`, and the window

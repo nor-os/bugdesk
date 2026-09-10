@@ -574,9 +574,15 @@ export class TileTree {
             ...(opts.transient ? { transient: true } : {}),
         };
         n.tabs.push(tab);
-        n.activeTabIdx = n.tabs.length - 1;
-        _syncActiveTab(n);
-        return n.activeTabIdx;
+        // `background` appends WITHOUT switching to it — the caller asked for a
+        // tab to come back to, not for the page to change under them. Without
+        // this, "open in a background tab" was indistinguishable from an
+        // ordinary click: the tab arrived and took the screen with it.
+        if (!opts.background) {
+            n.activeTabIdx = n.tabs.length - 1;
+            _syncActiveTab(n);
+        }
+        return n.tabs.length - 1;
     }
 
     /** Switch the active tab on a leaf. No-op if `idx` is out of range. */

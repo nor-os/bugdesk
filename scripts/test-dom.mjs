@@ -347,6 +347,62 @@ await t('parent and child rules are exact mirrors', () => {
     }
 });
 
+/* ── the settings page tells the truth about what it controls ──────── */
+
+console.log('\nSettings');
+
+await t('only settings this app actually reads are offered', () => {
+    // The inherited schema describes a different application — ETL pipelines,
+    // an AI assistant, an autosaving editor. BugDesk reads a fraction of it, so
+    // the rest were controls that changed nothing, with no way for the user to
+    // tell which was which.
+    const gone = ['workspace.autosave.enabled', 'workspace.autosave.intervalSeconds',
+                  'etl.parallelWorkers', 'ai.defaultMode', 'ai.maxToolCalls',
+                  'editor.autosaveDelayMs', 'data.tablePageSize', 'projects.directory',
+                  'notifications.durationMs', 'workspace.undoHistoryLimit',
+                  'debug.logSettingsAccess', 'data.defaultResampleMethod',
+                  // Read on boot, but by a module loader looking for an EcoSim
+                  // modules directory a bug tracker does not have.
+                  'modules.autoCreateDefaults'];
+    for (const path of gone) {
+        assert.ok(!settings.VISIBLE_SETTINGS.has(path), `${path} is still advertised`);
+    }
+    assert.ok(settings.VISIBLE_SETTINGS.has('bugdesk.humanName'));
+});
+
+const { readFileSync: rfSettings, readdirSync: rdSettings } = await import('node:fs');
+const walkJs = (dir) => rdSettings(dir, { withFileTypes: true }).flatMap((e) =>
+    e.isDirectory() ? walkJs(join(dir, e.name)) : (e.name.endsWith('.js') ? [join(dir, e.name)] : []));
+const allSource = walkJs(join(ROOT, 'ui', 'js')).map((f) => rfSettings(f, 'utf8')).join('\n');
+
+await t('every offered setting is read somewhere, or is a button', () => {
+    // The allow-list keeps itself honest: add a setting and this says list it;
+    // delete the code that reads one and this says the row is now a lie.
+    const source = allSource;
+    const schema = settings.getSchema();
+
+    for (const path of settings.VISIBLE_SETTINGS) {
+        const def = schema[path];
+        assert.ok(def, `${path} is offered but not in the schema`);
+        if (def.type === 'action') continue;      // a button, not a value
+        assert.ok(source.includes(`getSetting('${path}'`) || source.includes(`getSetting("${path}"`),
+            `${path} is offered in Settings but nothing reads it`);
+    }
+});
+
+await t('every setting that IS read is offered', () => {
+    // The other direction: a setting the app honours but never shows is a
+    // preference the user cannot reach.
+    const read = new Set();
+    for (const m of allSource.matchAll(/getSetting\(['"]([^'"]+)['"]/g)) read.add(m[1]);
+    for (const path of read) {
+        if (path.startsWith('simulation')) continue;   // only named inside a comment
+        assert.ok(settings.VISIBLE_SETTINGS.has(path) || settings.HIDDEN_SETTINGS.has(path),
+            `${path} is read by the app but neither offered in Settings nor `
+            + 'listed in HIDDEN_SETTINGS with a reason');
+    }
+});
+
 /* ── who you are ─────────────────────────────────────────────────────
  *
  * "Change your name" wrote the profile on disk and nothing on screen moved,
@@ -754,11 +810,13 @@ await t('the setting decides between a window and a background tab', () => {
 
     settings.setSetting('bugdesk.modifierOpen', 'tab');
     dnd.openModified(wm, 'item', { id: '7' });
-    // `transient` is what "without closing the current view" means: the tab is
-    // added but not switched to, so the list stays in front.
+    // BACKGROUND is the whole difference from an ordinary click, which already
+    // opens a record and takes you to it. `transient` was the wrong flag: in
+    // this WM it means "not archived", not "not switched to", so the tab
+    // arrived and took the screen exactly as a plain click does.
     assert.equal(calls[1].opts.dest, 'main');
     assert.equal(calls[1].opts.newTab, true);
-    assert.equal(calls[1].opts.transient, true);
+    assert.equal(calls[1].opts.background, true, 'the tab would steal the screen');
 
     settings.setSetting('bugdesk.modifierOpen', 'window');
 });

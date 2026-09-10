@@ -1237,6 +1237,11 @@ export class WindowManager {
      *
      *  A link declares its target as TWO axes:
      *
+     *   `opts.background` — with `newTab`, append the tab without switching
+     *                     to it. "Open in a background tab" means the page you
+     *                     are reading stays in front; without it the tab
+     *                     arrives and takes the screen, which is what an
+     *                     ordinary click already does.
      *   `opts.dest`   — WHERE the content lands:
      *                   'main'   → the primary content tile (default).
      *                              The nav panel always uses this.
@@ -1279,6 +1284,8 @@ export class WindowManager {
         const { ctx = null, transient = false, up = false } = opts;
         // Resolve the two axes, honoring the legacy `target` alias.
         let { dest = 'main', newTab = false } = opts;
+        // Append the tab but stay where you are. Only meaningful with `newTab`.
+        const background = !!opts.background;
         if (opts.target != null) {
             switch (opts.target) {
                 case 'window':  dest = 'window';  newTab = false; break;
@@ -1312,12 +1319,12 @@ export class WindowManager {
         if (dest === 'window') return this._navigateWindow(kind, props);
         if (dest === 'main') {
             return newTab
-                ? this.openInTabInPrimary(kind, props, transient)
+                ? this.openInTabInPrimary(kind, props, transient, background)
                 : this.openInPrimary(kind, props);
         }
         // dest === 'origin'
         return newTab
-            ? this._navigateTab(ctx, kind, props, transient)
+            ? this._navigateTab(ctx, kind, props, transient, background)
             : this._navigateAuto(ctx, kind, props);
     }
 
@@ -1396,14 +1403,14 @@ export class WindowManager {
         this.openInPrimary(kind, props);
     }
 
-    _navigateTab(ctx, kind, props, transient = false) {
+    _navigateTab(ctx, kind, props, transient = false, background = false) {
         // Windows aren't tabbed — "open in tab" inside a window just
         // replaces the window's content.
         if (ctx?.windowId && this._windowToLeaf.has(ctx.windowId)) {
             this.openInWindow(ctx.windowId, kind, props);
             return;
         }
-        this.openInTabFromContext(ctx || {}, kind, props, transient);
+        this.openInTabFromContext(ctx || {}, kind, props, transient, background);
     }
 
     /** Spawn a fresh ManagedWindow with the requested content. No
@@ -1489,7 +1496,7 @@ export class WindowManager {
      *  Mirrors `openFromContext` (windowed / split-leaf / primary
      *  routing) but uses `appendLeafTab` so the existing content
      *  stays in place as a tab. */
-    openInTabFromContext(ctx, kind, props = {}, transient = false) {
+    openInTabFromContext(ctx, kind, props = {}, transient = false, background = false) {
         // Managed-window content: just open in the window — managed
         // windows aren't tabbed (one window = one content).
         if (ctx?.windowId && this._windowToLeaf.has(ctx.windowId)) {
@@ -1507,8 +1514,11 @@ export class WindowManager {
             this.openInPrimary(kind, props);
             return;
         }
-        tree.appendLeafTab(leafId, { kind, props }, _tabTitle(kind, props), { transient });
-        tree.focus(leafId);
+        tree.appendLeafTab(leafId, { kind, props }, _tabTitle(kind, props),
+            { transient, background });
+        // A BACKGROUND tab must not steal the tile's focus either — the point
+        // is that the user stays exactly where they were.
+        if (!background) tree.focus(leafId);
         this.renderer.render();
         this._persist();
         this._notifyChange('tab-open');
@@ -1521,7 +1531,7 @@ export class WindowManager {
      *  click from outside the tile system (e.g. the bottom-panel
      *  "Add row" button, which passes no ctx) reliably lands as a sibling
      *  tab in the main tile rather than swapping its content. */
-    openInTabInPrimary(kind, props = {}, transient = false) {
+    openInTabInPrimary(kind, props = {}, transient = false, background = false) {
         const tree = this._tree();
         const leafId = tree.primaryLeafId();
         // No content tile on this desktop (e.g. a panels-only layout) —
@@ -1529,8 +1539,11 @@ export class WindowManager {
         // caller asked for "a tab in the main tile"; with no main tile to
         // tab into, a floating window is the least-surprising fallback.
         if (!leafId) { this._navigateWindow(kind, props); return; }
-        tree.appendLeafTab(leafId, { kind, props }, _tabTitle(kind, props), { transient });
-        tree.focus(leafId);
+        tree.appendLeafTab(leafId, { kind, props }, _tabTitle(kind, props),
+            { transient, background });
+        // A BACKGROUND tab must not steal the tile's focus either — the point
+        // is that the user stays exactly where they were.
+        if (!background) tree.focus(leafId);
         this.renderer.render();
         this._persist();
         this._notifyChange('tab-open');

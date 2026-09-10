@@ -95,6 +95,58 @@ export {
     registerSettings,
 } from '@flexdesk/core';
 
+/**
+ * The settings BugDesk actually honours.
+ *
+ * `@flexdesk/core` registers a schema written for a different application — a
+ * simulation IDE with ETL pipelines, an AI assistant, an autosaving editor and a
+ * projects directory. BugDesk inherits the whole of it and READS almost none of
+ * it, so the Settings page advertised a page and a half of controls that change
+ * nothing: an Auto-Save section over a store that has no autosave, an ETL group,
+ * an AI category. A setting nobody reads is not a harmless leftover — it is the
+ * app promising something it does not do, and the user has no way to tell which
+ * of the rows in front of them are real.
+ *
+ * So this is an ALLOW-LIST, and `scripts/test-ui.mjs` keeps it honest: every
+ * path here must be read somewhere in `ui/js` (or be an `action` row, which is
+ * a button rather than a value), and every path read must be listed here. Add a
+ * setting to the app and the test tells you to list it; delete the code that
+ * reads one and the test tells you the row is now a lie.
+ */
+export const VISIBLE_SETTINGS = new Set([
+    // Who you are, and what a Ctrl-click does — BugDesk's own.
+    'bugdesk.humanName',
+    'bugdesk.agentName',
+    'bugdesk.collaborators',
+    'bugdesk.modifierOpen',
+    // Inherited, and genuinely wired up.
+    'workspace.save.showToast',
+    'workspace.save.showErrorToast',
+    'workspace.import.showToast',
+    'workspace.import.showErrorToast',
+    'host.showConnectedToast',
+    'window.animateMinimize',
+    'window.macShadows',
+]);
+
+/**
+ * Read by live code, and still not worth offering.
+ *
+ * The bar for a settings row is not "some code branches on it" — it is "the
+ * user can observe the difference". `modules.autoCreateDefaults` is read on
+ * boot by `utils/module_loader.js`, which looks for an EcoSim modules directory
+ * that a bug tracker does not have and quietly finds nothing. Its row read
+ * "Auto-create default modules — create the default Economy module", which is
+ * a sentence about another program.
+ *
+ * Listed rather than silently dropped so the drift guard in
+ * `scripts/test-dom.mjs` stays total: every setting the app reads must be
+ * either offered or named here, with the reason.
+ */
+export const HIDDEN_SETTINGS = new Set([
+    'modules.autoCreateDefaults',
+]);
+
 // ─── bugdesk-owned settings slice ────────────────────────────────────────────
 // Pushed into the shell-global store by app_bootstrap.js via
 // `registerSettings(BUGDESK_SETTINGS_SLICE)`. Kept here (not in

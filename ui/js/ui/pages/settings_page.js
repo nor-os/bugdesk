@@ -18,6 +18,7 @@ import {
     resetCategory,
     resetAllSettings,
 } from '../../core/settings.js';
+import { VISIBLE_SETTINGS } from '../../core/settings.js';
 import { installOverlayScrollbar } from '../utils/overlay_scrollbar.js';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -55,12 +56,27 @@ export class SettingsPage extends PageBase {
     }
 
     /** Categories to show — the allow-list (in its given order) or all. */
+    /**
+     * Rows this application actually honours.
+     *
+     * The inherited schema describes a different app; BugDesk reads a fraction
+     * of it. Everything else is a control that changes nothing, and there is no
+     * way for the user to tell which is which by looking. See VISIBLE_SETTINGS
+     * in core/settings.js, and the test that keeps it honest.
+     */
+    _visibleSettings(categoryId) {
+        return getSettingsByCategory(categoryId).filter((d) => VISIBLE_SETTINGS.has(d.path));
+    }
+
     _visibleCategories() {
         const all = getCategories();
-        if (!this._categoryFilter) return all;
-        return this._categoryFilter
-            .map(id => all.find(c => c.id === id))
-            .filter(Boolean);
+        const scoped = this._categoryFilter
+            ? this._categoryFilter.map(id => all.find(c => c.id === id)).filter(Boolean)
+            : all;
+        // A category whose every row was inherited-and-unread is an empty page
+        // with a heading — worse than not offering it, because the user goes
+        // looking for what must be in there.
+        return scoped.filter((c) => this._visibleSettings(c.id).length > 0);
     }
 
     // ── Lifecycle ────────────────────────────────────────────────────────────
@@ -110,6 +126,10 @@ export class SettingsPage extends PageBase {
     }
 
     dispose() {
+        // attachSelect appends its popup to <body>; without this it outlives
+        // the page that opened it.
+        for (const h of this._selectHandles || []) { try { h.destroy(); } catch { /* gone */ } }
+        this._selectHandles = [];
         for (const unsub of this._busSubscriptions) unsub();
         this._busSubscriptions = [];
         for (const timerId of this._debounceTimers.values()) clearTimeout(timerId);
@@ -177,7 +197,7 @@ export class SettingsPage extends PageBase {
         const cat = categories.find(c => c.id === categoryId);
         if (!cat) return;
 
-        const settings = getSettingsByCategory(categoryId);
+        const settings = this._visibleSettings(categoryId);
 
         // Group settings by their group field
         const groups = new Map();
@@ -233,6 +253,7 @@ export class SettingsPage extends PageBase {
         const matches = [];
         for (const [path, def] of Object.entries(schema)) {
             if (!visibleIds.has(def.category)) continue;
+            if (!VISIBLE_SETTINGS.has(path)) continue;
             const searchable = `${def.label} ${def.description} ${def.group} ${path}`.toLowerCase();
             if (searchable.includes(lowerQuery)) {
                 matches.push({ path, ...def });
@@ -337,12 +358,25 @@ export class SettingsPage extends PageBase {
                     role="switch" aria-checked="${!!value}" tabindex="0" type="button"></button>`;
     }
 
+    /**
+     * A choice control, replaced after render by the app's own (see
+     * ticketdesk/select_field.js's `attachSelect`).
+     *
+     * A bare `<select>` is drawn by the BROWSER, so it ignores the app's tokens
+     * entirely — a light popup over a dark UI on most platforms — and it was the
+     * one control on this page that did not look like the app it is part of.
+     * The `<select>` is still what gets rendered, because attachSelect keeps it
+     * as the value carrier: `data-control`/`data-path` survive onto a hidden
+     * input, so `_hydrateControls` and the change wiring below need no
+     * knowledge of any of this.
+     */
     _renderSelect(path, value, options) {
         const opts = (options || []).map(opt => {
             const selected = opt.value === value ? ' selected' : '';
             return `<option value="${opt.value}"${selected}>${opt.label}</option>`;
         }).join('');
-        return `<select class="settings-select" data-control="select" data-path="${path}">${opts}</select>`;
+        return `<select class="settings-select" data-control="select" data-path="${path}"
+                        data-enhance="select">${opts}</select>`;
     }
 
     _renderNumber(path, value, def) {
@@ -381,6 +415,7 @@ export class SettingsPage extends PageBase {
 
     _hydrateControls() {
         if (!this._contentEl) return;
+        this._enhanceSelects();
 
         // Store refs for all localStorage-backed controls. Bridge-backed
         // controls (data-control="bridge-*") manage their own value and
@@ -391,6 +426,29 @@ export class SettingsPage extends PageBase {
                 this._controlRefs.set(path, { el, type: el.dataset.control });
             }
         });
+    }
+
+    /**
+     * Swap every `<select>` on the page for the app's own choice control.
+     *
+     * Loaded lazily and failing soft: a settings page that will not render
+     * because a cosmetic upgrade threw is a worse outcome than a native
+     * dropdown. The handles are kept so a re-render can dispose them —
+     * attachSelect appends its popup to <body>, which would otherwise outlive
+     * the page that opened it.
+     */
+    _enhanceSelects() {
+        for (const h of this._selectHandles || []) { try { h.destroy(); } catch { /* gone */ } }
+        this._selectHandles = [];
+        const targets = [...this._contentEl.querySelectorAll('select[data-enhance="select"]')];
+        if (!targets.length) return;
+        import('../../ticketdesk/select_field.js').then(({ attachSelect }) => {
+            for (const el of targets) {
+                if (!el.isConnected) continue;
+                const options = [...el.options].map((o) => ({ value: o.value, label: o.textContent }));
+                this._selectHandles.push(attachSelect(el, { options, value: el.value }));
+            }
+        }).catch((err) => console.warn('[settings] custom dropdowns unavailable', err));
     }
 
     // ── Bridge-backed settings (project store, not localStorage) ──────────────

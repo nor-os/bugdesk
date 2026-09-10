@@ -476,7 +476,7 @@ to aim for a particular column:
 | gesture | what happens |
 |---|---|
 | **drag a row onto any tile** | that tile displays the record. Every tile that can take it is outlined while you drag; panels are not offered, because dropping a bug onto the filter rail means nothing |
-| **Ctrl-click a row** (⌘ on a Mac) | opens it **without taking the list off screen** — a floating window by default, or a background tab. Set which in **Settings › General › Records** |
+| **Ctrl-click a row** (⌘ on a Mac) | opens it **without taking the list off screen** — a floating window by default, or a genuinely background tab that waits for you. Set which in **Settings › General › Records** |
 
 Neither replaces the plain click, because neither is discoverable on its own.
 **Shift-click is left alone**: it is the table's range-select and the one
