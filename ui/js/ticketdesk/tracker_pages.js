@@ -121,10 +121,44 @@ const section = (id, glyph, title, rows, emptyText, action = '') => `
 function mountTracker(host, props, ctx) {
     let scope = props?.scope && SCOPES.some((s) => s.id === props.scope) ? props.scope : 'all';
 
-    const openBoard = (p) => ctx.wm?.openInPrimary?.('backlog', p);
+    /* ── where a click goes ──────────────────────────────────────────
+     *
+     * BESIDE the dashboard, never over it.
+     *
+     * Every row here used to open in the dashboard's own tile, which took the
+     * dashboard off screen — you clicked a late ticket to see who had it and
+     * lost the list of everything else that was late. That is the wrong shape
+     * for a dashboard: it is a place you work FROM, and you come back to it
+     * after every single row.
+     *
+     * So the first click splits a detail pane off to the right, and every click
+     * after that REUSES it. One stable two-pane layout — the tracker on the
+     * left, whatever you are looking at on the right — rather than a pane per
+     * click, which is what a plain `dest: 'split-h'` would give.
+     *
+     * `detailLeaf` is re-checked against the live tree each time rather than
+     * trusted: the user can close that pane, and a stale id would silently
+     * navigate nothing.
+     */
+    let detailLeaf = null;
+
+    const openBeside = (kind, props) => {
+        const tree = ctx.wm?.desktops?.active?.()?.tree;
+        if (detailLeaf && tree?.get(detailLeaf)) {
+            ctx.wm?.navigate?.(kind, props, { ctx: { ...ctx, leafId: detailLeaf }, dest: 'origin' });
+            return;
+        }
+        detailLeaf = ctx.wm?.navigate?.(kind, props, { ctx, dest: 'split-h' }) || null;
+        // No WM, or a tile that cannot be split (it is already the only one in a
+        // window): fall back to the old behaviour rather than silently doing
+        // nothing at all.
+        if (!detailLeaf) ctx.wm?.openInTabFromContext?.(ctx, kind, props);
+    };
+
+    const openBoard = (p) => openBeside('backlog', p);
     const openItem = (id) => {
         const model = ITEMS.find((x) => Number(x.id) === Number(id));
-        ctx.wm?.openInTabFromContext?.(ctx, 'item', { id: String(id), label: itemLabel(model) || `#${id}` });
+        openBeside('item', { id: String(id), label: itemLabel(model) || `#${id}` });
     };
 
     /** Everything this dashboard is talking about, under the current scope. */
@@ -275,8 +309,8 @@ function mountTracker(host, props, ctx) {
         if (!model) return;
         e.preventDefault();
         showContextMenu(e.clientX, e.clientY, [
-            { label: 'Open', icon: 'open_in_new', action: 'open' },
-            { label: 'Open in split right', icon: 'splitscreen_vertical_add', action: 'split' },
+            { label: 'Open beside the tracker', icon: 'open_in_new', action: 'open' },
+            { label: 'Open in a window', icon: 'web_asset', action: 'window' },
             { separator: true },
             { label: `Everything on ${model.assignee || 'nobody'}`, icon: 'person', action: 'who' },
             { label: 'Everything in this project', icon: 'folder_special', action: 'project',
@@ -285,9 +319,9 @@ function mountTracker(host, props, ctx) {
             { label: 'Copy reference', icon: 'content_copy', action: 'copy' },
         ], (action) => {
             if (action === 'open') openItem(model.id);
-            else if (action === 'split') {
+            else if (action === 'window') {
                 ctx.wm?.navigate?.('item', { id: String(model.id), label: itemLabel(model) },
-                    { ctx, dest: 'split-h' });
+                    { ctx, dest: 'window' });
             } else if (action === 'who') {
                 openBoard({ expr: assigneeExpr(model.assignee), label: model.assignee ? `On ${model.assignee}` : 'Nobody on it' });
             } else if (action === 'project' && model.projectRef) {

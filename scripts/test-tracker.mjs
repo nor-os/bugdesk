@@ -59,7 +59,17 @@ const data = await import(UI + 'backlog_data.js');
 const filters = await import(UI + 'backlog_filters.js');
 const newItem = await import(UI + 'new_item.js');
 const picker = await import(UI + 'item_picker.js');
-const { taxonomy } = await import(TILING + 'kind_taxonomy.js');
+const { taxonomy, activeTopNavKind } = await import(TILING + 'kind_taxonomy.js');
+
+/** The lit chip for a page of `kind`, through the real derivation the top bar
+ *  and the left rail both call — a fake WM whose focused leaf holds that kind. */
+const activeSection = (kind) => activeTopNavKind({
+    desktops: { active: () => ({ tree: {
+        focusedLeafId: 'leaf',
+        get: () => ({ content: { kind } }),
+        primaryLeafId: () => 'leaf',
+    } }) },
+});
 
 /* ── the mode reaches every module that reads it ─────────────────── */
 
@@ -76,6 +86,11 @@ t('Project appears in the New item Type select', () => {
     assert.ok(project, 'no Project entry');
     assert.equal(project.store, 'backlog');
     assert.equal(project.value, 'project');
+});
+t('no bug type is offered — there is no bug store to file into', () => {
+    assert.deepEqual(newItem.KINDS.map((k) => k.id),
+        ['project', 'epic', 'story', 'task']);
+    assert.ok(!newItem.KINDS.some((k) => k.store === 'bugs'));
 });
 t('a project is filed with a phase and a date, and no parent', () => {
     const f = newItem.fieldsFor('project');
@@ -96,21 +111,34 @@ t('every offered backlog kind can carry a target date', () => {
 
 console.log('\ntracker mode: chrome');
 
-t('the Tracker chip exists and leads the strip', () =>
-    assert.deepEqual(taxonomy.topNavEntries().map((e) => e.kind),
-        ['tracker', 'queues', 'backlog']));
-t('Backlog keeps its kind id and reads as Tickets', () => {
+t('Tracker is the ONLY top-level section', () =>
+    // Everything else is reached from the dashboard. A second chip read as a
+    // competing place to be, and moved the user out of the section they were
+    // working in the moment they opened a ticket.
+    assert.deepEqual(taxonomy.topNavEntries().map((e) => e.kind), ['tracker']));
+t('the bug store is absent, not empty', () => {
+    // A tracker does not live in a code repo, so there is no bug store for a
+    // Bugs chip to lead to.
+    assert.equal(taxonomy.meta('queues'), undefined);
+    assert.equal(taxonomy.meta('ticket'), undefined);
+});
+t('Tickets keeps its kind id, and sits UNDER Tracker', () => {
     // The id is baked into saved tile layouts and every props.filter route;
     // renaming it would strand both for a cosmetic gain.
     assert.equal(taxonomy.meta('backlog').label, 'Tickets');
-    assert.ok(taxonomy.meta('backlog').isTopNav);
+    assert.ok(!taxonomy.meta('backlog').isTopNav);
+    assert.equal(taxonomy.topNavFor('backlog'), 'tracker');
 });
-t('the Bugs chip is still there — tracker mode adds, it does not remove', () =>
-    assert.equal(taxonomy.meta('queues').label, 'Bugs'));
-t('the item page still belongs to the backlog section', () =>
-    assert.equal(taxonomy.topNavFor('item'), 'backlog'));
-t('the create mask files into the ticket section, not the bug queue', () =>
-    assert.equal(taxonomy.topNavFor('new-item'), 'backlog'));
+t('opening a ticket keeps you in the Tracker section', () => {
+    // THE BUG: `item` -> `backlog` is one hop, and in tracker mode `backlog` is
+    // not a chip — so the section derivation has to walk up to `tracker`.
+    // Without it the chip went dark and the left rail lost its section the
+    // moment you clicked a row on the dashboard.
+    assert.equal(activeSection('item'), 'tracker');
+    assert.equal(activeSection('backlog'), 'tracker');
+    assert.equal(activeSection('new-item'), 'tracker');
+    assert.equal(activeSection('tracker'), 'tracker');
+});
 
 /* ── the rail ────────────────────────────────────────────────────── */
 

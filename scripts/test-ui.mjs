@@ -324,6 +324,10 @@ t('the kinds route to the two stores', () => {
     assert.deepEqual(byStore.bugs, ['bug', 'regression', 'chore']);
     assert.deepEqual(byStore.backlog, ['epic', 'story', 'task']);
 });
+t('the default kind is one this deployment actually offers', () =>
+    // openNewItem() with no kind opens on KINDS[0]; a hardcoded 'bug' would
+    // open the tracker's mask on a type that is not in its own select.
+    assert.ok(newItem.KINDS.some((k) => k.id === newItem.KINDS[0].id)));
 t('Project is not offered outside tracker mode', () =>
     assert.equal(newItem.KINDS.some((k) => k.id === 'project'), false));
 t('Chore is stored as the bug type `task`', () =>

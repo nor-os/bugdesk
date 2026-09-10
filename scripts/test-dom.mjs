@@ -495,15 +495,27 @@ await t('the store derives an owning project for every descendant', () => {
 
 const { createTrackerContent } = await import(join(UI, 'ticketdesk', 'tracker_pages.js'));
 
+/* A WM stand-in that models the one thing these assertions are about: tiles
+ * exist, a split creates one, and navigating an existing tile does not. */
 const opened = [];
+const panes = new Set();
+let paneSeq = 0;
 const mountDashboard = () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const ctx = {
+        leafId: 'dashboard',
         wm: {
+            desktops: { active: () => ({ tree: { get: (id) => (panes.has(id) ? { id } : null) } }) },
+            navigate: (kind, props, opts) => {
+                opened.push({ kind, props, dest: opts?.dest, into: opts?.ctx?.leafId });
+                if (opts?.dest !== 'split-h') return opts?.ctx?.leafId || null;
+                const id = `pane${++paneSeq}`;
+                panes.add(id);
+                return id;
+            },
             openInPrimary: (kind, props) => opened.push({ how: 'primary', kind, props }),
             openInTabFromContext: (_c, kind, props) => opened.push({ how: 'tab', kind, props }),
-            navigate: (kind, props) => opened.push({ how: 'navigate', kind, props }),
         },
     };
     const handle = createTrackerContent({ eventBus: null }).tracker(host, {}, ctx);
@@ -559,19 +571,40 @@ await t('people are ordered worst-first, not alphabetically', () => {
     assert.equal(names[0], 'bob', `expected bob first, got ${JSON.stringify(names)}`);
 });
 
-await t('clicking a row opens that item', () => {
+await t('clicking a row opens the ticket BESIDE the dashboard, not over it', () => {
+    // The reported bug: a click took the dashboard off screen. You clicked a
+    // late ticket to see who had it and lost the list of everything else late.
     opened.length = 0;
     board.host.querySelector('[data-sec="overdue"] [data-open]').click();
     assert.equal(opened.length, 1);
     assert.equal(opened[0].kind, 'item');
     assert.equal(opened[0].props.id, '2');
+    assert.equal(opened[0].dest, 'split-h', 'the dashboard was navigated away from');
 });
 
-await t('clicking a person opens the board scoped to them', () => {
+await t('the next click REUSES that pane instead of splitting again', () => {
+    // Otherwise every row costs a pane and the tracker is a sliver by the
+    // fourth one.
+    opened.length = 0;
+    board.host.querySelector('[data-sec="soon"] [data-open]').click();
+    assert.equal(opened.length, 1);
+    assert.equal(opened[0].dest, 'origin');
+    assert.equal(opened[0].into, 'pane1');
+});
+
+await t('closing that pane makes the next click open a fresh one', () => {
+    panes.clear();
+    opened.length = 0;
+    board.host.querySelector('[data-sec="gaps"] [data-open]').click();
+    assert.equal(opened[0].dest, 'split-h', 'navigated a tile that no longer exists');
+});
+
+await t('clicking a person opens their list beside the dashboard too', () => {
     opened.length = 0;
     board.host.querySelector('[data-who="bob"]').click();
     assert.equal(opened[0].kind, 'backlog');
     assert.match(JSON.stringify(opened[0].props.expr), /"bob"/);
+    assert.equal(opened[0].into, 'pane2');
 });
 
 await t('the scope switch narrows to what I handed out', async () => {

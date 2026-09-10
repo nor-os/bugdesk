@@ -17,6 +17,10 @@
 # run asks who you are and remembers it in a git-ignored .bugdesk/ beside the
 # stores.
 set -euo pipefail
+# Captured BEFORE the cd into server/ below: in tracker mode the directory you
+# started from names the tracker (see ResolveTrackerProject in Program.cs), and
+# by the time the server runs its own working directory is server/.
+export BUGDESK_INVOKED_FROM="${BUGDESK_INVOKED_FROM:-$PWD}"
 root="$(cd "$(dirname "$0")" && pwd)"
 
 # Same resolution order as the server's own ResolveBugsDir / ResolveBacklogDir
@@ -37,6 +41,8 @@ for a in "$@"; do
         --seed) seed=1 ;;
         --tracker) BUGDESK_MODE=tracker ;;
         --mode=*) BUGDESK_MODE="${a#--mode=}" ;;
+        # Forwarded, not consumed: the server reads it (ResolveTrackerProject).
+        --project=*) args+=("$a") ;;
         *) args+=("$a") ;;
     esac
 done
@@ -67,17 +73,27 @@ seed_store() {
     echo "BugDesk: seeded $dir with ${#incoming[@]} example $what."
 }
 
-# Tracker mode seeds from its own examples: a project with dated work on it,
-# so the dashboard has something to be late about. Seeding a plain backlog there
-# would show an empty "what is overdue" on a store with no dates in it, which
-# demonstrates nothing.
-if [ "$seed" = "1" ]; then
-    seed_store "$bugs_dir" 'BUG-*.md' "$root/examples/bugs" "bug(s)"
-    if [ "$BUGDESK_MODE" = "tracker" ]; then
-        seed_store "$backlog_dir" '*-[0-9]*.md' "$root/examples/tracker" "tracked item(s)"
-    else
-        seed_store "$backlog_dir" '*-[0-9]*.md' "$root/examples/backlog" "backlog item(s)"
+# A TRACKER does not live in the repo at all — its records go under the user's
+# own BugDesk directory, one folder per project (see ResolveTrackerBase in
+# Program.cs). So the paths computed above are simply not its business, and
+# neither is a fixed port: the server takes the next free one, because a tracker
+# is usually opened alongside a BugDesk already running on a repo.
+if [ "$BUGDESK_MODE" = "tracker" ]; then
+    if [ "$seed" = "1" ]; then
+        # The server owns the tracker's paths, so ask it where they are rather
+        # than recomputing them here and getting to disagree.
+        echo "BugDesk: --seed is applied by the server in tracker mode; see the URL it prints."
+        export BUGDESK_SEED_TRACKER=1
     fi
+    cd "$root/server"
+    echo "BugDesk → tracker mode (the URL is printed below; the port is picked automatically)"
+    exec dotnet run "${args[@]}"
+fi
+
+# Seed each store INDEPENDENTLY — see seed_store above.
+if [ "$seed" = "1" ]; then
+    seed_store "$bugs_dir"    'BUG-*.md'    "$root/examples/bugs"    "bug(s)"
+    seed_store "$backlog_dir" '*-[0-9]*.md' "$root/examples/backlog" "backlog item(s)"
 fi
 
 cd "$root/server"

@@ -50,13 +50,17 @@ const BACKLOG_KIND = (type) => ({
 });
 
 export const KINDS = [
-    { id: 'bug', label: 'Bug', store: 'bugs', value: 'bug', icon: 'bug_report' },
-    { id: 'regression', label: 'Regression', store: 'bugs', value: 'regression', icon: 'history' },
-    { id: 'chore', label: 'Chore', store: 'bugs', value: 'task', icon: 'build' },
-    // `project` only in tracker mode: it is the level a follow-up tracker hangs
-    // everything from, and in a plain backlog it is a menu entry that could only
-    // ever file the wrong thing. The store still READS a project either way.
-    ...(TRACKER ? [BACKLOG_KIND('project')] : []),
+    // NO BUG TYPES IN TRACKER MODE. A tracker has no bug store — it does not
+    // live in a code repo at all — so these three could only ever file into a
+    // directory that does not exist. `project` is the mirror image: the level a
+    // follow-up tracker hangs everything from, and in a plain backlog a menu
+    // entry that could only ever file the wrong thing. The store still READS
+    // every type either way; this is about what is OFFERED.
+    ...(TRACKER ? [BACKLOG_KIND('project')] : [
+        { id: 'bug', label: 'Bug', store: 'bugs', value: 'bug', icon: 'bug_report' },
+        { id: 'regression', label: 'Regression', store: 'bugs', value: 'regression', icon: 'history' },
+        { id: 'chore', label: 'Chore', store: 'bugs', value: 'task', icon: 'build' },
+    ]),
     BACKLOG_KIND('epic'),
     BACKLOG_KIND('story'),
     BACKLOG_KIND('task'),
@@ -376,6 +380,8 @@ export function createNewItemContent({ eventBus } = {}) {
  * beside whatever prompted you to file something.
  */
 export function openNewItem(wm, { kind = '', parent = 0, phase = '', ctx = null } = {}) {
-    const props = { kind: kind || 'bug', parent, phase, label: 'New item' };
+    // The default has to be a kind this deployment actually offers: `bug` in
+    // tracker mode would open the mask on a type that is not in its own select.
+    const props = { kind: kind || KINDS[0].id, parent, phase, label: 'New item' };
     wm?.openInTabFromContext?.(ctx || {}, 'new-item', props);
 }

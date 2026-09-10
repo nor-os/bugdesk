@@ -2,41 +2,100 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-// BugDesk bridge: serves the FlexDesk UI and exposes two directories of markdown
-// records as JSON — the BUG store (BUGDESK_BUGS, default ./bugs) and the BACKLOG
-// store (BUGDESK_BACKLOG, default ./backlog). The markdown files are the source
-// of truth; this process only reads and writes them.
+// BugDesk bridge: serves the FlexDesk UI and exposes directories of markdown
+// records as JSON. The markdown files are the source of truth; this process only
+// reads and writes them.
 //
-// Per-user configuration (who you are, your filters, your workspace layout) is
-// NOT in either store — it lives in a git-ignored .bugdesk/ directory beside
-// them. See UserConfig.cs for why.
-
-var builder = WebApplication.CreateBuilder(args);
-var app = builder.Build();
-
-// ---- Locate the stores ----------------------------------------------------
-string bugsDir = ResolveBugsDir(app.Environment.ContentRootPath);
-string backlogDir = ResolveBacklogDir(bugsDir);
-string uiDir = Path.GetFullPath(Path.Combine(app.Environment.ContentRootPath, "..", "ui"));
+// WHERE those directories are depends on the MODE — see the block below.
 
 // ---- Mode ------------------------------------------------------------------
 // BugDesk runs in one of two modes, chosen at launch and never switched at
 // runtime — it decides what the app is FOR, and a toggle inside the UI would
-// invite flipping it per tab.
+// invite flipping it per tab. Resolved FIRST, because every path below depends
+// on it.
 //
-//   bugs      (default) a bug tracker with a backlog beside it. What BugDesk
-//             has always been.
-//   tracker   a follow-up tracker: work you have handed to other people, who
-//             may have no access to this checkout at all. Adds the `project`
-//             level above epics, target dates, and the dashboard that answers
-//             "what did I assign, and what is late".
-//
-// It changes the CHROME and the vocabulary, not the store format: both modes
-// read and write the same markdown, so a tracker's PROJ- records still open in
-// a plain backlog and vice versa. Nothing is hidden — tracker mode is additive.
+//   bugs      (default) a bug tracker with a backlog beside it, both inside the
+//             project repo, both committed. What BugDesk has always been.
+//   tracker   a follow-up tracker: work you have handed to other people. It is
+//             NOT about the code in any repo, so it does not live in one — see
+//             ResolveTrackerBase. Adds the `project` level above epics, target
+//             dates, and the dashboard that answers "what did I assign, and
+//             what is late".
 string mode = ResolveMode(args);
-app.Logger.LogInformation("BugDesk: bugs={bugs} backlog={backlog} ui={ui} mode={mode}",
-    bugsDir, backlogDir, uiDir, mode);
+
+// Our own flags are stripped before the host sees them: ASP.NET's command-line
+// configuration provider wants `--key=value` or `--key value`, and a bare
+// `--tracker` makes it throw before a line of this file runs.
+var builder = WebApplication.CreateBuilder(HostArgs(args));
+
+// ---- Locate our own assets -------------------------------------------------
+// Walked UP from both the content root and the binary, rather than assumed to
+// be "one above the working directory". That assumption held only while BugDesk
+// was always started by run.sh, which cd's into server/ first. A tracker is
+// started from wherever the user happens to be — that directory is what names
+// the tracker — so the working directory is no longer a reliable anchor, and
+// getting this wrong means silently serving no UI at all.
+string uiDir = FindNear(Path.Combine("ui", "index.html"),
+                        builder.Environment.ContentRootPath, AppContext.BaseDirectory)
+               is { } indexHtml
+    ? Path.GetDirectoryName(indexHtml)!
+    : Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "ui"));
+
+// ---- Locate the stores ----------------------------------------------------
+string trackerBase = mode == "tracker" ? ResolveTrackerBase(args) : "";
+string bugsDir = mode == "tracker"
+    ? Env("BUGDESK_BUGS") ?? Path.Combine(trackerBase, "bugs")
+    : ResolveBugsDir(builder.Environment.ContentRootPath);
+string backlogDir = mode == "tracker"
+    ? EnsureDir(Env("BUGDESK_BACKLOG") ?? Path.Combine(trackerBase, "tickets"))
+    : ResolveBacklogDir(bugsDir);
+// Attachments sit beside the records in tracker mode. In bugs mode they stay
+// under the bug store, where existing ones already are.
+string attachDir = mode == "tracker"
+    ? Path.Combine(trackerBase, "attachments")
+    : Path.Combine(bugsDir, "attachments");
+
+// ---- Port ------------------------------------------------------------------
+// A tracker is a personal tool you open when you want it, often alongside a
+// BugDesk already running on a repo — so a fixed port would collide with the
+// thing you were already using. Take the next free one instead, and only when
+// nothing more specific was asked for: an explicit ASPNETCORE_URLS is a
+// deliberate choice and must not be second-guessed.
+if (mode == "tracker" && string.IsNullOrEmpty(Env("ASPNETCORE_URLS")))
+{
+    var port = FirstFreePort(8766);
+    if (port > 0) builder.WebHost.UseUrls($"http://127.0.0.1:{port}");
+}
+
+var app = builder.Build();
+
+app.Logger.LogInformation("BugDesk: mode={mode} records={records} ui={ui}",
+    mode, mode == "tracker" ? backlogDir : $"{bugsDir} + {backlogDir}", uiDir);
+
+// `--seed` for a tracker is applied HERE rather than in run.sh, because run.sh
+// does not know where a tracker's records live — the server owns that path, and
+// two places computing it is two places to get it wrong. Never overwrites: a
+// store with anything in it is left exactly as it is.
+if (mode == "tracker" && Env("BUGDESK_SEED_TRACKER") is not null)
+{
+    var samples = FindNear(Path.Combine("examples", "tracker"),
+                           builder.Environment.ContentRootPath, AppContext.BaseDirectory) ?? "";
+    var existing = Directory.EnumerateFiles(backlogDir, "*.md").Any();
+    if (existing)
+        app.Logger.LogInformation("BugDesk: {dir} already has records — skipping --seed", backlogDir);
+    else if (samples.Length == 0 || !Directory.Exists(samples))
+        app.Logger.LogInformation("BugDesk: no examples at {dir} — nothing to seed", samples);
+    else
+    {
+        var n = 0;
+        foreach (var file in Directory.EnumerateFiles(samples, "*.md"))
+        {
+            File.Copy(file, Path.Combine(backlogDir, Path.GetFileName(file)), overwrite: false);
+            n++;
+        }
+        app.Logger.LogInformation("BugDesk: seeded {dir} with {n} example ticket(s)", backlogDir, n);
+    }
+}
 
 // ---- Authorship (configurable — see README "Authorship") ------------------
 // BugDesk's lifecycle assumes exactly two roles: a human who files/triages/tests
@@ -48,7 +107,9 @@ app.Logger.LogInformation("BugDesk: bugs={bugs} backlog={backlog} ui={ui} mode={
 // because a variable exported in a shell profile used to make every later name
 // change a file the server then ignored. BUGDESK_USER is what picks a different
 // profile per process, for two people sharing one checkout.
-string configDir = ResolveConfigDir(bugsDir);
+string configDir = mode == "tracker"
+    ? Env("BUGDESK_CONFIG") ?? Path.Combine(trackerBase, "config")
+    : ResolveConfigDir(bugsDir);
 var users = new UserStore(
     configDir,
     Environment.GetEnvironmentVariable("BUGDESK_USER"),
@@ -110,7 +171,6 @@ if (Directory.Exists(uiDir))
 // together in git rather than rotting as a dead link. Backlog items share the
 // directory — an attachment is addressed by content hash, so which store
 // referenced it first does not matter.
-string attachDir = Path.Combine(bugsDir, "attachments");
 {
     Directory.CreateDirectory(attachDir);
     var attachFiles = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(attachDir);
@@ -745,6 +805,152 @@ app.MapMethods("/api/{**rest}", new[] { "GET", "POST" },
     () => Results.Json(new { ok = true, result = new { ok = true } }, json));
 
 app.Run();
+
+// ---- launch plumbing -------------------------------------------------------
+
+/// A non-empty environment variable, or null. Saves repeating the emptiness
+/// check at every call site where "" and "unset" must mean the same thing.
+static string? Env(string name)
+{
+    var v = Environment.GetEnvironmentVariable(name);
+    return string.IsNullOrWhiteSpace(v) ? null : v.Trim();
+}
+
+/// <summary>
+/// The first existing <paramref name="marker"/> found by walking UP from each
+/// of <paramref name="starts"/>. Returns its full path, or null.
+/// <para>
+/// The marker is a RELATIVE path with a file at the end of it
+/// (<c>ui/index.html</c>, not <c>ui</c>) so a stray directory of the same name
+/// somewhere up the tree cannot be mistaken for the real one.
+/// </para>
+/// </summary>
+static string? FindNear(string marker, params string?[] starts)
+{
+    foreach (var start in starts)
+    {
+        if (string.IsNullOrWhiteSpace(start)) continue;
+        var dir = new DirectoryInfo(Path.GetFullPath(start));
+        for (var hops = 0; dir is not null && hops < 8; hops++, dir = dir.Parent)
+        {
+            var candidate = Path.Combine(dir.FullName, marker);
+            if (File.Exists(candidate) || Directory.Exists(candidate)) return candidate;
+        }
+    }
+    return null;
+}
+
+static string EnsureDir(string path)
+{
+    var full = Path.GetFullPath(path);
+    Directory.CreateDirectory(full);
+    return full;
+}
+
+/// BugDesk's own flags, removed before the generic host parses the rest.
+static string[] HostArgs(string[] argv) => argv.Where(a =>
+    a is not ("--tracker" or "--bugs")
+    && !a.StartsWith("--mode=", StringComparison.OrdinalIgnoreCase)
+    && !a.StartsWith("--project=", StringComparison.OrdinalIgnoreCase)).ToArray();
+
+/// The first free loopback port at or after <paramref name="start"/>, or 0 if
+/// the whole window is taken.
+///
+/// <para>
+/// Bind-and-release, not a scan of what is listening: only an actual bind
+/// proves the port is usable by THIS process. There is a race between releasing
+/// it and Kestrel taking it, and it is the right trade for a local single-user
+/// tool — the alternative is handing Kestrel a socket, which means reimplementing
+/// its listener configuration to save a window measured in milliseconds.
+/// </para>
+static int FirstFreePort(int start, int window = 200)
+{
+    for (var port = start; port < start + window && port < 65536; port++)
+    {
+        try
+        {
+            var probe = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, port);
+            probe.Start();
+            probe.Stop();
+            return port;
+        }
+        catch (System.Net.Sockets.SocketException) { /* in use — try the next */ }
+    }
+    return 0;
+}
+
+// ---- tracker storage -------------------------------------------------------
+
+/// <summary>
+/// Where a TRACKER's records live: <c>&lt;root&gt;/&lt;project&gt;</c>.
+///
+/// <para>
+/// NOT in a repo, and that is the whole point. A tracker is a manager's record
+/// of work handed to other people; it is not about the code in any checkout,
+/// most of the people in it have never seen that checkout, and committing it
+/// would put private notes about colleagues into a shared history. So it lives
+/// under the user's own BugDesk directory — <c>%APPDATA%\BugDesk</c> on Windows,
+/// <c>~/.bugdesk</c> everywhere else — with one folder per project, so one
+/// person can keep several trackers apart.
+/// </para>
+///
+/// <code>
+/// ~/.bugdesk/
+///   acme-migration/
+///     tickets/      PROJ-/EPIC-/STORY-/TASK-NNNN.md
+///     attachments/
+///     config/       who you are, the roster, your layout
+/// </code>
+///
+/// <para>
+/// The record directory is <c>tickets/</c>, not <c>backlog/</c>: the top bar
+/// says Tickets in this mode, and a backlog is work you plan for yourself
+/// rather than a list of things other people owe you. There is no
+/// <c>bugs/</c> — a tracker has no bug store, and the UI drops the chip that
+/// would lead to one.
+/// </para>
+///
+/// <para>
+/// The project name comes from <c>--project</c>, then
+/// <c>BUGDESK_TRACKER_PROJECT</c>, then the directory BugDesk was STARTED in
+/// (run.sh exports it before it cd's into server/), then "default". Starting a
+/// tracker from a directory and getting that directory's tracker is the
+/// behaviour worth having; naming it explicitly is for when it is not.
+/// </para>
+/// </summary>
+static string ResolveTrackerBase(string[] argv)
+{
+    var root = Env("BUGDESK_TRACKER_HOME");
+    if (root is null)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            root = string.IsNullOrEmpty(appData) ? null : Path.Combine(appData, "BugDesk");
+        }
+        root ??= Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".bugdesk");
+    }
+    return EnsureDir(Path.Combine(Path.GetFullPath(root), ResolveTrackerProject(argv)));
+}
+
+static string ResolveTrackerProject(string[] argv)
+{
+    string? name = null;
+    for (var i = 0; i < argv.Length; i++)
+    {
+        if (argv[i].StartsWith("--project=", StringComparison.OrdinalIgnoreCase))
+            name = argv[i]["--project=".Length..];
+        else if (argv[i] is "--project" && i + 1 < argv.Length)
+            name = argv[i + 1];
+    }
+    name ??= Env("BUGDESK_TRACKER_PROJECT")
+          ?? Path.GetFileName((Env("BUGDESK_INVOKED_FROM") ?? Directory.GetCurrentDirectory())
+                              .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+    // Slugged with the same rule profiles use, so a project called "ACME / Q4"
+    // cannot escape the tracker root or collide with "acme-q4".
+    return UserStore.SlugOf(name ?? "default");
+}
 
 // ---- mode -----------------------------------------------------------------
 // `--tracker` on the command line, or BUGDESK_MODE=tracker. The flag wins: it

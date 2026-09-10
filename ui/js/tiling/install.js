@@ -213,7 +213,7 @@ export async function installTilingShell({ eventBus, logger, runtime } = {}) {
     // TicketDesk: real Search + New Ticket actions in the top bar. Both
     // lead to the SAME mask page — mode decides whether the entered data
     // creates a ticket or searches for one.
-    _installTicketActions(wm);
+    _installTicketActions(wm, trackerMode);
 
     _syncPanelToggleButtons(wm);
     _syncDesktopBar(wm);
@@ -342,7 +342,7 @@ function _syncPageShortcuts(wm) {
  *  backwards — the store is a property of the thing. One "New item" dialog now
  *  covers both (see ticketdesk/new_item.js), and the full-page bug mask, which
  *  is still richer, is reached from the Bugs page's own New Bug button. */
-function _installTicketActions(wm) {
+function _installTicketActions(wm, trackerMode = false) {
     const barRight = document.querySelector('.global-top-bar .bar-right');
     if (!barRight || barRight.querySelector('.td-topbar-actions')) return;
     const wrap = document.createElement('div');
@@ -360,6 +360,24 @@ function _installTicketActions(wm) {
             // and looking a parent up, which a modal makes hostile.
             const { openNewItem } = await import('../ticketdesk/new_item.js');
             openNewItem(wm);
+            return;
+        }
+        // TRACKER MODE has no bug store and therefore no `ticket` kind — the
+        // search page IS the bug mask in search mode. The shared item picker is
+        // the right search there anyway: type any part of a reference or title,
+        // filter by type, open it. It is transient by nature, so unlike the bug
+        // search it does not need a tab of its own.
+        if (trackerMode) {
+            const [{ openItemPicker }, { itemLabel }] = await Promise.all([
+                import('../ticketdesk/item_picker.js'),
+                import('../ticketdesk/backlog_data.js'),
+            ]);
+            const picked = await openItemPicker({ title: 'Find a ticket' });
+            if (picked?.id) {
+                wm.navigate('item',
+                    { id: String(picked.id), label: itemLabel(picked) || `#${picked.id}` },
+                    { dest: 'main', newTab: true });
+            }
             return;
         }
         // Search always opens as a NEW TAB, never in place. openInPrimary swaps the primary tile's

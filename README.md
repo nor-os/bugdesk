@@ -89,7 +89,8 @@ that the checklist never parsed survives the first time anyone ticks a box.
 ```bash
 ./run.sh                              # http://127.0.0.1:8766, ./bugs + ./backlog
 ./run.sh --seed                       # + pre-seed empty stores with the examples
-./run.sh --tracker                    # TRACKER mode — see below
+./run.sh --tracker                    # TRACKER mode — its own store, auto port
+./run.sh --tracker --project acme     # ...naming the tracker explicitly
 ./run.sh --tracker --seed             # + an example project with dated work on it
 BUGDESK_BUGS=/path/to/bugs ./run.sh   # backlog follows as its sibling
 BUGDESK_USER=alice ./run.sh           # pick a profile without the first-run prompt
@@ -483,18 +484,61 @@ your behalf, put it there after a meeting, an email or a message. That is the
 fact the whole mode is designed around, and it is why the dashboard leads with
 what the tracker *cannot* tell you as prominently as with what it can.
 
-Tracker mode **adds and relabels; it never removes**. The bug store is still
-there, the same markdown is on disk, and a store written in one mode opens
-correctly in the other.
+**It is not a mode of a repo — it is a different app over the same file format.**
 
 | | changes |
 |---|---|
-| top nav | **TRACKER · BUGS · TICKETS** — the dashboard leads and is the landing page; BACKLOG reads "Tickets" (the kind id is unchanged, so saved layouts survive) |
-| types | adds **`project`** above epics, in the Type select and the pickers |
-| fields | **`due`** (target date) and **`reporter`** on every backlog record |
+| where it lives | **not in your repo.** `~/.bugdesk/<project>/` (`%APPDATA%\BugDesk\<project>\` on Windows), one folder per tracked project |
+| port | **picked automatically** — the next free one from 8766 |
+| top nav | **TRACKER, and only Tracker.** No Bugs, no Tickets: everything is reached from the dashboard |
+| types | adds **`project`** above epics; drops the bug types, since there is no bug store |
+| fields | **`due`** (target date) and **`reporter`** on every record |
 | board | a **Due** column, sorted chronologically, painted as a pill |
 | left rail | **Projects** instead of Work packages; views lead with Overdue |
 | skill | [`/tracker`](skills/tracker/SKILL.md) |
+
+### Where the files are
+
+```
+~/.bugdesk/                       %APPDATA%\BugDesk\ on Windows
+  acme-migration/                 one folder per tracked project
+    tickets/                      PROJ-/EPIC-/STORY-/TASK-NNNN.md
+    attachments/
+    config/                       who you are, the roster, your window layout
+  client-beta/
+    ...
+```
+
+**Not in a repo, and that is the point.** A tracker is a record of work handed
+to other people: it is not about the code in any checkout, most of the people in
+it have never seen that checkout, and committing it would put private notes
+about colleagues into a shared history. `bugs/` and `backlog/` inside a project
+are the wrong home for it in every respect — including the names.
+
+The project is named by the **directory you start the tracker from**, so
+`cd ~/work/acme-migration && bugdesk --tracker` gets you that tracker and
+nothing else. Override with `--project <name>` or `BUGDESK_TRACKER_PROJECT`;
+move the root with `BUGDESK_TRACKER_HOME`.
+
+**The port is picked automatically** in tracker mode: a tracker is a personal
+tool you open when you want it, usually alongside a BugDesk already running on a
+repo, so a fixed port would collide with the thing you were already using. An
+explicit `ASPNETCORE_URLS` is still honoured — the automatic choice only fills a
+gap, it does not override a decision.
+
+### One section, not three
+
+The top bar carries **Tracker and nothing else**. Tickets and the bug queue are
+not top-level entries: a tracker has no bug store at all, and the ticket list is
+something you reach *from* the dashboard rather than a competing place to be.
+
+That is also why **clicking a row keeps you on the tracker**. The ticket opens
+in a pane **beside** the dashboard — reusing the same pane on every subsequent
+click, so you get one stable two-pane layout rather than a pane per row — and
+the ticket page sits *under* Tracker in the section hierarchy, so the lit chip
+and the left rail do not change under you. You clicked a late ticket to see who
+had it; losing the list of everything else that was late is not a reasonable
+price.
 
 ### The project level
 

@@ -59,7 +59,48 @@ they are simply not *offered* outside tracker mode.
   without saying why, a missed date with no replacement stays missed, and if the
   source does not say it then it did not happen.
 - `examples/tracker/` and `--tracker --seed`, so the dashboard has something to
-  be late about on a first run.
+  be late about on a first run. In tracker mode the server does the seeding,
+  because it owns the paths and two places computing them is two places to get
+  them wrong.
+
+### Changed — tracker mode is its own app, not a mode of a repo
+
+- **A tracker's records leave the repo.** They live under the user's own BugDesk
+  directory — `~/.bugdesk/<project>/` (`%APPDATA%\BugDesk\<project>\` on
+  Windows) — with `tickets/`, `attachments/` and `config/` inside, one folder per
+  tracked project. `bugs/` and `backlog/` inside a checkout were the wrong home
+  in every respect, including the names: a tracker is a record of work handed to
+  other people, it is not about the code in any repo, most of the people in it
+  have never seen that repo, and committing it would put private notes about
+  colleagues into a shared history. The project is named by the directory the
+  tracker was started from; `--project`, `BUGDESK_TRACKER_PROJECT` and
+  `BUGDESK_TRACKER_HOME` override.
+- **The port is picked automatically** in tracker mode — the next free one from
+  8766. A tracker is a personal tool opened alongside a BugDesk already running
+  on a repo, so a fixed port collides with the thing you were already using. An
+  explicit `ASPNETCORE_URLS` still wins: the automatic choice fills a gap, it
+  does not overrule a decision.
+- **The top bar carries Tracker and nothing else.** Bugs and Tickets are gone as
+  top-level entries — the bug store does not exist in this mode, and the ticket
+  list is reached *from* the dashboard rather than being a competing place to be.
+  The bug types are dropped from the New item Type select for the same reason,
+  and the top-bar Search uses the shared item picker instead of the bug mask.
+- **The server finds its own assets by walking up from the binary** as well as
+  the working directory. "One above the working directory" held only while
+  BugDesk was always started by `run.sh`, which cd's into `server/` first — a
+  tracker is started from wherever the user happens to be, and getting this
+  wrong meant silently serving no UI at all.
+
+### Fixed
+
+- **Clicking a ticket on the Tracker dashboard took the dashboard off screen.**
+  You clicked a late ticket to see who had it and lost the list of everything
+  else that was late. Two causes: the ticket page opened in the dashboard's own
+  tile, and — because `item` → `backlog` is a single hop and `backlog` is not a
+  top-level section in tracker mode — the lit chip and the left rail lost their
+  section entirely. Tickets now open in a pane **beside** the dashboard, reusing
+  the same pane on every later click so the layout stays stable, and the section
+  derivation walks up until it finds a section that actually exists.
 
 **A required working sequence in `/bugs` and `/backlog`.** Both skills now claim
 an item before touching anything, and the claim is **pushed before the work

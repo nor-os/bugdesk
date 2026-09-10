@@ -23,6 +23,10 @@
 # or invoke it directly:
 #   powershell -ExecutionPolicy Bypass -File .\run.ps1
 $ErrorActionPreference = 'Stop'
+# Captured BEFORE the Set-Location into server\ below: in tracker mode the
+# directory you started from names the tracker (ResolveTrackerProject in
+# Program.cs), and by then the process is somewhere else.
+if (-not $env:BUGDESK_INVOKED_FROM) { $env:BUGDESK_INVOKED_FROM = (Get-Location).Path }
 $root = $PSScriptRoot
 
 # Same resolution order as the server's own ResolveBugsDir / ResolveBacklogDir
@@ -42,6 +46,7 @@ foreach ($a in $args) {
     if ($a -eq '--seed') { $seed = $true }
     elseif ($a -eq '--tracker') { $env:BUGDESK_MODE = 'tracker' }
     elseif ($a -like '--mode=*') { $env:BUGDESK_MODE = $a.Substring(7) }
+    # Forwarded, not consumed: the server reads it (ResolveTrackerProject).
     else { $dotnetArgs += $a }
 }
 if (-not $env:BUGDESK_MODE) { $env:BUGDESK_MODE = 'bugs' }
@@ -66,20 +71,33 @@ function Seed-Store {
     Write-Host "BugDesk: seeded $Dir with $($incoming.Count) example $What."
 }
 
-# Tracker mode seeds from its own examples: a project with dated work on it, so
-# the dashboard has something to be late about.
-if ($seed) {
-    Seed-Store $bugsDir 'BUG-*.md' (Join-Path $root 'examples\bugs') 'bug(s)'
-    if ($env:BUGDESK_MODE -eq 'tracker') {
-        Seed-Store $backlogDir '*-*.md' (Join-Path $root 'examples\tracker') 'tracked item(s)'
-    } else {
-        Seed-Store $backlogDir '*-*.md' (Join-Path $root 'examples\backlog') 'backlog item(s)'
-    }
-}
-
 if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
     Write-Host "BugDesk: 'dotnet' not found on PATH. Install the .NET SDK from https://dotnet.microsoft.com/download"
     exit 1
+}
+
+# A TRACKER does not live in the repo at all - its records go under
+# %APPDATA%\BugDesk, one folder per project (ResolveTrackerBase in Program.cs).
+# So the paths computed above are not its business, and neither is a fixed port:
+# the server takes the next free one, because a tracker is usually opened
+# alongside a BugDesk already running on a repo.
+if ($env:BUGDESK_MODE -eq 'tracker') {
+    if ($seed) {
+        # The server owns the tracker's paths, so ask it to seed rather than
+        # recomputing them here and getting to disagree.
+        Write-Host "BugDesk: --seed is applied by the server in tracker mode; see the URL it prints."
+        $env:BUGDESK_SEED_TRACKER = '1'
+    }
+    Set-Location (Join-Path $root 'server')
+    Write-Host "BugDesk -> tracker mode (the URL is printed below; the port is picked automatically)"
+    & dotnet run @dotnetArgs
+    exit $LASTEXITCODE
+}
+
+# Seed each store INDEPENDENTLY - see Seed-Store above.
+if ($seed) {
+    Seed-Store $bugsDir    'BUG-*.md' (Join-Path $root 'examples\bugs')    'bug(s)'
+    Seed-Store $backlogDir '*-*.md'   (Join-Path $root 'examples\backlog') 'backlog item(s)'
 }
 
 Set-Location (Join-Path $root 'server')

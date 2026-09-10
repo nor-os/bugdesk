@@ -48,7 +48,9 @@ export const taxonomy = createTaxonomy({
         // `item` a sub-page of Backlog.
         home: { label: 'Home', icon: 'home' },
 
-        // NO shortLabel on either top-nav entry. FlexDesk renders the chip as
+        // ── the BUG store, and its top-nav chip ──────────────────────
+        //
+        // NO shortLabel on a top-nav entry. FlexDesk renders the chip as
         // `shortLabel || label` (see createTaxonomy's topNavEntries), so the
         // abbreviations this used to carry put "QUE" and "BKL" in the top bar —
         // two cryptic three-letter codes where the whole job of the strip is to
@@ -57,16 +59,27 @@ export const taxonomy = createTaxonomy({
         // The kind id stays `queues` while the label reads "Bugs": the id is
         // baked into saved tile layouts and every `props.filter` route, and
         // renaming it would strand both for a cosmetic gain.
-        queues: {
-            label: 'Bugs', icon: 'bug_report',
-            isTopNav: true, order: 20,
-        },
-        ticket: { label: 'Bug', icon: 'bug_report', topNav: 'queues' },
+        //
+        // ABSENT ENTIRELY IN TRACKER MODE, along with `ticket`. A tracker has no
+        // bug store — it does not live in a code repo at all (see
+        // ResolveTrackerRoot in server/Program.cs) — so a Bugs chip there leads
+        // to a queue over a directory that does not exist. Removed rather than
+        // emptied: a top-nav entry that can only ever show "nothing here" is
+        // chrome that costs a glance every time and never repays it. Nothing is
+        // stranded by the removal, because tracker mode keeps its layouts in its
+        // own config directory, so no saved bugs-mode tile can be restored into
+        // it.
+        ...(TRACKER ? {} : {
+            queues: {
+                label: 'Bugs', icon: 'bug_report',
+                isTopNav: true, order: 20,
+            },
+            ticket: { label: 'Bug', icon: 'bug_report', topNav: 'queues' },
+        }),
 
-        // TRACKER MODE's landing page: what is late, and whose it is. First in
-        // the strip and therefore the WM's default leaf, because it is the
-        // question the mode exists to answer — you open a tracker to find out
-        // what needs chasing, not to browse a tree.
+        // TRACKER MODE's landing page: what is late, and whose it is. In tracker
+        // mode it is the ONLY top-nav entry — everything else is reached from
+        // it, which is the point of a dashboard.
         //
         // Absent entirely in the default mode rather than present-and-empty: a
         // chip that leads to a dashboard over a store with no target dates in it
@@ -78,31 +91,34 @@ export const taxonomy = createTaxonomy({
             },
         } : {}),
 
-        // The second store: [projects →] epics → stories → tasks. `item` covers
+        // The record store: [projects →] epics → stories → tasks. `item` covers
         // every type rather than getting a kind each — they share one page, one
         // route and one id space, and four kinds would only make the breadcrumb
         // and the palette pick between synonyms.
         //
         // The kind id stays `backlog` in both modes, for the same reason
         // `queues` stays `queues` while reading "Bugs": it is baked into saved
-        // tile layouts and every `props.filter` route. Only the LABEL changes —
-        // "backlog" is a word about work you plan for yourself, and a tracker is
-        // a list of things other people owe you.
-        backlog: {
-            label: TRACKER ? 'Tickets' : 'Backlog',
-            icon: 'workspaces',
-            isTopNav: true, order: 30,
-        },
+        // tile layouts and every `props.filter` route.
+        //
+        // In tracker mode it is NOT a top-nav entry — it sits UNDER Tracker.
+        // That is what keeps the chip lit and the left rail in place when you
+        // open a ticket from the dashboard: the section you are in has not
+        // changed, you have only gone deeper into it. As its own chip it read as
+        // a second, competing place to be, and clicking any row on the dashboard
+        // moved the user out of the section they were working in.
+        backlog: TRACKER
+            ? { label: 'Tickets', icon: 'workspaces', topNav: 'tracker' }
+            : { label: 'Backlog', icon: 'workspaces', isTopNav: true, order: 30 },
         item: { label: 'Item', icon: 'article', topNav: 'backlog' },
 
         // The create mask. Its breadcrumb sits under whichever section this
-        // deployment files INTO by default — Bugs normally, Tickets in tracker
-        // mode, where the bug queue is not where anything starts. The Type
+        // deployment files INTO by default — Bugs normally, Tracker in tracker
+        // mode, where there is no bug queue for anything to start from. The Type
         // select inside it is what actually decides which store the record lands
         // in, and the page is reachable from every section either way.
         'new-item': {
             label: 'New item', icon: 'add_circle',
-            topNav: TRACKER ? 'backlog' : 'queues',
+            topNav: TRACKER ? 'tracker' : 'queues',
         },
 
         // Settings reachable from the hamburger; no top-nav slot. App-global
@@ -150,8 +166,22 @@ export function activeTopNavKind(wm) {
     const activeKind = usable ? focusedKind : (primaryId ? tree.get(primaryId)?.content?.kind : null);
     if (!activeKind) return null;
 
-    return taxonomy.topNavFor(activeKind)
-        || (activeKind === 'home' ? taxonomy.topNavEntries()[0]?.kind : null)
+    // WALK UP to the nearest kind that actually has a chip. FlexDesk's own
+    // `topNavFor` is a SINGLE hop — it returns `meta.topNav` verbatim — which is
+    // enough only while every kind points straight at a top-nav entry. Tracker
+    // mode nests them two deep (`item` → `backlog` → `tracker`, because Tickets
+    // is not its own section there), and one hop lands on `backlog`, which
+    // matches no chip: nothing lit, and the left rail with no section to follow.
+    const seen = new Set();
+    let kind = activeKind;
+    while (kind && !seen.has(kind)) {
+        seen.add(kind);
+        const meta = taxonomy.meta(kind);
+        if (meta?.isTopNav) return kind;
+        kind = meta?.topNav;
+    }
+
+    return (activeKind === 'home' ? taxonomy.topNavEntries()[0]?.kind : null)
         || activeKind
         || null;
 }

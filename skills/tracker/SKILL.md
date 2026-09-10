@@ -35,11 +35,29 @@ message. That single fact drives every rule below.
 
 ## Step 0 — find the store and the configured names
 
-1. **Store directory.** In order: `BUGDESK_BACKLOG` if set; otherwise a
-   `backlog/` directory *beside* the bug store; otherwise a `backlog/` at the
-   project root; otherwise ask. Tracker mode does **not** use a different
-   directory — the mode changes the UI and the vocabulary, not where the files
-   live, so the same store opens either way.
+1. **Store directory.** A tracker does **not** live in a code repo. Its records
+   are under the user's own BugDesk directory, one folder per tracked project:
+
+   ```
+   ~/.bugdesk/<project>/tickets/          Linux and macOS
+   %APPDATA%\BugDesk\<project>\tickets\    Windows
+   ```
+
+   In order: `BUGDESK_BACKLOG` if set; otherwise `<root>/<project>/tickets`,
+   where the root is `BUGDESK_TRACKER_HOME` or the default above, and
+   `<project>` is `BUGDESK_TRACKER_PROJECT` or the name of the directory the
+   tracker was started from; otherwise **ask** — do not guess which project the
+   user means when several exist. If a server is reachable, don't derive any of
+   this: `GET /api/project` reports the resolved config path, and the records
+   sit beside it.
+
+   **Why it is not in the repo**: a tracker is a record of work handed to other
+   people. It is not about the code in any checkout, most of the people in it
+   have never seen that checkout, and committing it would put private notes
+   about colleagues into a shared history.
+
+   The files themselves are the same format as a backlog store, so `/backlog`
+   can read them — but the *location* differs, and so does the workflow.
 2. **Names.** `GET /api/config` if a server is reachable — it returns
    `humanAuthor`, `agentAuthor`, the collaborator roster, and `mode`. Otherwise
    `BUGDESK_AGENT` (default `agent`) and `BUGDESK_HUMAN` (default `reviewer`).
@@ -55,10 +73,11 @@ message. That single fact drives every rule below.
    Never write into `.bugdesk/` yourself — the profiles are the human's, and they
    are git-ignored precisely so they stay that way.
 3. **Confirm the mode.** If `/api/config` reports `mode: "bugs"`, the user is
-   not running a tracker. The files still work — `project`, `due` and
-   `reporter` are legal in every mode — but the dashboard and the Project type
-   will not be in their UI. Say so once rather than writing records they cannot
-   see properly.
+   not running a tracker — they have a repo's bug store and backlog open. The
+   record format is the same (`project`, `due` and `reporter` are legal in every
+   mode) but the dashboard and the Project type are not in that UI, and the
+   store you are about to write to may not be the one they are looking at. Say
+   so once rather than writing records they cannot see.
 
 ### The collaborator roster
 
@@ -68,11 +87,10 @@ message. That single fact drives every rule below.
 { "collaborators": [ { "name": "priya", "agent": "priya_agent", "added": "2026-09-10" } ] }
 ```
 
-**Where it lives.** `.bugdesk/project.json` — the one file in that directory
-that is committed; its `.gitignore` ignores everything else there (names,
-filters, layouts, which are per-person). A repo set up before this moved has it
-at the project root as `bugdesk.json` instead, and that still wins when it
-exists — check both. `GET /api/project` reports the resolved `path`.
+**Where it lives.** `<project>/config/project.json`, beside the tickets — see
+the layout above. Nothing here is committed anywhere, because a tracker is not
+in a repo; the committed/ignored split that `.bugdesk/` makes in a code project
+has nothing to divide here. `GET /api/project` reports the resolved `path`.
 
 In a tracker this list is mostly **people, not agents** — colleagues, vendors,
 counterparts. Add anyone you assign to who is not on it: `POST
@@ -83,11 +101,14 @@ Matching is case-insensitive, so "Priya" and "priya" are one entry.
 ## File format
 
 ```
-backlog/
-  PROJ-0001.md      project
-  EPIC-0004.md      epic
-  STORY-0007.md     story
-  TASK-0031.md      task
+~/.bugdesk/acme-migration/
+  tickets/
+    PROJ-0001.md      project
+    EPIC-0004.md      epic
+    STORY-0007.md     story
+    TASK-0031.md      task
+  attachments/        images pasted into a description or comment
+  config/             who you are, the collaborator roster, your window layout
 ```
 
 **IDs are one sequence shared by all four prefixes.** The next id is
