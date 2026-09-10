@@ -409,6 +409,30 @@ sits beside the list the new record will appear in:
 | Bugs | **Bug** — opens the full mask, with a markdown editor and link staging |
 | Backlog | **[Project ·] Epic · Story · Task** — the page, preselected and titled for the type |
 
+## Opening things without losing your place
+
+Every list opens records by replacing something — the row takes over the tile
+you were in, or arrives as a tab in front of it. That is right for working
+through a queue and wrong for the thing triage mostly *is*: two records side by
+side, a bug and the story it blocks, somebody's overdue list and the one item
+you are about to ask them about.
+
+Two gestures for that, in the bug queue, the ticket list and the Tracker
+dashboard alike:
+
+| gesture | what happens |
+|---|---|
+| **drag a row onto any tile** | that tile displays the record. Every tile that can take it is outlined while you drag; panels are not offered, because dropping a bug onto the filter rail means nothing |
+| **Ctrl-click a row** (⌘ on a Mac) | opens it **without taking the list off screen** — a floating window by default, or a background tab. Set which in **Settings › General › Records** |
+
+Neither replaces the plain click, because neither is discoverable on its own.
+**Shift-click is left alone**: it is the table's range-select and the one
+selection gesture with nowhere else to go.
+
+Dragging a row out of BugDesk entirely — into an editor, a chat window, a commit
+message — pastes its reference (`BUG-0042`), which is the only thing an outside
+program could usefully do with it.
+
 ## Hierarchy
 
 The backlog is a tree and reads like one:

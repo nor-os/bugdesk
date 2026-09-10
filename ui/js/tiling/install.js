@@ -221,6 +221,17 @@ export async function installTilingShell({ eventBus, logger, runtime } = {}) {
 
     window.__twm = { wm, palette };
 
+    // Drag a record from any list onto any tile to display it there. One
+    // document-level listener pair rather than per-tile wiring: tiles are
+    // created, destroyed and repainted constantly, and a drop target bound to a
+    // tile element stops working the first time that tile repaints.
+    try {
+        const { installRecordDropTargets } = await import('../ticketdesk/record_dnd.js');
+        installRecordDropTargets({ wm });
+    } catch (err) {
+        log.warn?.('record drop targets failed to install', { err });
+    }
+
     // Live updates: the bridge watches the store directories and pushes changes
     // that BugDesk did not make. Installed after wm.load() so the pages that
     // react to the events are already mounted and subscribed.

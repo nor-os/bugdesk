@@ -433,6 +433,43 @@ await t('the write-through does not echo a change that came from the bridge', as
     assert.deepEqual(posts, [], `posted ${JSON.stringify(posts)}`);
 });
 
+/* ── the children grid ───────────────────────────────────────────────
+ *
+ * jsdom has no layout, so it cannot see a wrapped grid — which is exactly how
+ * the "green circle saying Done" got shipped: a sixth cell was added to a row
+ * whose CSS declares five columns, so the status pill wrapped onto an implicit
+ * row and landed in the 15px glyph column.
+ *
+ * What CAN be checked without layout is the arithmetic behind it: the number of
+ * cells the template declares against the number the markup emits. That is the
+ * whole bug, and it is checkable from the stylesheet text.
+ */
+
+console.log('\nChildren row shape');
+
+const { readFileSync: readCss } = await import('node:fs');
+const backlogCss = readCss(join(ROOT, 'ui', 'css', 'backlog.css'), 'utf8');
+
+/** The column count `grid-template-columns` declares for one selector. */
+const gridColumns = (css, selector) => {
+    const block = css.split(selector + ' {')[1];
+    if (!block) return null;
+    const decl = /grid-template-columns:\s*([^;]+);/.exec(block.split('}')[0]);
+    if (!decl) return null;
+    // minmax(0, 90px) is ONE column — collapse the parenthesised parts first,
+    // or its comma reads as a column break.
+    return decl[1].replace(/\([^)]*\)/g, 'x').trim().split(/\s+/).length;
+};
+
+await t('the children row declares a column for every cell it renders', () => {
+    const declared = gridColumns(backlogCss, '.bd-childrow');
+    assert.ok(declared, 'no grid-template-columns for .bd-childrow');
+    // glyph, reference, title, assignee, points-or-due, status
+    assert.equal(declared, 6,
+        `.bd-childrow renders 6 cells but declares ${declared} columns — `
+        + 'the extras wrap onto an implicit row');
+});
+
 /* ── the Tracker dashboard ───────────────────────────────────────────
  *
  * Mounted for real, over a store loaded through the actual `loadBacklog()` path
@@ -625,6 +662,166 @@ await t('the page tears down without throwing', () => {
 });
 
 put('fetch', realFetch);
+
+/* ── dragging a record, and Ctrl-clicking one ────────────────────────
+ *
+ * Both gestures exist so a list can show you something WITHOUT going away, so
+ * what is asserted is mostly where things do NOT land: a modified click must not
+ * navigate the tile you are reading, and a drop must land in the tile under the
+ * cursor rather than the focused one.
+ *
+ * jsdom implements no DataTransfer, so one is stubbed. Everything downstream of
+ * it — the MIME type, the payload shape, the tile lookup — is the shipping code.
+ */
+
+console.log('\nDrag and Ctrl-click');
+
+const dnd = await import(join(UI, 'ticketdesk', 'record_dnd.js'));
+
+const makeTransfer = () => {
+    const store = new Map();
+    return {
+        setData: (t, v) => store.set(t, String(v)),
+        getData: (t) => store.get(t) ?? '',
+        get types() { return [...store.keys()]; },
+        effectAllowed: '', dropEffect: '',
+    };
+};
+const fire = (target, type, dataTransfer) => {
+    const ev = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(ev, 'dataTransfer', { value: dataTransfer });
+    target.dispatchEvent(ev);
+    return ev;
+};
+
+await t('Ctrl and Cmd mean "open elsewhere"; Shift stays the table\'s own', () => {
+    assert.equal(dnd.isModifiedOpen({ ctrlKey: true }), true);
+    assert.equal(dnd.isModifiedOpen({ metaKey: true }), true);
+    assert.equal(dnd.isModifiedOpen({}), false);
+    // Shift is range-select, and the one selection gesture with no other home.
+    assert.equal(dnd.isModifiedOpen({ ctrlKey: true, shiftKey: true }), false);
+});
+
+await t('the setting decides between a window and a background tab', () => {
+    const calls = [];
+    const wm = { navigate: (kind, props, opts) => calls.push({ kind, opts }) };
+
+    settings.setSetting('bugdesk.modifierOpen', 'window');
+    dnd.openModified(wm, 'item', { id: '7' });
+    assert.equal(calls[0].opts.dest, 'window');
+
+    settings.setSetting('bugdesk.modifierOpen', 'tab');
+    dnd.openModified(wm, 'item', { id: '7' });
+    // `transient` is what "without closing the current view" means: the tab is
+    // added but not switched to, so the list stays in front.
+    assert.equal(calls[1].opts.dest, 'main');
+    assert.equal(calls[1].opts.newTab, true);
+    assert.equal(calls[1].opts.transient, true);
+
+    settings.setSetting('bugdesk.modifierOpen', 'window');
+});
+
+await t('the setting is read at CALL time, not at module load', () =>
+    // A gesture that needs a reload before it obeys a preference is a gesture
+    // people stop trusting.
+    assert.equal(dnd.modifierOpenMode(), 'window'));
+
+await t('dragging a dashboard row carries what would open it', () => {
+    const board2 = mountDashboard();
+    const row = board2.host.querySelector('[data-sec="overdue"] [data-open]');
+    assert.equal(row.draggable, true, 'the row is not draggable');
+    const dt = makeTransfer();
+    fire(row, 'dragstart', dt);
+    const payload = JSON.parse(dt.getData(dnd.RECORD_MIME));
+    assert.equal(payload.kind, 'item');
+    assert.equal(payload.props.id, '2');
+    // The outside-the-app fallback: dropped into an editor it pastes as a ref.
+    assert.equal(dt.getData('text/plain'), 'STORY-0002');
+    fire(row, 'dragend', dt);
+    board2.handle.destroy();
+    board2.host.remove();
+});
+
+await t('a drop lands in the tile under the cursor', () => {
+    const navigated = [];
+    const kinds = { leafA: 'backlog', leafPanel: 'panel:left' };
+    const wm = {
+        desktops: { active: () => ({ tree: { get: (id) => ({ content: { kind: kinds[id] } }) } }) },
+        navigate: (kind, props, opts) => navigated.push({ kind, props, into: opts?.ctx?.leafId }),
+    };
+    const targets = dnd.installRecordDropTargets({ wm });
+
+    const tile = document.createElement('div');
+    tile.className = 'twm-leaf';
+    tile.dataset.leafId = 'leafA';
+    tile.innerHTML = '<div class="twm-leaf__body"></div>';
+    document.body.appendChild(tile);
+
+    const dt = makeTransfer();
+    dt.setData(dnd.RECORD_MIME, JSON.stringify({ kind: 'item', props: { id: '9' } }));
+    const body = tile.querySelector('.twm-leaf__body');
+
+    const over = fire(body, 'dragover', dt);
+    assert.equal(over.defaultPrevented, true, 'the tile refused the drag');
+    assert.ok(tile.classList.contains('twm-leaf--droptarget'), 'no drop affordance');
+
+    fire(body, 'drop', dt);
+    assert.equal(navigated.length, 1);
+    assert.equal(navigated[0].into, 'leafA', 'the record did not land in the hovered tile');
+    assert.equal(navigated[0].props.id, '9');
+    assert.ok(!tile.classList.contains('twm-leaf--droptarget'), 'the affordance was left behind');
+
+    targets.destroy();
+    tile.remove();
+});
+
+await t('a panel refuses the drop — it is chrome, not a place for a record', () => {
+    const navigated = [];
+    const wm = {
+        desktops: { active: () => ({ tree: { get: () => ({ content: { kind: 'panel:left' } }) } }) },
+        navigate: (...a) => navigated.push(a),
+    };
+    const targets = dnd.installRecordDropTargets({ wm });
+
+    const panel = document.createElement('div');
+    panel.className = 'twm-leaf';
+    panel.dataset.leafId = 'leafPanel';
+    panel.innerHTML = '<div class="twm-leaf__body"></div>';
+    document.body.appendChild(panel);
+
+    const dt = makeTransfer();
+    dt.setData(dnd.RECORD_MIME, JSON.stringify({ kind: 'item', props: { id: '9' } }));
+    const over = fire(panel.querySelector('.twm-leaf__body'), 'dragover', dt);
+    assert.equal(over.defaultPrevented, false, 'a panel offered itself as a drop target');
+    assert.ok(!panel.classList.contains('twm-leaf--droptarget'));
+    fire(panel.querySelector('.twm-leaf__body'), 'drop', dt);
+    assert.equal(navigated.length, 0);
+
+    targets.destroy();
+    panel.remove();
+});
+
+await t('somebody else\'s drag is ignored entirely', () => {
+    const wm = {
+        desktops: { active: () => ({ tree: { get: () => ({ content: { kind: 'backlog' } }) } }) },
+        navigate: () => assert.fail('navigated on a foreign drag'),
+    };
+    const targets = dnd.installRecordDropTargets({ wm });
+    const tile = document.createElement('div');
+    tile.className = 'twm-leaf';
+    tile.dataset.leafId = 'leafA';
+    tile.innerHTML = '<div class="twm-leaf__body"></div>';
+    document.body.appendChild(tile);
+
+    const dt = makeTransfer();
+    dt.setData('text/uri-list', 'https://example.invalid');
+    const over = fire(tile.querySelector('.twm-leaf__body'), 'dragover', dt);
+    assert.equal(over.defaultPrevented, false);
+    fire(tile.querySelector('.twm-leaf__body'), 'drop', dt);
+
+    targets.destroy();
+    tile.remove();
+});
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

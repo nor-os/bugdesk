@@ -34,6 +34,7 @@ import { showContextMenu } from '../ecoagent/ui/context_menu.js';
 import { shell, statusLine } from './pages.js';
 import { esc, HUMAN_AUTHOR } from './data.js';
 import { openNewItem } from './new_item.js';
+import { installRecordDragSource, isModifiedOpen, openModified } from './record_dnd.js';
 import { assigneeExpr, dueStateExpr, projectExpr } from './backlog_filters.js';
 import {
     DUE_SOON_DAYS, ITEMS, TYPE_ICON,
@@ -85,7 +86,7 @@ const dueCell = (i) => {
 };
 
 const itemRow = (i) => `
-    <div class="tk-row" data-open="${i.id}" role="button" tabindex="0">
+    <div class="tk-row" data-open="${i.id}" role="button" tabindex="0" draggable="true">
         ${typeGlyph(i.type)}
         <span class="bd-item__ref tk-row__ref">${esc(i.ref)}</span>
         <span class="tk-row__title">${esc(i.title)}</span>
@@ -286,7 +287,17 @@ function mountTracker(host, props, ctx) {
             return;
         }
         const row = e.target.closest('[data-open]');
-        if (row) { openItem(row.dataset.open); return; }
+        if (row) {
+            // Ctrl/Cmd-click: a floating window, or a background tab, per the
+            // setting — either way the dashboard stays where it is.
+            const model = ITEMS.find((x) => Number(x.id) === Number(row.dataset.open));
+            if (isModifiedOpen(e) && model) {
+                openModified(ctx.wm, 'item', { id: String(model.id), label: itemLabel(model) });
+                return;
+            }
+            openItem(row.dataset.open);
+            return;
+        }
 
         if (e.target.closest('[data-a="new"]')) openNewItem(ctx.wm, { kind: 'task', ctx });
     };
@@ -338,6 +349,15 @@ function mountTracker(host, props, ctx) {
     host.addEventListener('keydown', onKey);
     host.addEventListener('contextmenu', onMenu);
 
+    // Drag a row onto any tile to display it there. See ./record_dnd.js.
+    const drag = installRecordDragSource(host, (el) => {
+        const id = el?.closest?.('[data-open]')?.dataset.open;
+        const model = id ? ITEMS.find((x) => Number(x.id) === Number(id)) : null;
+        return model
+            ? { kind: 'item', props: { id: String(model.id), label: itemLabel(model) }, label: model.ref }
+            : null;
+    });
+
     // Repaint on any write, ours or somebody else's. NOTE the handle:
     // EventBus.on() returns { id, dispose } and off() takes THAT — a call
     // shaped like removeEventListener silently leaves the subscription behind.
@@ -347,6 +367,7 @@ function mountTracker(host, props, ctx) {
         title: 'Tracker',
         destroy: () => {
             sub?.dispose?.();
+            drag.destroy();
             host.removeEventListener('click', onClick);
             host.removeEventListener('keydown', onKey);
             host.removeEventListener('contextmenu', onMenu);

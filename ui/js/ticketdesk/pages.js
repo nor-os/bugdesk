@@ -40,6 +40,7 @@
 
 import { mountTileBreadcrumb } from '../tiling/tile_breadcrumb.js';
 import { activeTopNavKind } from '../tiling/kind_taxonomy.js';
+import { installRecordDragSource, isModifiedOpen, openModified } from './record_dnd.js';
 import { DataTable } from '../ui/components/data_table.js';
 import { showContextMenu } from '../ecoagent/ui/context_menu.js';
 import {
@@ -426,14 +427,41 @@ function mountQueues(host, props, ctx) {
                 td.innerHTML = `<span class="td-pri-cell"><span class="td-pri td-pri--${value}" title="Priority ${value}"></span><span class="td-dim">P${value}</span></span>`;
                 return true;
             }
-            if (colIdx === 1) { td.innerHTML = `<span class="td-mono td-link">${esc(value)}</span>`; return true; }
+            if (colIdx === 1) {
+                // Every cell runs through here; the id column always exists, so
+                // it is where the row is marked draggable. Set on the <tr>
+                // rather than by a listener, because DataTable rebuilds these
+                // rows wholesale on every sort, filter and live update.
+                const tr = td.parentElement;
+                if (tr) { tr.draggable = true; tr.dataset.dragId = String(row[QUEUE_ID_COL]); }
+                td.innerHTML = `<span class="td-mono td-link">${esc(value)}</span>`;
+                return true;
+            }
             if (colIdx === 2) { td.innerHTML = `<span class="td-chip">${esc(value)}</span>`; return true; }
             return false;
         },
         onRowClick: (rowIdx, row, ev) => {
-            if (ev && (ev.ctrlKey || ev.metaKey || ev.shiftKey)) return;
+            // Ctrl/Cmd-click opens WITHOUT taking the queue off screen — a
+            // floating window, or a background tab, per the setting. Shift is
+            // left alone: it is the table's range-select and the one selection
+            // gesture with no other home.
+            if (isModifiedOpen(ev)) {
+                const id = row[QUEUE_ID_COL];
+                openModified(ctx.wm, 'ticket',
+                    { id, label: ticketLabel(TICKETS.find((x) => x.id === id)) || id });
+                return;
+            }
+            if (ev && ev.shiftKey) return;
             openTicket(row[QUEUE_ID_COL], { dest: 'origin', newTab: true });
         },
+    });
+
+    // Drag a row onto any tile to display it there. See ./record_dnd.js.
+    const drag = installRecordDragSource(host, (el) => {
+        const id = el?.closest?.('[data-drag-id]')?.dataset.dragId;
+        if (!id) return null;
+        const model = TICKETS.find((x) => String(x.id) === String(id));
+        return { kind: 'ticket', props: { id, label: ticketLabel(model) || id }, label: `#${id}` };
     });
     // Priority is a short-badge column (an 8px swatch + "P3"), so pin it
     // narrow. colWidths overrides are honored verbatim by the fit pass
@@ -482,7 +510,7 @@ function mountQueues(host, props, ctx) {
     // which is precisely how this leaked every queue mount before.
     return {
         title: resolved.label,
-        destroy: () => { unsub(); liveSub?.dispose?.(); table.dispose(); },
+        destroy: () => { unsub(); liveSub?.dispose?.(); drag.destroy(); table.dispose(); },
     };
 }
 

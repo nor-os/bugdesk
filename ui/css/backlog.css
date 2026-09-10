@@ -339,7 +339,11 @@
 .bd-children { display: flex; flex-direction: column; }
 .bd-childrow {
     display: grid;
-    grid-template-columns: 15px 78px 1fr auto auto;
+    /* SIX cells: glyph, reference, title, assignee, points-or-due, status.
+       A short template does not truncate — the extra cell wraps onto an
+       implicit row and lands in the 15px glyph column, which is how a Done
+       status pill came to render as a green circle under the list. */
+    grid-template-columns: 15px 78px 1fr minmax(0, 90px) auto auto;
     align-items: center;
     gap: 8px;
     padding: 4px 2px;
@@ -818,3 +822,32 @@
 }
 .bd-conflict__text { flex: 1; line-height: 1.45; }
 .bd-conflict .ea-btn { flex: 0 0 auto; }
+
+
+/* ── Dragging a record onto a tile (ticketdesk/record_dnd.js) ────────
+   The gesture is not discoverable on its own, so the affordances carry it:
+   a grab cursor on anything draggable, and — only while a record is
+   actually in flight — a visible outline on the tile that would take it.
+   Scoped under `.bd-dragging-record` on <body> so none of this is paid for
+   during an ordinary drag-select or a tab reorder. */
+
+tr[draggable="true"],
+.tk-row[draggable="true"] { cursor: grab; }
+tr[draggable="true"]:active,
+.tk-row[draggable="true"]:active { cursor: grabbing; }
+
+.bd-dragging-record .twm-leaf {
+    /* Every tile that COULD take the drop, stated quietly, so the one under
+       the cursor has something to stand out from. */
+    outline: 1px dashed var(--ea-border, #333);
+    outline-offset: -3px;
+}
+.bd-dragging-record .twm-leaf--droptarget {
+    outline: 2px solid var(--accent-bright, #007acc);
+    outline-offset: -3px;
+}
+.bd-dragging-record .twm-leaf--droptarget .twm-leaf__body {
+    background: rgb(0 122 204 / 8%);
+}
+/* A panel is chrome and never accepts a record — say so by not offering. */
+.bd-dragging-record .twm-leaf:has(> .twm-leaf__body > .twm-panel) { outline: none; }

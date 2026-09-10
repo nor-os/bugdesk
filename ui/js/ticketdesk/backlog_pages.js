@@ -31,6 +31,7 @@ import { attachTagInput } from './tag_input.js';
 import { attachSelect } from './select_field.js';
 import { watchRecord } from './live.js';
 import { attachParentPicker, childTypesFor, openItemPicker } from './item_picker.js';
+import { installRecordDragSource, isModifiedOpen, openModified } from './record_dnd.js';
 import { openFilterEditor } from './filter_editor.js';
 import { openNewItem } from './new_item.js';
 import { onFiltersChanged } from './filter_store.js';
@@ -315,6 +316,13 @@ function mountBacklogBoard(host, props, ctx) {
         renderCell: (td, value, colIdx, rowIdx, row) => {
             const model = byRef.get(row[REF_COL]);
             if (colIdx === REF_COL) {
+                // Every cell of a row runs through here; the reference column is
+                // the one that always exists, so it is where the row is marked
+                // draggable. Set on the <tr> itself rather than by a listener,
+                // because DataTable rebuilds these rows wholesale on every sort,
+                // filter and live update.
+                const tr = td.parentElement;
+                if (tr) { tr.draggable = true; tr.dataset.dragRef = row[REF_COL]; }
                 td.innerHTML = `<span class="bd-item__ref">${esc(value)}</span>`;
                 return true;
             }
@@ -344,10 +352,27 @@ function mountBacklogBoard(host, props, ctx) {
             return false;
         },
         onRowClick: (rowIdx, row, ev) => {
-            if (ev && (ev.ctrlKey || ev.metaKey || ev.shiftKey)) return;
             const model = byRef.get(row[REF_COL]);
+            // Ctrl/Cmd-click opens WITHOUT taking the list off screen — a
+            // floating window, or a background tab, per the setting. Shift is
+            // left alone: it is the table's range-select and the one selection
+            // gesture that has no other home.
+            if (isModifiedOpen(ev)) {
+                if (model) openModified(ctx.wm, 'item', { id: String(model.id), label: itemLabel(model) });
+                return;
+            }
+            if (ev && ev.shiftKey) return;
             if (model) openItem(model.id, { dest: 'origin', newTab: true });
         },
+    });
+
+    // Drag a row onto any tile to display it there. See ./record_dnd.js.
+    const drag = installRecordDragSource(host, (el) => {
+        const ref = el?.closest?.('[data-drag-ref]')?.dataset.dragRef;
+        const model = ref ? byRef.get(ref) : null;
+        return model
+            ? { kind: 'item', props: { id: String(model.id), label: itemLabel(model) }, label: model.ref }
+            : null;
     });
 
     // The caret lives INSIDE a row, so its click would also open the item.
@@ -416,6 +441,7 @@ function mountBacklogBoard(host, props, ctx) {
         destroy: () => {
             unsub();
             sub?.dispose?.();
+            drag.destroy();
             host.removeEventListener('click', onCaret, true);
             table.dispose();
         },

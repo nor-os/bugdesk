@@ -115,6 +115,8 @@ export const BUGDESK_SETTINGS_SLICE = {
         bugdesk: {
             humanName: '',
             agentName: '',
+            // What Ctrl/Cmd-click on a list row does. See ticketdesk/record_dnd.js.
+            modifierOpen: 'window',
             // Not a stored value — the row is a button (see the schema below).
             // It carries a default so the settings store has a shape for the
             // path and the row renders like every other one.
@@ -150,6 +152,23 @@ export const BUGDESK_SETTINGS_SLICE = {
                 const { openCollaborators } = await import('../ticketdesk/collaborators.js');
                 return openCollaborators({ eventBus: window.__ecoagent?.eventBus });
             },
+        },
+
+        // Both answers are reasonable and the difference is about how someone
+        // works, not about which is correct — so it is a setting rather than a
+        // decision made for everybody.
+        'bugdesk.modifierOpen': {
+            type: 'select', category: 'general', group: 'Records',
+            label: 'Ctrl-click a record',
+            description: 'What Ctrl-click (Cmd-click on a Mac) does to a row in the bug queue, '
+                + 'the ticket list or the Tracker dashboard. Either way the list you are reading '
+                + 'stays in front of you — that is the point of the gesture. You can also DRAG a '
+                + 'row onto any tile to display it there.',
+            options: [
+                { value: 'window', label: 'Open in a floating window' },
+                { value: 'tab', label: 'Open in a background tab' },
+            ],
+            defaultValue: 'window',
         },
 
         'bugdesk.agentName': {

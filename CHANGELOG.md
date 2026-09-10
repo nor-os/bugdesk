@@ -91,7 +91,38 @@ they are simply not *offered* outside tracker mode.
   tracker is started from wherever the user happens to be, and getting this
   wrong meant silently serving no UI at all.
 
+**Two ways to open a record without losing your place**, in the bug queue, the
+ticket list and the Tracker dashboard alike. Every list opened things by
+replacing something, which is right for working through a queue and wrong for
+what triage mostly is — two records side by side.
+
+- **Drag a row onto any tile** and that tile displays it. Every tile that can
+  take the drop is outlined while a record is in flight; panels are not offered,
+  because dropping a bug onto the filter rail means nothing. Dragging out of
+  BugDesk entirely pastes the reference, which is the only thing an outside
+  program could do with it.
+- **Ctrl-click** (⌘ on a Mac) opens a record in a floating window, or in a
+  background tab — **Settings › General › Records**. Both answers are reasonable
+  and the difference is about how someone works, so it is a setting rather than a
+  decision made for everybody. The tab case is `transient`: added but not
+  switched to, which is what "without closing the current view" has to mean.
+- **Shift-click is deliberately untouched.** It is the table's range-select and
+  the one selection gesture with nowhere else to go.
+
+One document-level listener pair serves every tile, rather than per-tile wiring:
+tiles are created, destroyed and repainted constantly, and a drop target bound to
+a tile element stops working the first time that tile repaints.
+
 ### Fixed
+
+- **The Children list showed a green circle with "Done" in it, under the list.**
+  A regression from the tracker commit: `.bd-childrow` declares five grid
+  columns and the row had grown a sixth cell (the assignee), so the status pill
+  wrapped onto an implicit row and landed in the 15px glyph column — a pill
+  squeezed to a circle. jsdom has no layout and cannot see a wrapped grid, but
+  the arithmetic behind it is checkable from the stylesheet text, so a test now
+  compares the declared column count against the cells the markup emits. It
+  reproduces this exact bug when the old template is put back.
 
 - **Clicking a ticket on the Tracker dashboard took the dashboard off screen.**
   You clicked a late ticket to see who had it and lost the list of everything
