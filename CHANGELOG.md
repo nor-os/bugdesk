@@ -113,6 +113,39 @@ One document-level listener pair serves every tile, rather than per-tile wiring:
 tiles are created, destroyed and repainted constantly, and a drop target bound to
 a tile element stops working the first time that tile repaints.
 
+**Acceptance criteria can be written when a record is filed**, rather than only
+after it exists. That is when what "done" means is freshest — filing a story and
+immediately reopening it to say so was ceremony.
+
+**A task no longer inherits its parent's acceptance criteria.** It never did:
+nothing anywhere copied or resolved them, so the claim left a task looking
+covered by a list that describes something else, and its own empty criteria
+looking like a normal state rather than a gap. A task now has its own, or none,
+and is asked for them like anything else. Its refinement panel reports its own
+criteria instead of pointing at the parent's. **The ladder is unchanged** — a
+task still goes `draft → in-progress` with no `refined` — because that was
+always about the transition, not about the criteria; the reason given for it has
+been corrected everywhere it appeared. A project is now the only type not asked
+for criteria: it is a container, and what "done" means for it is that the work
+inside it is done.
+
+**Target dates are inherited**, exactly as `phase` is. An empty `due` resolves to
+the nearest dated ancestor's — a task under a story due on the 14th is due on the
+14th, and no longer shows up in the dashboard's "needs a date" pile when somebody
+has in fact said when. Setting a date on the item overrides it; clearing it goes
+back to inheriting. Nothing is copied down, because a copy stops tracking the
+original the moment it moves. Everything that asks "when is this due" — the
+dashboard's sections and sorting, the board's Due column, the person rollup —
+reads the date in force rather than the authored one.
+
+**A sub-item due after its parent is flagged**, on the item page, the board's Due
+column and the dashboard rows. Flagged rather than refused: plans slip one piece
+at a time, and forbidding it would only make people enter dates they do not mean.
+But it always means the parent's date is already wrong and nobody has moved it —
+whoever is watching the parent still thinks it lands on the 14th. Only an item's
+OWN date can overrun (an inherited one *is* the ancestor's), the nearest
+overrun ancestor is the one named, and closed work is exempt.
+
 **Descriptions are editable.** The item page rendered one and offered no way to
 change it, so the one field with room to say *why* was write-once: you could set
 it while filing and never again. Same shape the acceptance criteria already use

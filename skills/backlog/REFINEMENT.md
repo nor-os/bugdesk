@@ -14,10 +14,16 @@ pass is step 0 of it, and it is pushed on its own before anything is claimed.
 /backlog refine phase <name>    refine every draft in a phase
 ```
 
-**Tasks are not refined.** A task has no `refined` state at all — it inherits
-its parent story's acceptance criteria and goes `draft → in-progress → done`.
-If you catch yourself writing criteria and an estimate for a task, what you
-have is a story: change its type and refine it as one.
+**Tasks are not refined.** A task has no `refined` state at all — it goes
+`draft → in-progress → done`, so there is no transition for this pass to run it
+through.
+
+That is about the LADDER, not about the criteria. **A task does not inherit its
+parent's acceptance criteria**; it has its own, or none. Writing criteria on a
+task is perfectly reasonable when what "done" means for that step is worth
+stating. What tells you a task is really a story is the SIZE of what you are
+writing — an independent estimate, and criteria that describe an outcome
+somebody outside the work would notice.
 
 An item is **refined** when someone has answered three questions about it:
 
@@ -169,4 +175,5 @@ For each item you're refining:
   stories. Give it a description worth reading and a phase, and refine the
   stories underneath.
 - **A task, at all.** It has no `refined` state; the bridge rejects the
-  transition. See the note at the top.
+  transition. Give it criteria if they are worth writing — that is not
+  refinement, it is just saying what done means. See the note at the top.

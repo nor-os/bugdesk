@@ -1217,6 +1217,28 @@ static List<int> Descendants(List<BacklogItem> all, int id)
     return out_;
 }
 
+/// <summary>
+/// The item's own target date, or the nearest dated ancestor's.
+/// <para>
+/// INHERITED rather than copied down, exactly as the phase is, and for the same
+/// reason: a date stamped onto every descendant at creation drifts the moment
+/// the parent moves, and the copy wins in precisely the report you care about.
+/// A task under a story due on the 14th is due on the 14th until somebody says
+/// otherwise — and when they do, its own `due` overrides and nothing has to be
+/// un-copied.
+/// </para>
+/// </summary>
+static string EffectiveDue(List<BacklogItem> all, BacklogItem item)
+{
+    if (item.Due.Length > 0) return item.Due;
+    foreach (var id in Ancestors(all, item.Id))
+    {
+        var anc = all.FirstOrDefault(i => i.Id == id);
+        if (anc is { Due.Length: > 0 }) return anc.Due;
+    }
+    return "";
+}
+
 /// The item's own phase, or the nearest ancestor's. Epics carry the label;
 /// stories and tasks inherit it, so "what is left in phase X" is answerable
 /// without stamping the same string onto every descendant.
@@ -1261,7 +1283,10 @@ static List<object> BacklogSummaries(string dir)
     foreach (var item in all.OrderBy(i => i.Id))
         if (seen.Add(item.Id)) ordered.Add(item);
 
-    return ordered.Select(i => i.ToSummary(EffectivePhase(all, i), childCount.GetValueOrDefault(i.Id))).ToList();
+    return ordered
+        .Select(i => i.ToSummary(EffectivePhase(all, i), childCount.GetValueOrDefault(i.Id),
+                                 EffectiveDue(all, i)))
+        .ToList();
 }
 
 /// One item with everything the detail page needs: the record, its resolved
@@ -1275,7 +1300,8 @@ static object FullItem(List<BacklogItem> all, BacklogItem item)
         id = item.Id, type = item.Type, title = item.Title, status = item.Status, stage = item.Stage,
         ladder = BacklogItem.LadderFor(item.Type),
         parent = item.Parent, phase = item.Phase, effectivePhase = EffectivePhase(all, item),
-        assignee = item.Assignee, reporter = item.Reporter, due = item.Due,
+        assignee = item.Assignee, reporter = item.Reporter,
+        due = item.Due, effectiveDue = EffectiveDue(all, item),
         points = item.Points, subsystem = item.Subsystem,
         labels = item.Labels, links = item.Links, created = item.Created, updated = item.Updated,
         description = item.Description, acceptance = item.Acceptance, criteria = item.Criteria(),
@@ -1287,7 +1313,8 @@ static object FullItem(List<BacklogItem> all, BacklogItem item)
         childItems = all.Where(i => i.Parent == item.Id)
             .OrderBy(i => i.TypeOrder).ThenBy(i => i.Id)
             .Select(c => new { id = c.Id, type = c.Type, title = c.Title, status = c.Status,
-                               points = c.Points, assignee = c.Assignee, due = c.Due })
+                               points = c.Points, assignee = c.Assignee,
+                               due = c.Due, effectiveDue = EffectiveDue(all, c) })
             .ToList(),
     };
 }

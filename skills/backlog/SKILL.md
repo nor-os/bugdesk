@@ -174,6 +174,14 @@ Field notes:
   inherit it through their ancestors; leave their `phase:` empty rather than
   copying the string down, or the two will drift and the copy will win in
   exactly the report you care about. (See Phases below.)
+- **due**: a target date, `YYYY-MM-DD`, or empty. **Inherited** from the nearest
+  dated ancestor when empty, exactly as `phase` is — a task under a story due on
+  the 14th is due on the 14th. Set one on the item to override it; clear it to go
+  back to inheriting. **Do not copy a parent's date down** onto its children: the
+  copy stops tracking the moment the parent moves, and it wins in exactly the
+  report you care about. A sub-item dated LATER than its parent is allowed and is
+  flagged in the UI — it means the parent's date is already wrong and nobody has
+  moved it yet, which is worth a comment.
 - **points**: a relative estimate, free text (`1`, `3`, `M`, whatever the
   project uses). Empty means *not estimated* — a real state, distinct from `0`,
   and one of the refinement checks.
@@ -217,8 +225,9 @@ EPIC-0001  Auth rewrite            phase: foundation
   bucket, not an epic.
 - A **story** is one outcome, small enough to have acceptance criteria that
   fit on a screen.
-- A **task** is a step. Tasks may have no acceptance criteria of their own;
-  they inherit their story's.
+- A **task** is a step. It may carry acceptance criteria of its own, and it
+  **does not inherit its story's** — write them when what "done" means for the
+  step is worth stating, and leave them off when it is obvious.
 
 ## Phases
 
@@ -263,11 +272,16 @@ project is neither `refined` nor `review`**, for both reasons at once: it is a
 container with no acceptance criteria of its own, and what gets reviewed is the
 work inside it.
 
-**A task is never `refined`.** A task inherits its parent story's acceptance
-criteria, so there is nothing about it to refine: no criteria of its own, no
-independent estimate worth arguing about. A task goes from `draft` straight to
-`in-progress`. This also means `/backlog refine` **skips tasks** — if you find
-yourself refining one, what you actually have is a story.
+**A task is never `refined`.** It goes from `draft` straight to `in-progress`,
+so `/backlog refine` **skips tasks** — there is no transition to run them
+through.
+
+**But a task does NOT inherit its parent's acceptance criteria.** It has its own,
+or none. Nothing anywhere copies or resolves a parent's criteria onto a task, so
+treating a task as covered by them means treating it as covered by a list that
+describes something else. Write criteria on a task when what "done" means for it
+is worth writing down, and leave them off when it is obvious — an unticked box
+on a task is as real as one on a story.
 
 The server enforces this: `POST /api/backlog/{id}` with a status the type's
 ladder does not contain is rejected with the ladder in the error. And retyping
@@ -312,7 +326,7 @@ own step, with its own commit — and only then claim it.
 | the item | the gate |
 |---|---|
 | **epic** or **story** in `draft` | refine it: [REFINEMENT.md](REFINEMENT.md), then `status: refined` |
-| **task** in `draft` | a task never passes through `refined` — it inherits its story's acceptance criteria, so **the gate is on its parent story.** If the parent is not refined, refine the parent. If the task has no parent at all, that is the refinement problem: resolve it before working. |
+| **task** in `draft` | a task never passes through `refined`, so there is nothing to gate on the task itself. **The gate is on its parent story:** tasks written against an unrefined story are a plan for work nobody has agreed on yet, so refine the parent first. If the task has no parent at all, that is the problem to resolve before working. (This is a rule about the PLAN, not about inheritance — a task's acceptance criteria are its own.) |
 | **project** | not worked on directly. Work on the things inside it. |
 
 The bridge will *let* you go straight from `draft` to `in-progress` — the ladder
@@ -450,7 +464,10 @@ write the direction you're asserting.
 - Don't put bugs in the backlog store or features in the bug store. If a
   request is "make it stop crashing", it's a bug; if it's "make it able to",
   it's backlog.
-- Don't copy an epic's `phase` down onto its stories and tasks. It's inherited.
+- Don't copy an epic's `phase` or a parent's `due` down onto its descendants.
+  Both are inherited, and a copy stops tracking the original the moment it moves.
+- Don't treat a task as covered by its parent's acceptance criteria. It has its
+  own, or none.
 - Don't renumber or reuse an `id`, even for an item you're dropping — and
   remember the sequence is shared across all three prefixes.
 - Don't create tasks under an unrefined story, or stories under an epic you

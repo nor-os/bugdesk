@@ -155,7 +155,16 @@ The two fields that make this a tracker rather than a backlog:
 - **due** — the target date, `YYYY-MM-DD`, or **empty**. Empty is a real state,
   not a missing value: it means nobody has committed to a date, which is
   precisely what the dashboard surfaces. **Never fill in a plausible date to
-  make a record look complete.** The bridge rejects anything that is not
+  make a record look complete.**
+
+  An empty `due` is **inherited** from the nearest dated ancestor, exactly as
+  `phase` is — a task under a story due on the 14th is due on the 14th, so the
+  dashboard does not report it as undated. Set one on the item to override;
+  clear it to go back to inheriting. **Do not copy a parent's date down**: the
+  copy stops tracking the moment the parent moves. A sub-item dated LATER than
+  its parent is allowed and is flagged — it means the parent's date is already
+  wrong and nobody has moved it, which is worth a comment and usually worth
+  raising. The bridge rejects anything that is not
   `YYYY-MM-DD` rather than storing it, because a date that cannot be parsed can
   never be overdue — it would sit in the one blind spot the tool must not have.
 - **reporter** — who is following it up, as opposed to `assignee`, who is doing

@@ -46,7 +46,8 @@ import {
 import {
     ALL_TYPES, ITEMS, PHASES, TRACKER, TYPES, TYPE_ICON,
     DUE_LABEL, collapsibleIds, dueState, duePhrase, fetchItem, humanizeItemStatus,
-    isClosedItem, isGated, itemLabel, itemRef, ladderFor, loadBacklog, parentTypesFor,
+    dueOf, dueOverrun, isClosedItem, isGated, itemLabel, itemRef, ladderFor,
+    loadBacklog, parentTypesFor,
     patchItem, postItemComment,
     REFINEMENT_RULES, refinementGaps, stageActions, stageOf, treeRows,
     typeLabelOf,
@@ -144,7 +145,7 @@ const BOARD_COLS = [
     // row — the target date is the axis a follow-up tracker turns on and very
     // little else. The CELL still carries the raw `YYYY-MM-DD` so the column
     // sorts chronologically; the pill is painted over it in renderCell.
-    ...(TRACKER ? [{ key: 'due', label: 'Due', get: (i) => i.due || '' }] : []),
+    ...(TRACKER ? [{ key: 'due', label: 'Due', get: (i) => i.dueLabel || '' }] : []),
     { key: 'phase', label: 'Phase', get: (i) => i.phaseLabel },
     { key: 'updated', label: 'Updated', get: (i) => i.updated },
 ];
@@ -358,7 +359,10 @@ function mountBacklogBoard(host, props, ctx) {
                 return true;
             }
             if (COL.due !== undefined && colIdx === COL.due) {
-                td.innerHTML = model ? duePill(model) : '';
+                const over = model ? dueOverrun(model) : null;
+                td.innerHTML = (model ? duePill(model) : '')
+                    + (over ? `<span class="bd-duewarn bd-duewarn--dot"
+                               title="Due after ${esc(itemRef(over))} (${esc(dueOf(over))})">${icon('warning')}</span>` : '');
                 return true;
             }
             return false;
@@ -575,6 +579,37 @@ function mountItem(host, props, ctx) {
         // DERIVED — from where the milestone label is written, and from the
         // hierarchy rules in ./backlog_data.js — rather than being a second
         // per-type table here that could disagree with the New item form's.
+        /**
+         * The date field, plus what is true about it that the input cannot say.
+         *
+         * A date is INHERITED from the nearest dated ancestor unless this record
+         * sets its own — so an empty input is not "no date", it is "the same
+         * date as the thing this belongs to", and the placeholder says which.
+         * Clearing the field is how you go back to inheriting.
+         *
+         * The overrun note is the other half: a sub-item due after its parent is
+         * allowed (plans slip one piece at a time, and refusing would only make
+         * people lie about the date) but it always means the parent's date is
+         * already wrong and nobody has moved it yet.
+         */
+        const dueField = () => {
+            const inherited = String(item.effectiveDue || '').trim();
+            const own = String(item.due || '').trim();
+            const over = dueOverrun(item);
+            return `<div class="bd-duefield">
+                <input class="ea-tin" type="date" data-f="due" value="${esc(own)}"
+                       ${!own && inherited ? `title="Inherited from ${esc(inherited)} — set a date here to override it"` : ''}>
+                ${!own && inherited
+                    ? `<span class="td-dim bd-duefield__note">inherited ${esc(inherited)}</span>`
+                    : ''}
+                ${over
+                    ? `<span class="bd-duewarn" title="${esc(itemRef(over))} is due ${esc(dueOf(over))}">
+                           ${icon('warning')} after ${esc(itemRef(over))} (${esc(dueOf(over))})
+                       </span>`
+                    : ''}
+            </div>`;
+        };
+
         const authorsPhase = item.type === 'project' || item.type === 'epic';
         const hasParent = parentTypesFor(item.type).length > 0;
         const hasPoints = item.type !== 'project';
@@ -590,7 +625,7 @@ function mountItem(host, props, ctx) {
                 ? field('Phase', tin('phase', item.phase))
                 : field('Phase', `<input class="ea-tin" value="${esc(item.effectivePhase || '—')}" readonly title="Inherited from the owning project or epic">`)}
             ${field('Assignee', '<select class="ea-tin" data-f="assignee"></select>')}
-            ${field('Target date', `<input class="ea-tin" type="date" data-f="due" value="${esc(item.due || '')}">`)}
+            ${field('Target date', dueField())}
             ${field('Subsystem', tin('subsystem', item.subsystem))}
             ${field('Reporter', '<select class="ea-tin" data-f="reporter"></select>')}
             <div class="td-field td-span2"><label>Labels</label>${tin('labels', (item.labels || []).join(', '))}</div>
@@ -725,18 +760,23 @@ function mountItem(host, props, ctx) {
             return;
         }
 
-        // A task never passes through `refined` — it inherits its story's
-        // acceptance criteria, so there is nothing about it to refine. Showing
-        // it a checklist it can never need is how a lifecycle stops meaning
-        // anything; point at the story instead.
+        // A task never passes through `refined` — it goes draft → in-progress —
+        // so the five-check panel would be a checklist it can never satisfy.
+        // What it DOES have is acceptance criteria of its own: a task does NOT
+        // inherit its parent's. It used to say it did, which was a claim about
+        // data that was never true — nothing anywhere copied or resolved them —
+        // and it left tasks looking covered by criteria that described something
+        // else.
         if (item.type === 'task') {
-            const parent = ITEMS.find((x) => Number(x.id) === Number(item.parent));
-            $('[data-slot="refinement"]').innerHTML = parent
-                ? `<div class="td-dim">A task inherits its parent's acceptance criteria —
-                   <button type="button" class="bd-item__ref" data-goto="${parent.id}">${esc(parent.ref)}</button>
-                   ${esc(parent.title)} (${parent.criteriaDone}/${parent.criteriaTotal} met).</div>`
-                : `<div class="td-dim">This task has no parent yet, so it inherits no acceptance
-                   criteria. Set one above.</div>`;
+            const met = (item.criteria || []).filter((c) => c.done).length;
+            const total = (item.criteria || []).length;
+            $('[data-slot="refinement"]').innerHTML = total
+                ? `<ul class="bd-gaps${met === total ? ' bd-gaps--met' : ''}">
+                       <li>${met} of ${total} acceptance criteria met</li>
+                   </ul>`
+                : `<div class="td-dim">A task goes straight from draft to in progress.
+                   Give it acceptance criteria below if what "done" means is worth
+                   writing down.</div>`;
             return;
         }
 
@@ -811,8 +851,7 @@ function mountItem(host, props, ctx) {
         el.innerHTML = `
             ${list.length
                 ? `<ul class="bd-crit-list">${list.map(criterion).join('')}</ul>`
-                : `<div class="td-dim bd-crit-empty">No acceptance criteria yet${
-                    item.type === 'task' ? ' — a task usually inherits its story\'s.' : '.'}</div>`}
+                : '<div class="td-dim bd-crit-empty">No acceptance criteria yet.</div>'}
             <div class="bd-crit-add">
                 ${icon('add')}
                 <input class="ea-tin bd-crit-add__input" data-crit-new

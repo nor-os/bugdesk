@@ -81,11 +81,15 @@ export const FIELDS_FOR = {
     // has one only in tracker mode, where a project exists to hold it, and
     // `parentTypesFor` is the single place that says so.
     project:    { phase: true, due: true },
-    epic:       { phase: true, points: true, due: true },
-    story:      { points: true, due: true },
-    task:       { points: true, due: true },
+    epic:       { phase: true, points: true, due: true, acceptance: true },
+    story:      { points: true, due: true, acceptance: true },
+    // A task does NOT inherit its parent's acceptance criteria — it has its own,
+    // or none — so it is asked for them like anything else. A project is the one
+    // type that is not: it is a container, and what "done" means for it is that
+    // the work inside it is done.
+    task:       { points: true, due: true, acceptance: true },
 };
-const ADAPTIVE = ['severity', 'parent', 'phase', 'points', 'due'];
+const ADAPTIVE = ['severity', 'parent', 'phase', 'points', 'due', 'acceptance'];
 
 /**
  * The fields one kind actually has, with `parent` resolved against the
@@ -163,6 +167,15 @@ export function mountNewItem(host, props, ctx) {
                         <select class="ea-tin" data-f="subsystem"></select></div>
                     <div class="td-field td-span2"><label>Labels</label>
                         <input class="ea-tin" data-f="labels"></div>
+                </div>
+            </section>
+            <section class="td-group" data-row="acceptance">
+                <div class="td-group__title">Acceptance criteria
+                    <span class="td-dim">— one checkable outcome per line</span>
+                </div>
+                <div class="td-group__body">
+                    <textarea class="ea-tin td-area" data-f="acceptance"
+                        placeholder="- [ ] An unauthenticated user hitting /app is redirected to the IdP&#10;- [ ] A successful callback lands on the last page"></textarea>
                 </div>
             </section>
             <section class="td-group">
@@ -292,6 +305,10 @@ export function mountNewItem(host, props, ctx) {
                     phase: shown.phase ? selects.phase.value() : '',
                     points: shown.points ? fval('points') : '',
                     due: shown.due ? fval('due') : '',
+                    // Written at CREATION, so a story can be filed already
+                    // refined rather than filed and then immediately reopened to
+                    // say what "done" means — which is when it is freshest.
+                    acceptance: shown.acceptance ? fval('acceptance') : '',
                     assignee: selects.assignee.value(),
                     subsystem: selects.subsystem.value() || 'unsorted',
                     labels: toList(fval('labels')),

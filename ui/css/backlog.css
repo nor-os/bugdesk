@@ -857,3 +857,28 @@ tr[draggable="true"]:active,
 }
 /* A panel is chrome and never accepts a record — say so by not offering. */
 .bd-dragging-record .twm-leaf:has(> .twm-leaf__body > .twm-panel) { outline: none; }
+
+
+/* ── Target date: what it inherits, and what it overruns ─────────────
+   The input alone cannot say either. An empty field is not "no date" — it
+   means "the same date as the thing this belongs to" — and a sub-item due
+   after its parent is legal but always worth saying, because it means the
+   parent's date is already wrong and nobody has moved it. */
+
+.bd-duefield { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.bd-duefield input[type="date"] { flex: 0 1 auto; }
+.bd-duefield__note { font-size: 10px; white-space: nowrap; }
+
+.bd-duewarn {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 10px;
+    color: #ff9800;
+    white-space: nowrap;
+}
+.bd-duewarn .material-symbols-outlined { font-size: 13px; }
+/* In a table cell there is no room for the sentence — the glyph carries it,
+   and the title has the rest. */
+.bd-duewarn--dot { margin-left: 4px; }
+.bd-duewarn--dot .material-symbols-outlined { font-size: 12px; }

@@ -214,12 +214,13 @@ class BacklogItem
 
     /// <param name="phase">The inherited phase, resolved by the caller (which is
     /// the only place that can see the whole store).</param>
-    public object ToSummary(string phase, int childCount) => new
+    /// <param name="effectiveDue">The inherited target date, likewise.</param>
+    public object ToSummary(string phase, int childCount, string effectiveDue = "") => new
     {
         id = Id, type = Type, title = Title, status = Status, stage = Stage,
         ladder = LadderFor(Type),
         parent = Parent, phase = Phase, effectivePhase = phase,
-        assignee = Assignee, reporter = Reporter, due = Due,
+        assignee = Assignee, reporter = Reporter, due = Due, effectiveDue,
         points = Points, subsystem = Subsystem,
         labels = Labels, links = Links, created = Created, updated = Updated,
         typeOrder = TypeOrder, children = childCount,

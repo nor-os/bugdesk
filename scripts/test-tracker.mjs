@@ -105,6 +105,14 @@ t('a project is filed with a phase and a date, and no parent', () => {
 });
 t('an epic gains a Parent row, because there is now a project to hold it', () =>
     assert.equal(newItem.fieldsFor('epic').parent, true));
+t('a project is the only type not asked for acceptance criteria', () => {
+    // It is a container: what "done" means for it is that the work inside it is
+    // done. Everything else, TASKS INCLUDED, has its own criteria or none.
+    assert.ok(!newItem.fieldsFor('project').acceptance);
+    for (const k of ['epic', 'story', 'task']) {
+        assert.equal(newItem.fieldsFor(k).acceptance, true, `${k} cannot be given criteria`);
+    }
+});
 t('every offered backlog kind can carry a target date', () => {
     for (const k of ['project', 'epic', 'story', 'task']) {
         assert.equal(newItem.fieldsFor(k).due, true, `${k} cannot be given a date`);

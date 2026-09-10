@@ -278,9 +278,16 @@ export const DUE_SOON_DAYS = 7;
  *
  * @returns {'done'|'none'|'overdue'|'today'|'soon'|'later'}
  */
+/** The date in force: the item's own, or the one it inherits. Everything that
+ *  asks "when is this due" reads THIS — an undated task under a story due on
+ *  the 14th is due on the 14th, and treating it as undated would put it in the
+ *  dashboard's "needs a date" pile when somebody has in fact said when. */
+export const dueOf = (item) =>
+    String(item?.due || '').trim() || String(item?.effectiveDue || '').trim();
+
 export function dueState(item, today = todayISO()) {
     if (item?.status === 'done' || item?.status === 'dropped') return 'done';
-    const due = String(item?.due || '').trim();
+    const due = dueOf(item);
     if (!due) return 'none';
     const days = daysBetween(today, due);
     if (days === null) return 'none';
@@ -299,8 +306,8 @@ export const DUE_LABEL = {
 export function duePhrase(item, today = todayISO()) {
     const state = dueState(item, today);
     if (state === 'none') return 'no target date';
-    if (state === 'done') return item?.due ? `target was ${item.due}` : 'no target date';
-    const days = daysBetween(today, item.due);
+    if (state === 'done') return dueOf(item) ? `target was ${dueOf(item)}` : 'no target date';
+    const days = daysBetween(today, dueOf(item));
     if (days === 0) return 'due today';
     if (days < 0) return `${-days} day${days === -1 ? '' : 's'} late`;
     return `in ${days} day${days === 1 ? '' : 's'}`;
@@ -420,7 +427,13 @@ function mapItem(raw, byId) {
         phaseLabel: raw.effectivePhase || '',
         assignee: raw.assignee || '',
         reporter: raw.reporter || '',
+        // `due` is what this record AUTHORED (the edit field binds to it, and
+        // empty is a real answer). `dueLabel` is the one in force, own or
+        // inherited, which is what every read should use.
         due: raw.due || '',
+        effectiveDue: raw.effectiveDue || '',
+        dueLabel: dueOf(raw),
+        inheritsDue: !String(raw.due || '').trim() && !!String(raw.effectiveDue || '').trim(),
         dueState: dueState(raw),
         duePhrase: duePhrase(raw),
         updated: raw.updated || '',
@@ -571,6 +584,35 @@ export const childTypesFor = (parentType) =>
     : parentType === 'epic' ? ['story']
     : parentType === 'story' ? ['task']
     : [];
+
+/**
+ * The ancestor this item is due AFTER, if any.
+ *
+ * A sub-item due later than the thing it belongs to is not an error — plans slip
+ * one piece at a time, and forbidding it would just make people lie about the
+ * date. But it is always worth SAYING, because it means the parent's date is
+ * already wrong and nobody has moved it yet: whoever is watching the parent
+ * thinks it lands on the 14th, and one of its stories says the 20th.
+ *
+ * Only an item's OWN date can overrun — an inherited one is by definition the
+ * ancestor's, and warning about a date equal to itself would fire on most of
+ * the store. Closed work is exempt: a finished item's date is history.
+ *
+ * @returns {object|null} the nearest ancestor it overruns.
+ */
+export function dueOverrun(item, byId = new Map(ITEMS.map((i) => [Number(i.id), i]))) {
+    const own = String(item?.due || '').trim();
+    if (!own || isClosedItem(item)) return null;
+    let cur = byId.get(Number(item.parent));
+    const seen = new Set([Number(item?.id)]);
+    while (cur && !seen.has(Number(cur.id))) {
+        seen.add(Number(cur.id));
+        const theirs = dueOf(cur);
+        if (theirs && own > theirs) return cur;      // ISO dates compare as text
+        cur = byId.get(Number(cur.parent));
+    }
+    return null;
+}
 
 /** Every id in the current store that could be collapsed — what "collapse all"
  *  needs, without the caller walking the tree itself. */

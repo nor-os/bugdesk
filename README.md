@@ -530,10 +530,11 @@ TASK    draft ──────────────▶ in-progress ──�
 | `dropped` | decided against. Off every ladder; the file stays, with a comment saying why. |
 
 **An epic is never `review`** — an epic is not reviewed as a unit, its stories
-are, one at a time. **A task is never `refined`** — it inherits its story's
-acceptance criteria, so it has nothing of its own to refine. **A project is
-neither**, for both reasons at once: it is a container with no criteria of its
-own, and what gets reviewed is the work inside it. Sharing the
+are, one at a time. **A task is never `refined`** — it goes straight from draft
+to in progress. That is about the ladder, not the criteria: **a task does not
+inherit its parent's acceptance criteria**, it has its own or none. **A project
+is neither `refined` nor `review`** — it is a container, and what "done" means
+for it is that the work inside it is done. Sharing the
 vocabulary keeps one status enum in the filter editor and one set of pills in
 the CSS; varying the ladder is what stops either surface offering a transition
 that means nothing.
@@ -639,7 +640,16 @@ bridge rejects anything else with the ladder in the error.
 
 ### Target dates
 
-`due: 2026-09-05`, or **empty**. Empty is a real state, not a missing value: it
+`due: 2026-09-05`, or **empty**. An empty one is **inherited** from the nearest
+dated ancestor, exactly as `phase` is — a task under a story due on the 14th is
+due on the 14th, and the dashboard does not report it as undated. Set a date on
+the item to override; clear it to go back to inheriting. Nothing is ever copied
+down, because a copy stops tracking the original the moment it moves.
+
+**A sub-item due after its parent is flagged, not refused.** Plans slip one
+piece at a time, and forbidding it would only make people put in dates they do
+not mean. But it always means the parent's date is already wrong and nobody has
+moved it — whoever is watching the parent still thinks it lands on the 14th. Empty is a real state, not a missing value: it
 means nobody has committed to a date, which is exactly what a tracker exists to
 surface. The bridge rejects anything that is not `YYYY-MM-DD` rather than
 storing it — a date that cannot be parsed can never be overdue, so it would sit

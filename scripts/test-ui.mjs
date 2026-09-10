@@ -273,7 +273,7 @@ console.log('\nnew_item field adaptation');
 // `fieldsFor`, not the raw FIELDS_FOR table: `parent` is DERIVED from the
 // hierarchy rules rather than listed per kind, so the table alone no longer
 // says what the form draws.
-const ORDER = ['severity', 'parent', 'phase', 'points', 'due'];
+const ORDER = ['severity', 'parent', 'phase', 'points', 'due', 'acceptance'];
 const visible = (kindId) => {
     const f = newItem.fieldsFor(kindId);
     return ORDER.filter((k) => f[k]);
@@ -286,11 +286,22 @@ t('regression and chore match bug', () => {
     assert.deepEqual(visible('chore'), ['severity']);
 });
 t('an epic is asked for a phase, and for no parent outside tracker mode', () =>
-    assert.deepEqual(visible('epic'), ['phase', 'points', 'due']));
+    assert.deepEqual(visible('epic'), ['phase', 'points', 'due', 'acceptance']));
 t('a story is asked for a parent, never a phase', () =>
-    assert.deepEqual(visible('story'), ['parent', 'points', 'due']));
+    assert.deepEqual(visible('story'), ['parent', 'points', 'due', 'acceptance']));
 t('a task matches a story', () =>
-    assert.deepEqual(visible('task'), ['parent', 'points', 'due']));
+    assert.deepEqual(visible('task'), ['parent', 'points', 'due', 'acceptance']));
+t('every backlog kind that has acceptance criteria is asked for them', () => {
+    // A task does NOT inherit its parent's, so it is asked like anything else.
+    for (const k of ['epic', 'story', 'task']) {
+        assert.ok(visible(k).includes('acceptance'), `${k} cannot be given criteria`);
+    }
+    // A project is the exception: it is a container, and what "done" means for
+    // it is that the work inside it is done.
+    for (const k of ['bug', 'regression', 'chore']) {
+        assert.ok(!visible(k).includes('acceptance'), `${k} offers acceptance criteria`);
+    }
+});
 t('every backlog kind can carry a target date', () => {
     for (const k of ['epic', 'story', 'task']) {
         assert.ok(visible(k).includes('due'), `${k} cannot be given a target date`);
@@ -388,6 +399,51 @@ t('the phrase names the number of days, not the date', () => {
 t('todayISO is the local date, zero-padded', () =>
     assert.equal(data.todayISO(new Date(2026, 8, 3, 23, 30)), '2026-09-03'));
 
+/* ── inherited target dates ──────────────────────────────────────── */
+
+console.log('\ninherited target dates');
+
+t('an own date beats an inherited one', () => {
+    assert.equal(data.dueOf({ due: '2026-09-10', effectiveDue: '2026-09-20' }), '2026-09-10');
+});
+t('an empty date falls back to the inherited one', () => {
+    // A task under a story due on the 14th IS due on the 14th; reporting it as
+    // undated puts it in the "needs a date" pile when somebody has said when.
+    assert.equal(data.dueOf({ due: '', effectiveDue: '2026-09-14' }), '2026-09-14');
+    assert.equal(data.dueState({ due: '', effectiveDue: '2026-09-14', status: 'draft' }, TODAY), 'soon');
+});
+t('neither is still `none`', () =>
+    assert.equal(data.dueState({ due: '', effectiveDue: '', status: 'draft' }, TODAY), 'none'));
+
+/* ── a sub-item that overruns its parent ─────────────────────────── */
+
+console.log('\ndue overruns');
+
+const tree = (rows) => new Map(rows.map((r) => [Number(r.id), r]));
+const PARENTED = tree([
+    { id: 1, parent: 0, due: '2026-09-14', status: 'in-progress' },
+    { id: 2, parent: 1, due: '2026-09-20', status: 'in-progress' },   // overruns #1
+    { id: 3, parent: 1, due: '', effectiveDue: '2026-09-14', status: 'draft' },
+    { id: 4, parent: 2, due: '2026-09-25', status: 'draft' },         // overruns #1 via #2
+    { id: 5, parent: 1, due: '2026-09-30', status: 'done' },          // closed
+    { id: 6, parent: 1, due: '2026-09-14', status: 'draft' },         // equal, not after
+]);
+const over = (id) => data.dueOverrun(PARENTED.get(id), PARENTED);
+
+t('a child dated after its parent is flagged', () =>
+    assert.equal(over(2)?.id, 1));
+t('the NEAREST overrun ancestor is the one named', () =>
+    // #4 is after both #2 (the 20th) and #1 (the 14th); #2 is what to go and fix.
+    assert.equal(over(4)?.id, 2));
+t('an inherited date never overruns — it IS the ancestor\'s', () =>
+    assert.equal(over(3), null));
+t('a closed item is not flagged; its date is history', () =>
+    assert.equal(over(5), null));
+t('the same date is not "after" it', () =>
+    assert.equal(over(6), null));
+t('a top-level item has nothing to overrun', () =>
+    assert.equal(over(1), null));
+
 /* ── the project level ───────────────────────────────────────────── */
 
 console.log('\nproject type');
@@ -480,6 +536,15 @@ t('the handback states the skill names are legal for their types', () => {
     }
 });
 
+t('no doc still claims a task inherits its parent\'s criteria', () => {
+    // It never did — nothing anywhere copied or resolved them — and saying so
+    // left tasks looking covered by a list describing something else.
+    for (const [name, text] of [['backlog/SKILL.md', backlogSkill],
+                                ['backlog/REFINEMENT.md', skillText('backlog', 'REFINEMENT.md')]]) {
+        assert.ok(!/inherits its (parent|story)/i.test(text.replace(/inherits it from|inherit it from/gi, '')),
+            `skills/${name} still says a task inherits acceptance criteria`);
+    }
+});
 t('the skill still says a task is never refined and a project never reviewed', () => {
     assert.ok(!data.LADDERS.task.includes('refined'));
     assert.ok(!data.LADDERS.project.includes('refined'));

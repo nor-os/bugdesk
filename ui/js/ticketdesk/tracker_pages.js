@@ -39,8 +39,8 @@ import { confirmDelete } from './delete_item.js';
 import { assigneeExpr, dueStateExpr, projectExpr } from './backlog_filters.js';
 import {
     DUE_SOON_DAYS, ITEMS, TYPE_ICON,
-    daysBetween, dueState, duePhrase, humanizeItemStatus, itemLabel, itemRef,
-    todayISO, typeLabelOf,
+    daysBetween, dueOf, dueOverrun, dueState, duePhrase, humanizeItemStatus,
+    itemLabel, itemRef, todayISO, typeLabelOf,
 } from './backlog_data.js';
 
 /** Set by createTrackerContent at registration, before any mount runs. */
@@ -83,7 +83,11 @@ const scopeFilter = (scope) => (i) => {
 const dueCell = (i) => {
     const state = dueState(i);
     if (state === 'none') return '<span class="bd-due bd-due--none">no date</span>';
-    return `<span class="bd-due bd-due--${state}" title="${esc(i.due)}">${esc(duePhrase(i))}</span>`;
+    const over = dueOverrun(i);
+    return `<span class="bd-due bd-due--${state}" title="${esc(dueOf(i))}${
+        i.inheritsDue ? ' (inherited)' : ''}">${esc(duePhrase(i))}</span>`
+        + (over ? `<span class="bd-duewarn bd-duewarn--dot"
+                    title="Due after ${esc(itemRef(over))} (${esc(dueOf(over))})">${icon('warning')}</span>` : '');
 };
 
 const itemRow = (i) => `
@@ -186,11 +190,11 @@ function mountTracker(host, props, ctx) {
             const state = dueState(i, today);
             if (state === 'overdue') {
                 row.overdue++;
-                row.worst = Math.max(row.worst, -daysBetween(today, i.due));
+                row.worst = Math.max(row.worst, -daysBetween(today, dueOf(i)));
             } else if (state === 'none') {
                 row.undated++;
-            } else if (i.due && (!row.next || i.due < row.next)) {
-                row.next = i.due;
+            } else if (dueOf(i) && (!row.next || dueOf(i) < row.next)) {
+                row.next = dueOf(i);
             }
         }
         return [...by.values()].sort((a, b) =>
@@ -220,9 +224,9 @@ function mountTracker(host, props, ctx) {
         const withState = (s) => open.filter((i) => dueState(i, today) === s);
 
         const overdue = withState('overdue')
-            .sort((a, b) => daysBetween(today, a.due) - daysBetween(today, b.due));
+            .sort((a, b) => daysBetween(today, dueOf(a)) - daysBetween(today, dueOf(b)));
         const soon = [...withState('today'), ...withState('soon')]
-            .sort((a, b) => String(a.due).localeCompare(String(b.due)));
+            .sort((a, b) => dueOf(a).localeCompare(dueOf(b)));
         // The two gaps, in one section: an item with nobody on it and an item
         // with no date are the same failure from the tracker's point of view —
         // it cannot tell you anything about either.
