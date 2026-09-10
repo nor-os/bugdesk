@@ -42,9 +42,12 @@ app.Logger.LogInformation("BugDesk: bugs={bugs} backlog={backlog} ui={ui} mode={
 // BugDesk's lifecycle assumes exactly two roles: a human who files/triages/tests
 // records through this UI, and an agent who investigates them (typically an AI
 // coding assistant driven through the /bugs and /backlog skills). Neither name is
-// fixed. The human's name normally comes from the per-user profile the first-run
-// screen writes; BUGDESK_HUMAN/BUGDESK_AGENT override it for CI and for two
-// people sharing one checkout.
+// fixed. The name comes from the per-user PROFILE — what the first-run screen
+// and "change your name" write. BUGDESK_HUMAN/BUGDESK_AGENT SEED that profile
+// when there is none yet (a scripted deployment, CI); they no longer outrank it,
+// because a variable exported in a shell profile used to make every later name
+// change a file the server then ignored. BUGDESK_USER is what picks a different
+// profile per process, for two people sharing one checkout.
 string configDir = ResolveConfigDir(bugsDir);
 var users = new UserStore(
     configDir,
@@ -561,7 +564,6 @@ app.MapGet("/api/config", () => Results.Json(new
     humanAuthor = users.HumanAuthor,
     agentAuthor = users.AgentAuthor,
     configured = users.Configured,
-    envLocked = users.EnvLocked,
     user = users.ActiveSlug,
     profiles = users.Profiles(),
     configDir = users.ConfigDir,
@@ -596,7 +598,6 @@ app.MapPost("/api/config/user", async (HttpRequest req) =>
         humanAuthor = users.HumanAuthor,
         agentAuthor = users.AgentAuthor,
         configured = users.Configured,
-        envLocked = users.EnvLocked,
         user = slug,
         profiles = users.Profiles(),
         configDir = users.ConfigDir,

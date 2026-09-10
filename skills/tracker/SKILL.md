@@ -43,8 +43,17 @@ message. That single fact drives every rule below.
 2. **Names.** `GET /api/config` if a server is reachable — it returns
    `humanAuthor`, `agentAuthor`, the collaborator roster, and `mode`. Otherwise
    `BUGDESK_AGENT` (default `agent`) and `BUGDESK_HUMAN` (default `reviewer`).
-   Since the human's name usually comes from a per-user profile rather than the
-   environment, prefer `/api/config` and do not guess from env vars alone.
+
+   **The profile beats the environment.** `BUGDESK_HUMAN`/`BUGDESK_AGENT` only
+   seed a name when no profile exists yet; once the human has set one — through the
+   first-run screen or "change your name" — the file is the answer and the
+   variables are ignored. So `GET /api/config` is the reliable source, and a
+   `BUGDESK_HUMAN` you can see in the environment may name somebody the user has
+   since changed away from. If no server is reachable, read
+   `.bugdesk/active.json` for the current profile's slug and then
+   `.bugdesk/user-<slug>.json` for the names, before falling back to the variables.
+   Never write into `.bugdesk/` yourself — the profiles are the human's, and they
+   are git-ignored precisely so they stay that way.
 3. **Confirm the mode.** If `/api/config` reports `mode: "bugs"`, the user is
    not running a tracker. The files still work — `project`, `due` and
    `reporter` are legal in every mode — but the dashboard and the Project type

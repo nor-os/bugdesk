@@ -93,7 +93,7 @@ that the checklist never parsed survives the first time anyone ticks a box.
 ./run.sh --tracker --seed             # + an example project with dated work on it
 BUGDESK_BUGS=/path/to/bugs ./run.sh   # backlog follows as its sibling
 BUGDESK_USER=alice ./run.sh           # pick a profile without the first-run prompt
-BUGDESK_HUMAN=alice BUGDESK_AGENT=claude ./run.sh
+BUGDESK_HUMAN=alice BUGDESK_AGENT=claude ./run.sh   # seed a profile, skip the prompt
 ```
 
 On Windows, `run.ps1` is the same wrapper for PowerShell (5.1 or 7):
@@ -148,6 +148,10 @@ an effect.
 Override the location with `BUGDESK_CONFIG`. Two people sharing one checkout
 can each start their own server with `BUGDESK_USER=<name>`, which selects a
 profile for that process without repointing `active.json`.
+
+**This file beats the environment.** `BUGDESK_HUMAN`/`BUGDESK_AGENT` seed it
+when there is none — see [Authorship](#authorship) — and stop mattering once
+there is.
 
 Who you are is shown in the **bottom-left corner** at all times — in a repo
 several people share, that is the one piece of state you want to be able to
@@ -236,9 +240,26 @@ Resolution order, highest first:
 
 | source | notes |
 |---|---|
-| `BUGDESK_HUMAN` / `BUGDESK_AGENT` | environment. Also **suppresses the first-run prompt** — an explicitly configured deployment is not "unconfigured". |
-| the per-user profile | what the first-run screen writes. The normal case. |
+| the per-user profile | `.bugdesk/user-<name>.json` — what the first-run screen and "change your name" write. **The normal case, and the authority.** |
+| `BUGDESK_HUMAN` / `BUGDESK_AGENT` | environment. A **seed**, not an override: used when there is no profile yet, and a profile is written from it on the spot — which is what **suppresses the first-run prompt** for a scripted deployment. |
 | `reviewer` / `agent` | generic fallback |
+
+**The profile wins, and that is the whole point of it.** The order used to run
+the other way, with no way out: with `BUGDESK_HUMAN` exported in a shell
+profile, "change your name" wrote a file the server then ignored on every boot,
+for ever. An environment variable is how a process is *started*; a config file
+is what the user *changed*, and the more recent, more deliberate statement is
+the one that counts.
+
+Seeding deliberately does **not** write `active.json`, exactly as `BUGDESK_USER`
+does not: one `BUGDESK_HUMAN=bob ./run.sh` must not silently repoint the
+checkout's default for everyone else. Changing the name in the UI is an explicit
+act, and that does persist.
+
+The one thing an environment variable could do that a file cannot — give two
+people sharing one checkout a different identity per process — is what
+**`BUGDESK_USER`** is for, and it still works: it selects a profile for that
+process only.
 
 The server exposes the resolved pair via `GET /api/config`; the UI fetches it
 before anything else renders, so every default assignee, comment placeholder
@@ -247,9 +268,10 @@ comment is a `### YYYY-MM-DD · <author>` block — that is the whole point of t
 format: you always know who said what, without depending on GitHub's issue
 authorship or a `gh` token.
 
-Because the human's name now usually comes from a profile rather than the
-environment, **an agent should read `/api/config` rather than assume `BUGDESK_HUMAN`
-being unset means `reviewer`.** Both skills say so.
+Because the name comes from a profile rather than the environment, **an agent
+should read `/api/config` rather than assume `BUGDESK_HUMAN` tells it anything**
+— it may be unset, or set to somebody the user has since changed away from. All
+three skills say so.
 
 ## API
 

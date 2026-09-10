@@ -164,11 +164,31 @@ bridge rejects.
   changing, which does not move when you fix the capitalisation of your own name
   or rename only the agent. It compares the names now.
 
+- **`BUGDESK_HUMAN` / `BUGDESK_AGENT` no longer outrank the config file.** They
+  seed an identity when there is none; they do not override one. With
+  `BUGDESK_HUMAN` exported in a shell profile, "change your name" wrote a file
+  the server then ignored on every boot, for ever — and there was no way out of
+  it from inside the app. An environment variable is how a process is *started*;
+  a config file is what the user *changed*, and the more recent, more deliberate
+  statement has to be the one that counts.
+
+  On a first run with no profile, `BUGDESK_HUMAN` now **writes** one and the
+  first-run prompt stays suppressed, so a scripted deployment behaves exactly as
+  before. Seeding deliberately does not write `active.json`, for the same reason
+  `BUGDESK_USER` does not: one `BUGDESK_HUMAN=bob ./run.sh` must not silently
+  repoint the checkout's default for everybody else. The one thing an env var
+  could do that a file cannot — a different identity per process, for two people
+  sharing one checkout — is what `BUGDESK_USER` is for, and that is unchanged.
+
+  `envLocked` is gone from `GET /api/config` along with the branch below that
+  reported it: there is no lock left to report, and a field describing one would
+  only invite the dead end back.
+
 - **The dialog claimed success when `BUGDESK_HUMAN` was set.** That variable
-  outranks the profile on the server, so a name typed into the dialog was
+  outranked the profile on the server, so a name typed into the dialog was
   written to disk and then ignored on every boot — and the dialog said "Now
-  &lt;old name&gt;" and moved on. It says what is actually happening instead, and
-  names the one thing that changes it.
+  &lt;old name&gt;" and moved on. It was first made honest about that, and then
+  the precedence above removed the situation entirely; the branch is gone.
 
 - **The Parent picker's display was visibly larger than every control beside
   it.** It is an `<input>`, and an input does not inherit the page font — it

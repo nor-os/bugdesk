@@ -52,10 +52,16 @@ operation(s) a request implies.
    exact string you write as comment author and as `assignee` when an item is
    on you; `BUGDESK_HUMAN` (default `reviewer`) is the person. If a BugDesk
    server is reachable, `GET /api/config` returns the live pair — prefer it.
-   Since BugDesk 0.2 the human's name usually comes from a **per-user profile**
-   (`.bugdesk/user-<name>.json` beside the store, git-ignored) rather than an
-   environment variable, so `/api/config` is the reliable source and guessing
-   from the environment alone can be wrong.
+   **The profile beats the environment.** `BUGDESK_HUMAN`/`BUGDESK_AGENT` only
+   seed a name when no profile exists yet; once the human has set one — through the
+   first-run screen or "change your name" — the file is the answer and the
+   variables are ignored. So `GET /api/config` is the reliable source, and a
+   `BUGDESK_HUMAN` you can see in the environment may name somebody the user has
+   since changed away from. If no server is reachable, read
+   `.bugdesk/active.json` for the current profile's slug and then
+   `.bugdesk/user-<slug>.json` for the names, before falling back to the variables.
+   Never write into `.bugdesk/` yourself — the profiles are the human's, and they
+   are git-ignored precisely so they stay that way.
 
 ### The collaborator roster
 

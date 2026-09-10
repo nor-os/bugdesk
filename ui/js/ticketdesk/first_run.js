@@ -274,14 +274,6 @@ export function installAuthorshipWriteThrough({ eventBus, getSetting } = {}) {
             });
             const j = await res.json().catch(() => null);
             if (!res.ok || !j?.ok) throw new Error(j?.error || `HTTP ${res.status}`);
-            if (j.envLocked) {
-                eventBus.emit?.('toast:show', {
-                    type: 'error',
-                    message: `BUGDESK_HUMAN is set, so BugDesk keeps signing as ${j.humanAuthor}.`
-                           + ' Your profile was saved; unset the variable and restart to use it.',
-                });
-                return;
-            }
             await applyIdentity(j, { eventBus });
             eventBus.emit?.('toast:show', {
                 type: 'info',
@@ -329,39 +321,20 @@ export async function openIdentityDialog({ eventBus } = {}) {
     let lastName = cfg.humanAuthor || '';
 
     let profiles = [];
-    let envLocked = false;
     try {
         const res = await fetch('/api/config', { headers: { accept: 'application/json' } });
         const j = res.ok ? await res.json() : null;
         if (j?.ok) {
             profiles = Array.isArray(j.profiles) ? j.profiles : [];
-            envLocked = !!j.envLocked;
             lastName = j.humanAuthor || lastName;
         }
     } catch (err) {
         console.warn('BugDesk: could not list profiles', err);
     }
 
-    // BUGDESK_HUMAN outranks the profile on the server (see UserStore.HumanAuthor),
-    // so a name typed here would be written to disk and then ignored on every
-    // boot. The dialog used to accept it anyway and report success — say what is
-    // actually happening instead, and name the one thing that fixes it.
-    if (envLocked) {
-        const { openForm } = await import('../ecoagent/ui/modal.js');
-        await openForm({
-            title: 'Your name comes from the environment',
-            submitLabel: 'Close',
-            fields: [{
-                name: 'note', label: 'Signed in as', type: 'text', readonly: true,
-                hint: 'BUGDESK_HUMAN is set for this server, and it outranks the saved'
-                    + ' profile. Unset it (and BUGDESK_AGENT) and restart BugDesk to'
-                    + ' choose a name here.',
-            }],
-            defaults: { note: `${cfg.humanAuthor || ''} · agent ${cfg.agentAuthor || ''}` },
-        });
-        return null;
-    }
-
+    // There is no "your name is locked by the environment" case any more.
+    // BUGDESK_HUMAN seeds a profile when there is none; the profile this dialog
+    // writes is what wins from then on. See server/UserConfig.cs.
     const known = profiles.map((p) => p.name).filter(Boolean);
     const { openForm } = await import('../ecoagent/ui/modal.js');
     const result = await openForm({

@@ -48,11 +48,24 @@ using System.Text.Json.Nodes;
 /// </para>
 ///
 /// <para>
-/// Environment variables still win, for CI and for two people sharing one
-/// checkout: <c>BUGDESK_USER</c> picks a profile without rewriting
-/// <c>active.json</c>, and <c>BUGDESK_HUMAN</c>/<c>BUGDESK_AGENT</c> override the
-/// names outright (which also suppresses the first-run prompt — an explicitly
-/// configured deployment is not "unconfigured").
+/// THE PROFILE WINS. Environment variables SEED an identity; they do not
+/// override one. <c>BUGDESK_HUMAN</c>/<c>BUGDESK_AGENT</c> are used when there
+/// is no profile yet — and a profile is written from them on the spot, which is
+/// what suppresses the first-run prompt for a scripted deployment. From then on
+/// the file is the answer, because the file is what the UI writes and what
+/// <c>GET /api/config</c> reports to the skills.
+/// </para>
+///
+/// <para>
+/// It used to be the other way round, and there was no way out of it: with
+/// <c>BUGDESK_HUMAN</c> exported in a shell profile, "change your name" wrote a
+/// file the server then ignored on every boot, for ever. An environment
+/// variable is how a process is STARTED; a config file is what the user
+/// CHANGED, and the more recent, more deliberate statement has to be the one
+/// that counts. The one thing an env var could do that the file cannot — pick a
+/// different identity per process, for two people sharing one checkout — is
+/// what <c>BUGDESK_USER</c> is for, and that still works: it selects a profile
+/// for this process only, without rewriting <c>active.json</c>.
 /// </para>
 /// </summary>
 class UserStore
@@ -87,27 +100,41 @@ class UserStore
             // BUGDESK_USER for someone who has never run BugDesk here is a
             // legitimate first run FOR THEM: materialise the profile rather than
             // booting nameless.
-            if (_envUser is not null) Write(NewProfile(_envUser, null));
+            if (_envUser is not null) NewProfile(_envUser, _envAgent);
             else ActiveSlug = null;   // stale pointer (profile deleted) — ask again
         }
+
+        // BUGDESK_HUMAN with nothing configured: SEED a profile from it, rather
+        // than carrying the name around as a permanent override. This is the
+        // whole of what the variable does now — it answers "who is this, the
+        // first time", and the file it writes answers every time after that.
+        //
+        // Deliberately does NOT write active.json, exactly as BUGDESK_USER does
+        // not: one `BUGDESK_HUMAN=bob ./run.sh` must not silently repoint the
+        // checkout's default for everyone else who runs it. Changing the name in
+        // the UI is an explicit act and does persist.
+        if (ActiveSlug is null && _envHuman is not null) NewProfile(_envHuman, _envAgent);
     }
 
     /* ── identity ──────────────────────────────────────────────────── */
 
     /// <summary>
     /// False only when nothing anywhere says who the user is — the one case that
-    /// earns the first-run prompt.
+    /// earns the first-run prompt. A <c>BUGDESK_HUMAN</c> deployment is
+    /// configured because the constructor has already written its profile.
     /// </summary>
-    public bool Configured => _envHuman is not null || ActiveSlug is not null;
+    public bool Configured => ActiveSlug is not null;
 
-    /// <summary>True when the name comes from the environment and the UI must not offer to change it.</summary>
-    public bool EnvLocked => _envHuman is not null;
-
+    /// <summary>
+    /// The profile first, the environment only as the seed it did not get to
+    /// use. See the class remarks: an env var starts a process, a profile is
+    /// what the user changed, and the second is the more recent statement.
+    /// </summary>
     public string HumanAuthor =>
-        _envHuman ?? Active()?["name"]?.GetValue<string>() ?? "reviewer";
+        Str(Active()?["name"]) ?? _envHuman ?? "reviewer";
 
     public string AgentAuthor =>
-        _envAgent ?? Str(Active()?["agentName"]) ?? "agent";
+        Str(Active()?["agentName"]) ?? _envAgent ?? "agent";
 
     /* ── profiles ──────────────────────────────────────────────────── */
 
@@ -276,17 +303,25 @@ class UserStore
         }
     }
 
+    /// <summary>
+    /// Materialise a profile and make it this process's active one.
+    /// <para>
+    /// The agent name is DERIVED when none is given, by the same rule
+    /// <see cref="ProjectConfig.AgentNameFor"/> applies everywhere else — a
+    /// profile written with a blank one would fall through to the generic
+    /// "agent", and two people's assistants signing identically is the thing
+    /// that rule exists to prevent.
+    /// </para>
+    /// </summary>
     JsonObject NewProfile(string name, string? agentName)
     {
         var slug = SlugOf(name);
         var doc = NewProfileDoc(name, slug);
-        if (!Blank(agentName)) doc["agentName"] = agentName!.Trim();
+        doc["agentName"] = Blank(agentName) ? ProjectConfig.AgentNameFor(name) : agentName!.Trim();
         ActiveSlug = slug;
         WriteJson(ProfilePath(slug), doc);
         return doc;
     }
-
-    void Write(JsonObject doc) => WriteJson(ProfilePath(Str(doc["slug"])!), doc);
 
     static JsonObject NewProfileDoc(string name, string slug) => new()
     {

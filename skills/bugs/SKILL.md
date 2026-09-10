@@ -48,15 +48,21 @@ the operations below. Use judgment about which operation(s) a request implies.
 3. **Human name.** Same idea, via `BUGDESK_HUMAN` (default `reviewer`). This is
    who a bug reverts to when you move it to `testing`.
 
-   Since BugDesk 0.2 the human's name usually does *not* come from an
-   environment variable at all: it comes from a **per-user profile** the UI
-   writes on first run — `.bugdesk/user-<name>.json`, git-ignored, beside the
-   bug store. Several people can share one repo, each with their own name. So
-   `GET /api/config` is the reliable source and an absent `BUGDESK_HUMAN` no
-   longer means the name is `reviewer`. If no server is reachable, look for
-   `.bugdesk/active.json` (it names the current profile's slug) before falling
-   back to the default. Never write into `.bugdesk/` yourself — it is the
-   human's, and it is git-ignored precisely so it stays that way.
+   The name usually does *not* come from an environment variable at all: it
+   comes from a **per-user profile** the UI writes — `.bugdesk/user-<name>.json`,
+   git-ignored, beside the bug store. Several people can share one repo, each
+   with their own name.
+
+   **The profile beats the environment.** `BUGDESK_HUMAN`/`BUGDESK_AGENT` only
+   seed a name when no profile exists yet; once the human has set one — through the
+   first-run screen or "change your name" — the file is the answer and the
+   variables are ignored. So `GET /api/config` is the reliable source, and a
+   `BUGDESK_HUMAN` you can see in the environment may name somebody the user has
+   since changed away from. If no server is reachable, read
+   `.bugdesk/active.json` for the current profile's slug and then
+   `.bugdesk/user-<slug>.json` for the names, before falling back to the variables.
+   Never write into `.bugdesk/` yourself — the profiles are the human's, and they
+   are git-ignored precisely so they stay that way.
 
 ### The collaborator roster
 
