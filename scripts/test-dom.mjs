@@ -573,6 +573,7 @@ await t('the item already chosen is never hidden, whatever its status', async ()
 });
 
 const { createTrackerContent } = await import(join(UI, 'ticketdesk', 'tracker_pages.js'));
+const { createBacklogContent } = await import(join(UI, 'ticketdesk', 'backlog_pages.js'));
 
 /* A WM stand-in that models the one thing these assertions are about: tiles
  * exist, a split creates one, and navigating an existing tile does not. */
@@ -917,6 +918,101 @@ await t('somebody else\'s drag is ignored entirely', () => {
 
     targets.destroy();
     tile.remove();
+});
+
+/* ── editing a description ───────────────────────────────────────────
+ *
+ * The item page rendered the description and offered no way to change it, so
+ * the one field with room to say WHY was write-once: you could set it while
+ * filing and never again. This mounts the real page over a stubbed bridge and
+ * walks the round trip, because the failure this replaces was not a wrong
+ * value — it was a control that did not exist.
+ */
+
+console.log('\nEditing a description');
+
+await t('the description can be edited and saved', async () => {
+    const record = {
+        id: 2, type: 'story', title: 'Finance feed cutover', status: 'in-progress',
+        stage: 2, ladder: ['draft', 'refined', 'in-progress', 'review', 'done'],
+        parent: 1, phase: '', effectivePhase: 'q4', assignee: 'bob', reporter: 'alice',
+        due: '', points: '5', subsystem: 'vendors', labels: [], links: [],
+        created: '2026-09-01', updated: '2026-09-09',
+        description: 'The original text.', acceptance: '', criteria: [],
+        comments: [], children: 0, ancestors: [], childItems: [],
+    };
+    const posts = [];
+    const realFetchLocal = globalThis.fetch;
+    put('fetch', async (url, opts) => {
+        const path = String(url);
+        if (opts?.method === 'POST' && /\/api\/backlog\/2$/.test(path)) {
+            const patch = JSON.parse(opts.body);
+            posts.push(patch);
+            Object.assign(record, patch);
+            return { ok: true, json: async () => ({ ok: true, item: record }) };
+        }
+        if (/\/api\/backlog\/2$/.test(path)) return { ok: true, json: async () => ({ ok: true, item: record }) };
+        if (path.endsWith('/api/backlog')) return { ok: true, json: async () => ({ ok: true, items: FIXTURE }) };
+        if (path.endsWith('/api/backlog/meta')) return { ok: true, json: async () => ({ ok: true, phases: ['q4'] }) };
+        return { ok: true, json: async () => ({ ok: true, settings: {} }) };
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const page = createBacklogContent({ eventBus: null }).item(host, { id: '2' }, { wm: null });
+    await tick(); await tick(); await tick();
+
+    // It reads as rendered markdown, with an Edit button.
+    assert.match(host.querySelector('[data-slot="desc"]').textContent, /The original text/);
+    const edit = host.querySelector('[data-a="desc-edit"]');
+    assert.ok(edit, 'no way to edit the description');
+
+    edit.click();
+    const ta = host.querySelector('[data-f="description"]');
+    assert.ok(ta, 'clicking Edit produced no editor');
+    assert.equal(ta.value, 'The original text.', 'the editor did not load the current text');
+
+    ta.value = 'Rewritten, with a link: https://example.com/a';
+    host.querySelector('[data-a="desc-save"]').click();
+    await tick(); await tick();
+
+    assert.equal(posts.length, 1, `expected one save, got ${posts.length}`);
+    assert.equal(posts[0].description, 'Rewritten, with a link: https://example.com/a');
+    // ...and it comes back rendered, with the URL clickable.
+    const desc = host.querySelector('[data-slot="desc"]');
+    assert.match(desc.innerHTML, /<a href="https:\/\/example\.com\/a"/);
+    assert.ok(!host.querySelector('[data-f="description"]'), 'the editor stayed open after saving');
+
+    page.destroy?.();
+    host.remove();
+    put('fetch', realFetchLocal);
+});
+
+await t('the placeholder for an empty description is never loaded as text', async () => {
+    // The bridge writes `_(no description provided)_` for an empty one. Loading
+    // it into the editor would turn a placeholder into content on the next save.
+    const record = {
+        id: 9, type: 'task', title: 'x', status: 'draft', ladder: ['draft', 'in-progress', 'done'],
+        parent: 0, phase: '', effectivePhase: '', assignee: '', reporter: '', due: '',
+        points: '', subsystem: 'unsorted', labels: [], links: [], created: '', updated: '',
+        description: '_(no description provided)_', acceptance: '', criteria: [],
+        comments: [], children: 0, ancestors: [], childItems: [],
+    };
+    const realFetchLocal = globalThis.fetch;
+    put('fetch', async (url) => (/\/api\/backlog\/9$/.test(String(url))
+        ? { ok: true, json: async () => ({ ok: true, item: record }) }
+        : { ok: true, json: async () => ({ ok: true, items: FIXTURE, phases: [], settings: {} }) }));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const page = createBacklogContent({ eventBus: null }).item(host, { id: '9' }, { wm: null });
+    await tick(); await tick(); await tick();
+    host.querySelector('[data-a="desc-edit"]').click();
+    assert.equal(host.querySelector('[data-f="description"]').value, '');
+
+    page.destroy?.();
+    host.remove();
+    put('fetch', realFetchLocal);
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

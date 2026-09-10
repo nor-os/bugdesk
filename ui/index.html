@@ -165,6 +165,8 @@
             // be resolved here, before either is evaluated — same reason as the
             // two names below.
             mode: cfg.mode === 'tracker' ? 'tracker' : 'bugs',
+            // Whether `<name>_agent` is assignable here — false in tracker mode.
+            agentsAssignable: cfg.agentsAssignable !== false,
             humanAuthor: cfg.humanAuthor || 'reviewer',
             agentAuthor: cfg.agentAuthor || 'agent',
             // The shared roster (bugdesk.json). Every assignee picker reads it,

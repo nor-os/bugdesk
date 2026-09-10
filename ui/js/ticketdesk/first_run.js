@@ -336,6 +336,9 @@ export async function openIdentityDialog({ eventBus } = {}) {
     // BUGDESK_HUMAN seeds a profile when there is none; the profile this dialog
     // writes is what wins from then on. See server/UserConfig.cs.
     const known = profiles.map((p) => p.name).filter(Boolean);
+    // In tracker mode nobody in the store has an assistant, so there is no agent
+    // to name — asking would be asking for a value nothing ever reads.
+    const agents = (window.__BUGDESK_CONFIG__ || {}).agentsAssignable !== false;
     const { openForm } = await import('../ecoagent/ui/modal.js');
     const result = await openForm({
         title: 'Who is working here?',
@@ -347,9 +350,9 @@ export async function openIdentityDialog({ eventBus } = {}) {
               hint: known.length > 1
                   ? 'A different name switches to that profile, with its own saved filters.'
                   : '' },
-            { name: 'agentName', label: 'Agent name', type: 'text',
+            ...(agents ? [{ name: 'agentName', label: 'Agent name', type: 'text',
               placeholder: 'derived from your name',
-              hint: 'The name your AI assistant signs its comments with.' },
+              hint: 'The name your AI assistant signs its comments with.' }] : []),
             { name: 'manage', label: 'Everyone else', type: 'select',
               options: [{ value: '', label: 'Leave the collaborator list alone' },
                         { value: 'yes', label: 'Open the collaborator list…' }],
@@ -365,7 +368,7 @@ export async function openIdentityDialog({ eventBus } = {}) {
         // identically. Only auto-filled while it still matches what the name
         // implies, so a deliberately chosen agent name is never overwritten.
         onFieldChange: (field, value, api) => {
-            if (field !== 'name') return;
+            if (field !== 'name' || !agents) return;
             const current = String(api.get('agentName') || '').trim();
             if (current && current !== agentNameFor(lastName)) return;
             lastName = String(api.get('name') || '');

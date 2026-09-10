@@ -51,7 +51,25 @@ class ProjectConfig
 
     public string Path { get; }
 
-    public ProjectConfig(string path) { Path = path; }
+    /// <summary>
+    /// Whether each person's assistant is a thing you can assign work TO.
+    ///
+    /// <para>
+    /// False in TRACKER mode, and that is the whole difference. A tracker is a
+    /// record of work handed to other PEOPLE — colleagues, vendors, counterparts
+    /// — and none of them has an assistant in this store; a
+    /// <c>&lt;name&gt;_agent</c> beside every one of them is an entry in every
+    /// picker that can never legitimately be chosen. In a code repo it is the
+    /// opposite: the agent is the half of the pair that does most of the work.
+    /// </para>
+    /// </summary>
+    public bool AgentsAssignable { get; }
+
+    public ProjectConfig(string path, bool agentsAssignable = true)
+    {
+        Path = path;
+        AgentsAssignable = agentsAssignable;
+    }
 
     /// <summary>The conventional agent name for a person. One rule, everywhere.</summary>
     public static string AgentNameFor(string human) =>
@@ -78,6 +96,7 @@ class ProjectConfig
         {
             var name = c?["name"]?.GetValue<string>();
             if (!string.IsNullOrWhiteSpace(name)) names.Add(name);
+            if (!AgentsAssignable) continue;
             var agent = c?["agent"]?.GetValue<string>();
             if (!string.IsNullOrWhiteSpace(agent)) names.Add(agent);
         }
@@ -105,12 +124,19 @@ class ProjectConfig
                 { found = o; break; }
             }
 
+            // An unnamed agent is DERIVED where agents are assignable, so every
+            // person's assistant has a distinguishable name. Where they are NOT
+            // — a tracker, whose entries are colleagues and vendors — the field
+            // is left empty rather than filled with a name for an assistant
+            // nobody has. Writing one anyway is what put a `<name>_agent` beside
+            // every person in a store that has no agents in it.
+            var derived = AgentsAssignable ? AgentNameFor(name) : "";
             if (found is null)
             {
                 found = new JsonObject
                 {
                     ["name"] = name.Trim(),
-                    ["agent"] = string.IsNullOrWhiteSpace(agent) ? AgentNameFor(name) : agent!.Trim(),
+                    ["agent"] = string.IsNullOrWhiteSpace(agent) ? derived : agent!.Trim(),
                     ["added"] = Md.Today(),
                 };
                 list.Add(found);
@@ -120,7 +146,7 @@ class ProjectConfig
                 found["name"] = name.Trim();
                 if (!string.IsNullOrWhiteSpace(agent)) found["agent"] = agent!.Trim();
                 else if (string.IsNullOrWhiteSpace(found["agent"]?.GetValue<string>()))
-                    found["agent"] = AgentNameFor(name);
+                    found["agent"] = derived;
             }
 
             doc["collaborators"] = list;

@@ -75,10 +75,22 @@ export const AGENT_AUTHOR = _cfg.agentAuthor || getSetting('bugdesk.agentName') 
 
 export const COLLABORATORS = Array.isArray(_cfg.collaborators) ? _cfg.collaborators : [];
 
+/**
+ * Is `<name>_agent` a thing you can assign work TO here?
+ *
+ * No in tracker mode: a tracker records work handed to PEOPLE, none of whom has
+ * an assistant in this store, so an agent beside every one of them is an entry
+ * in every picker that can never legitimately be chosen. The bridge decides (see
+ * ProjectConfig.AgentsAssignable) and reports it, so the two halves cannot
+ * disagree about who exists.
+ */
+export const AGENTS_ASSIGNABLE = _cfg.agentsAssignable !== false;
+
 export const ASSIGNEES = (() => {
     const list = Array.isArray(_cfg.assignees) ? _cfg.assignees.filter(Boolean) : [];
     // Whoever I am is always assignable, even before the roster has caught up.
-    for (const name of [HUMAN_AUTHOR, AGENT_AUTHOR]) {
+    const seeds = AGENTS_ASSIGNABLE ? [HUMAN_AUTHOR, AGENT_AUTHOR] : [HUMAN_AUTHOR];
+    for (const name of seeds) {
         if (name && !list.some((n) => n.toLowerCase() === name.toLowerCase())) list.push(name);
     }
     return list;

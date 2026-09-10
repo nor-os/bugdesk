@@ -46,7 +46,10 @@ globalThis.localStorage = {
 
 // THE POINT OF THIS FILE: set before the first import, never touched again.
 globalThis.window = {
-    __BUGDESK_CONFIG__: { humanAuthor: 'alice', agentAuthor: 'claude', mode: 'tracker' },
+    __BUGDESK_CONFIG__: {
+        humanAuthor: 'alice', agentAuthor: 'claude', mode: 'tracker',
+        agentsAssignable: false, assignees: ['alice', 'bo'],
+    },
 };
 
 let pass = 0, fail = 0;
@@ -56,6 +59,7 @@ const t = (name, fn) => {
 };
 
 const data = await import(UI + 'backlog_data.js');
+const bugData = await import(UI + 'data.js');
 const filters = await import(UI + 'backlog_filters.js');
 const newItem = await import(UI + 'new_item.js');
 const picker = await import(UI + 'item_picker.js');
@@ -105,6 +109,17 @@ t('every offered backlog kind can carry a target date', () => {
     for (const k of ['project', 'epic', 'story', 'task']) {
         assert.equal(newItem.fieldsFor(k).due, true, `${k} cannot be given a date`);
     }
+});
+
+t('no <name>_agent is assignable', () => {
+    // A tracker records work handed to PEOPLE, none of whom has an assistant in
+    // this store — an agent beside every one of them is an entry in every
+    // picker that can never legitimately be chosen. The bridge says so
+    // (ProjectConfig.AgentsAssignable) and the client seeds accordingly.
+    assert.equal(bugData.AGENTS_ASSIGNABLE, false);
+    assert.ok(!bugData.ASSIGNEES.some((n) => n.endsWith('_agent')),
+        `agents in the picker: ${bugData.ASSIGNEES.join(', ')}`);
+    assert.ok(bugData.ASSIGNEES.includes('alice'), 'the human went missing too');
 });
 
 /* ── the chrome ──────────────────────────────────────────────────── */

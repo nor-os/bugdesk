@@ -72,15 +72,21 @@ class UserStore
 {
     readonly object _gate = new();
     readonly string? _envUser, _envHuman, _envAgent;
+    /// <summary>Whether a profile created here gets a derived
+    /// <c>&lt;name&gt;_agent</c>. False in tracker mode — see
+    /// <see cref="ProjectConfig.AgentsAssignable"/>.</summary>
+    readonly bool _deriveAgent;
 
     public string ConfigDir { get; }
 
     /// <summary>Slug of the profile in use, or null when there is none yet.</summary>
     public string? ActiveSlug { get; private set; }
 
-    public UserStore(string configDir, string? envUser, string? envHuman, string? envAgent)
+    public UserStore(string configDir, string? envUser, string? envHuman, string? envAgent,
+                     bool deriveAgent = true)
     {
         ConfigDir = configDir;
+        _deriveAgent = deriveAgent;
         _envUser = Blank(envUser) ? null : envUser!.Trim();
         _envHuman = Blank(envHuman) ? null : envHuman!.Trim();
         _envAgent = Blank(envAgent) ? null : envAgent!.Trim();
@@ -317,7 +323,9 @@ class UserStore
     {
         var slug = SlugOf(name);
         var doc = NewProfileDoc(name, slug);
-        doc["agentName"] = Blank(agentName) ? ProjectConfig.AgentNameFor(name) : agentName!.Trim();
+        doc["agentName"] = Blank(agentName)
+            ? (_deriveAgent ? ProjectConfig.AgentNameFor(name) : "")
+            : agentName!.Trim();
         ActiveSlug = slug;
         WriteJson(ProfilePath(slug), doc);
         return doc;

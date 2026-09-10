@@ -110,18 +110,22 @@ if (mode == "tracker" && Env("BUGDESK_SEED_TRACKER") is not null)
 string configDir = mode == "tracker"
     ? Env("BUGDESK_CONFIG") ?? Path.Combine(trackerBase, "config")
     : ResolveConfigDir(bugsDir);
+// TRACKER mode assigns work to PEOPLE, so it derives no `<name>_agent` — see
+// ProjectConfig.AgentsAssignable.
+bool agentsAssignable = mode != "tracker";
 var users = new UserStore(
     configDir,
     Environment.GetEnvironmentVariable("BUGDESK_USER"),
     Environment.GetEnvironmentVariable("BUGDESK_HUMAN"),
-    Environment.GetEnvironmentVariable("BUGDESK_AGENT"));
+    Environment.GetEnvironmentVariable("BUGDESK_AGENT"),
+    agentsAssignable);
 app.Logger.LogInformation("BugDesk: config={config} user={user}",
     users.ConfigDir, users.ActiveSlug ?? "(unconfigured — the UI will ask)");
 
 // The SHARED roster — who works on this repo. Committed, unlike the per-user
 // profile: an assignee dropdown offering only "me and my agent" is useless the
 // moment a record belongs to somebody else.
-var project = new ProjectConfig(ResolveProjectConfig(bugsDir, configDir));
+var project = new ProjectConfig(ResolveProjectConfig(bugsDir, configDir), agentsAssignable);
 app.Logger.LogInformation("BugDesk: project={project}", project.Path);
 
 // Pre-profile UI state: a single shared filters.json. Read once, folded into
@@ -702,6 +706,8 @@ app.MapGet("/api/config", () => Results.Json(new
     // module (see ui/index.html) because the taxonomy — which top-nav chips
     // exist, and what they are called — is built at module load.
     mode,
+    // Whether `<name>_agent` is a thing you can assign work to here.
+    agentsAssignable,
     humanAuthor = users.HumanAuthor,
     agentAuthor = users.AgentAuthor,
     configured = users.Configured,
@@ -726,7 +732,9 @@ app.MapPost("/api/config/user", async (HttpRequest req) =>
     var agent = body.TryGetValue("agentName", out var a) ? a.GetString() : null;
     // An unnamed agent is DERIVED, not left generic: every person's assistant
     // needs a distinguishable name or two people's agents sign the same way.
-    if (string.IsNullOrWhiteSpace(agent)) agent = ProjectConfig.AgentNameFor(name);
+    // Except in TRACKER mode, where nobody in the store has an assistant and a
+    // `<name>_agent` beside every person is an entry no picker can use.
+    if (string.IsNullOrWhiteSpace(agent) && agentsAssignable) agent = ProjectConfig.AgentNameFor(name);
     var slug = users.SelectOrCreate(name, agent);
     users.MigrateLegacyFilters(legacyFiltersPath);
     project.Upsert(name, agent);

@@ -113,6 +113,38 @@ One document-level listener pair serves every tile, rather than per-tile wiring:
 tiles are created, destroyed and repainted constantly, and a drop target bound to
 a tile element stops working the first time that tile repaints.
 
+**Descriptions are editable.** The item page rendered one and offered no way to
+change it, so the one field with room to say *why* was write-once: you could set
+it while filing and never again. Same shape the acceptance criteria already use
+— rendered markdown, the composer one click away, paste-a-screenshot included.
+An open editor now counts as unsaved work, so an incoming change asks before
+replacing it instead of discarding a paragraph mid-sentence; `dirty` only
+tracked the frontmatter fields, which left the largest thing on the page
+unprotected.
+
+**Pasted URLs are linked, and shortened to something readable.** A record
+accumulates links and pasted links are long — one can be wider than the tile it
+sits in, and a wrapped line of query parameters buries the sentence it was
+evidence for. A bare URL becomes a link whose text drops the scheme, a `www.`
+and the middle of a long path (`build.example.com/jobs/…/report.html`), with the
+full URL in the title. One ellipsis, ever: whether the elided part is a path or
+a query does not change what the reader does about it. A link with a label keeps
+its label, a URL in a code span stays literal, sentence punctuation is not
+swallowed, and `javascript:`/`data:` are not linked at all.
+
+Titles are deliberately **not** fetched. That would mean the browser reaching out
+to every host mentioned in every record — blocked by CORS most of the time, slow
+the rest, and a quiet promise that reading a bug report tells somebody's server
+you read it.
+
+**No `<name>_agent` in tracker mode.** A tracker records work handed to people,
+none of whom has an assistant in that store, so an agent beside every one of them
+is a row in every picker that can never legitimately be chosen. Nothing derives
+one now: not the profile, not the roster, not the assignee list, and the Agent
+name field is gone from the identity dialog. The bridge decides
+(`ProjectConfig.AgentsAssignable`) and reports it, so the two halves cannot
+disagree about who exists. Bug mode is unchanged.
+
 **Finished work gets out of the way.** A store accumulates closed records for
 ever; after a year they are most of it, and a surface that lists them alongside
 live work buries the handful of things you were looking for. Closed work —

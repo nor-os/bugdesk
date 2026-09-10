@@ -38,6 +38,78 @@ function safeUrl(raw) {
     return '#';
 }
 
+/**
+ * A URL as something a person can read.
+ *
+ * A record is full of pasted links — a PR, a build, a doc, a vendor's ticket —
+ * and pasted links are long. One of them can be wider than the whole tile, and
+ * a wrapped 200-character line of query parameters buries the sentence it was
+ * evidence for. So the LINK TEXT is shortened and the full URL goes in the
+ * title, where hovering still gives you the real thing.
+ *
+ * Shortened by dropping what carries no meaning to a reader, in order: the
+ * scheme, a `www.`, a trailing slash, then the middle of the path — the host and
+ * the LAST segment are what identify a link ("github.com/…/pull/318"), so those
+ * are what survive. The query and fragment become a bare `?` and `#`: that a
+ * link is parameterised is worth seeing, the parameters are not.
+ *
+ * Deliberately NOT a fetched page title. That would mean the browser reaching
+ * out to every host mentioned in every record — blocked by CORS most of the
+ * time, slow the rest, and a quiet promise that reading a bug report tells
+ * somebody's server you read it.
+ */
+export function shortenUrl(raw, max = 52) {
+    const full = String(raw || '').replace(/&amp;/g, '&');
+    let url;
+    try { url = new URL(/^[a-z][a-z0-9+.-]*:/i.test(full) ? full : `https://${full}`); }
+    catch { return raw; }
+
+    const host = url.hostname.replace(/^www\./, '');
+    const segs = url.pathname.split('/').filter(Boolean);
+
+    let path = segs.join('/');
+    if (`${host}/${path}`.length > max && segs.length > 2) {
+        // Keep the first and last segment: the first says what KIND of thing it
+        // is ("pull", "issues", "documents"), the last says which one.
+        path = `${segs[0]}/…/${segs[segs.length - 1]}`;
+    }
+    let out = path ? `${host}/${path}` : host;
+
+    // ONE ellipsis, ever. It means "there is more here than I am showing", and
+    // whether the more is a truncated path or a query string does not change
+    // what the reader does about it — they hover, or they click. Two of them in
+    // one label ("a/…/b.html?…") is noise pretending to be precision.
+    if (out.length > max) out = `${out.slice(0, max - 1)}…`;
+    else if (path === segs.join('/') && (url.search || url.hash)) out += '…';
+    return out;
+}
+
+/* Bare URLs in prose. Bounded by whitespace or an opening bracket so a link
+ * inside `(see https://…)` is caught, and stopped before HTML — the input is
+ * already escaped, so `<`, `>` and `"` only appear as entities and a raw one
+ * would mean the tag scaffolding this rule must not reach into. */
+const RE_BARE_URL = /(^|[\s(])(https?:\/\/[^\s<>"']+|www\.[^\s<>"']+)/g;
+
+/* Punctuation that ends a SENTENCE rather than a URL. A trailing ')' is only
+ * dropped when it closes a bracket the URL did not open — "(see https://x.com)"
+ * ends the parenthesis, but a Wikipedia link legitimately ends in one. */
+function trimUrlTail(u) {
+    let url = u;
+    for (;;) {
+        const last = url[url.length - 1];
+        if ('.,;:!?'.includes(last)) { url = url.slice(0, -1); continue; }
+        if (last === ')' && (url.match(/\(/g) || []).length < (url.match(/\)/g) || []).length) {
+            url = url.slice(0, -1);
+            continue;
+        }
+        if (url.endsWith('&quot;') || url.endsWith('&#39;')) {
+            url = url.slice(0, url.lastIndexOf('&'));
+            continue;
+        }
+        return url;
+    }
+}
+
 /** Inline rules, applied to one already-escaped run of text. */
 function inline(text) {
     // NUL-delimited placeholders: the input is escaped HTML, so it can never
@@ -50,24 +122,46 @@ function inline(text) {
         return `\u0000${spans.length - 1}\u0000`;
     });
 
+    // Anything that PRODUCES a tag is parked as a placeholder too: the autolink
+    // rule below scans for bare URLs, and without this it would find the href it
+    // had just written and link the inside of its own <a>.
+    const nodes = [];
+    const park = (html) => {
+        nodes.push(html);
+        return `\u0001${nodes.length - 1}\u0001`;
+    };
+
     s = s
         // Images before links — the syntax differs only by the leading '!'.
         // The optional title arrives as &quot;…&quot; — the whole document was
         // escaped before any rule ran, quotes included.
         .replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+&quot;([^&]*)&quot;)?\)/g,
-            (_m, alt, src, title) =>
+            (_m, alt, src, title) => park(
                 `<img class="td-md__img" src="${safeUrl(src)}" alt="${alt}"` +
-                `${title ? ` title="${title}"` : ''} loading="lazy">`)
+                `${title ? ` title="${title}"` : ''} loading="lazy">`))
         .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g,
-            (_m, label, href) =>
-                `<a href="${safeUrl(href)}" target="_blank" rel="noopener noreferrer">${label}</a>`)
+            (_m, label, href) => park(
+                `<a href="${safeUrl(href)}" target="_blank" rel="noopener noreferrer">${label}</a>`))
+        // Bare URLs, AFTER the explicit forms have been parked: a link somebody
+        // gave a label to keeps its label.
+        .replace(RE_BARE_URL, (_m, lead, raw) => {
+            const url = trimUrlTail(raw);
+            const href = safeUrl(url.startsWith('www.') ? `https://${url}` : url);
+            if (href === '#') return `${lead}${raw}`;
+            return lead + park(
+                `<a href="${href}" target="_blank" rel="noopener noreferrer"`
+                + ` title="${url}" class="td-md__url">${shortenUrl(url)}</a>`)
+                + raw.slice(url.length);
+        })
         .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
         .replace(/~~([^~]+)~~/g, '<del>$1</del>')
         // Single '*' only when not part of a '**' pair already consumed above.
         .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>')
         .replace(/(^|\W)_([^_\n]+)_(?=\W|$)/g, '$1<em>$2</em>');
 
-    return s.replace(/\u0000(\d+)\u0000/g, (_m, i) => `<code>${spans[Number(i)]}</code>`);
+    return s
+        .replace(/\u0001(\d+)\u0001/g, (_m, i) => nodes[Number(i)])
+        .replace(/\u0000(\d+)\u0000/g, (_m, i) => `<code>${spans[Number(i)]}</code>`);
 }
 
 /* ── block structure ────────────────────────────────────────────── */

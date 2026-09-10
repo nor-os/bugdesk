@@ -513,6 +513,73 @@ t('the backlog skill gates work on refinement', () => {
     assert.match(backlogSkill, /does not get worked on/);
 });
 
+/* ── URLs in prose ───────────────────────────────────────────────────
+ *
+ * Records are full of pasted links, and pasted links are long enough to be
+ * wider than the tile they sit in. These check the two halves: that a bare URL
+ * becomes clickable at all, and that what it SHOWS is readable — without the
+ * rule reaching into places it must not, which is where an inline renderer of
+ * this shape usually goes wrong.
+ */
+
+console.log('\nURLs');
+
+const markdown = await import(UI + 'markdown.js');
+const { renderMarkdown, shortenUrl } = markdown;
+
+t('a bare URL becomes a link', () => {
+    const html = renderMarkdown('See https://example.com/docs for more.');
+    assert.match(html, /<a href="https:\/\/example\.com\/docs"/);
+    assert.match(html, /rel="noopener noreferrer"/);
+});
+t('what it SHOWS drops the scheme and the www', () => {
+    assert.equal(shortenUrl('https://www.example.com/docs'), 'example.com/docs');
+    assert.equal(shortenUrl('https://example.com'), 'example.com');
+});
+t('a long path keeps the ends and elides the middle', () => {
+    // The first segment says what KIND of thing it is, the last says which one.
+    assert.equal(
+        shortenUrl('https://build.example.com/jobs/nightly/2026/09/10/artifacts/report.html'),
+        'build.example.com/jobs/…/report.html');
+});
+t('one ellipsis, ever', () => {
+    const label = shortenUrl('https://build.example.com/jobs/a/b/c/d/e/report.html?run=1#step-7');
+    assert.equal((label.match(/…/g) || []).length, 1, `two ellipses in "${label}"`);
+});
+t('a query is signalled when nothing else was elided', () => {
+    assert.equal(shortenUrl('https://example.com/search?q=cats'), 'example.com/search…');
+    assert.equal(shortenUrl('https://example.com/search'), 'example.com/search');
+});
+t('the full URL survives in the title, so nothing is actually lost', () => {
+    const html = renderMarkdown('https://example.com/a/b/c/d/e/f/g/h/i/j/k/l/m/n.html?x=1');
+    assert.match(html, /title="https:\/\/example\.com\/a\/b\/c\/d\/e\/f\/g\/h\/i\/j\/k\/l\/m\/n\.html\?x=1"/);
+});
+t('a labelled link keeps its label', () => {
+    const html = renderMarkdown('[the PR](https://example.com/pull/1) landed.');
+    assert.match(html, />the PR</);
+    assert.ok(!/example\.com\/pull\/1</.test(html), 'the label was replaced by the URL');
+});
+t('the rule does not reach inside the href it just wrote', () => {
+    // The failure mode this guards: autolinking runs over output that already
+    // contains <a href="https://…">, finds that URL, and links the inside of
+    // its own anchor.
+    const html = renderMarkdown('[x](https://example.com/a)');
+    assert.equal((html.match(/<a /g) || []).length, 1, `nested anchors: ${html}`);
+});
+t('a URL inside code stays literal', () => {
+    const html = renderMarkdown('run `curl https://example.com/a`');
+    assert.match(html, /<code>curl https:\/\/example\.com\/a<\/code>/);
+    assert.ok(!/<a /.test(html), 'a link was made inside a code span');
+});
+t('sentence punctuation is not part of the URL', () => {
+    assert.match(renderMarkdown('see https://example.com/a.'), /href="https:\/\/example\.com\/a"/);
+    assert.match(renderMarkdown('(see https://example.com/a)'), /href="https:\/\/example\.com\/a"/);
+});
+t('a dangerous scheme is not linked at all', () => {
+    const html = renderMarkdown('javascript:alert(1) and data:text/html,x');
+    assert.ok(!/<a /.test(html), `linked something unsafe: ${html}`);
+});
+
 /* ── live updates ────────────────────────────────────────────────────
  *
  * The event payload is what decides whether an open record silently refreshes

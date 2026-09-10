@@ -78,6 +78,21 @@ UI lists exactly which of those checks a `draft` still fails, and
 five rules. They are defined once, in
 `ui/js/ticketdesk/backlog_data.js`'s `REFINEMENT_RULES`.
 
+**Descriptions are editable in place** — read as rendered markdown, edited in
+the same composer the create mask uses, with the same paste-a-screenshot
+support. An open editor counts as unsaved work, so an incoming change from
+somewhere else asks before replacing it rather than discarding a paragraph
+mid-sentence.
+
+**Pasted URLs are linked and shortened.** A record accumulates links — a PR, a
+build, a vendor's ticket — and one of them can be wider than the tile it sits
+in. A bare URL becomes a link whose text drops the scheme and elides the middle
+of a long path (`build.example.com/jobs/…/report.html`), with the full URL in
+the title. A link you gave a label to keeps its label. Titles are **not**
+fetched: that would mean the browser reaching out to every host mentioned in
+every record, and a quiet promise that reading a bug report tells somebody's
+server you read it.
+
 **Acceptance criteria are a checklist you tick**, not markdown you hand-edit —
 add, rename, remove and tick rows in place, with the markdown editor one click
 away for bulk edits. Each change is one addressed operation on one line rather
@@ -232,6 +247,13 @@ resolved `path`, which is the quickest way to see which file is in force.
 Each person's agent name is **derived** as `<name>_agent`. It is not a decision
 worth making per project, and two people whose assistants both sign as `agent`
 cannot be told apart in a comment thread.
+
+**Not in tracker mode.** A tracker records work handed to *people* — colleagues,
+vendors, counterparts — and none of them has an assistant in that store, so no
+`<name>_agent` is created or offered. An agent entry beside every person would
+be a row in every picker that can never legitimately be chosen. The `/tracker`
+skill still signs its comments as an agent; it is just not somebody you assign
+work to.
 
 ## Authorship
 
@@ -545,6 +567,7 @@ what the tracker *cannot* tell you as prominently as with what it can.
 | port | **picked automatically** — the next free one from 8766 |
 | top nav | **TRACKER, and only Tracker.** No Bugs, no Tickets: everything is reached from the dashboard |
 | types | adds **`project`** above epics; drops the bug types, since there is no bug store |
+| assignees | **people only** — no `<name>_agent` is created or offered |
 | fields | **`due`** (target date) and **`reporter`** on every record |
 | board | a **Due** column, sorted chronologically, painted as a pill |
 | left rail | **Projects** instead of Work packages; views lead with Overdue |

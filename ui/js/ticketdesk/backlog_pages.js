@@ -513,8 +513,10 @@ function mountItem(host, props, ctx) {
                 <div class="td-group__body bd-children" data-slot="children"></div>
             </section>
             <section class="td-group">
-                <div class="td-group__title">Description</div>
-                <div class="td-group__body td-md" data-slot="desc"><span class="td-dim">Loading…</span></div>
+                <div class="td-group__title">Description
+                    <span class="td-group__actions" data-slot="descactions"></span>
+                </div>
+                <div class="td-group__body" data-slot="desc"><span class="td-dim">Loading…</span></div>
             </section>
             <section class="td-group">
                 <div class="td-group__title">Comments <span class="td-dim">— posted as ${esc(HUMAN_AUTHOR)}</span></div>
@@ -544,15 +546,16 @@ function mountItem(host, props, ctx) {
     let tagInput = null;
     let composer = null;
     let acceptanceEditor = null;
+    let descEditor = null;
     const fieldSelects = [];      // custom dropdowns replacing the bare <select>s
     let parentPicker = null;      // the shared search control (item_picker.js)
     const destroyWidgets = () => {
-        for (const w of [tagInput, composer, acceptanceEditor, parentPicker, ...fieldSelects]) {
+        for (const w of [tagInput, composer, acceptanceEditor, descEditor, parentPicker, ...fieldSelects]) {
             try { w?.destroy(); } catch { /* already gone */ }
         }
         fieldSelects.length = 0;
         parentPicker = null;
-        tagInput = composer = acceptanceEditor = null;
+        tagInput = composer = acceptanceEditor = descEditor = null;
     };
 
     /* ── record ─────────────────────────────────────────────────── */
@@ -861,8 +864,57 @@ function mountItem(host, props, ctx) {
 
     /* ── description + comments ─────────────────────────────────── */
 
+    /* ── description ─────────────────────────────────────────────────
+     *
+     * Editable, which it was not: the mask let you file a description and then
+     * never change it, so the one field with room to say WHY was write-once. It
+     * is the same shape the acceptance criteria already use — read it as
+     * rendered markdown, edit it in the composer one click away, with the same
+     * paste-a-screenshot support the create mask has.
+     *
+     * The placeholder the bridge writes for an empty description
+     * (`_(no description provided)_`) is never loaded into the editor: saving it
+     * back would turn a placeholder into content. */
+    let descRaw = false;
+
     const renderDesc = () => {
-        $('[data-slot="desc"]').innerHTML = md(item.description) || '<span class="td-dim">No description.</span>';
+        const el = $('[data-slot="desc"]');
+        const actions = $('[data-slot="descactions"]');
+        try { descEditor?.destroy(); } catch { /* first render */ }
+        descEditor = null;
+
+        if (!descRaw) {
+            el.className = 'td-group__body td-md';
+            el.innerHTML = md(item.description) || '<span class="td-dim">No description.</span>';
+            if (actions) {
+                actions.innerHTML = `<button class="ea-btn ea-btn--small" data-a="desc-edit"
+                    title="Edit the description">${icon('edit_note')} Edit</button>`;
+            }
+            return;
+        }
+
+        el.className = 'td-group__body';
+        el.innerHTML = `<textarea class="ea-tin td-area" data-f="description"
+            placeholder="Why this matters, and for whom. Paste a screenshot to attach it."></textarea>`;
+        if (actions) {
+            actions.innerHTML = `
+                <button class="ea-btn ea-btn--small ea-btn--primary" data-a="desc-save">${icon('save')} Save</button>
+                <button class="ea-btn ea-btn--small" data-a="desc-cancel">Cancel</button>`;
+        }
+        const ta = el.querySelector('textarea');
+        ta.value = /^_\(.*\)_$/.test((item.description || '').trim()) ? '' : (item.description || '');
+        descEditor = attachMarkdownEditor(ta, { onStatus: statusLine, minHeight: 160 });
+        requestAnimationFrame(() => ta.focus());
+    };
+
+    const saveDescription = async () => {
+        try {
+            apply(await patchItem(item.id, {
+                description: host.querySelector('[data-f="description"]')?.value || '',
+            }));
+            await broadcast();
+            statusLine('Description saved.');
+        } catch (err) { statusLine(`Save failed: ${err?.message || err}`); }
     };
 
     const commentHTML = (c) => `
@@ -952,6 +1004,9 @@ function mountItem(host, props, ctx) {
      *  has to remember which six sections a write invalidates. */
     const apply = (fresh) => {
         item = fresh;
+        // A repaint means the record moved on; an open editor holding the
+        // previous text would silently save it back over the new one.
+        descRaw = false;
         renderAncestors();
         renderRecord();
         renderStages();
@@ -1101,6 +1156,9 @@ function mountItem(host, props, ctx) {
         else if (act === 'save-acceptance') { await saveAcceptance(); acceptanceRaw = false; renderAcceptance(); }
         else if (act === 'acceptance-raw') { acceptanceRaw = true; renderAcceptance(); }
         else if (act === 'acceptance-list') { acceptanceRaw = false; renderAcceptance(); }
+        else if (act === 'desc-edit') { descRaw = true; renderDesc(); }
+        else if (act === 'desc-cancel') { descRaw = false; renderDesc(); }
+        else if (act === 'desc-save') { await saveDescription(); descRaw = false; renderDesc(); }
         else if (act === 'addchild') {
             openNewItem(ctx.wm, {
                 kind: childTypesFor(item.type)[0] || 'task',
@@ -1117,7 +1175,12 @@ function mountItem(host, props, ctx) {
         host,
         store: 'backlog',
         id: () => item?.id || id,
-        isDirty: () => dirty,
+        // An OPEN COMPOSER is unsaved work too. `dirty` only tracks the
+        // frontmatter fields, so a description or a criteria block being typed
+        // into would have been silently replaced by an incoming change — the
+        // exact loss this banner exists to prevent, in the one place with room
+        // for a paragraph of it.
+        isDirty: () => dirty || descRaw || acceptanceRaw,
         onStatus: statusLine,
         eventBus: _eventBus,
         onReload: async () => {

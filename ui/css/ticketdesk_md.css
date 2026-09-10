@@ -292,3 +292,13 @@
 .td-tags__opt:hover,
 .td-tags__opt--on { background: var(--state-selected, rgba(17, 119, 179, 0.22)); }
 .td-tags__opt b { color: var(--text-bright, #fff); font-weight: 700; }
+
+
+/* An auto-linked bare URL. The text is a SHORTENED form of the href (see
+   shortenUrl in ticketdesk/markdown.js) and the full one is in the title, so
+   the link reads as a link rather than as a wall of query string — and it must
+   never be the thing that makes a tile scroll sideways. */
+.td-md__url {
+    word-break: break-word;
+    overflow-wrap: anywhere;
+}
