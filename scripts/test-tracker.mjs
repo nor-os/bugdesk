@@ -152,6 +152,27 @@ t('Tickets keeps its kind id, and sits UNDER Tracker', () => {
     assert.ok(!taxonomy.meta('backlog').isTopNav);
     assert.equal(taxonomy.topNavFor('backlog'), 'tracker');
 });
+t('every page declares the section it lives in', () => {
+    for (const kind of ['home', 'backlog', 'item', 'new-item', 'tracker']) {
+        assert.ok(taxonomy.topNavFor(kind), `${kind} declares no section`);
+    }
+    // `home` renders the dashboard here, so it must group with it.
+    assert.equal(taxonomy.topNavFor('home'), 'tracker');
+});
+
+t('the ticket list and a ticket group as ONE page', () => {
+    // wm.js groups a tile's tabs by `taxonomy.topNavFor(kind)` — a SINGLE hop.
+    // If `item` and `backlog` report different sections, openInPrimary('backlog')
+    // from a tile showing an `item` is treated as a CROSS-PAGE swap: it archives
+    // the current tabs and restores the other page's, so the props it was given
+    // are dropped on the floor and the tile shows whatever was last there.
+    // From the outside that looks like the click doing nothing.
+    assert.equal(taxonomy.topNavFor('item'), taxonomy.topNavFor('backlog'),
+        'item and backlog are in different page groups');
+    assert.equal(taxonomy.topNavFor('new-item'), taxonomy.topNavFor('backlog'),
+        'new-item is in a different page group from the list it files into');
+});
+
 t('opening a ticket keeps you in the Tracker section', () => {
     // THE BUG: `item` -> `backlog` is one hop, and in tracker mode `backlog` is
     // not a chip — so the section derivation has to walk up to `tracker`.

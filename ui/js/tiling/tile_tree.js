@@ -350,15 +350,26 @@ export class TileTree {
             }));
             n.activeTabIdx = Math.max(0,
                 Math.min(n.tabs.length - 1, saved.activeTabIdx || 0));
-            // The caller asked for a specific entity (props.id) OR for a
-            // page kind that ISN'T the nav category itself (e.g. `settings`
-            // lives under the `home` topNav). In both cases we must surface
-            // the requested target rather than silently showing whatever
-            // the restored page happened to hold. A bare top-nav click
-            // (target.kind === targetTopNav, no id) falls through and just
-            // restores the saved tabs as-is.
+            // The caller asked for a specific entity (props.id), for a page
+            // kind that ISN'T the nav category itself (e.g. `settings` lives
+            // under the `home` topNav), or for this page WITH PARTICULAR PROPS
+            // (a filter, an ad-hoc expression). In all three we must surface the
+            // requested target rather than silently showing whatever the
+            // restored page happened to hold.
+            //
+            // THE THIRD CASE WAS MISSING, and it is not a corner: "show me
+            // everything open on bo" is `kind: 'backlog'` with an `expr` and no
+            // id — no entity, and `backlog` IS its own nav category — so it fell
+            // through to the bare-restore branch and put back whatever the page
+            // last held. If that was a ticket you had been reading, the tile did
+            // not visibly change at all, and the click looked broken.
+            //
+            // A BARE page switch still restores as-is, which is the whole point
+            // of archiving tabs: clicking a top-nav chip carries no props and
+            // must put back the tab you left open.
             const wantsTarget = target.props?.id != null
-                             || target.kind !== targetTopNav;
+                             || target.kind !== targetTopNav
+                             || Object.keys(target.props || {}).length > 0;
             if (wantsTarget) {
                 const wantId = target.props?.id != null;
                 const matchIdx = n.tabs.findIndex((t) =>

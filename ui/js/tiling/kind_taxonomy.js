@@ -46,7 +46,15 @@ export const taxonomy = createTaxonomy({
         // landing (in tracker mode, to the dashboard — see
         // ticketdesk/tracker_pages.js). `ticket` is a sub-page of Queues,
         // `item` a sub-page of Backlog.
-        home: { label: 'Home', icon: 'home' },
+        // `home` is the WM's default leaf, and it RENDERS the landing page of a
+        // section — the bug queue normally, the Tracker dashboard in tracker
+        // mode. So it has to SAY which section that is. It declared none, which
+        // made every openInPrimary(...) from the landing tile a cross-page swap:
+        // the WM archived the tile's tabs, restored the target page's, and
+        // dropped the props it was given. That is the same fault as `item`
+        // below, and between them they are why "show me this person's work"
+        // looked like a click that did nothing.
+        home: { label: 'Home', icon: 'home', topNav: TRACKER ? 'tracker' : 'queues' },
 
         // ── the BUG store, and its top-nav chip ──────────────────────
         //
@@ -109,7 +117,23 @@ export const taxonomy = createTaxonomy({
         backlog: TRACKER
             ? { label: 'Tickets', icon: 'workspaces', topNav: 'tracker' }
             : { label: 'Backlog', icon: 'workspaces', isTopNav: true, order: 30 },
-        item: { label: 'Item', icon: 'article', topNav: 'backlog' },
+
+        // `item` points at whatever SECTION its list is in, not at the list.
+        //
+        // FlexDesk's `topNavFor` is a SINGLE hop — it returns `meta.topNav`
+        // verbatim — and the WM groups a tile's tabs by it (see `swapToPage` in
+        // wm.js). Pointing `item` at `backlog` while `backlog` itself points at
+        // `tracker` therefore put two kinds of the SAME section in two different
+        // page groups, and every `openInPrimary('backlog', …)` from a tile
+        // showing an item was treated as a cross-page swap: it archived the
+        // tabs, restored the other page's, and dropped the props it was handed.
+        // The Inspector's "show me this person's work" did exactly that and
+        // looked, from the outside, like a click that did nothing.
+        //
+        // The cost is one breadcrumb level in tracker mode — `Tracker ›
+        // STORY-0007` rather than `Tracker › Tickets › STORY-0007` — which is
+        // a fair price for the two kinds agreeing about where they live.
+        item: { label: 'Item', icon: 'article', topNav: TRACKER ? 'tracker' : 'backlog' },
 
         // The create mask. Its breadcrumb sits under whichever section this
         // deployment files INTO by default — Bugs normally, Tracker in tracker

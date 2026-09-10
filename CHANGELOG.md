@@ -249,6 +249,34 @@ in whichever store the panel is currently reporting on.
 
 ### Fixed
 
+- **Clicking a name in the Inspector did nothing.** Reported twice; the first
+  fix made the rows clickable and I then confirmed with a test that the click
+  reached the right call — which it did. The request was being discarded two
+  layers below it.
+
+  `TileTree.swapToPage` decides whether a page switch must surface the caller's
+  target or may simply restore the tabs that page last had. It asked two
+  questions — is a specific entity wanted (`props.id`), and is this a page kind
+  other than the nav category itself — and **missed the third: was this page
+  asked for with particular props.** "Everything open on bo" is `kind: 'backlog'`
+  with an `expr` and no id: no entity, and `backlog` is its own category. So it
+  fell through to the bare restore and put back whatever the Backlog page last
+  held — a ticket you had been reading, usually — and the tile did not visibly
+  change at all.
+
+  A bare page switch still restores as-is, which is the point of archiving tabs:
+  a top-nav chip carries no props and must put back the tab you left open. Both
+  behaviours are now tested against the real `TileTree` rather than a mock of the
+  window manager — no mock could have caught this, because the click, the handler
+  and the call were all correct.
+
+- **Two kinds in one section disagreed about which section that was.**
+  `topNavFor` is a single hop, so in tracker mode `item` reported `backlog` while
+  `backlog` reported `tracker`, and `home` — the landing tile, which renders a
+  section's own page — declared no section at all. Every `openInPrimary` from
+  those tiles was therefore treated as a cross-page swap. Both now declare the
+  section they are in, and a test asserts every page kind declares one.
+
 - **Drag-and-drop did not work from either table.** `DataTable` calls
   `renderCell(td, …)` while the cell is still DETACHED — it is appended to its
   `<tr>` afterwards — so `td.parentElement` was `null` and marking the row

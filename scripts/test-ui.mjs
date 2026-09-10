@@ -486,6 +486,19 @@ t('a plain backlog offers three types; the store still knows four', () => {
     assert.deepEqual(data.ALL_TYPES, ['project', 'epic', 'story', 'task']);
     assert.equal(data.TRACKER, false);
 });
+t('every page declares the section it lives in', () => {
+    // The WM groups a tile's tabs by `topNavFor(kind)`, a SINGLE hop. A kind
+    // that returns undefined — or one that disagrees with the page it sits
+    // beside — makes openInPrimary a cross-page swap, which archives the tabs
+    // and DROPS the props it was handed. That is invisible until something
+    // routes by props, and then it looks like a click doing nothing.
+    for (const kind of ['home', 'queues', 'ticket', 'backlog', 'item', 'new-item']) {
+        assert.ok(taxonomyDefault.topNavFor(kind), `${kind} declares no section`);
+    }
+    assert.equal(taxonomyDefault.topNavFor('home'), 'queues', 'home is not with the page it renders');
+    assert.equal(taxonomyDefault.topNavFor('item'), taxonomyDefault.topNavFor('backlog'));
+    assert.equal(taxonomyDefault.topNavFor('ticket'), taxonomyDefault.topNavFor('queues'));
+});
 t('the default mode has no Tracker chip', () =>
     // The tracker-mode counterpart of this lives in test-tracker.mjs, which
     // runs in its own process — the mode is read once, at module load.
@@ -643,6 +656,71 @@ t('sentence punctuation is not part of the URL', () => {
 t('a dangerous scheme is not linked at all', () => {
     const html = renderMarkdown('javascript:alert(1) and data:text/html,x');
     assert.ok(!/<a /.test(html), `linked something unsafe: ${html}`);
+});
+
+/* ── swapToPage: honouring the props a caller asked for ──────────────
+ *
+ * The tile tree, exercised directly. This is where "clicking a name in the
+ * Inspector does nothing" actually lived, and no mock of the window manager
+ * could have found it — the click, the handler and the call were all correct,
+ * and the request was discarded two layers below them.
+ */
+
+console.log('\nswapToPage');
+
+const { TileTree, makeLeaf } = await import(TILING + 'tile_tree.js');
+
+/** A leaf that has been on the Backlog page before and left a ticket open. */
+const leafOnBacklog = () => {
+    const t = new TileTree();
+    const root = makeLeaf({ content: { kind: 'queues', props: {} }, title: 'Bugs' });
+    t.setRoot(root);
+    const id = root.id;
+    t.focusedLeafId = id;
+    // Archive a Backlog page whose active tab is an ITEM, not the board — the
+    // ordinary state after reading a ticket and clicking away.
+    const leaf = t.get(id);
+    leaf.pageTabs = {
+        backlog: {
+            tabs: [
+                { kind: 'backlog', props: { filter: 'board' }, title: 'Backlog', history: [] },
+                { kind: 'item', props: { id: '7' }, title: 'STORY-0007', history: [] },
+            ],
+            activeTabIdx: 1,
+        },
+    };
+    return { t, id, leaf };
+};
+
+t('a request carrying props is honoured, not dropped', () => {
+    // THE BUG: `wantsTarget` was `props.id != null || kind !== targetTopNav`.
+    // Opening the backlog board with a FILTER carries neither — no id, and
+    // `backlog` IS its own section — so the restore fell through and put back
+    // whatever the page last held. Here that is a ticket, so the tile did not
+    // visibly change at all.
+    const { t, id, leaf } = leafOnBacklog();
+    t.swapToPage(id, { kind: 'backlog', props: { expr: { q: 1 }, label: 'On bo' }, title: 'On bo' },
+        'queues', 'backlog');
+    const active = leaf.tabs[leaf.activeTabIdx];
+    assert.equal(active.kind, 'backlog', `landed on a ${active.kind}, not the list`);
+});
+
+t('a bare page switch still restores what you were reading', () => {
+    // The other half, and why this cannot simply always force the target: a
+    // top-nav click carries no props and MUST put back the tab you left open.
+    const { t, id, leaf } = leafOnBacklog();
+    t.swapToPage(id, { kind: 'backlog', props: {}, title: 'Backlog' }, 'queues', 'backlog');
+    const active = leaf.tabs[leaf.activeTabIdx];
+    assert.equal(active.kind, 'item', 'a bare page switch threw away the open ticket');
+    assert.equal(active.props.id, '7');
+});
+
+t('an entity request still wins', () => {
+    const { t, id, leaf } = leafOnBacklog();
+    t.swapToPage(id, { kind: 'item', props: { id: '9' }, title: 'TASK-0009' }, 'queues', 'backlog');
+    const active = leaf.tabs[leaf.activeTabIdx];
+    assert.equal(active.kind, 'item');
+    assert.equal(active.props.id, '9');
 });
 
 /* ── live updates ────────────────────────────────────────────────────
