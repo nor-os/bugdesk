@@ -878,9 +878,37 @@ tr[draggable="true"]:active,
    after its parent is legal but always worth saying, because it means the
    parent's date is already wrong and nobody has moved it. */
 
-.bd-duefield { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.bd-duefield input[type="date"] { flex: 0 1 auto; }
-.bd-duefield__note { font-size: 10px; white-space: nowrap; }
+/* ONE LINE. The date itself lives in the input — including an inherited one,
+   because the field answers "when is this due" and the answer is the same
+   whether this record set it or its parent did. An empty input beside a
+   second line of text read as "no date" when there was one. */
+.bd-duefield {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: nowrap;
+    min-width: 0;
+}
+.bd-duefield input[type="date"] { flex: 0 1 auto; min-width: 0; }
+
+/* An inherited value is real but not this record's own, and the difference is
+   its future: it moves when the parent moves. Dashed and dimmed, so the field
+   reads as borrowed rather than set — and both go the instant it is edited. */
+.bd-duefield__in--inherited {
+    border-style: dashed !important;
+    color: var(--text-muted, #888) !important;
+}
+.bd-duebadge {
+    flex: 0 0 auto;
+    padding: 0 6px;
+    border: 1px dashed #4a4a4a;
+    border-radius: var(--radius-pill, 999px);
+    font-size: 9.5px;
+    letter-spacing: 0.03em;
+    color: var(--text-muted, #888);
+    white-space: nowrap;
+    cursor: help;
+}
 
 .bd-duewarn {
     display: inline-flex;

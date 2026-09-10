@@ -987,6 +987,80 @@ await t('the description can be edited and saved', async () => {
     put('fetch', realFetchLocal);
 });
 
+const dueRecord = () => ({
+    id: 4, type: 'task', title: 'x', status: 'draft',
+    ladder: ['draft', 'in-progress', 'done'],
+    parent: 1, phase: '', effectivePhase: '', assignee: '', reporter: '',
+    due: '', effectiveDue: '2026-12-15',      // inherited; none of its own
+    points: '', subsystem: 'unsorted', labels: [], links: [], created: '', updated: '',
+    description: '', acceptance: '', criteria: [], comments: [],
+    children: 0, ancestors: [], childItems: [],
+});
+
+/** Mount the item page over a stubbed bridge, collecting what it POSTs. */
+const mountItemPage = async (record) => {
+    const posts = [];
+    const realFetchLocal = globalThis.fetch;
+    put('fetch', async (url, opts) => {
+        if (opts?.method === 'POST' && /\/api\/backlog\/4$/.test(String(url))) {
+            posts.push(JSON.parse(opts.body));
+            return { ok: true, json: async () => ({ ok: true, item: record }) };
+        }
+        if (/\/api\/backlog\/4$/.test(String(url))) {
+            return { ok: true, json: async () => ({ ok: true, item: record }) };
+        }
+        return { ok: true, json: async () => ({ ok: true, items: FIXTURE, phases: [], settings: {} }) };
+    });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const page = createBacklogContent({ eventBus: null }).item(host, { id: '4' }, { wm: null });
+    await tick(); await tick(); await tick();
+    return {
+        host, posts,
+        done: () => { page.destroy?.(); host.remove(); put('fetch', realFetchLocal); },
+    };
+};
+
+await t('an inherited date is shown IN the field, badged, and writable', async () => {
+    const m = await mountItemPage(dueRecord());
+    const due = m.host.querySelector('[data-f="due"]');
+    assert.ok(due, 'no target date field');
+    // IN the field, not on a second line: an empty input beside a line of text
+    // reads as "no date" when there is one.
+    assert.equal(due.value, '2026-12-15', 'the inherited date is not in the input');
+    assert.equal(due.readOnly, false, 'the field is not writable');
+    assert.ok(m.host.querySelector('[data-slot="duebadge"]'), 'nothing says it is inherited');
+    m.done();
+});
+
+await t('saving an untouched page keeps it inheriting', async () => {
+    // Adopting the value on screen would quietly stop the item tracking its
+    // parent, with nothing on screen having said so.
+    const m = await mountItemPage(dueRecord());
+    const title = m.host.querySelector('[data-f="title"]');
+    title.value = 'renamed';
+    title.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    m.host.querySelector('[data-a="save"]').click();
+    await tick(); await tick();
+    assert.equal(m.posts.at(-1).due, '',
+        `an untouched inherited date was adopted as its own: ${m.posts.at(-1).due}`);
+    m.done();
+});
+
+await t('editing the date makes it this record own, and drops the badge', async () => {
+    const m = await mountItemPage(dueRecord());
+    const due = m.host.querySelector('[data-f="due"]');
+    due.value = '2026-11-01';
+    due.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    // The badge stops being true the moment it is edited, not after a save.
+    assert.ok(!m.host.querySelector('[data-slot="duebadge"]'), 'still badged as inherited');
+    assert.ok(!due.classList.contains('bd-duefield__in--inherited'));
+    m.host.querySelector('[data-a="save"]').click();
+    await tick(); await tick();
+    assert.equal(m.posts.at(-1).due, '2026-11-01', 'the override was not sent');
+    m.done();
+});
+
 await t('the placeholder for an empty description is never loaded as text', async () => {
     // The bridge writes `_(no description provided)_` for an empty one. Loading
     // it into the editor would turn a placeholder into content on the next save.

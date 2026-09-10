@@ -476,6 +476,10 @@ function mountItem(host, props, ctx) {
 
     let item = null;                     // the authoritative record, refreshed on every write
     let dirty = false;
+    // Has the user EDITED the target date on this render? An inherited date is
+    // shown in the field, so saving the page would otherwise write it back as
+    // this record's own and quietly stop it tracking its parent.
+    let dueTouched = false;
 
     host.innerHTML = `
     <div class="td-page td-ticket">
@@ -580,34 +584,57 @@ function mountItem(host, props, ctx) {
         // hierarchy rules in ./backlog_data.js — rather than being a second
         // per-type table here that could disagree with the New item form's.
         /**
-         * The date field, plus what is true about it that the input cannot say.
+         * The date field.
          *
-         * A date is INHERITED from the nearest dated ancestor unless this record
-         * sets its own — so an empty input is not "no date", it is "the same
-         * date as the thing this belongs to", and the placeholder says which.
-         * Clearing the field is how you go back to inheriting.
+         * An inherited date is shown IN THE INPUT, not beside it. The field is
+         * meant to answer "when is this due", and the answer is the same whether
+         * this record set the date or the thing it belongs to did — putting the
+         * inherited one on a second line made the input look empty, which reads
+         * as "no date" when there is one.
          *
-         * The overrun note is the other half: a sub-item due after its parent is
-         * allowed (plans slip one piece at a time, and refusing would only make
-         * people lie about the date) but it always means the parent's date is
-         * already wrong and nobody has moved it yet.
+         * It is read/write either way: type over it and it becomes this record's
+         * own; clear it and it goes back to inheriting. A badge says which state
+         * you are in, because those are the same date with different futures —
+         * an inherited one moves when the parent does.
+         *
+         * WHAT MAKES IT AN OVERRIDE IS EDITING IT, not saving the page. Nothing
+         * converts an inherited date to an owned one just because you changed
+         * the title and hit Save — a silent conversion would quietly stop the
+         * item tracking its parent, and nothing on screen would have said so.
+         * See `dueTouched` below.
          */
         const dueField = () => {
             const inherited = String(item.effectiveDue || '').trim();
             const own = String(item.due || '').trim();
+            const from = !own && inherited ? dueSource() : null;
             const over = dueOverrun(item);
             return `<div class="bd-duefield">
-                <input class="ea-tin" type="date" data-f="due" value="${esc(own)}"
-                       ${!own && inherited ? `title="Inherited from ${esc(inherited)} — set a date here to override it"` : ''}>
+                <input class="ea-tin${!own && inherited ? ' bd-duefield__in--inherited' : ''}"
+                       type="date" data-f="due" value="${esc(own || inherited)}"
+                       ${from ? `title="From ${esc(itemRef(from))} — type a date to give this one its own"` : ''}>
                 ${!own && inherited
-                    ? `<span class="td-dim bd-duefield__note">inherited ${esc(inherited)}</span>`
+                    ? `<span class="bd-duebadge" data-slot="duebadge"
+                             title="${from ? `From ${esc(itemRef(from))}. ` : ''}Editing this gives this record its own date.">inherited</span>`
                     : ''}
                 ${over
                     ? `<span class="bd-duewarn" title="${esc(itemRef(over))} is due ${esc(dueOf(over))}">
-                           ${icon('warning')} after ${esc(itemRef(over))} (${esc(dueOf(over))})
+                           ${icon('warning')} after ${esc(itemRef(over))}
                        </span>`
                     : ''}
             </div>`;
+        };
+
+        /** The ancestor an inherited date actually came from, for the label. */
+        const dueSource = () => {
+            const byId = new Map(ITEMS.map((i) => [Number(i.id), i]));
+            let cur = byId.get(Number(item.parent));
+            const seen = new Set([Number(item.id)]);
+            while (cur && !seen.has(Number(cur.id))) {
+                seen.add(Number(cur.id));
+                if (String(cur.due || '').trim()) return cur;
+                cur = byId.get(Number(cur.parent));
+            }
+            return null;
         };
 
         const authorsPhase = item.type === 'project' || item.type === 'epic';
@@ -1043,6 +1070,7 @@ function mountItem(host, props, ctx) {
      *  has to remember which six sections a write invalidates. */
     const apply = (fresh) => {
         item = fresh;
+        dueTouched = false;
         // A repaint means the record moved on; an open editor holding the
         // previous text would silently save it back over the new one.
         descRaw = false;
@@ -1071,7 +1099,9 @@ function mountItem(host, props, ctx) {
                 type: fval('type'),
                 assignee: fval('assignee'),
                 reporter: fval('reporter'),
-                due: fval('due'),
+                // Untouched means "leave it as it was" — which for an inherited
+                // date means keep inheriting, not adopt the value on screen.
+                due: dueTouched ? fval('due') : (item.due || ''),
                 subsystem: fval('subsystem') || 'unsorted',
                 labels: fval('labels') ? fval('labels').split(',').map((s) => s.trim()).filter(Boolean) : [],
             };
@@ -1124,8 +1154,19 @@ function mountItem(host, props, ctx) {
 
     /* ── wiring ─────────────────────────────────────────────────── */
 
-    host.addEventListener('input', (e) => { if (e.target.matches('[data-f]:not([readonly])')) setDirty(true); });
-    host.addEventListener('change', (e) => { if (e.target.matches('[data-f]:not([readonly])')) setDirty(true); });
+    const onFieldEdit = (e) => {
+        if (!e.target.matches('[data-f]:not([readonly])')) return;
+        setDirty(true);
+        if (e.target.matches('[data-f="due"]')) {
+            dueTouched = true;
+            // It is this record's own date from the moment it is edited, so the
+            // badge stops being true right then rather than after a save.
+            e.target.classList.remove('bd-duefield__in--inherited');
+            host.querySelector('[data-slot="duebadge"]')?.remove();
+        }
+    };
+    host.addEventListener('input', onFieldEdit);
+    host.addEventListener('change', onFieldEdit);
 
     // Checklist interaction. Delegated, because renderAcceptance replaces the
     // whole list on every change.

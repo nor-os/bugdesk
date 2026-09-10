@@ -647,9 +647,17 @@ bridge rejects anything else with the ladder in the error.
 
 `due: 2026-09-05`, or **empty**. An empty one is **inherited** from the nearest
 dated ancestor, exactly as `phase` is — a task under a story due on the 14th is
-due on the 14th, and the dashboard does not report it as undated. Set a date on
-the item to override; clear it to go back to inheriting. Nothing is ever copied
-down, because a copy stops tracking the original the moment it moves.
+due on the 14th, and the dashboard does not report it as undated. Nothing is ever
+copied down, because a copy stops tracking the original the moment it moves.
+
+**The inherited date shows in the field itself**, badged `inherited`, and it is
+writable: type over it and it becomes this record's own, clear it and it goes
+back to inheriting. The badge goes the moment you edit, because those are the
+same date with different futures — an inherited one moves when the parent does.
+
+Saving a record you did not touch the date on **keeps it inheriting**. Adopting
+the value on screen just because the page was saved would quietly stop the item
+tracking its parent, with nothing on screen having said so.
 
 **A sub-item due after its parent is flagged, not refused.** Plans slip one
 piece at a time, and forbidding it would only make people put in dates they do

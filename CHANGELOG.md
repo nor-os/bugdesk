@@ -153,6 +153,17 @@ been corrected everywhere it appeared. A project is now the only type not asked
 for criteria: it is a container, and what "done" means for it is that the work
 inside it is done.
 
+**An inherited target date shows in the field**, badged `inherited`, rather than
+as a note on a second line — an empty input beside a line of text reads as "no
+date" when there is one. It is writable either way: type over it and it becomes
+this record's own, clear it and it goes back to inheriting, and the badge goes
+the moment you edit rather than after a save.
+
+What makes it an override is **editing** it, not saving the page. Nothing turns
+an inherited date into an owned one because you changed the title and hit Save —
+a silent conversion would stop the item tracking its parent with nothing on
+screen having said so.
+
 **Target dates are inherited**, exactly as `phase` is. An empty `due` resolves to
 the nearest dated ancestor's — a task under a story due on the 14th is due on the
 14th, and no longer shows up in the dashboard's "needs a date" pile when somebody
