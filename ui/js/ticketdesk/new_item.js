@@ -1,36 +1,36 @@
 /**
  * ticketdesk/new_item.js — "New item", the one place anything gets filed.
  *
- * BugDesk has two stores, and until this existed the top bar had a button per
- * store: "New Bug" and "New Item". That asks the user to decide which STORE
- * something belongs in before they have said what it is — which is backwards,
- * because the answer is a property of the thing. So there is one dialog, and
- * one Type select spanning both:
+ * BugDesk has two stores, and this is one mask spanning both. One Type select:
  *
  *     Bug · Regression · Chore   →  bugs/BUG-NNNN.md
  *     Epic · Story · Task        →  backlog/{EPIC,STORY,TASK}-NNNN.md
  *
- * Picking the type picks the store.
+ * Picking the type picks the store, and the form follows it: a bug is asked for
+ * a severity, a story for a parent and an estimate, an epic for the phase its
+ * descendants inherit. Deciding which STORE something belongs in before saying
+ * what it is would be backwards — the store is a property of the thing.
  *
- * The form FOLLOWS the Type select. A bug is asked for a severity; a story for
- * a parent and an estimate; an epic for the phase its descendants inherit. The
- * fields are all built once and the irrelevant rows hidden, because rebuilding
- * the form on every change would discard whatever had already been typed.
- *
- * The select itself is scoped by the caller: opened from the backlog's "Epic"
- * button it offers Epic/Story/Task and never mentions bugs, since that item is
- * not going to be one. Only the top bar's untyped entry point offers all six.
- *
- * The full-page bug mask still exists and is still richer (markdown editor,
- * link staging) — the Bugs page's own "New Bug" button opens that. This dialog
- * is the quick cross-store affordance, reachable from anywhere.
+ * A PAGE, NOT A DIALOG. Filing something is not a two-second confirmation: you
+ * write a description, paste a screenshot into it, go and look the parent up,
+ * come back. A modal makes all of that hostile — it traps focus, it cannot sit
+ * open beside the thing you are describing, and it cannot be resized to fit a
+ * paragraph. So this is a content kind (`new-item`) opening in a tab like any
+ * other page, and the description is the same markdown editor the bug mask
+ * uses, with the same paste-a-screenshot support.
  */
 
-import { openForm } from '../ecoagent/ui/modal.js';
-import { statusLine } from './pages.js';
-import { HUMAN_AUTHOR, assigneeOptions, createBug, loadData } from './data.js';
-import { ITEMS, PHASES, createItem, itemRef, loadBacklog } from './backlog_data.js';
+import { mountTileBreadcrumb } from '../tiling/tile_breadcrumb.js';
+import { attachMarkdownEditor } from './md_editor.js';
+import { attachTagInput } from './tag_input.js';
+import { attachSelect } from './select_field.js';
 import { openItemPicker, parentTypesFor } from './item_picker.js';
+import {
+    ASSIGNEES, HUMAN_AUTHOR, TICKETS, assigneeOptions, createBug, loadData,
+} from './data.js';
+import { ITEMS, PHASES, createItem, itemRef, loadBacklog } from './backlog_data.js';
+
+const icon = (name) => `<span class="material-symbols-outlined">${name}</span>`;
 
 /**
  * The Type select. `store` routes the create; `value` is what that store's
@@ -38,52 +38,23 @@ import { openItemPicker, parentTypesFor } from './item_picker.js';
  *
  * "Chore" is a bug whose stored type is `task` — see the note in ./data.js on
  * why the display name differs. It sits in the bug group because that is where
- * the record lives, and putting it next to the backlog's Task is exactly the
- * confusion the rename removed.
+ * the record lives.
  */
 export const KINDS = [
-    { id: 'bug', label: 'Bug', store: 'bugs', value: 'bug' },
-    { id: 'regression', label: 'Regression', store: 'bugs', value: 'regression' },
-    { id: 'chore', label: 'Chore', store: 'bugs', value: 'task' },
-    { id: 'epic', label: 'Epic', store: 'backlog', value: 'epic' },
-    { id: 'story', label: 'Story', store: 'backlog', value: 'story' },
-    { id: 'task', label: 'Task', store: 'backlog', value: 'task' },
+    { id: 'bug', label: 'Bug', store: 'bugs', value: 'bug', icon: 'bug_report' },
+    { id: 'regression', label: 'Regression', store: 'bugs', value: 'regression', icon: 'history' },
+    { id: 'chore', label: 'Chore', store: 'bugs', value: 'task', icon: 'build' },
+    { id: 'epic', label: 'Epic', store: 'backlog', value: 'epic', icon: 'workspaces' },
+    { id: 'story', label: 'Story', store: 'backlog', value: 'story', icon: 'article' },
+    { id: 'task', label: 'Task', store: 'backlog', value: 'task', icon: 'check_box_outline_blank' },
 ];
 const kindById = (id) => KINDS.find((k) => k.id === id) || KINDS[0];
 const typeLabelOf = (t) => ({ epic: 'Epic', story: 'Story', task: 'Task' })[t] || 'Item';
 
-/** The picker stores a bare id; a hand-edited or legacy value may still carry
- *  the reference, so the first number wins either way. */
-function parentId(raw) {
-    const s = String(raw || '').trim();
-    if (!s) return 0;
-    const m = s.match(/(\d+)/);
-    return m ? Number(m[1]) : 0;
-}
-
-const clean = (v) => String(v ?? '').trim();
-const toList = (v) => clean(v) ? clean(v).split(',').map((s) => s.trim()).filter(Boolean) : [];
-
 /**
- * Open the dialog and create whatever it returns.
- *
- * @param {object}  o
- * @param {string}  [o.kind]    preselect a type by its id ('bug', 'story', …).
- *                              When given, the dialog is titled for it ("New
- *                              story"); when omitted it is the generic "New
- *                              item" — the top bar's entry point, where the
- *                              user has not said what they are filing yet.
- * @param {number}  [o.parent]  preselect a backlog parent (the tree's
- *                              "Add child…").
- * @param {string}  [o.phase]   preselect an epic's phase.
- * @returns {Promise<{store: 'bugs'|'backlog', record: object}|null>} null if
- *          cancelled or the create failed (the failure is reported on the
- *          status line, not thrown at the caller).
- */
-/**
- * Which fields each kind actually has. The form is built once with the union
- * and rows are shown or hidden from here as the Type select changes — a form
- * rebuilt on every change would throw away whatever the user had already typed.
+ * Which fields each kind actually has — the one table both the form's
+ * visibility and the submit's payload read, so a hidden field can never be sent
+ * and a sent field can never be invisible.
  */
 export const FIELDS_FOR = {
     bug:        { severity: true },
@@ -97,153 +68,288 @@ export const FIELDS_FOR = {
 };
 const ADAPTIVE = ['severity', 'parent', 'phase', 'points'];
 
-export async function openNewItem({ kind = '', parent = 0, phase = '' } = {}) {
-    // The Type select can change after the form is built, and the picker's
-    // legal parent types depend on it — so it is read at click time, not baked
-    // in at construction.
-    let currentKindId = kind || KINDS[0].id;
-    const currentKind = () => currentKindId;
-    const preset = kind ? kindById(kind) : null;
-    // Scope the TYPE SELECT to the store the preselection implies: a dialog
-    // opened from the backlog's "Epic" button has no business offering to file
-    // a bug. Only the top bar's untyped entry point offers all six.
-    const store = preset ? preset.store : null;
-    const kinds = store ? KINDS.filter((k) => k.store === store) : KINDS;
+const toList = (v) => String(v ?? '').trim()
+    ? String(v).split(',').map((s) => s.trim()).filter(Boolean) : [];
 
-    /** "EPIC-0001 — Auth rewrite" for an id, so the read-only box says what was
-     *  chosen rather than a bare number. */
-    const parentLabel = (id) => {
-        const item = ITEMS.find((i) => String(i.id) === String(id));
-        return item ? `${item.ref} — ${item.title}` : '';
+/** Subsystems already in use, across BOTH stores — the vocabulary you are
+ *  almost certainly picking from, with typing still allowed for a new one. */
+const subsystemOptions = () => Array.from(new Set([
+    ...TICKETS.map((t) => t.subsystem),
+    ...ITEMS.map((i) => i.subsystem),
+].filter(Boolean))).sort();
+
+const setStatus = (msg) => {
+    const el = document.getElementById('sim-status');
+    if (el) el.textContent = msg;
+};
+
+/* ── the page ────────────────────────────────────────────────────── */
+
+export function mountNewItem(host, props, ctx) {
+    let kindId = kindById(props?.kind || 'bug').id;
+    let parentId = Number(props?.parent) || 0;
+
+    host.innerHTML = `
+    <div class="td-page td-ticket">
+        <div class="td-banner">${icon('add_circle')} <b>New item</b> — the Type decides which store it lands in.</div>
+        <div class="td-mask">
+            <section class="td-group">
+                <div class="td-group__title">Record</div>
+                <div class="td-group__body td-grid2">
+                    <div class="td-field"><label class="td-req">Type</label>
+                        <select class="ea-tin" data-f="kind"></select></div>
+                    <div class="td-field"><label>Assignee</label>
+                        <select class="ea-tin" data-f="assignee"></select></div>
+                    <div class="td-field td-span2"><label class="td-req">Title</label>
+                        <input class="ea-tin" data-f="title"></div>
+                    <div class="td-field" data-row="severity"><label>Severity</label>
+                        <select class="ea-tin" data-f="severity"></select></div>
+                    <div class="td-field" data-row="parent"><label>Parent</label>
+                        <div class="ea-picker">
+                            <input class="ea-picker__display" data-f="parentLabel" type="text"
+                                   placeholder="none — click to search" readonly>
+                            <button type="button" class="ea-btn ea-picker__btn" data-a="pickparent"
+                                    aria-label="Find a parent">${icon('search')}</button>
+                        </div></div>
+                    <div class="td-field" data-row="phase"><label>Phase</label>
+                        <select class="ea-tin" data-f="phase"></select></div>
+                    <div class="td-field" data-row="points"><label>Estimate</label>
+                        <input class="ea-tin" data-f="points" placeholder="e.g. 3"></div>
+                    <div class="td-field"><label>Subsystem</label>
+                        <select class="ea-tin" data-f="subsystem"></select></div>
+                    <div class="td-field td-span2"><label>Labels</label>
+                        <input class="ea-tin" data-f="labels"></div>
+                </div>
+            </section>
+            <section class="td-group">
+                <div class="td-group__title">Description</div>
+                <div class="td-group__body">
+                    <textarea class="ea-tin td-area" data-f="description"
+                        placeholder="Steps to reproduce, or the outcome this delivers. Paste a screenshot to attach it."></textarea>
+                </div>
+            </section>
+        </div>
+    </div>`;
+
+    const $ = (sel) => host.querySelector(sel);
+    const fval = (k) => host.querySelector(`[data-f="${k}"]`)?.value?.trim() ?? '';
+    const row = (name) => host.querySelector(`[data-row="${name}"]`);
+
+    /* ── controls ────────────────────────────────────────────────── */
+
+    const selects = {};
+    selects.kind = attachSelect($('[data-f="kind"]'), {
+        options: KINDS.map((k) => ({ value: k.id, label: k.label, icon: k.icon })),
+        value: kindId,
+        onChange: (v) => { kindId = v; syncFields(); },
+    });
+    selects.assignee = attachSelect($('[data-f="assignee"]'), {
+        // Read at OPEN time: the roster can grow while this page is open.
+        optionsFor: () => assigneeOptions().map((n) => ({
+            value: n,
+            label: n || 'Unassigned',
+            icon: !n ? '' : (n.endsWith('_agent') ? 'smart_toy' : 'person'),
+        })),
+        value: '', emptyLabel: 'Unassigned',
+    });
+    selects.severity = attachSelect($('[data-f="severity"]'), {
+        options: ['crash', 'high', 'medium', 'low'], value: 'medium',
+    });
+    selects.phase = attachSelect($('[data-f="phase"]'), {
+        optionsFor: () => PHASES, value: props?.phase || '', allowNew: true,
+        emptyLabel: 'No phase',
+    });
+    selects.subsystem = attachSelect($('[data-f="subsystem"]'), {
+        optionsFor: subsystemOptions, value: '', allowNew: true, emptyLabel: 'unsorted',
+    });
+
+    const tagInput = attachTagInput(host.querySelector('[data-f="labels"]'), {
+        suggestions: Array.from(new Set([
+            ...TICKETS.flatMap((t) => t.labels || []),
+            ...ITEMS.flatMap((i) => i.labels || []),
+        ])).sort(),
+    });
+
+    // The same editor the bug mask uses: markdown toolbar, and pasting or
+    // dropping an image uploads it and inserts the reference.
+    const descEditor = attachMarkdownEditor(host.querySelector('[data-f="description"]'), {
+        onStatus: setStatus, minHeight: 220,
+    });
+
+    /* ── parent ──────────────────────────────────────────────────── */
+
+    const paintParent = () => {
+        const item = ITEMS.find((i) => Number(i.id) === parentId);
+        const el = $('[data-f="parentLabel"]');
+        if (el) el.value = item ? `${item.ref} — ${item.title}` : '';
+    };
+    paintParent();
+
+    const pickParent = async () => {
+        const childType = kindById(kindId).value;
+        const picked = await openItemPicker({
+            title: `Parent for this ${typeLabelOf(childType).toLowerCase()}`,
+            types: parentTypesFor(childType),
+            current: parentId,
+        });
+        if (!picked) return;
+        parentId = picked.id || 0;
+        paintParent();
     };
 
-    // Headings only earn their place when the form spans both stores; a scoped
-    // dialog has nothing to distinguish.
-    const sections = !store;
+    /* ── field visibility ────────────────────────────────────────── */
 
-    const result = await openForm({
-        title: preset ? `New ${preset.label.toLowerCase()}` : 'New item',
-        submitLabel: 'Create',
-        fields: [
-            { name: 'kind', label: 'Type', type: 'select', required: true,
-              options: kinds.map((k) => ({ value: k.id, label: k.label })),
-              ...(sections ? { hint: 'Bug, Regression and Chore go to the bug store; Epic, Story and Task to the backlog.' } : {}) },
-            { name: 'title', label: 'Title', type: 'text', required: true,
-              placeholder: store === 'bugs' ? 'What is wrong?'
-                  : store === 'backlog' ? 'What outcome does this deliver?'
-                  : 'What is wrong, or what should this deliver?' },
-            { name: 'assignee', label: 'Assignee', type: 'select',
-              options: assigneeOptions() },
-            { name: 'subsystem', label: 'Subsystem', type: 'text', placeholder: 'unsorted' },
-            { name: 'labels', label: 'Labels', type: 'text', placeholder: 'comma, separated' },
-
-            ...(sections ? [{ section: 'Bug', name: '__sec_bug' }] : []),
-            { name: 'severity', label: 'Severity', type: 'select',
-              options: ['crash', 'high', 'medium', 'low'] },
-
-            ...(sections ? [{ section: 'Backlog work', name: '__sec_backlog' }] : []),
-            // A LOOKUP, not a typed value: a datalist matches on the literal
-            // prefix of the option text, so finding "Auth rewrite" meant typing
-            // the reference you opened the control to find.
-            { name: 'parent', label: 'Parent', type: 'picker',
-              placeholder: 'none — click to search',
-              displayFor: parentLabel,
-              pick: async (currentId) => {
-                  const childType = kindById(currentKind()).value;
-                  const picked = await openItemPicker({
-                      title: `Parent for this ${typeLabelOf(childType).toLowerCase()}`,
-                      types: parentTypesFor(childType),
-                      current: Number(currentId) || 0,
-                  });
-                  if (!picked) return null;
-                  return { value: picked.id ? String(picked.id) : '', label: picked.id ? `${picked.ref} — ${picked.title}` : '' };
-              } },
-            { name: 'phase', label: 'Phase', type: 'select', create: true,
-              options: PHASES, placeholder: 'e.g. foundation',
-              hint: 'Stories and tasks inherit it.' },
-            { name: 'points', label: 'Estimate', type: 'text', placeholder: 'e.g. 3' },
-
-            { name: 'description', label: 'Description', type: 'textarea', rows: 5 },
-        ],
-        defaults: {
-            kind: preset ? preset.id : kinds[0].id,
-            parent: parent ? String(parent) : '',
-            phase,
-            assignee: '',
-            severity: 'medium',
-        },
-        // The form follows the Type select: a bug is asked for a severity, a
-        // story for a parent and an estimate, an epic for a phase. Fired once on
-        // open too, so a preselected type is reflected before the first click.
-        onFieldChange: (name, value, api) => {
-            currentKindId = api.get('kind') || currentKindId;
-            const chosen = FIELDS_FOR[currentKindId] || {};
-            for (const f of ADAPTIVE) api.setVisible(f, !!chosen[f]);
-            if (sections) {
-                api.setVisible('__sec_bug', !!chosen.severity);
-                api.setVisible('__sec_backlog', !!(chosen.parent || chosen.phase || chosen.points));
-            }
-        },
-    });
-    if (!result || !clean(result.title)) return null;
-
-    const chosen = kindById(result.kind);
-    try {
-        if (chosen.store === 'bugs') {
-            const bug = await createBug({
-                title: clean(result.title),
-                type: chosen.value,
-                severity: clean(result.severity) || 'medium',
-                subsystem: clean(result.subsystem) || 'unsorted',
-                assignee: clean(result.assignee) || HUMAN_AUTHOR,
-                labels: toList(result.labels),
-                links: [],
-                description: clean(result.description),
-            });
-            await loadData();
-            statusLine(`Bug #${bug.id} created.`);
-            return { store: 'bugs', record: bug };
+    function syncFields() {
+        const shown = FIELDS_FOR[kindId] || {};
+        for (const f of ADAPTIVE) {
+            const el = row(f);
+            if (el) el.hidden = !shown[f];
         }
-
-        // An epic has no parent, and a story/task has no authored phase — it
-        // inherits one. Sending either anyway is how the two drift.
-        const isEpic = chosen.value === 'epic';
-        const item = await createItem({
-            title: clean(result.title),
-            type: chosen.value,
-            parent: isEpic ? 0 : parentId(result.parent),
-            phase: isEpic ? clean(result.phase) : '',
-            points: clean(result.points),
-            assignee: clean(result.assignee),
-            subsystem: clean(result.subsystem) || 'unsorted',
-            labels: toList(result.labels),
-            description: clean(result.description),
-        });
-        await loadBacklog();
-        statusLine(`${itemRef(item)} created.`);
-        return { store: 'backlog', record: item };
-    } catch (err) {
-        statusLine(`Create failed: ${err?.message || err}`);
-        return null;
+        const title = host.querySelector('[data-f="title"]');
+        if (title) {
+            title.placeholder = kindById(kindId).store === 'bugs'
+                ? 'What is wrong?' : 'What outcome does this deliver?';
+        }
     }
+    syncFields();
+
+    /* ── actions ─────────────────────────────────────────────────── */
+
+    const actionsEl = ctx?.pageActions || null;
+    if (actionsEl) {
+        actionsEl.innerHTML = `
+            <div class="td-floatactions">
+                <button class="ea-btn" data-a="reset">${icon('undo')} Reset</button>
+                <button class="ea-btn ea-btn--primary" data-a="create">${icon('add')} Create</button>
+            </div>`;
+    }
+
+    const create = async () => {
+        const title = fval('title');
+        if (!title) {
+            setStatus('Create failed: a title is required.');
+            host.querySelector('[data-f="title"]')?.focus();
+            return;
+        }
+        const chosen = kindById(kindId);
+        const shown = FIELDS_FOR[kindId] || {};
+        const btn = actionsEl?.querySelector('[data-a="create"]');
+        if (btn) btn.disabled = true;
+        try {
+            let open;
+            if (chosen.store === 'bugs') {
+                const bug = await createBug({
+                    title,
+                    type: chosen.value,
+                    severity: selects.severity.value() || 'medium',
+                    subsystem: selects.subsystem.value() || 'unsorted',
+                    assignee: selects.assignee.value() || HUMAN_AUTHOR,
+                    labels: toList(fval('labels')),
+                    links: [],
+                    description: fval('description'),
+                });
+                await loadData();
+                setStatus(`Bug #${bug.id} created.`);
+                open = () => ctx.wm?.navigate?.('ticket',
+                    { id: `#${bug.id}`, label: `#${bug.id} — ${bug.title}` }, { ctx, dest: 'origin' });
+            } else {
+                const item = await createItem({
+                    title,
+                    type: chosen.value,
+                    // Only ever send what this kind actually has: a hidden field
+                    // must not reach the record.
+                    parent: shown.parent ? parentId : 0,
+                    phase: shown.phase ? selects.phase.value() : '',
+                    points: shown.points ? fval('points') : '',
+                    assignee: selects.assignee.value(),
+                    subsystem: selects.subsystem.value() || 'unsorted',
+                    labels: toList(fval('labels')),
+                    description: fval('description'),
+                });
+                await loadBacklog();
+                setStatus(`${itemRef(item)} created.`);
+                open = () => ctx.wm?.navigate?.('item',
+                    { id: String(item.id), label: `${itemRef(item)} — ${item.title}` }, { ctx, dest: 'origin' });
+            }
+            ctx.eventBus?.emit?.('backlog:changed', {});
+            // Replace this page with what it made: the mask has done its job,
+            // and leaving it open invites filing the same thing twice.
+            open?.();
+        } catch (err) {
+            setStatus(`Create failed: ${err?.message || err}`);
+            if (btn) btn.disabled = false;
+        }
+    };
+
+    const reset = () => {
+        host.querySelectorAll('input[data-f], textarea[data-f]').forEach((el) => { el.value = ''; });
+        parentId = 0;
+        paintParent();
+        try { tagInput?.setTags([]); } catch { /* no carrier */ }
+        selects.assignee.set('');
+        selects.severity.set('medium');
+        selects.phase.set('');
+        selects.subsystem.set('');
+        setStatus('Cleared.');
+    };
+
+    const onClick = (e) => {
+        const act = e.target.closest('[data-a]')?.dataset.a;
+        if (act === 'pickparent') pickParent();
+        else if (act === 'create') create();
+        else if (act === 'reset') reset();
+    };
+    host.addEventListener('click', onClick);
+    actionsEl?.addEventListener('click', onClick);
+
+    requestAnimationFrame(() => host.querySelector('[data-f="title"]')?.focus());
+
+    return {
+        title: 'New item',
+        destroy: () => {
+            host.removeEventListener('click', onClick);
+            actionsEl?.removeEventListener('click', onClick);
+            for (const s of Object.values(selects)) { try { s.destroy(); } catch { /* gone */ } }
+            try { tagInput?.destroy(); } catch { /* gone */ }
+            try { descEditor?.destroy(); } catch { /* gone */ }
+        },
+    };
+}
+
+/** The content kind, wrapped in the standard page shell. */
+export function createNewItemContent({ eventBus } = {}) {
+    return {
+        'new-item': (hostEl, props, ctx) => {
+            hostEl.classList.add('twm-page-shell', 'td-shell');
+            hostEl.innerHTML = '';
+            const crumbSlot = document.createElement('div');
+            crumbSlot.className = 'twm-page-shell__breadcrumb';
+            const actionsSlot = document.createElement('div');
+            actionsSlot.className = 'td-shell__actions';
+            const contentSlot = document.createElement('div');
+            contentSlot.className = 'twm-page-shell__content';
+            hostEl.append(crumbSlot, actionsSlot, contentSlot);
+            let crumb = null;
+            try {
+                crumb = mountTileBreadcrumb('new-item', props, { ...ctx, eventBus });
+                crumbSlot.appendChild(crumb.el);
+            } catch (err) { console.warn('[bugdesk] breadcrumb failed', err); }
+            const ret = mountNewItem(contentSlot, props, { ...ctx, eventBus, pageActions: actionsSlot });
+            return {
+                title: ret.title,
+                destroy: () => { try { crumb?.destroy?.(); } catch { /* gone */ } ret.destroy?.(); },
+            };
+        },
+    };
 }
 
 /**
- * Open the dialog and then open what it made, in the tile the caller came from.
- * The two always go together — you file something in order to work on it — so
- * every call site would otherwise repeat this branch.
+ * Open the New item page in a tab of the tile the caller came from.
+ *
+ * A tab, not a window and not a modal: it is a page you work in, and it belongs
+ * beside whatever prompted you to file something.
  */
-export async function createAndOpen(wm, opts = {}, navOpts = {}) {
-    const made = await openNewItem(opts);
-    if (!made || !wm) return made;
-    if (made.store === 'bugs') {
-        wm.openInPrimary('ticket', { id: `#${made.record.id}`, label: `#${made.record.id}` });
-    } else {
-        wm.openInPrimary('item', {
-            id: String(made.record.id),
-            label: `${itemRef(made.record)} — ${made.record.title}`,
-            ...navOpts,
-        });
-    }
-    return made;
+export function openNewItem(wm, { kind = '', parent = 0, phase = '', ctx = null } = {}) {
+    const props = { kind: kind || 'bug', parent, phase, label: 'New item' };
+    wm?.openInTabFromContext?.(ctx || {}, 'new-item', props);
 }

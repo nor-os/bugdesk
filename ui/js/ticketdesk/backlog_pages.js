@@ -28,11 +28,12 @@ import { showContextMenu } from '../ecoagent/ui/context_menu.js';
 import { renderMarkdown } from './markdown.js';
 import { attachMarkdownEditor } from './md_editor.js';
 import { attachTagInput } from './tag_input.js';
+import { attachSelect } from './select_field.js';
 import { openFilterEditor } from './filter_editor.js';
 import { openNewItem } from './new_item.js';
 import { onFiltersChanged } from './filter_store.js';
 import { shell, statusLine } from './pages.js';
-import { esc, initials, HUMAN_AUTHOR, AGENT_AUTHOR, assigneeOptions } from './data.js';
+import { esc, initials, HUMAN_AUTHOR, assigneeOptions } from './data.js';
 import {
     BUILTIN_FILTERS, DEFAULT_FILTER, MODEL, SCOPE,
     adhocFilter, deleteFilter, describeFilter, duplicateFilter, epicExpr,
@@ -256,16 +257,12 @@ function mountBacklogBoard(host, props, ctx) {
                     break;
                 case 'add-child': {
                     if (!model) break;
-                    const created = await openNewItem({
+                    // A new child under a folded parent would land invisible.
+                    _collapsed.delete(Number(model.id));
+                    openNewItem(ctx.wm, {
                         kind: model.type === 'epic' ? 'story' : 'task',
-                        parent: model.id,
+                        parent: model.id, ctx,
                     });
-                    if (created) {
-                        // A new child under a folded parent would land invisible.
-                        _collapsed.delete(Number(model.id));
-                        refresh();
-                        openItem(created.record.id, { dest: 'origin', newTab: true });
-                    }
                     break;
                 }
                 case 'copy-ref':
@@ -345,9 +342,9 @@ function mountBacklogBoard(host, props, ctx) {
             rowLabel: (i) => ({ id: i.ref, title: i.title, status: i.statusLabel, dot: i.type }),
             onSaved: openSavedFilter,
         }),
-        'new-epic': async () => { if (await openNewItem({ kind: 'epic' })) refresh(); },
-        'new-story': async () => { if (await openNewItem({ kind: 'story' })) refresh(); },
-        'new-task': async () => { if (await openNewItem({ kind: 'task' })) refresh(); },
+        'new-epic': () => openNewItem(ctx.wm, { kind: 'epic', ctx }),
+        'new-story': () => openNewItem(ctx.wm, { kind: 'story', ctx }),
+        'new-task': () => openNewItem(ctx.wm, { kind: 'task', ctx }),
     };
     host.querySelector('.td-page__bar').addEventListener('click', (e) => {
         const btn = e.target.closest('[data-a]');
@@ -463,10 +460,12 @@ function mountItem(host, props, ctx) {
     let tagInput = null;
     let composer = null;
     let acceptanceEditor = null;
+    const fieldSelects = [];      // custom dropdowns replacing the bare <select>s
     const destroyWidgets = () => {
-        for (const w of [tagInput, composer, acceptanceEditor]) {
+        for (const w of [tagInput, composer, acceptanceEditor, ...fieldSelects]) {
             try { w?.destroy(); } catch { /* already gone */ }
         }
+        fieldSelects.length = 0;
         tagInput = composer = acceptanceEditor = null;
     };
 
@@ -509,6 +508,42 @@ function mountItem(host, props, ctx) {
                 suggestions: Array.from(new Set(ITEMS.flatMap((i) => i.labels || []))).sort(),
             })
             : null;
+
+        // Custom controls, replacing the browser's own. Phase ALLOWS A NEW
+        // VALUE: the phase vocabulary is not a fixed list, it is extended by
+        // naming one, and a dropdown that cannot express "foundation-2" forces
+        // the user out to a text file to say it.
+        for (const s of fieldSelects) { try { s.destroy(); } catch { /* gone */ } }
+        fieldSelects.length = 0;
+        const attach = (name, spec) => {
+            const el = host.querySelector(`[data-f="${name}"]`);
+            if (el && el.tagName === 'SELECT') fieldSelects.push(attachSelect(el, spec));
+        };
+        attach('type', {
+            options: TYPES.map((t) => ({ value: t, label: typeLabelOf(t), icon: TYPE_ICON[t] })),
+            value: item.type,
+        });
+        attach('assignee', {
+            optionsFor: () => assigneeOptions().map((n) => ({
+                value: n, label: n || 'Unassigned',
+                icon: !n ? '' : (n.endsWith('_agent') ? 'smart_toy' : 'person'),
+            })),
+            value: item.assignee || '', emptyLabel: 'Unassigned',
+        });
+        attach('parent', {
+            optionsFor: () => [{ value: '', label: '(none)' }, ...parentOptions(item.type)],
+            value: item.parent || '', emptyLabel: '(none)',
+        });
+        const phaseEl = host.querySelector('[data-f="phase"]');
+        if (phaseEl && phaseEl.tagName === 'INPUT') {
+            const holder = document.createElement('select');
+            for (const attr of phaseEl.attributes) holder.setAttribute(attr.name, attr.value);
+            phaseEl.replaceWith(holder);
+            fieldSelects.push(attachSelect(holder, {
+                optionsFor: () => PHASES, value: item.phase || '', allowNew: true,
+                emptyLabel: 'No phase',
+            }));
+        }
     };
 
     const renderAncestors = () => {
@@ -870,11 +905,10 @@ function mountItem(host, props, ctx) {
         else if (act === 'acceptance-raw') { acceptanceRaw = true; renderAcceptance(); }
         else if (act === 'acceptance-list') { acceptanceRaw = false; renderAcceptance(); }
         else if (act === 'addchild') {
-            const created = await openNewItem({
+            openNewItem(ctx.wm, {
                 kind: item.type === 'epic' ? 'story' : 'task',
-                parent: item.id,
+                parent: item.id, ctx,
             });
-            if (created) { apply(await fetchItem(item.id)); await broadcast(); }
         }
     };
     host.addEventListener('click', onClick);

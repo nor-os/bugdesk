@@ -692,3 +692,83 @@
     white-space: nowrap;
     max-width: 45%;
 }
+
+/* ── Custom choice control (select_field.js) ─────────────────────────
+   Replaces `<select>`, which the browser draws — so it ignores the app's
+   tokens, cannot carry an icon per option, and cannot be typed into. */
+
+.bd-sel { display: block; }
+.bd-sel__button {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    width: 100%;
+    min-height: 22px;
+    padding: 2px 6px;
+    font: inherit;
+    font-size: var(--ea-font-body, 11px);
+    text-align: left;
+    color: var(--text-primary, #e0e0e0);
+    background: var(--surface-3, #3c3c3c);
+    border: 1px solid var(--ea-border, #333);
+    border-radius: 2px;
+    cursor: pointer;
+}
+.bd-sel__button:hover { border-color: var(--border-strong, #383838); background: var(--surface-3, #3c3c3c); }
+.bd-sel__button:focus-visible { outline: 1px solid var(--accent-bright, #007acc); outline-offset: -1px; }
+.bd-sel__label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bd-sel__label--muted { color: var(--text-dim, #666); }
+.bd-sel__icon { font-size: 14px; width: 14px; flex: 0 0 14px; color: var(--text-muted, #888); }
+.bd-sel__caret { font-size: 15px; color: var(--text-muted, #888); flex: 0 0 auto; }
+
+.bd-sel__panel {
+    position: fixed;
+    z-index: 11500;         /* above the picker overlay, which can be beneath it */
+    max-height: 320px;
+    display: flex;
+    flex-direction: column;
+    background: var(--surface-1, #252526);
+    border: 1px solid var(--border-strong, #383838);
+    border-radius: var(--radius-md, 6px);
+    box-shadow: 0 12px 32px rgb(0 0 0 / 50%);
+    overflow: hidden;
+}
+.bd-sel__searchrow {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border-subtle, #2a2a2a);
+}
+.bd-sel__searchrow .material-symbols-outlined { font-size: 15px; color: var(--text-muted, #888); }
+.bd-sel__search {
+    flex: 1;
+    font: inherit;
+    font-size: var(--font-size-sm, 12px);
+    color: var(--text-primary, #e0e0e0);
+    background: transparent;
+    border: none;
+    outline: none;
+}
+.bd-sel__list {
+    flex: 1 1 auto;
+    min-height: 0;
+    margin: 0;
+    padding: 3px 0;
+    list-style: none;
+    overflow-y: auto;
+}
+.bd-sel__opt {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 9px;
+    font-size: var(--font-size-sm, 12px);
+    cursor: pointer;
+}
+.bd-sel__opt--on { background: var(--surface-2, #2d2d2d); }
+.bd-sel__opt--current .bd-sel__optlabel { font-weight: var(--font-weight-semibold, 600); }
+.bd-sel__optlabel { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bd-sel__hint { font-size: 10px; color: var(--text-dim, #666); }
+.bd-sel__opt--new { border-top: 1px solid var(--border-subtle, #2a2a2a); color: var(--color-success, #3fb950); }
+.bd-sel__empty { padding: 8px 9px; color: var(--text-dim, #666); font-style: italic; font-size: var(--font-size-sm, 12px); }

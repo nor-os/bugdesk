@@ -144,6 +144,13 @@ invisible, since the app boots perfectly well on last release's code.
 
 ### Fixed
 
+- **Clicking a backlog filter switched to the bug view.** Both rails mount into
+  the same panel body, and the bugs rail's delegated listeners stayed attached
+  when the backlog rail replaced its content. Both stores have a builtin keyed
+  `active`, so clicking the backlog's "In progress" also fired the bug handler,
+  which resolved `active` against the *bug* builtins and navigated to Queues.
+  The handlers are guarded on which rail is showing, and removed on teardown.
+
 - **The top-nav chip stopped highlighting.** `install.js` called
   `activeTopNavKind(wm)` without importing it — an edit whose import half never
   landed. Every sync threw a `ReferenceError`, so no chip ever lit.
@@ -170,6 +177,30 @@ invisible, since the app boots perfectly well on last release's code.
   type (preselected to what can legally hold the item), type any part of a
   reference or title, arrow keys and Enter to pick. The field then shows
   `EPIC-0001 — Auth rewrite`. `openForm` gained a `picker` field type for it.
+- **New item is a page, not a modal.** Filing something is not a two-second
+  confirmation: you write a description, paste a screenshot into it, go and look
+  the parent up, come back. A modal traps focus, cannot sit open beside the
+  thing you are describing, and cannot be resized to fit a paragraph. It is now
+  a content kind that opens in a tab, with the same markdown editor (and
+  paste-a-screenshot support) the bug mask uses, and every field the records
+  actually have — subsystem, phase, labels and estimate included.
+- **Choice fields are BugDesk's own control, not `<select>`.** The browser draws
+  its own, so it ignores the app's tokens, cannot carry an icon per option and
+  cannot be typed into. All three matter here: Type wants a glyph, Assignee
+  wants to mark which entries are agents, and Phase is a vocabulary you extend
+  by typing a name that does not exist yet.
+- **Phase is a searchable combo that accepts new values**, on the New item page
+  and on the item page, where it was a plain text input.
+- **Search covers both stores.** It searched bugs only, so the story you filed
+  ten minutes ago was unfindable — and there is no reason to have to remember
+  which store a thing went into before you can look for it. Results carry a
+  Store column and open in whichever page their own store uses. Status and Type
+  still narrow to bugs, since the backlog has neither.
+- The top menu's File (New…, Open Project…, Save, Save All, Exit) and Edit
+  entries are gone. BugDesk has no project to open and nothing to save — the
+  store is a directory of markdown files, written the moment an edit is made —
+  and a Save that does nothing is worse than no Save, because it implies the
+  rest of the app might not have saved.
 - **The New item form now follows the Type select.** A bug is asked for a
   severity; a story for a parent and an estimate; an epic for the phase its
   descendants inherit. It used to show every field of both stores at once,

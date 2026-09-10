@@ -114,6 +114,7 @@ export async function installTilingShell({ eventBus, logger, runtime } = {}) {
     try {
         const { createTicketDeskContent } = await import('../ticketdesk/pages.js');
         const { createBacklogContent } = await import('../ticketdesk/backlog_pages.js');
+        const { createNewItemContent } = await import('../ticketdesk/new_item.js');
         const { loadData } = await import('../ticketdesk/data.js');
         const { loadBacklog } = await import('../ticketdesk/backlog_data.js');
         const [bugs, backlog] = await Promise.allSettled([loadData(), loadBacklog()]);
@@ -123,7 +124,7 @@ export async function installTilingShell({ eventBus, logger, runtime } = {}) {
         else console.error('[bugdesk] loadBacklog failed — the backlog will render empty', backlog.reason);
 
         ticketDeskContent = createTicketDeskContent({ eventBus });
-        backlogContent = createBacklogContent({ eventBus });
+        backlogContent = { ...createBacklogContent({ eventBus }), ...createNewItemContent({ eventBus }) };
     } catch (err) {
         console.error('[bugdesk] page registration failed', err);
     }
@@ -333,11 +334,10 @@ function _installTicketActions(wm) {
         const btn = e.target.closest('[data-td]');
         if (!btn) return;
         if (btn.dataset.td === 'item') {
-            // No preselected type: the dialog opens as "New item" and the Type
-            // select is where the user says what it is — and therefore which
-            // store it lands in. createAndOpen then opens whichever it made.
-            const { createAndOpen } = await import('../ticketdesk/new_item.js');
-            await createAndOpen(wm);
+            // A tab, not a dialog: filing something means writing a description
+            // and looking a parent up, which a modal makes hostile.
+            const { openNewItem } = await import('../ticketdesk/new_item.js');
+            openNewItem(wm);
             return;
         }
         // Search always opens as a NEW TAB, never in place. openInPrimary swaps the primary tile's
@@ -351,14 +351,27 @@ function _installTicketActions(wm) {
     else barRight.insertBefore(wrap, barRight.firstChild);
 }
 
-/** Strip View + Run menus from the top menu bar. Their actions live
- *  elsewhere now (panel toggles for View, sim-controls cluster for Run). */
+/**
+ * Strip the menus that mean nothing in BugDesk, leaving only Help for the
+ * hamburger to collect.
+ *
+ *   View  — the panel toggles next door do this, visibly and in one click.
+ *   Run   — there is no simulation.
+ *   File  — New…, Open Project…, Save, Save All, Exit. BugDesk has no project
+ *           to open and nothing to save: the store is a directory of markdown
+ *           files and every edit is written the moment it is made. A Save that
+ *           does nothing is worse than no Save, because it implies the rest of
+ *           the app might not have saved.
+ *   Edit  — Undo and Redo ship permanently disabled, and Find duplicates the
+ *           per-column filters and Ctrl+K.
+ */
 function _trimMenuBar() {
+    const drop = new Set(['view', 'run', 'file', 'edit']);
     const menu = document.querySelector('.global-top-bar .app-menu');
     if (!menu) return;
     for (const item of menu.querySelectorAll('.menu-item')) {
         const label = item.querySelector('span')?.textContent?.trim().toLowerCase();
-        if (label === 'view' || label === 'run') item.remove();
+        if (drop.has(label)) item.remove();
     }
 }
 

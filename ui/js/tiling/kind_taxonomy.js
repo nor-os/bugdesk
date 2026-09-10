@@ -55,6 +55,12 @@ export const taxonomy = createTaxonomy({
         },
         item: { label: 'Item', icon: 'article', topNav: 'backlog' },
 
+        // The create mask. Sits under Bugs in the breadcrumb because that is
+        // BugDesk's home section; the Type select inside it is what actually
+        // decides which store the record lands in, and the page is reachable
+        // from both.
+        'new-item': { label: 'New item', icon: 'add_circle', topNav: 'queues' },
+
         // Settings reachable from the hamburger; no top-nav slot. App-global
         // (localStorage-backed, openable with no project loaded), so its
         // breadcrumb omits the project ancestor — `appGlobal` flags that.

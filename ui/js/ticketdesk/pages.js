@@ -54,6 +54,7 @@ import {
     LINK_TYPES, linkTypeDef, formatLink, outgoingLinks, incomingLinks, validateNewLink,
 } from './links.js';
 import { attachTagInput } from './tag_input.js';
+import { ITEMS } from './backlog_data.js';
 import {
     esc, STAGES, TICKETS, TEAM, HUMAN_AUTHOR, AGENT_AUTHOR, assigneeOptions,
     fetchBug, patchBug, postComment, createBug, loadData, initials,
@@ -442,8 +443,11 @@ function mountQueues(host, props, ctx) {
     table.render();
     requestAnimationFrame(() => { if (host.isConnected) table.focus(); });
 
-    host.querySelector('[data-a="newbug"]').addEventListener('click', () => {
-        ctx.wm?.openInPrimary?.('ticket', { mode: 'new', label: 'New Bug' });
+    host.querySelector('[data-a="newbug"]').addEventListener('click', async () => {
+        // The same page the backlog's Epic/Story/Task buttons open, preselected
+        // — one create mask, not one per store.
+        const { openNewItem } = await import('./new_item.js');
+        openNewItem(ctx.wm, { kind: 'bug', ctx });
     });
 
     host.querySelector('[data-a="savefilter"]').addEventListener('click', () => {
@@ -778,65 +782,90 @@ function mountTicket(host, props, ctx) {
         const doSearch = () => {
             const text = (fval('summary') + ' ' + fval('desc')).trim().toLowerCase();
             const status = fval('status'), type = fval('type'), subsystem = fval('subsystem').toLowerCase();
-            const matches = TICKETS.filter((tk) => {
+            const bugs = TICKETS.filter((tk) => {
                 if (text && !tk.summary.toLowerCase().includes(text)) return false;
                 if (subsystem && !String(tk.subsystem || '').toLowerCase().includes(subsystem)) return false;
                 if (status && status !== '(any)' && tk.status !== status) return false;
                 if (type && type !== '(any)' && typeLabelOf(tk.type) !== type) return false;
                 return true;
-            });
+            }).map((tk) => ({ ...tk, store: 'bugs', ref: tk.id }));
+
+            // BOTH stores. A search that only knows about bugs is a search that
+            // cannot find the story you filed ten minutes ago, and there is no
+            // reason for the user to have to remember which of the two a thing
+            // went into before they can look for it. The bug-only fields
+            // (status, type) are ignored for backlog rows rather than excluding
+            // them: an unset field means "don't care", not "bugs only".
+            const wantsBugFields = (status && status !== '(any)') || (type && type !== '(any)');
+            const items = wantsBugFields ? [] : ITEMS.filter((i) => {
+                if (text && !String(i.title || '').toLowerCase().includes(text)) return false;
+                if (subsystem && !String(i.subsystem || '').toLowerCase().includes(subsystem)) return false;
+                return true;
+            }).map((i) => ({
+                store: 'backlog', ref: i.ref, id: i.ref, bugId: i.id,
+                summary: i.title, type: i.typeLabel, status: i.statusLabel,
+                sla: i.updated, assignee: i.assignee,
+            }));
+
+            const matches = [...bugs, ...items];
             disposeResults();
-            resultsEl.innerHTML = `<section class="td-group"><div class="td-group__title">Results — ${matches.length} bug${matches.length === 1 ? '' : 's'}</div><div class="td-tablehost"></div></section>`;
+            resultsEl.innerHTML = `<section class="td-group"><div class="td-group__title">Results — ${bugs.length} bug${bugs.length === 1 ? '' : 's'}${items.length ? `, ${items.length} backlog item${items.length === 1 ? '' : 's'}` : ''}</div><div class="td-tablehost"></div></section>`;
             // Bug id is column 0 here (no Pri column), so the menu's row →
             // id mapping differs from the queue's; the two share nothing but
             // the idea.
             const resultIds = (cm) => (cm.selectedRows?.length ? cm.selectedRows : (cm.row ? [cm.row] : []))
                 .map((r) => r?.[0]).filter(Boolean);
-            const openResult = (id, opts) => {
-                const p = { id, label: id };
-                if (ctx.wm?.navigate) ctx.wm.navigate('ticket', p, { ctx, ...opts });
-                else ctx.wm?.openInTabFromContext?.(ctx, 'ticket', p);
+            const byRef = new Map(matches.map((m) => [m.ref, m]));
+            /** A result opens in the page its OWN store uses. */
+            const openResult = (ref, opts) => {
+                const m = byRef.get(ref);
+                if (!m) return;
+                const kind = m.store === 'backlog' ? 'item' : 'ticket';
+                const p = m.store === 'backlog'
+                    ? { id: String(m.bugId), label: `${m.ref} — ${m.summary}` }
+                    : { id: m.id, label: `${m.id} — ${m.summary}` };
+                if (ctx.wm?.navigate) ctx.wm.navigate(kind, p, { ctx, ...opts });
+                else ctx.wm?.openInTabFromContext?.(ctx, kind, p);
             };
             resultsTable = new DataTable(resultsEl.querySelector('.td-tablehost'), {
-                headers: ['Bug', 'Type', 'Summary', 'Status', 'Updated', 'Assignee'],
-                rows: matches.map((m) => [m.id, m.type, m.summary, m.status, m.sla, m.assignee]),
+                headers: ['Ref', 'Store', 'Type', 'Summary', 'Status', 'Updated', 'Assignee'],
+                rows: matches.map((m) => [m.ref, m.store === 'backlog' ? 'Backlog' : 'Bugs',
+                                          m.type, m.summary, m.status, m.sla, m.assignee]),
                 pagination: false, selectable: true, copyable: true, sortable: true, mode: 'compact',
-                emptyMessage: 'No bugs match the criteria',
+                emptyMessage: 'Nothing matches the criteria',
                 contextMenuItems: (cm) => {
                     const n = resultIds(cm).length;
                     return [
-                        { label: n > 1 ? `Open ${n} bugs in tabs` : 'Open', icon: 'open_in_new', action: 'open', disabled: !n },
-                        { label: 'Open in new tab', icon: 'tab', action: 'open-tab', disabled: !n },
+                        { label: n > 1 ? `Open ${n} in tabs` : 'Open', icon: 'open_in_new', action: 'open', disabled: !n },
                         { label: 'Open in new window', icon: 'web_asset', action: 'open-window', disabled: !cm.row },
                         { separator: true },
-                        { label: n > 1 ? `Copy ${n} bug IDs` : 'Copy bug ID', icon: 'content_copy', action: 'copy-id', disabled: !n },
+                        { label: n > 1 ? `Copy ${n} references` : 'Copy reference', icon: 'content_copy', action: 'copy-id', disabled: !n },
                     ];
                 },
                 onContextMenuAction: (action, cm) => {
-                    const ids = resultIds(cm);
+                    const refs = resultIds(cm);
                     switch (action) {
-                        case 'open':
-                        case 'open-tab': ids.forEach((id) => openResult(id, { dest: 'origin', newTab: true })); break;
+                        case 'open': refs.forEach((r) => openResult(r, { dest: 'origin', newTab: true })); break;
                         case 'open-window': if (cm.row?.[0]) openResult(cm.row[0], { dest: 'window' }); break;
                         case 'copy-id':
-                            if (ids.length) copyText(ids.join('\n'),
-                                `Copied ${ids.length} bug ID${ids.length === 1 ? '' : 's'}.`);
+                            if (refs.length) copyText(refs.join('\n'),
+                                `Copied ${refs.length} reference${refs.length === 1 ? '' : 's'}.`);
                             break;
                     }
                 },
                 renderCell: (td, value, colIdx) => {
                     if (colIdx === 0) { td.innerHTML = `<span class="td-mono td-link">${esc(value)}</span>`; return true; }
+                    if (colIdx === 1) { td.innerHTML = `<span class="td-chip">${esc(value)}</span>`; return true; }
                     return false;
                 },
                 onRowClick: (i, row, ev) => {
                     if (ev && (ev.ctrlKey || ev.metaKey || ev.shiftKey)) return;
-                    ctx.wm?.openInTabFromContext?.(ctx, 'ticket',
-                        { id: row[0], label: ticketLabel(TICKETS.find((x) => x.id === row[0])) || row[0] });
+                    openResult(row[0], { dest: 'origin', newTab: true });
                 },
             });
             resultsTable.render();
             resultsTable.focus();
-            statusLine(`Search: ${matches.length} match${matches.length === 1 ? '' : 'es'}.`);
+            statusLine(`Search: ${matches.length} match${matches.length === 1 ? '' : 'es'} across both stores.`);
         };
         $('[data-a="dosearch"]').addEventListener('click', doSearch);
         $('[data-a="reset"]').addEventListener('click', () => {
@@ -1226,19 +1255,26 @@ function mountTicketNav(host, props, ctx) {
         }
     };
 
-    body.addEventListener('click', (e) => {
+    // GUARDED on `shown`. These are delegated onto the shared panel body, which
+    // the backlog rail also mounts into — so without the guard a click on a
+    // backlog filter row fires this handler too. Both stores have a builtin
+    // keyed `active`, so clicking the backlog's "In progress" resolved `active`
+    // against the BUG builtins and navigated to Queues.
+    const onBugRailClick = (e) => {
+        if (shown !== 'bugs') return;
         if (e.target.closest('[data-new]')) { newFilter(); return; }
         const row = e.target.closest('[data-filter]');
         if (!row) return;
         const btn = e.target.closest('.td-nav__action');
         if (btn) { runAction(btn.dataset.act, row.dataset.filter, !!row.dataset.custom); return; }
         runAction('open', row.dataset.filter, !!row.dataset.custom);
-    });
+    };
 
     // Keyboard: the rows are role="button", so Enter/Space must activate
     // them like a click. The action buttons are native <button>s and need
     // nothing (their click handler above already covers them).
-    body.addEventListener('keydown', (e) => {
+    const onBugRailKey = (e) => {
+        if (shown !== 'bugs') return;
         if (e.key !== 'Enter' && e.key !== ' ') return;
         if (e.target.closest('.td-nav__action')) return;
         if (e.target.matches('[data-new]')) { e.preventDefault(); newFilter(); return; }
@@ -1246,9 +1282,10 @@ function mountTicketNav(host, props, ctx) {
         if (!row) return;
         e.preventDefault();
         runAction('open', row.dataset.filter, !!row.dataset.custom);
-    });
+    };
 
-    body.addEventListener('contextmenu', (e) => {
+    const onBugRailMenu = (e) => {
+        if (shown !== 'bugs') return;
         const row = e.target.closest('[data-filter]');
         if (!row) return;
         e.preventDefault();
@@ -1269,13 +1306,20 @@ function mountTicketNav(host, props, ctx) {
             ];
         showContextMenu(e.clientX, e.clientY, items,
             (action) => runAction(action, row.dataset.filter, custom));
-    });
+    };
+
+    body.addEventListener('click', onBugRailClick);
+    body.addEventListener('keydown', onBugRailKey);
+    body.addEventListener('contextmenu', onBugRailMenu);
 
     return {
         title: 'Filters',
         destroy: () => {
             unsub();
             focusSub?.dispose?.();
+            body.removeEventListener('click', onBugRailClick);
+            body.removeEventListener('keydown', onBugRailKey);
+            body.removeEventListener('contextmenu', onBugRailMenu);
             try { backlogRail?.destroy(); } catch { /* not mounted */ }
         },
     };
