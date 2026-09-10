@@ -29,6 +29,7 @@ import { renderMarkdown } from './markdown.js';
 import { attachMarkdownEditor } from './md_editor.js';
 import { attachTagInput } from './tag_input.js';
 import { attachSelect } from './select_field.js';
+import { watchRecord } from './live.js';
 import { openFilterEditor } from './filter_editor.js';
 import { openNewItem } from './new_item.js';
 import { onFiltersChanged } from './filter_store.js';
@@ -807,6 +808,7 @@ function mountItem(host, props, ctx) {
             else patch.parent = Number(fval('parent') || 0);
             apply(await patchItem(item.id, patch));
             await broadcast();
+            live.clear();
             statusLine(`${itemRef(item)} saved.`);
         } catch (err) { statusLine(`Save failed: ${err?.message || err}`); }
     };
@@ -914,6 +916,20 @@ function mountItem(host, props, ctx) {
     host.addEventListener('click', onClick);
     actionsEl?.addEventListener('click', onClick);
 
+    // Same contract as the bug page: silent when clean, a choice when dirty.
+    const live = watchRecord({
+        host,
+        store: 'backlog',
+        id: () => item?.id || id,
+        isDirty: () => dirty,
+        onStatus: statusLine,
+        eventBus: _eventBus,
+        onReload: async () => {
+            try { apply(await fetchItem(item?.id || id)); }
+            catch (err) { statusLine(`Reload failed: ${err?.message || err}`); }
+        },
+    });
+
     (async () => {
         try {
             apply(await fetchItem(id));
@@ -926,6 +942,7 @@ function mountItem(host, props, ctx) {
     return {
         title: itemLabel(ITEMS.find((x) => Number(x.id) === id)) || `Item ${id}`,
         destroy: () => {
+            live.dispose();
             host.removeEventListener('change', onCriteriaChange);
             host.removeEventListener('keydown', onCriteriaKey);
             destroyWidgets();

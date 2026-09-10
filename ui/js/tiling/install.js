@@ -209,6 +209,16 @@ export async function installTilingShell({ eventBus, logger, runtime } = {}) {
 
     window.__twm = { wm, palette };
 
+    // Live updates: the bridge watches the store directories and pushes changes
+    // that BugDesk did not make. Installed after wm.load() so the pages that
+    // react to the events are already mounted and subscribed.
+    try {
+        const { installLiveUpdates } = await import('../ticketdesk/live.js');
+        installLiveUpdates({ eventBus, logger: log });
+    } catch (err) {
+        log.warn?.('live updates failed to install', { err });
+    }
+
     // Settings › General › Authorship writes through to the per-user profile,
     // so the name the UI signs comments with and the name GET /api/config
     // reports to the skills can never disagree. See first_run.js.

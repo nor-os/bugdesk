@@ -137,6 +137,34 @@ switches BugDesk to that person's profile (creating it if the name is new),
 along with their saved filters, and writes through to the profile on disk so
 `/api/config` and the UI can never disagree about who you are.
 
+## Live updates
+
+The markdown files are the source of truth precisely so **other things write
+them** — a `git pull`, an agent working through the `/bugs` skill, somebody's
+editor. The bridge watches both store directories and pushes changes to every
+open browser over Server-Sent Events (`GET /api/events`), so the UI is never
+looking at a store that has moved on without it.
+
+| what changed | what happens |
+|---|---|
+| a record, anywhere | the queue and the backlog tree repaint |
+| the record you have open, **no unsaved edits** | it refreshes silently |
+| the record you have open, **unsaved edits** | you are asked: *discard mine and reload*, or *keep my edits* (the next save overwrites) |
+| the record you have open, **deleted on disk** | you are told; saving writes the file again |
+
+Discarding your edits to show you somebody else's is not a decision to make on
+your behalf, and neither is silently overwriting theirs — so when there is
+something to lose, the page says so and both choices are one click.
+
+**Your own saves never announce themselves.** Every write BugDesk makes also
+trips the watcher, so the bridge records the SHA-256 of what it wrote and treats
+a file that still hashes to that value as its own echo. A timing window would
+have been the obvious fix and the wrong one: a slow disk turns it into a race.
+
+A burst is coalesced over a 250 ms quiet period — a `git pull` rewriting twenty
+files should be one repaint, not twenty — and the stream sends a comment
+heartbeat every 25 s so proxies do not drop it as idle.
+
 ## Collaborators
 
 `bugdesk.json`, beside the stores and **committed**, is who can be assigned work
@@ -216,6 +244,7 @@ Same-origin JSON, backed by the markdown files:
 | POST | `/api/project/collaborators` | replace the roster (what the Settings editor saves) |
 | POST | `/api/project/collaborator` | add or update one person, without sending the whole roster |
 | POST | `/api/attachments` | upload one image (base64), returns its `/attachments/…` URL |
+| GET  | `/api/events` | Server-Sent Events: records changed on disk by anything but BugDesk |
 
 Every other `/api/<method>` returns `{ok:true,result:{ok:true}}` so the shell
 boots and renders its empty states.

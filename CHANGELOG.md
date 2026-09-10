@@ -10,6 +10,26 @@ and it tracks the work you *meant* to do alongside the work that broke.
 
 ### Added
 
+**Live updates.** The bridge watches both store directories and pushes changes
+to every open browser over Server-Sent Events (`GET /api/events`). Before this
+the UI only knew the store as it was at page load, so an agent could move a bug
+to `testing` and the human would sit looking at `investigation` until they
+happened to reload — and if they then saved, they silently overwrote the agent.
+
+- Lists repaint on any change.
+- The record you have open refreshes **silently when you have no unsaved
+  edits** — the common case by a wide margin.
+- When you *do* have unsaved edits, the page says the file changed and offers
+  both choices: discard yours and reload, or keep yours and overwrite on save.
+  Neither is safe to pick on the user's behalf.
+- A deleted record is reported as such.
+- **Your own saves never announce themselves.** Every BugDesk write also trips
+  the watcher, so the bridge records the SHA-256 of what it wrote and treats a
+  file still hashing to that value as its own echo. A timing window would have
+  been the obvious fix and the wrong one — a slow disk makes it a race.
+- Bursts coalesce over 250 ms (a `git pull` rewriting twenty files is one
+  repaint), and the stream heartbeats every 25 s so proxies do not drop it.
+
 **A shared collaborator roster.** `bugdesk.json`, beside the stores and
 **committed**, lists everyone who can be assigned work here. It is the opposite
 of the per-user profile: an assignee dropdown offering only "me and my agent"

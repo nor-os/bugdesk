@@ -47,6 +47,22 @@ app.Logger.LogInformation("BugDesk: project={project}", project.Path);
 string legacyFiltersPath = Path.Combine(ResolveStateDir(app.Environment.ContentRootPath), "filters.json");
 users.MigrateLegacyFilters(legacyFiltersPath);
 
+// ---- Live updates ---------------------------------------------------------
+// The markdown files are the source of truth precisely so other things write
+// them — a git pull, an agent through the /bugs skill, somebody's editor. The
+// watcher turns those into SSE so an open browser is never looking at a store
+// that has moved on without it. See StoreWatcher.cs, and note that EVERY write
+// below goes through WriteRecord so the watcher can tell our own echo from a
+// real change.
+var watcher = new StoreWatcher(bugsDir, backlogDir, project.Path, app.Logger);
+app.Lifetime.ApplicationStopping.Register(() => watcher.Dispose());
+
+async Task WriteRecord(string path, string text)
+{
+    await File.WriteAllTextAsync(path, text);
+    watcher.Note(path, text);
+}
+
 // ---- Static UI ------------------------------------------------------------
 if (Directory.Exists(uiDir))
 {
@@ -151,7 +167,7 @@ app.MapPost("/api/bugs/{id:int}", async (int id, HttpRequest req) =>
             text = Md.SetFrontmatter(text, key, Md.ListValue(v.EnumerateArray().Select(e => e.GetString() ?? "")));
     }
     text = Md.SetFrontmatter(text, "updated", Md.Today());
-    await File.WriteAllTextAsync(path, text);
+    await WriteRecord(path, text);
     return Results.Json(new { ok = true, bug = LoadOne(bugsDir, id) }, json);
 });
 
@@ -165,7 +181,7 @@ app.MapPost("/api/bugs/{id:int}/comments", async (int id, HttpRequest req) =>
     if (string.IsNullOrWhiteSpace(comment)) return Results.Json(new { ok = false, error = "empty comment" }, json, statusCode: 400);
 
     var text = Md.AppendComment(await File.ReadAllTextAsync(path), author ?? users.HumanAuthor, comment!);
-    await File.WriteAllTextAsync(path, text);
+    await WriteRecord(path, text);
     return Results.Json(new { ok = true, bug = LoadOne(bugsDir, id) }, json);
 });
 
@@ -208,7 +224,7 @@ app.MapPost("/api/bugs", async (HttpRequest req) =>
     sb.Append(string.IsNullOrWhiteSpace(description) ? "_(no description provided)_" : description);
     sb.Append('\n');
 
-    await File.WriteAllTextAsync(BugPath(bugsDir, nextId), sb.ToString());
+    await WriteRecord(BugPath(bugsDir, nextId), sb.ToString());
     return Results.Json(new { ok = true, bug = LoadOne(bugsDir, nextId) }, json);
 });
 
@@ -314,7 +330,7 @@ app.MapPost("/api/backlog", async (HttpRequest req) =>
         Description = Get("description"),
         Acceptance = Get("acceptance"),
     };
-    await File.WriteAllTextAsync(Path.Combine(backlogDir, item.FileName), item.Render());
+    await WriteRecord(Path.Combine(backlogDir, item.FileName), item.Render());
 
     var reloaded = LoadBacklog(backlogDir);
     return Results.Json(new { ok = true, item = FullItem(reloaded, reloaded.First(i => i.Id == item.Id)) }, json);
@@ -416,12 +432,12 @@ app.MapPost("/api/backlog/{id:int}", async (int id, HttpRequest req) =>
         // between the two leaves the record duplicated (visible, fixable by
         // hand) rather than deleted (gone).
         var next = Path.Combine(backlogDir, $"{BacklogItem.Prefixes[retype]}-{id:D4}.md");
-        await File.WriteAllTextAsync(next, text);
+        await WriteRecord(next, text);
         File.Delete(path);
     }
     else
     {
-        await File.WriteAllTextAsync(path, text);
+        await WriteRecord(path, text);
     }
 
     var reloaded = LoadBacklog(backlogDir);
@@ -462,7 +478,7 @@ app.MapPost("/api/backlog/{id:int}/criteria", async (int id, HttpRequest req) =>
     if (next is null)
         return Results.Json(new { ok = false, error = $"no criterion at position {index}" }, json, statusCode: 400);
 
-    await File.WriteAllTextAsync(path, Md.SetFrontmatter(next, "updated", Md.Today()));
+    await WriteRecord(path, Md.SetFrontmatter(next, "updated", Md.Today()));
 
     var reloaded = LoadBacklog(backlogDir);
     return Results.Json(new { ok = true, item = FullItem(reloaded, reloaded.First(i => i.Id == id)) }, json);
@@ -480,7 +496,7 @@ app.MapPost("/api/backlog/{id:int}/comments", async (int id, HttpRequest req) =>
     var comment = body.TryGetValue("body", out var b) ? b.GetString() : "";
     if (string.IsNullOrWhiteSpace(comment)) return Results.Json(new { ok = false, error = "empty comment" }, json, statusCode: 400);
 
-    await File.WriteAllTextAsync(path, Md.AppendComment(await File.ReadAllTextAsync(path), author ?? users.HumanAuthor, comment!));
+    await WriteRecord(path, Md.AppendComment(await File.ReadAllTextAsync(path), author ?? users.HumanAuthor, comment!));
 
     var reloaded = LoadBacklog(backlogDir);
     return Results.Json(new { ok = true, item = FullItem(reloaded, reloaded.First(i => i.Id == id)) }, json);
@@ -629,6 +645,45 @@ app.MapPost("/api/workspace_state_write", async (HttpRequest req) =>
     var data = body.TryGetValue("data", out var d) ? d.GetString() ?? "" : "";
     var wrote = users.WriteState(path, data);
     return Results.Json(new { ok = true, result = new { ok = wrote } }, json);
+});
+
+// ---- Live updates: the stream ---------------------------------------------
+// One long-lived response per open browser. Registered BEFORE the catch-all,
+// which would otherwise answer it with a JSON object and no stream at all.
+app.MapGet("/api/events", async (HttpContext http, CancellationToken ct) =>
+{
+    http.Response.Headers.ContentType = "text/event-stream";
+    http.Response.Headers.CacheControl = "no-cache, no-transform";
+    // Tells nginx and friends not to buffer; without it the stream is invisible
+    // behind a reverse proxy until something flushes a whole buffer's worth.
+    http.Response.Headers["X-Accel-Buffering"] = "no";
+
+    var channel = watcher.Subscribe();
+    var write = async (string frame) =>
+    {
+        await http.Response.WriteAsync(frame, ct);
+        await http.Response.Body.FlushAsync(ct);
+    };
+
+    try
+    {
+        await write(": connected\n\n");
+        while (!ct.IsCancellationRequested)
+        {
+            // Race the next event against the heartbeat: an idle stream that
+            // never writes is dropped by proxies and by some browsers, and the
+            // client cannot tell that from "nothing has changed".
+            var next = channel.Reader.WaitToReadAsync(ct).AsTask();
+            var tick = Task.Delay(StoreWatcher.Heartbeat, ct);
+            var done = await Task.WhenAny(next, tick);
+            if (done == tick) { await write(": ping\n\n"); continue; }
+            if (!await next) break;
+            while (channel.Reader.TryRead(out var frame)) await write(frame);
+        }
+    }
+    catch (OperationCanceledException) { /* the browser went away */ }
+    catch (IOException) { /* the browser went away mid-write */ }
+    finally { watcher.Unsubscribe(channel); }
 });
 
 // Permissive fallback for the EcoAgent/FlexDesk shell's bridge calls (app_version,

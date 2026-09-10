@@ -772,3 +772,28 @@
 .bd-sel__hint { font-size: 10px; color: var(--text-dim, #666); }
 .bd-sel__opt--new { border-top: 1px solid var(--border-subtle, #2a2a2a); color: var(--color-success, #3fb950); }
 .bd-sel__empty { padding: 8px 9px; color: var(--text-dim, #666); font-style: italic; font-size: var(--font-size-sm, 12px); }
+
+/* ── External-change banner (live.js) ────────────────────────────────
+   Shown only when the record on screen changed on disk AND the page holds
+   unsaved edits. A clean page just takes the new version. */
+
+.bd-conflict {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
+    margin-bottom: 8px;
+    padding: 7px 10px;
+    font-size: var(--font-size-sm, 12px);
+    color: var(--text-primary, #e0e0e0);
+    background: rgb(255 152 0 / 12%);
+    border: 1px solid var(--color-warning, #ff9800);
+    border-radius: var(--radius-md, 6px);
+}
+.bd-conflict .material-symbols-outlined {
+    font-size: 17px;
+    color: var(--color-warning, #ff9800);
+    flex: 0 0 auto;
+}
+.bd-conflict__text { flex: 1; line-height: 1.45; }
+.bd-conflict .ea-btn { flex: 0 0 auto; }

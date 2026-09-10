@@ -51,6 +51,7 @@ const { createFilterModel } = await import(UI + 'filter_engine.js');
 const data = await import(UI + 'backlog_data.js');
 const { activeTopNavKind } = await import(TILING + 'kind_taxonomy.js');
 const newItem = await import(UI + 'new_item.js');
+const live = await import(UI + 'live.js');
 
 /* ── the engine ──────────────────────────────────────────────────── */
 
@@ -309,6 +310,42 @@ t('the six kinds route to the two stores', () => {
 });
 t('Chore is stored as the bug type `task`', () =>
     assert.equal(newItem.KINDS.find((k) => k.id === 'chore').value, 'task'));
+
+/* ── live updates ────────────────────────────────────────────────────
+ *
+ * The event payload is what decides whether an open record silently refreshes
+ * or asks the user to choose, so getting "was that my record?" wrong either
+ * loses somebody's edits or leaves them staring at stale data. */
+
+console.log('\nlive update events');
+
+const ev = (...changed) => ({ changed, stores: [...new Set(changed.map((c) => c.store))] });
+const file = (store, id, deleted = false) => ({ store, id, deleted, file: `X-${id}.md` });
+
+t('a matching record is recognised', () =>
+    assert.equal(live.eventTouches(ev(file('bugs', 3)), 'bugs', 3), true));
+t('the SAME id in the OTHER store is not', () => {
+    // Ids collide across the two stores by design — BUG-0003 and STORY-0003
+    // both exist. Matching on id alone would refresh the wrong page.
+    assert.equal(live.eventTouches(ev(file('backlog', 3)), 'bugs', 3), false);
+});
+t('a different id is not', () =>
+    assert.equal(live.eventTouches(ev(file('bugs', 4)), 'bugs', 3), false));
+t('a string id from props still matches', () =>
+    assert.equal(live.eventTouches(ev(file('bugs', 3)), 'bugs', '3'), true));
+t('one match among many is found', () =>
+    assert.equal(live.eventTouches(ev(file('bugs', 1), file('bugs', 2), file('bugs', 3)), 'bugs', 3), true));
+t('an empty or malformed payload is not a match', () => {
+    assert.equal(live.eventTouches(null, 'bugs', 3), false);
+    assert.equal(live.eventTouches({}, 'bugs', 3), false);
+    assert.equal(live.eventTouches(ev(), 'bugs', 3), false);
+});
+t('deletion is distinguished from modification', () => {
+    assert.equal(live.eventDeleted(ev(file('bugs', 3, true)), 'bugs', 3), true);
+    assert.equal(live.eventDeleted(ev(file('bugs', 3, false)), 'bugs', 3), false);
+});
+t('a deletion of another record does not read as ours', () =>
+    assert.equal(live.eventDeleted(ev(file('bugs', 9, true)), 'bugs', 3), false));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

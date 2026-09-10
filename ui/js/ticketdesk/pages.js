@@ -55,6 +55,7 @@ import {
 } from './links.js';
 import { attachTagInput } from './tag_input.js';
 import { ITEMS } from './backlog_data.js';
+import { watchRecord } from './live.js';
 import {
     esc, STAGES, TICKETS, TEAM, HUMAN_AUTHOR, AGENT_AUTHOR, assigneeOptions,
     fetchBug, patchBug, postComment, createBug, loadData, initials,
@@ -457,6 +458,12 @@ function mountQueues(host, props, ctx) {
         openFilterEditor({ model: MODEL, scope: SCOPE, seedExpr: expr, items: TICKETS, onSaved: openSavedFilter });
     });
 
+    // The store changed under us — a git pull, an agent, somebody's editor.
+    // Nobody is mid-sentence in a table, so this simply repaints.
+    const liveSub = _eventBus?.on?.('bugs:changed', () => {
+        table.setData({ rows: TICKETS.filter(resolved.match).map(queueRow) });
+    });
+
     // A save/delete in the editor changes what this view means (or deletes
     // it outright — resolveFilter then lands on 'all'). Ad-hoc views own
     // their expression, so nothing in the store can move them.
@@ -473,7 +480,10 @@ function mountQueues(host, props, ctx) {
     // ResizeObserver. Call it unconditionally: `table` is always a live
     // DataTable here, so an optional call would only hide a future rename,
     // which is precisely how this leaked every queue mount before.
-    return { title: resolved.label, destroy: () => { unsub(); table.dispose(); } };
+    return {
+        title: resolved.label,
+        destroy: () => { unsub(); liveSub?.dispose?.(); table.dispose(); },
+    };
 }
 
 /* ── ticket mask (edit / new / search) ──────────────────────────── */
@@ -1027,6 +1037,7 @@ function mountTicket(host, props, ctx) {
         try {
             const updated = await patchBug(t.bugId, collectPatch());
             applyBug(updated); renderDesc(updated); renderComments(updated); renderLinks();
+            live.clear();
             statusLine(`Bug #${t.bugId} saved.`);
         } catch (err) { statusLine(`Save failed: ${err.message}`); }
     };
@@ -1080,6 +1091,25 @@ function mountTicket(host, props, ctx) {
 
     renderStages();
 
+    // The file this page is showing can change under it. Clean → take the new
+    // version silently; dirty → the user chooses, because discarding their
+    // edits to show somebody else's is not a decision to make for them.
+    const live = watchRecord({
+        host,
+        store: 'bugs',
+        id: () => t.bugId,
+        isDirty: () => state.dirty,
+        onStatus: statusLine,
+        eventBus: _eventBus,
+        onReload: async () => {
+            if (!t.bugId) return;
+            try {
+                const bug = await fetchBug(t.bugId);
+                applyBug(bug); renderDesc(bug); renderComments(bug); renderLinks();
+            } catch (err) { statusLine(`Reload failed: ${err.message}`); }
+        },
+    });
+
     (async () => {
         if (!t.bugId) {
             const el = $('[data-slot="desc"]');
@@ -1102,6 +1132,7 @@ function mountTicket(host, props, ctx) {
     return {
         title: ticketLabel(t),
         destroy: () => {
+            live.dispose();
             destroyWidgets();
             try { composer?.destroy(); } catch { /* already gone */ }
         },
