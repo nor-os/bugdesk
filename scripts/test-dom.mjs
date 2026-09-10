@@ -1061,6 +1061,31 @@ await t('editing the date makes it this record own, and drops the badge', async 
     m.done();
 });
 
+await t('the overrun warning is inline with the date, as a pill', async () => {
+    // Beside the input on the same line, like the inherited badge — not on a
+    // line of its own, where it reads as a separate paragraph about the record
+    // rather than as something about that field.
+    const record = dueRecord();
+    record.due = '2099-01-01';          // its own, and well after PROJ-0001's
+    record.effectiveDue = '2099-01-01';
+    const m = await mountItemPage(record);
+
+    const field = m.host.querySelector('.bd-duefield');
+    const warn = m.host.querySelector('[data-slot="duewarn"]');
+    assert.ok(warn, 'no overrun warning at all');
+    assert.equal(warn.parentElement, field, 'the warning is not inline with the date input');
+    assert.ok(warn.classList.contains('bd-duewarn--pill'), 'not styled as a pill');
+    assert.match(warn.textContent, /after PROJ-0001/);
+    // The one it overruns is named in the title, with ITS date — read from the
+    // fixture rather than written literally, since the fixture dates are
+    // relative to today (dueState reads the reader's own clock).
+    assert.ok(warn.title.includes(FIXTURE[0].due),
+        `the parent's date is missing from "${warn.title}"`);
+    // An owned date is not badged as inherited.
+    assert.ok(!m.host.querySelector('[data-slot="duebadge"]'));
+    m.done();
+});
+
 await t('the placeholder for an empty description is never loaded as text', async () => {
     // The bridge writes `_(no description provided)_` for an empty one. Loading
     // it into the editor would turn a placeholder into content on the next save.

@@ -153,6 +153,13 @@ been corrected everywhere it appeared. A project is now the only type not asked
 for criteria: it is a container, and what "done" means for it is that the work
 inside it is done.
 
+**Both things the date field cannot say are said the same way**: small pills on
+the same line as the input, differing only in what they mean — `inherited`
+dashed and grey because it is a statement of fact, `after PROJ-0001` solid and
+amber because it is a problem. Either can shorten to an ellipsis before the row
+wraps, with the detail in the title, so a long reference cannot push the layout
+around.
+
 **An inherited target date shows in the field**, badged `inherited`, rather than
 as a note on a second line — an empty input beside a line of text reads as "no
 date" when there is one. It is writable either way: type over it and it becomes

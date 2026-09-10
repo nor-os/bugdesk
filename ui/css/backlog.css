@@ -898,17 +898,36 @@ tr[draggable="true"]:active,
     border-style: dashed !important;
     color: var(--text-muted, #888) !important;
 }
-.bd-duebadge {
-    flex: 0 0 auto;
+/* The two things the input cannot say, said the same way: small pills on the
+   same line as the date, differing only in what they mean. `inherited` is
+   dashed and grey because it is a statement of fact; `after PROJ-0001` is
+   solid and amber because it is a problem. */
+.bd-duebadge,
+.bd-duefield .bd-duewarn--pill {
+    flex: 0 1 auto;
+    min-width: 0;
     padding: 0 6px;
-    border: 1px dashed #4a4a4a;
     border-radius: var(--radius-pill, 999px);
     font-size: 9.5px;
     letter-spacing: 0.03em;
-    color: var(--text-muted, #888);
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
     cursor: help;
 }
+.bd-duebadge {
+    border: 1px dashed #4a4a4a;
+    color: var(--text-muted, #888);
+}
+.bd-duefield .bd-duewarn--pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    border: 1px solid #7d5410;
+    background: rgb(255 152 0 / 12%);
+    color: #ff9800;
+}
+.bd-duefield .bd-duewarn--pill .material-symbols-outlined { font-size: 12px; flex: 0 0 auto; }
 
 .bd-duewarn {
     display: inline-flex;

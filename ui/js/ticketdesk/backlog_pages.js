@@ -617,8 +617,9 @@ function mountItem(host, props, ctx) {
                              title="${from ? `From ${esc(itemRef(from))}. ` : ''}Editing this gives this record its own date.">inherited</span>`
                     : ''}
                 ${over
-                    ? `<span class="bd-duewarn" title="${esc(itemRef(over))} is due ${esc(dueOf(over))}">
-                           ${icon('warning')} after ${esc(itemRef(over))}
+                    ? `<span class="bd-duewarn bd-duewarn--pill" data-slot="duewarn"
+                             title="This is due after ${esc(itemRef(over))}, which is due ${esc(dueOf(over))} — that date is now wrong, or this one is.">
+                           ${icon('warning')}after ${esc(itemRef(over))}
                        </span>`
                     : ''}
             </div>`;

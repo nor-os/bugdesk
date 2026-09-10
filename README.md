@@ -659,6 +659,11 @@ Saving a record you did not touch the date on **keeps it inheriting**. Adopting
 the value on screen just because the page was saved would quietly stop the item
 tracking its parent, with nothing on screen having said so.
 
+Both of those — `inherited`, and `after PROJ-0001` when a date overruns its
+parent — are small pills on the same line as the input, not notes underneath it.
+They are about that field, and reading as a separate paragraph about the record
+is not what they mean.
+
 **A sub-item due after its parent is flagged, not refused.** Plans slip one
 piece at a time, and forbidding it would only make people put in dates they do
 not mean. But it always means the parent's date is already wrong and nobody has
