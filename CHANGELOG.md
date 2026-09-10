@@ -267,11 +267,23 @@ in whichever store the panel is currently reporting on.
 
 ### Fixed
 
-- **Clicking a name in the Inspector did nothing.** Reported twice; the first
-  fix made the rows clickable and I then confirmed with a test that the click
-  reached the right call — which it did. The request was being discarded two
-  layers below it.
+- **Clicking a name in the Inspector did nothing** — the actual cause, found on
+  the third report. The panel repainted on every `wm:changed`, and the window
+  manager fires that from `tree.focus()`, which runs on **mousedown**. So
+  pressing on a row replaced the panel's DOM before the release: the row no
+  longer existed at mouseup, the browser dispatched `click` on an ancestor
+  instead, `closest('[data-member]')` found nothing, and the handler did nothing.
+  It looked like a dead handler; it was the panel pulling the row out from under
+  the click.
 
+  Invisible to a test that calls `.click()` — there is no press, no release, and
+  no repaint in between — which is why it survived two rounds of "I tested this
+  and it works". The panel now repaints only when the store it is reporting on
+  changes, or when a write says the numbers moved, which is what the left rail
+  had always done and why the rail never had the bug. The test asserts the row is
+  the SAME NODE after a focus change, and fails against the old code.
+
+- **Two earlier fixes on the way to it**, both real and both kept: the first
   `TileTree.swapToPage` decides whether a page switch must surface the caller's
   target or may simply restore the tabs that page last had. It asked two
   questions — is a specific entity wanted (`props.id`), and is this a page kind

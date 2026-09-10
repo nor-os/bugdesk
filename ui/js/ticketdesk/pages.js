@@ -1452,11 +1452,29 @@ function mountTicketInspector(host, props, ctx) {
     // Which store the rows are about, remembered from the last paint — a click
     // has to route to the same store the number was counted from, and the
     // top nav can move between the two.
-    let showing = 'bugs';
+    let showing = null;
 
-    const render = async () => {
+    /**
+     * Repaint, but ONLY when something is actually different.
+     *
+     * `wm:changed` fires on every focus change, and focusing happens on
+     * MOUSEDOWN — so an unguarded repaint replaced this panel's DOM between the
+     * press and the release of the user's own click. The row they pressed no
+     * longer existed by mouseup, so the browser dispatched `click` on an
+     * ancestor instead, `closest('[data-member]')` found nothing, and clicking a
+     * name did nothing at all. It looked like a dead handler; it was the panel
+     * pulling the row out from under the click.
+     *
+     * Invisible to a test that calls `.click()`, which is why this survived
+     * three attempts to find it. The left rail never had the bug because it
+     * early-returns when the section it is showing has not changed — this now
+     * does the same, and the row identity is asserted in the DOM tests.
+     */
+    const render = async ({ force = false } = {}) => {
         const backlog = ['backlog', 'tracker'].includes(activeTopNavKind(getWm()));
-        showing = backlog ? 'backlog' : 'bugs';
+        const next = backlog ? 'backlog' : 'bugs';
+        if (!force && next === showing && host.childElementCount) return;
+        showing = next;
         let rows = [];
         let empty = '';
         if (backlog) {
@@ -1523,13 +1541,17 @@ function mountTicketInspector(host, props, ctx) {
     host.addEventListener('click', onClick);
     host.addEventListener('keydown', onKey);
 
-    const sub = _eventBus?.on?.('wm:changed', render);
-    const backlogSub = _eventBus?.on?.('backlog:changed', render);
+    // A focus change can only change WHICH store is shown; the numbers cannot
+    // move without a write, and a write announces itself separately.
+    const sub = _eventBus?.on?.('wm:changed', () => render());
+    const backlogSub = _eventBus?.on?.('backlog:changed', () => render({ force: true }));
+    const bugSub = _eventBus?.on?.('bugs:changed', () => render({ force: true }));
     return {
         title: 'Inspector',
         destroy: () => {
             sub?.dispose?.();
             backlogSub?.dispose?.();
+            bugSub?.dispose?.();
             host.removeEventListener('click', onClick);
             host.removeEventListener('keydown', onKey);
         },

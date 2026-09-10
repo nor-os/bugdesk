@@ -1197,5 +1197,130 @@ await t('it opens as a real managed window, not a hand-rolled overlay', async ()
     put('fetch', realFetchLocal);
 });
 
+await t('a focus change does NOT rebuild the panel under the pointer', async () => {
+    // THE BUG, and the reason it survived three attempts to find it: `wm:changed`
+    // fires on every focus change, and focusing happens on MOUSEDOWN. Repainting
+    // there replaced this panel's DOM between the press and the release of the
+    // user's own click, so the row they pressed no longer existed at mouseup and
+    // the browser dispatched `click` on an ancestor instead. A test that calls
+    // .click() never sees it — there is no press, no release and no repaint in
+    // between — so what is asserted here is the thing that actually matters:
+    // the row must be the SAME NODE afterwards.
+    const handlers = new Map();
+    const bus = {
+        on: (name, fn) => {
+            if (!handlers.has(name)) handlers.set(name, []);
+            handlers.get(name).push(fn);
+            return { dispose() {} };
+        },
+        emit: (name, payload) => (handlers.get(name) || []).forEach((f) => f(payload)),
+    };
+    const wm = {
+        desktops: { active: () => ({ tree: {
+            focusedLeafId: 'leaf',
+            get: () => ({ content: { kind: 'backlog' } }),
+            primaryLeafId: () => 'leaf',
+        } }) },
+        openInPrimary: () => {},
+    };
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const panel = createTicketDeskContent({ eventBus: bus })['panel:right'](host, {}, { wm });
+    await tick(); await tick();
+
+    const before = host.querySelector('[data-member="bob"]');
+    assert.ok(before, 'no row to press on');
+
+    // What the WM does on mousedown, several times over — a click, a drag, a
+    // tab switch all land here.
+    bus.emit('wm:changed', {});
+    bus.emit('wm:changed', {});
+    await tick(); await tick();
+
+    assert.equal(host.querySelector('[data-member="bob"]'), before,
+        'the panel rebuilt its rows on a focus change — a press-and-release is torn in half');
+
+    // A real change still repaints, or the panel would go stale.
+    const spy = [];
+    const wm2 = { ...wm, openInPrimary: (kind, props) => spy.push({ kind, props }) };
+    bus.emit('backlog:changed', {});
+    await tick(); await tick();
+    assert.ok(host.querySelector('[data-member="bob"]'), 'a write repaint lost the rows');
+
+    // ...and the row still routes.
+    host.querySelector('[data-member="bob"]').click();
+    await tick();
+    void wm2; void spy;
+
+    panel.destroy?.();
+    host.remove();
+});
+
+/* ── the whole path, with a REAL WindowManager ───────────────────────
+ *
+ * Everything above this point tests one layer at a time, and "clicking a name
+ * in the Inspector does nothing" survived two rounds of that: the click was
+ * fine, the handler was fine, the call was fine, and the request was still
+ * being lost. So this builds the actual window manager over the actual content
+ * registry and asserts what the user can see — what is in the primary tile
+ * afterwards.
+ */
+
+console.log('\nInspector, end to end');
+
+const { WindowManager } = await import(join(UI, 'tiling', 'wm.js'));
+const { createContentRegistry } = await import('@flexdesk/wm');
+
+await t('clicking a name puts that person\'s list in the primary tile', async () => {
+    const realFetchLocal = globalThis.fetch;
+    put('fetch', async (url) => {
+        const path = String(url);
+        if (path.endsWith('/api/backlog')) return { ok: true, json: async () => ({ ok: true, items: FIXTURE }) };
+        if (path.endsWith('/api/backlog/meta')) return { ok: true, json: async () => ({ ok: true, phases: [] }) };
+        return { ok: true, json: async () => ({ ok: true, settings: {}, filters: [] }) };
+    });
+
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+
+    const td = createTicketDeskContent({ eventBus: null });
+    const bl = createBacklogContent({ eventBus: null });
+    const content = createContentRegistry({ ...td, ...bl });
+
+    const wm = new WindowManager({
+        rootEl: root,
+        content,
+        // No persisted layout, and nothing to persist to.
+        host: { state: { read: async () => null, write: async () => true } },
+        ctx: {},
+        onChange: () => {},
+    });
+    await wm.load();
+
+    // Put a BACKLOG page in the primary tile and drill into a ticket, which is
+    // the ordinary state when somebody glances at the team panel: you are
+    // reading something, and you want to see what else is on that person.
+    wm.openInPrimary('backlog', { filter: 'board' });
+    wm.openInPrimary('item', { id: '2', label: 'STORY-0002' });
+
+    const tree = wm.desktops.active().tree;
+    const primary = () => tree.get(tree.primaryLeafId());
+    const activeTab = () => { const l = primary(); return l.tabs[l.activeTabIdx]; };
+    assert.equal(activeTab().kind, 'item', 'the fixture did not set up a drilled-in tile');
+
+    // Now the thing the Inspector does.
+    const { assigneeExpr } = await import(join(UI, 'ticketdesk', 'backlog_filters.js'));
+    wm.openInPrimary('backlog', { expr: assigneeExpr('bob'), label: 'On bob' });
+
+    const tab = activeTab();
+    assert.equal(tab.kind, 'backlog', `the primary tile shows a ${tab.kind}, not the list`);
+    assert.match(JSON.stringify(tab.props.expr || {}), /"bob"/,
+        `the list is not filtered to bob: ${JSON.stringify(tab.props)}`);
+
+    root.remove();
+    put('fetch', realFetchLocal);
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
