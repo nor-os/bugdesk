@@ -137,6 +137,35 @@ switches BugDesk to that person's profile (creating it if the name is new),
 along with their saved filters, and writes through to the profile on disk so
 `/api/config` and the UI can never disagree about who you are.
 
+## Collaborators
+
+`bugdesk.json`, beside the stores and **committed**, is who can be assigned work
+here:
+
+```json
+{
+  "collaborators": [
+    { "name": "norman", "agent": "norman_agent", "added": "2026-09-10" },
+    { "name": "alice",  "agent": "alice_agent",  "added": "2026-09-12" }
+  ]
+}
+```
+
+It is the deliberate opposite of the per-user profile above: that file is
+private because two people must not overwrite each other's identity; this one is
+shared because they have to agree on who exists. Every assignee picker and both
+filter catalogues read it.
+
+The list maintains itself — setting your name adds you, and the `/bugs` and
+`/backlog` skills add the people they find in the git history. Edit it by hand,
+or in **Settings › General › Authorship › Manage collaborators**, for the cases
+that cannot: somebody who has not opened BugDesk yet, a name spelled two ways,
+a person who has left. Override the path with `BUGDESK_PROJECT`.
+
+Each person's agent name is **derived** as `<name>_agent`. It is not a decision
+worth making per project, and two people whose assistants both sign as `agent`
+cannot be told apart in a comment thread.
+
 ## Authorship
 
 BugDesk assumes exactly two roles — a human who files/triages/tests through
@@ -183,6 +212,9 @@ Same-origin JSON, backed by the markdown files:
 | POST | `/api/config/user` | adopt a profile by name (what the first-run screen posts) |
 | GET/POST | `/api/user/settings` | the UI's own preference bag, stored in the profile |
 | GET/POST | `/api/filters` | the user's saved queue filters — **per profile** |
+| GET  | `/api/project` | the shared config: the collaborator roster and the flat assignee list |
+| POST | `/api/project/collaborators` | replace the roster (what the Settings editor saves) |
+| POST | `/api/project/collaborator` | add or update one person, without sending the whole roster |
 | POST | `/api/attachments` | upload one image (base64), returns its `/attachments/…` URL |
 
 Every other `/api/<method>` returns `{ok:true,result:{ok:true}}` so the shell

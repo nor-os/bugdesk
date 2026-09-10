@@ -74,10 +74,10 @@ export function askForName(cfg) {
                         </label>
                         <input class="bd-firstrun__input" id="bd-firstrun-agent" name="agentName"
                                spellcheck="false" maxlength="60"
-                               placeholder="${esc(cfg?.agentAuthor || 'agent')}" />
+                               placeholder="derived from your name" />
                         <p class="bd-firstrun__hint">
-                            What your AI coding assistant signs its comments as. Must match
-                            <code>BUGDESK_AGENT</code>.
+                            The name your AI assistant signs its comments with.
+                            Left blank it becomes <code>&lt;your name&gt;_agent</code>.
                         </p>
                     </details>
 
@@ -241,9 +241,18 @@ export function installAuthorshipWriteThrough({ eventBus, getSetting } = {}) {
  * name SWITCHES profile (creating it if new) rather than renaming you in
  * place — identities own their own filters.
  */
+/** The conventional agent name for a person — the same rule the server applies
+ *  in ProjectConfig.AgentNameFor, so the two never disagree. */
+export const agentNameFor = (human) => {
+    const slug = String(human || '').trim().toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    return slug ? `${slug}_agent` : '';
+};
+
 export async function openIdentityDialog({ eventBus } = {}) {
     const { openForm } = await import('../ecoagent/ui/modal.js');
     const cfg = window.__BUGDESK_CONFIG__ || {};
+    let lastName = cfg.humanAuthor || '';
 
     let profiles = [];
     let current = null;
@@ -267,12 +276,23 @@ export async function openIdentityDialog({ eventBus } = {}) {
                   ? 'A different name switches to that profile, with its own saved filters.'
                   : '' },
             { name: 'agentName', label: 'Agent name', type: 'text',
-              placeholder: cfg.agentAuthor || 'agent',
-              hint: 'What your AI coding assistant signs its comments as. Must match BUGDESK_AGENT.' },
+              placeholder: 'derived from your name',
+              hint: 'The name your AI assistant signs its comments with.' },
         ],
         defaults: {
             name: cfg.humanAuthor || '',
             agentName: cfg.agentAuthor === 'agent' ? '' : (cfg.agentAuthor || ''),
+        },
+        // Follow the name: an agent called `<you>_agent` needs no explaining and
+        // no decision, and two people's agents can never end up signing
+        // identically. Only auto-filled while it still matches what the name
+        // implies, so a deliberately chosen agent name is never overwritten.
+        onFieldChange: (field, value, api) => {
+            if (field !== 'name') return;
+            const current = String(api.get('agentName') || '').trim();
+            if (current && current !== agentNameFor(lastName)) return;
+            lastName = String(api.get('name') || '');
+            api.set('agentName', agentNameFor(lastName));
         },
     });
     if (!result) return null;

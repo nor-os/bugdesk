@@ -10,6 +10,20 @@ and it tracks the work you *meant* to do alongside the work that broke.
 
 ### Added
 
+**A shared collaborator roster.** `bugdesk.json`, beside the stores and
+**committed**, lists everyone who can be assigned work here. It is the opposite
+of the per-user profile: an assignee dropdown offering only "me and my agent"
+cannot express "this is Alice's", which is most of what triage is.
+
+- Every assignee picker and both filter catalogues read it.
+- It maintains itself — setting your name adds you — and the `/bugs` and
+  `/backlog` skills can add the people they find in the git history via
+  `POST /api/project/collaborator`.
+- Editable in **Settings › General › Authorship › Manage collaborators**.
+- Each person's agent name is **derived** as `<name>_agent` rather than asked
+  for. "What should my agent be called" is a question with no interesting
+  answer, and two people whose agents both sign as `agent` cannot be told apart.
+
 **Per-user identity.** The first time you open BugDesk it asks for your name,
 once, and writes it to a git-ignored `.bugdesk/` directory beside the stores.
 Everything in `bugs/` and `backlog/` is shared and committed — that is the
@@ -149,6 +163,13 @@ invisible, since the app boots perfectly well on last release's code.
   opened in the *primary* tile — from a focused side tile the change happened
   somewhere the user was not looking. It is a dialog now, as its ellipsis
   promised, and the bottom-bar chip opens the same one.
+- **Parent is a search, not a combobox.** A datalist matches on the literal
+  prefix of the option text, so finding "Auth rewrite" meant typing the
+  reference you opened the control to look up. The field is now a read-only
+  display plus a magnifying glass that opens a real search dialog — filter by
+  type (preselected to what can legally hold the item), type any part of a
+  reference or title, arrow keys and Enter to pick. The field then shows
+  `EPIC-0001 — Auth rewrite`. `openForm` gained a `picker` field type for it.
 - **The New item form now follows the Type select.** A bug is asked for a
   severity; a story for a parent and an estimate; an epic for the phase its
   descendants inherit. It used to show every field of both stores at once,
@@ -162,6 +183,12 @@ invisible, since the app boots perfectly well on last release's code.
   threw on every `window-placeholder` render (any tile promoted to a window).
 - Removed an `if (false)` block in `app_bootstrap.js`, dead since TicketDesk
   dropped the Ecosim workspace.
+- **A combobox with `create: true` threw** "onCreate is not a function" and
+  blamed the user for typing their own name. That spelling now means "pick one
+  of these, or type anything", which is what every caller meant by it, and the
+  hint no longer promises to create something that is not being created.
+- The per-page create buttons are all secondary. Story was primary while Epic
+  and Task were not, implying a precedence between them that does not exist.
 
 - **Tile layouts never persisted.** `workspace_state_read`/`_write` fell
   through to the permissive `/api/{**rest}` catch-all, which answers a *read*

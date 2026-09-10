@@ -32,7 +32,7 @@ import { openFilterEditor } from './filter_editor.js';
 import { openNewItem } from './new_item.js';
 import { onFiltersChanged } from './filter_store.js';
 import { shell, statusLine } from './pages.js';
-import { esc, initials, HUMAN_AUTHOR, AGENT_AUTHOR } from './data.js';
+import { esc, initials, HUMAN_AUTHOR, AGENT_AUTHOR, assigneeOptions } from './data.js';
 import {
     BUILTIN_FILTERS, DEFAULT_FILTER, MODEL, SCOPE,
     adhocFilter, deleteFilter, describeFilter, duplicateFilter, epicExpr,
@@ -157,7 +157,7 @@ function mountBacklogBoard(host, props, ctx) {
             <span class="bd-newgroup">
                 <span class="td-dim">New</span>
                 <button class="ea-btn" data-a="new-epic" title="New epic">${icon('workspaces')} Epic</button>
-                <button class="ea-btn ea-btn--primary" data-a="new-story" title="New story">${icon('article')} Story</button>
+                <button class="ea-btn" data-a="new-story" title="New story">${icon('article')} Story</button>
                 <button class="ea-btn" data-a="new-task" title="New task">${icon('check_box_outline_blank')} Task</button>
             </span>
         </div>
@@ -493,7 +493,7 @@ function mountItem(host, props, ctx) {
             ${item.type === 'epic'
                 ? field('Phase', tin('phase', item.phase))
                 : field('Parent', sel('parent', [{ value: '', label: '(none)' }, ...parents], item.parent || ''))}
-            ${field('Assignee', sel('assignee', ['', HUMAN_AUTHOR, AGENT_AUTHOR], item.assignee))}
+            ${field('Assignee', sel('assignee', assigneeOptions(), item.assignee))}
             ${field('Subsystem', tin('subsystem', item.subsystem))}
             ${item.type !== 'epic'
                 ? field('Phase', `<input class="ea-tin" value="${esc(item.effectivePhase || '—')}" readonly title="Inherited from the owning epic">`)

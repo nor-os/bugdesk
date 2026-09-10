@@ -56,6 +56,32 @@ the operations below. Use judgment about which operation(s) a request implies.
    back to the default. Never write into `.bugdesk/` yourself — it is the
    human's, and it is git-ignored precisely so it stays that way.
 
+### The collaborator roster
+
+`bugdesk.json`, beside the stores and **committed**, lists everyone who can be
+assigned work here:
+
+```json
+{
+  "collaborators": [
+    { "name": "norman", "agent": "norman_agent", "added": "2026-09-10" },
+    { "name": "alice",  "agent": "alice_agent",  "added": "2026-09-12" }
+  ]
+}
+```
+
+Read it before you assign anything: `assignee` must be one of these names or
+one of their agents, or the UI's pickers and "On me" filters will not recognise
+it. `GET /api/project` returns the same list plus a flat `assignees` array when
+a server is reachable.
+
+**Keep it current.** If you are working with someone whose name is not on the
+list — a name from `git log`, or a person the user mentions — add them:
+`POST /api/project/collaborator` with `{"name": "..."}`, or append to the file
+directly. The agent name is derived as `<name>_agent` unless one is given;
+don't invent a different convention. A person is matched case-insensitively, so
+"Alice" and "alice" are one entry, not two.
+
 Don't hardcode `"agent"`/`"reviewer"`/`"claude"`/`"norman"` in anything you
 write — always use whatever you resolved here, since a project can configure
 either name to anything.

@@ -108,6 +108,10 @@ export const BUGDESK_SETTINGS_SLICE = {
         bugdesk: {
             humanName: '',
             agentName: '',
+            // Not a stored value — the row is a button (see the schema below).
+            // It carries a default so the settings store has a shape for the
+            // path and the row renders like every other one.
+            collaborators: null,
         },
     },
 
@@ -125,10 +129,26 @@ export const BUGDESK_SETTINGS_SLICE = {
             description: 'The name shown as assignee and comment author on everything you file. Saved to your per-user profile beside the store, so it follows you rather than this browser. Entering a different name switches BugDesk to that person\'s profile (creating it if it is new), along with their saved filters. Leave blank to use the server\'s BUGDESK_HUMAN default. Takes effect after you reload BugDesk.',
             defaultValue: '', placeholder: '(server default)', reloadHint: true,
         },
+        // A roster is a list of records, and no scalar control can edit one —
+        // so this row is a button that opens the editor that owns it. See
+        // settings_page.js's `type: 'action'`.
+        'bugdesk.collaborators': {
+            type: 'action', category: 'general', group: 'Authorship',
+            label: 'Collaborators',
+            description: 'Everyone who can be assigned work on this repo, from the shared bugdesk.json beside the stores. Setting your name adds you automatically; edit the list here to add someone who has not opened BugDesk yet, or to remove someone who has left.',
+            buttonLabel: 'Manage collaborators…',
+            icon: 'group',
+            defaultValue: null,
+            onClick: async () => {
+                const { openCollaborators } = await import('../ticketdesk/collaborators.js');
+                return openCollaborators({ eventBus: window.__ecoagent?.eventBus });
+            },
+        },
+
         'bugdesk.agentName': {
             type: 'text', category: 'general', group: 'Authorship',
             label: 'Agent name',
-            description: 'Whatever your AI coding assistant signs its comments as. It must match the BUGDESK_AGENT the /bugs and /backlog skills resolve, or the "On agent" and "Needs my reply" views will not recognise its comments. Saved to your profile alongside your own name. Leave blank to use the server\'s BUGDESK_AGENT default. Takes effect after you reload BugDesk.',
+            description: 'The name your AI assistant signs its comments with. Left blank it is derived from your own name as <you>_agent, which is what keeps two people\'s assistants from signing identically. Takes effect after you reload BugDesk.',
             defaultValue: '', placeholder: '(server default)', reloadHint: true,
         },
     },

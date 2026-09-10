@@ -55,7 +55,7 @@ import {
 } from './links.js';
 import { attachTagInput } from './tag_input.js';
 import {
-    esc, STAGES, TICKETS, TEAM, HUMAN_AUTHOR, AGENT_AUTHOR,
+    esc, STAGES, TICKETS, TEAM, HUMAN_AUTHOR, AGENT_AUTHOR, assigneeOptions,
     fetchBug, patchBug, postComment, createBug, loadData, initials,
     machineStatus, machineType, typeCode, typeLabelOf, humanizeStatus,
 } from './data.js';
@@ -301,7 +301,7 @@ function mountQueues(host, props, ctx) {
             <button class="ea-btn" data-a="savefilter">${icon('filter_alt')} Save as filter</button>
             <span class="bd-newgroup">
                 <span class="td-dim">New</span>
-                <button class="ea-btn ea-btn--primary" data-a="newbug"
+                <button class="ea-btn" data-a="newbug"
                         title="File a new bug">${icon('bug_report')} Bug</button>
             </span>
         </div>
@@ -517,7 +517,7 @@ function maskSections(t, mode) {
             ${field('Type', sel('type', ['Bug', 'Regression', 'Chore'], typeLabelOf(t.type)), true)}
             ${field('Severity', sel('severity', ['crash', 'high', 'medium', 'low'], t.severity || 'medium'), true)}
             ${field('Subsystem', tin('subsystem', t.subsystem))}
-            ${mode === 'search' ? '' : field('Assignee', `<div class="td-assignee">${sel('assignee', [HUMAN_AUTHOR, AGENT_AUTHOR], t.assignee || HUMAN_AUTHOR)}<button type="button" class="ea-btn td-reassign" data-a="reassign" title="Reassign this bug">${icon('person_search')}</button></div>`)}
+            ${mode === 'search' ? '' : field('Assignee', `<div class="td-assignee">${sel('assignee', assigneeOptions(), t.assignee || HUMAN_AUTHOR)}<button type="button" class="ea-btn td-reassign" data-a="reassign" title="Reassign this bug">${icon('person_search')}</button></div>`)}
             <div class="td-field td-span2"><label>Labels</label>${tin('labels', (t.labels || []).join(', '))}</div>
             ${mode === 'edit' ? field('Created', `<input class="ea-tin td-mono" value="${esc(t.created || '—')}" readonly>`) : ''}
             ${mode === 'edit' ? field('Updated', `<input class="ea-tin td-mono" data-f="updated" value="${esc(t.sla || '—')}" readonly>`) : ''}

@@ -51,6 +51,38 @@ const _cfg = (typeof window !== 'undefined' && window.__BUGDESK_CONFIG__) || {};
 export const HUMAN_AUTHOR = getSetting('bugdesk.humanName') || _cfg.humanAuthor || 'reviewer';
 export const AGENT_AUTHOR = getSetting('bugdesk.agentName') || _cfg.agentAuthor || 'agent';
 
+/* ── the shared roster ───────────────────────────────────────────────
+ *
+ * Who works on this repo, from the committed `bugdesk.json` (see
+ * server/ProjectConfig.cs). Assignment is the reason it exists: a picker
+ * offering only "me and my agent" cannot express "this is Alice's", which is
+ * most of what triage is.
+ *
+ * COLLABORATORS is `{ name, agent, added }[]`; ASSIGNEES is the flat list of
+ * everything assignable — each person and each person's agent. Both fall back
+ * to the two configured names, so a project that has never set a roster behaves
+ * exactly as BugDesk did before there was one. */
+
+export const COLLABORATORS = Array.isArray(_cfg.collaborators) ? _cfg.collaborators : [];
+
+export const ASSIGNEES = (() => {
+    const list = Array.isArray(_cfg.assignees) ? _cfg.assignees.filter(Boolean) : [];
+    // Whoever I am is always assignable, even before the roster has caught up.
+    for (const name of [HUMAN_AUTHOR, AGENT_AUTHOR]) {
+        if (name && !list.some((n) => n.toLowerCase() === name.toLowerCase())) list.push(name);
+    }
+    return list;
+})();
+
+/** Assignee options for a <select>, with "unassigned" first. */
+export const assigneeOptions = (includeBlank = true) =>
+    (includeBlank ? [''] : []).concat(ASSIGNEES);
+
+/** The agent a person's comments are signed by, when it is not me. */
+export const agentFor = (name) =>
+    COLLABORATORS.find((c) => c.name?.toLowerCase() === String(name || '').toLowerCase())?.agent
+    || `${String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}_agent`;
+
 /* ── status / type humanisation ─────────────────────────────────── */
 
 const STATUS_LABEL = {

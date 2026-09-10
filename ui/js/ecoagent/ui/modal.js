@@ -36,7 +36,21 @@
  *       hint: 'new asset kind',             // shown when the typed value is new
  *     },
  *   }
+ *
+ * `create: true` is the degenerate case — "pick one of these, or type anything"
+ * — where the typed value IS the value and there is no entity to create. It is
+ * spelled out rather than left to fail: a bare `true` used to reach
+ * `f.create.onCreate(v)` and surface as "onCreate is not a function", which
+ * tells the user nothing and blames them for typing their own name.
  */
+
+/** Normalise a `create` spec. `true` means the typed value is accepted as-is. */
+function _createSpec(f) {
+    if (!f || !f.create) return null;
+    if (f.create === true) return { onCreate: async (v) => v, hint: null };
+    return { onCreate: typeof f.create.onCreate === 'function' ? f.create.onCreate : async (v) => v,
+             hint: f.create.hint ?? null };
+}
 
 import { ManagedWindow } from '../../ui/components/managed_window.js';
 
@@ -107,6 +121,7 @@ export function openForm({ title, fields = [], defaults = {}, submitLabel = 'OK'
         const formFields = fields.filter((f) => !f.section);
         for (const f of formFields) {
             if (f.type === 'select' && f.create) _wireComboboxHint(body, f);
+            if (f.type === 'picker') _wirePicker(body, f);
         }
 
         const clearFieldError = (name) => {
@@ -180,16 +195,17 @@ export function openForm({ title, fields = [], defaults = {}, submitLabel = 'OK'
                     v = el.value;
                 }
                 if (f.type === 'select' && f.create) {
+                    const spec = _createSpec(f);
                     const known = new Set(_optionValues(f.options));
                     if (v && !known.has(v)) {
                         if (submitBtn) submitBtn.disabled = true;
                         let created;
                         let failMsg = null;
-                        try { created = await f.create.onCreate(v); }
+                        try { created = await spec.onCreate(v); }
                         catch (err) { created = null; failMsg = err?.message || String(err); }
                         if (submitBtn) submitBtn.disabled = false;
                         if (created == null) {
-                            const hint = (f.create && f.create.hint) || f.label.toLowerCase();
+                            const hint = spec.hint || f.label.toLowerCase();
                             showError(failMsg
                                 ? `Couldn't create ${hint} "${v}": ${failMsg}`
                                 : `Couldn't create ${hint} "${v}". See the toast for details.`);
@@ -457,16 +473,39 @@ function _optionValues(options) {
 
 /** Show / hide the "↳ will create …" hint as the user types into a
  *  create-capable combobox. */
+/** Hook a picker field's search button up to the caller's `pick()`, and keep
+ *  the hidden value and the visible display in step. */
+function _wirePicker(host, f) {
+    const hidden = host.querySelector(`input[type="hidden"][name="${f.name}"]`);
+    const display = host.querySelector(`[data-picker-display="${f.name}"]`);
+    const btn = host.querySelector(`[data-picker="${f.name}"]`);
+    if (!hidden || !display || !btn || typeof f.pick !== 'function') return;
+
+    const open = async () => {
+        const picked = await f.pick(hidden.value);
+        if (picked == null) return;                 // cancelled — leave it alone
+        hidden.value = picked.value ?? '';
+        display.value = picked.label ?? '';
+        hidden.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+    btn.addEventListener('click', open);
+    // The read-only box is the obvious thing to click; make it work too.
+    display.addEventListener('click', open);
+}
+
 function _wireComboboxHint(host, f) {
     const input = host.querySelector(`input[name="${f.name}"]`);
     const hintEl = host.querySelector(`.ea-combobox__hint[data-for="${f.name}"]`);
     if (!input || !hintEl) return;
     const known = new Set(_optionValues(f.options));
-    const label = (f.create && f.create.hint) || 'new entry';
+    const spec = _createSpec(f);
     const update = () => {
         const v = input.value.trim();
-        if (v && !known.has(v)) {
-            hintEl.textContent = `↳ will create ${label} “${v}”`;
+        // With `create: true` the typed value simply IS the value — there is no
+        // entity being made, so promising to "create" one is a lie that reads
+        // as a warning.
+        if (v && !known.has(v) && spec?.hint) {
+            hintEl.textContent = `↳ will create ${spec.hint} “${v}”`;
             hintEl.hidden = false;
         } else {
             hintEl.hidden = true;
@@ -525,6 +564,27 @@ function _renderField(f, value) {
     }
 
     const v = value == null ? '' : String(value);
+    if (f.type === 'picker') {
+        // A value the user LOOKS UP rather than types: the control shows the
+        // chosen thing and delegates finding it to the caller's `pick()`. The
+        // display text and the stored value are different things (an id vs.
+        // "EPIC-0001 — Auth rewrite"), so the value rides in a hidden input and
+        // the visible box is read-only.
+        const ph = f.placeholder ? `placeholder="${_esc(f.placeholder)}"` : '';
+        const shown = f.displayFor ? f.displayFor(v) : v;
+        return wrap(`
+            <div class="ea-picker">
+                <input type="hidden" name="${f.name}" value="${_esc(v)}">
+                <input class="ea-picker__display" data-picker-display="${f.name}" type="text"
+                       value="${_esc(shown)}" ${ph} readonly>
+                <button type="button" class="ea-btn ea-picker__btn" data-picker="${f.name}"
+                        aria-label="Search">
+                    <span class="material-symbols-outlined">search</span>
+                </button>
+            </div>
+        `);
+    }
+
     if (f.type === 'select' && f.create) {
         const dlId = `ea-dl-${f.name}-${_modalSeq}`;
         const opts = _optionValues(f.options)

@@ -160,6 +160,11 @@
         window.__BUGDESK_CONFIG__ = {
             humanAuthor: cfg.humanAuthor || 'reviewer',
             agentAuthor: cfg.agentAuthor || 'agent',
+            // The shared roster (bugdesk.json). Every assignee picker reads it,
+            // so it has to be resolved before the modules that build those
+            // pickers are evaluated — same reason as the two names above.
+            collaborators: Array.isArray(cfg.collaborators) ? cfg.collaborators : [],
+            assignees: Array.isArray(cfg.assignees) ? cfg.assignees : [],
         };
 
         const root = document.getElementById('ecoagent-root');

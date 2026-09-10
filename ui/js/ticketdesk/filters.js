@@ -19,7 +19,7 @@ import {
     getFilter as storeGet, listFilters as storeList,
     loadFilters, onFiltersChanged, saveFilter as storeSave,
 } from './filter_store.js';
-import { HUMAN_AUTHOR, AGENT_AUTHOR } from './data.js';
+import { ASSIGNEES, HUMAN_AUTHOR, AGENT_AUTHOR } from './data.js';
 
 export { FILTER_ICONS, emptyExpr, loadFilters, onFiltersChanged };
 
@@ -61,7 +61,7 @@ export const FILTER_FIELDS = [
     { key: 'subsystem', label: 'Subsystem', type: 'text', get: (t) => t.subsystem || '' },
     {
         key: 'assignee', label: 'Assignee', type: 'enum',
-        options: [HUMAN_AUTHOR, AGENT_AUTHOR],
+        options: ASSIGNEES,
         get: (t) => t.assignee || '',
     },
     { key: 'labels', label: 'Labels', type: 'set', get: (t) => Array.isArray(t.labels) ? t.labels : [] },
@@ -70,7 +70,7 @@ export const FILTER_FIELDS = [
     { key: 'comments', label: 'Comments', type: 'number', get: (t) => t.comments || 0 },
     {
         key: 'lastCommentAuthor', label: 'Last comment by', type: 'enum',
-        options: [HUMAN_AUTHOR, AGENT_AUTHOR, 'none'],
+        options: [...ASSIGNEES, 'none'],
         get: (t) => t.lastCommentAuthor || 'none',
     },
     { key: 'lastCommentDate', label: 'Last comment', type: 'date', get: (t) => t.lastCommentDate || '' },

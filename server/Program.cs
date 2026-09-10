@@ -35,6 +35,12 @@ var users = new UserStore(
 app.Logger.LogInformation("BugDesk: config={config} user={user}",
     users.ConfigDir, users.ActiveSlug ?? "(unconfigured — the UI will ask)");
 
+// The SHARED roster — who works on this repo. Committed, unlike the per-user
+// profile: an assignee dropdown offering only "me and my agent" is useless the
+// moment a record belongs to somebody else.
+var project = new ProjectConfig(ResolveProjectConfig(bugsDir));
+app.Logger.LogInformation("BugDesk: project={project}", project.Path);
+
 // Pre-profile UI state: a single shared filters.json. Read once, folded into
 // whichever profile is active, and never written again. Declared here because
 // the first-run handler below migrates on the profile it has just created.
@@ -495,6 +501,8 @@ app.MapGet("/api/config", () => Results.Json(new
     user = users.ActiveSlug,
     profiles = users.Profiles(),
     configDir = users.ConfigDir,
+    collaborators = project.Collaborators(),
+    assignees = project.Assignees(),
 }, json));
 
 // First run (or "switch user"): adopt a profile by name, creating it if needed.
@@ -509,8 +517,12 @@ app.MapPost("/api/config/user", async (HttpRequest req) =>
         return Results.Json(new { ok = false, error = "name must be 60 characters or fewer" }, json, statusCode: 400);
 
     var agent = body.TryGetValue("agentName", out var a) ? a.GetString() : null;
+    // An unnamed agent is DERIVED, not left generic: every person's assistant
+    // needs a distinguishable name or two people's agents sign the same way.
+    if (string.IsNullOrWhiteSpace(agent)) agent = ProjectConfig.AgentNameFor(name);
     var slug = users.SelectOrCreate(name, agent);
     users.MigrateLegacyFilters(legacyFiltersPath);
+    project.Upsert(name, agent);
     app.Logger.LogInformation("BugDesk: user profile {slug} selected", slug);
 
     return Results.Json(new
@@ -523,7 +535,42 @@ app.MapPost("/api/config/user", async (HttpRequest req) =>
         user = slug,
         profiles = users.Profiles(),
         configDir = users.ConfigDir,
+        collaborators = project.Collaborators(),
+        assignees = project.Assignees(),
     }, json);
+});
+
+// ---- The shared roster -----------------------------------------------------
+// Managed from Settings, and by the /bugs and /backlog skills, which can add
+// the people they find in the git history.
+app.MapGet("/api/project", () => Results.Json(new
+{
+    ok = true,
+    path = project.Path,
+    config = project.Document(),
+    assignees = project.Assignees(),
+}, json));
+
+app.MapPost("/api/project/collaborators", async (HttpRequest req) =>
+{
+    var body = await JsonSerializer.DeserializeAsync<Dictionary<string, JsonElement>>(req.Body, json) ?? new();
+    if (!body.TryGetValue("collaborators", out var list) || list.ValueKind != JsonValueKind.Array)
+        return Results.Json(new { ok = false, error = "collaborators array required" }, json, statusCode: 400);
+    var saved = project.SetCollaborators(JsonNode.Parse(list.GetRawText())!.AsArray());
+    return Results.Json(new { ok = true, collaborators = saved, assignees = project.Assignees() }, json);
+});
+
+// Add or update ONE person without having to send the whole roster — what an
+// agent does when it notices a name that is not on the list yet.
+app.MapPost("/api/project/collaborator", async (HttpRequest req) =>
+{
+    var body = await JsonSerializer.DeserializeAsync<Dictionary<string, JsonElement>>(req.Body, json) ?? new();
+    var name = body.TryGetValue("name", out var n) ? (n.GetString() ?? "").Trim() : "";
+    if (name.Length == 0)
+        return Results.Json(new { ok = false, error = "name required" }, json, statusCode: 400);
+    var agent = body.TryGetValue("agent", out var a) ? a.GetString() : null;
+    var saved = project.Upsert(name, agent);
+    return Results.Json(new { ok = true, collaborator = saved, assignees = project.Assignees() }, json);
 });
 
 // The UI's own preference bag, stored in the profile so it follows the person
@@ -618,6 +665,15 @@ static string ResolveBacklogDir(string bugsDir)
         : Path.GetFullPath(Path.Combine(bugsDir, "..", "backlog"));
     Directory.CreateDirectory(dir);
     return dir;
+}
+
+// The shared roster, beside the stores and COMMITTED. See ProjectConfig.cs.
+static string ResolveProjectConfig(string bugsDir)
+{
+    var env = Environment.GetEnvironmentVariable("BUGDESK_PROJECT");
+    return !string.IsNullOrEmpty(env)
+        ? Path.GetFullPath(env)
+        : Path.GetFullPath(Path.Combine(bugsDir, "..", "bugdesk.json"));
 }
 
 // Per-user config, beside the stores. See UserConfig.cs.

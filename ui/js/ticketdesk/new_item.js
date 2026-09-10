@@ -28,8 +28,9 @@
 
 import { openForm } from '../ecoagent/ui/modal.js';
 import { statusLine } from './pages.js';
-import { AGENT_AUTHOR, HUMAN_AUTHOR, createBug, loadData } from './data.js';
-import { PHASES, createItem, itemRef, loadBacklog, parentOptions } from './backlog_data.js';
+import { HUMAN_AUTHOR, assigneeOptions, createBug, loadData } from './data.js';
+import { ITEMS, PHASES, createItem, itemRef, loadBacklog } from './backlog_data.js';
+import { openItemPicker, parentTypesFor } from './item_picker.js';
 
 /**
  * The Type select. `store` routes the create; `value` is what that store's
@@ -49,9 +50,10 @@ export const KINDS = [
     { id: 'task', label: 'Task', store: 'backlog', value: 'task' },
 ];
 const kindById = (id) => KINDS.find((k) => k.id === id) || KINDS[0];
+const typeLabelOf = (t) => ({ epic: 'Epic', story: 'Story', task: 'Task' })[t] || 'Item';
 
-/** The combobox hands back whatever was typed — "EPIC-0004 — Auth" and "4" must
- *  both resolve to 4. */
+/** The picker stores a bare id; a hand-edited or legacy value may still carry
+ *  the reference, so the first number wins either way. */
 function parentId(raw) {
     const s = String(raw || '').trim();
     if (!s) return 0;
@@ -96,13 +98,24 @@ export const FIELDS_FOR = {
 const ADAPTIVE = ['severity', 'parent', 'phase', 'points'];
 
 export async function openNewItem({ kind = '', parent = 0, phase = '' } = {}) {
+    // The Type select can change after the form is built, and the picker's
+    // legal parent types depend on it — so it is read at click time, not baked
+    // in at construction.
+    let currentKindId = kind || KINDS[0].id;
+    const currentKind = () => currentKindId;
     const preset = kind ? kindById(kind) : null;
     // Scope the TYPE SELECT to the store the preselection implies: a dialog
     // opened from the backlog's "Epic" button has no business offering to file
     // a bug. Only the top bar's untyped entry point offers all six.
     const store = preset ? preset.store : null;
     const kinds = store ? KINDS.filter((k) => k.store === store) : KINDS;
-    const parents = parentOptions('task');
+
+    /** "EPIC-0001 — Auth rewrite" for an id, so the read-only box says what was
+     *  chosen rather than a bare number. */
+    const parentLabel = (id) => {
+        const item = ITEMS.find((i) => String(i.id) === String(id));
+        return item ? `${item.ref} — ${item.title}` : '';
+    };
 
     // Headings only earn their place when the form spans both stores; a scoped
     // dialog has nothing to distinguish.
@@ -120,7 +133,7 @@ export async function openNewItem({ kind = '', parent = 0, phase = '' } = {}) {
                   : store === 'backlog' ? 'What outcome does this deliver?'
                   : 'What is wrong, or what should this deliver?' },
             { name: 'assignee', label: 'Assignee', type: 'select',
-              options: ['', HUMAN_AUTHOR, AGENT_AUTHOR] },
+              options: assigneeOptions() },
             { name: 'subsystem', label: 'Subsystem', type: 'text', placeholder: 'unsorted' },
             { name: 'labels', label: 'Labels', type: 'text', placeholder: 'comma, separated' },
 
@@ -129,10 +142,22 @@ export async function openNewItem({ kind = '', parent = 0, phase = '' } = {}) {
               options: ['crash', 'high', 'medium', 'low'] },
 
             ...(sections ? [{ section: 'Backlog work', name: '__sec_backlog' }] : []),
-            { name: 'parent', label: 'Parent', type: 'select', create: true,
-              options: parents,
-              placeholder: parents.length ? 'pick an item…' : 'no parent available yet',
-              hint: 'Leave empty to file it without one.' },
+            // A LOOKUP, not a typed value: a datalist matches on the literal
+            // prefix of the option text, so finding "Auth rewrite" meant typing
+            // the reference you opened the control to find.
+            { name: 'parent', label: 'Parent', type: 'picker',
+              placeholder: 'none — click to search',
+              displayFor: parentLabel,
+              pick: async (currentId) => {
+                  const childType = kindById(currentKind()).value;
+                  const picked = await openItemPicker({
+                      title: `Parent for this ${typeLabelOf(childType).toLowerCase()}`,
+                      types: parentTypesFor(childType),
+                      current: Number(currentId) || 0,
+                  });
+                  if (!picked) return null;
+                  return { value: picked.id ? String(picked.id) : '', label: picked.id ? `${picked.ref} — ${picked.title}` : '' };
+              } },
             { name: 'phase', label: 'Phase', type: 'select', create: true,
               options: PHASES, placeholder: 'e.g. foundation',
               hint: 'Stories and tasks inherit it.' },
@@ -151,7 +176,8 @@ export async function openNewItem({ kind = '', parent = 0, phase = '' } = {}) {
         // story for a parent and an estimate, an epic for a phase. Fired once on
         // open too, so a preselected type is reflected before the first click.
         onFieldChange: (name, value, api) => {
-            const chosen = FIELDS_FOR[api.get('kind')] || {};
+            currentKindId = api.get('kind') || currentKindId;
+            const chosen = FIELDS_FOR[currentKindId] || {};
             for (const f of ADAPTIVE) api.setVisible(f, !!chosen[f]);
             if (sections) {
                 api.setVisible('__sec_bug', !!chosen.severity);

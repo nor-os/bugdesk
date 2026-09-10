@@ -26,7 +26,7 @@ import {
     deleteFilter as storeDelete, duplicateFilter as storeDuplicate,
     getFilter as storeGet, listFilters as storeList, saveFilter as storeSave,
 } from './filter_store.js';
-import { HUMAN_AUTHOR, AGENT_AUTHOR } from './data.js';
+import { ASSIGNEES, HUMAN_AUTHOR, AGENT_AUTHOR } from './data.js';
 import { ITEMS, PHASES, STATUSES, TYPES, itemRef, typeLabelOf } from './backlog_data.js';
 
 export const SCOPE = 'backlog';
@@ -64,7 +64,7 @@ export const FILTER_FIELDS = [
     { key: 'depth', label: 'Depth', type: 'number', get: (i) => i.depth || 0 },
     {
         key: 'assignee', label: 'Assignee', type: 'enum',
-        options: [HUMAN_AUTHOR, AGENT_AUTHOR, 'none'],
+        options: [...ASSIGNEES, 'none'],
         get: (i) => i.assignee || 'none',
     },
     { key: 'points', label: 'Estimate', type: 'number', get: (i) => i.points },
@@ -78,7 +78,7 @@ export const FILTER_FIELDS = [
     { key: 'comments', label: 'Comments', type: 'number', get: (i) => i.comments || 0 },
     {
         key: 'lastCommentAuthor', label: 'Last comment by', type: 'enum',
-        options: [HUMAN_AUTHOR, AGENT_AUTHOR, 'none'],
+        options: [...ASSIGNEES, 'none'],
         get: (i) => i.lastCommentAuthor || 'none',
     },
 ];

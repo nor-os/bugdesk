@@ -307,9 +307,28 @@ export class SettingsPage extends PageBase {
                 return this._renderText(def.path, value, def);
             case 'colorList':
                 return this._renderColorList(def.path, value);
+            case 'action':
+                return this._renderAction(def);
             default:
                 return `<span>${String(value)}</span>`;
         }
+    }
+
+    /**
+     * A settings row that is a BUTTON, not a value.
+     *
+     * Some settings are lists of records rather than a scalar — a roster of
+     * collaborators, say — and no scalar control can edit one. Rather than teach
+     * this page every such shape, the row opens the editor that owns it:
+     * `{ type: 'action', buttonLabel, onClick }`. The schema entry keeps the
+     * label, description and category so it is still findable by search and
+     * still sits under the right heading.
+     */
+    _renderAction(def) {
+        return `<button class="ea-btn settings-action" data-action="setting-action"
+                        data-path="${def.path}" type="button">${
+            def.icon ? `<span class="material-symbols-outlined">${def.icon}</span> ` : ''
+        }${def.buttonLabel || 'Open…'}</button>`;
     }
 
     _renderToggle(path, value) {
@@ -568,6 +587,21 @@ export class SettingsPage extends PageBase {
                 const removeColorBtn = e.target.closest('[data-action="remove-color"]');
                 if (removeColorBtn) {
                     this._handleRemoveColor(removeColorBtn.dataset.path, parseInt(removeColorBtn.dataset.index, 10));
+                    return;
+                }
+
+                // A `type: 'action'` row — hand off to whatever owns that
+                // setting's editor. Errors are reported, not swallowed: a button
+                // that silently does nothing is the worst possible outcome here.
+                const actionBtn = e.target.closest('[data-action="setting-action"]');
+                if (actionBtn) {
+                    const def = getSchema()[actionBtn.dataset.path];
+                    if (typeof def?.onClick === 'function') {
+                        Promise.resolve(def.onClick()).catch((err) =>
+                            console.error('[settings] action failed', actionBtn.dataset.path, err));
+                    } else {
+                        console.warn('[settings] no onClick for action', actionBtn.dataset.path);
+                    }
                     return;
                 }
             });
