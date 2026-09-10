@@ -185,6 +185,7 @@ export async function installTilingShell({ eventBus, logger, runtime } = {}) {
     // a single desktop labeled "WORK" (below), but the bar lets the user
     // add and switch between multiple desktops again.
     _installDesktopBar(wm);
+    _installUserChip(wm);
     _wirePageShortcuts(wm);
 
     await wm.load();
@@ -444,6 +445,11 @@ function _installHamburgerMenu() {
             icon: 'settings',
             action: 'twm-open-settings',
         });
+        items.push({
+            label: 'Change your name…',
+            icon: 'badge',
+            action: 'twm-open-settings',
+        });
         const rect = ham.getBoundingClientRect();
         showContextMenu(rect.left, rect.bottom, items, (action) => {
             if (action === 'twm-open-shortcuts') {
@@ -647,6 +653,39 @@ function _installTopBarResponsive() {
     } catch (_) {
         window.addEventListener('resize', apply);
     }
+}
+
+/**
+ * Who you are, in the bottom bar, always visible.
+ *
+ * The name already lived in Settings › General › Authorship, but nothing on
+ * screen said which of several people BugDesk currently thinks you are — and in
+ * a repo two people share, that is the one piece of state you most need to be
+ * able to check at a glance before you comment as somebody else. Clicking it
+ * opens the setting that changes it.
+ */
+function _installUserChip(wm) {
+    const host = document.querySelector('#global-bottom-bar .bar-left')
+              ?? document.querySelector('.global-bottom-bar .bar-left')
+              ?? document.querySelector('#global-bottom-bar .bar-right')
+              ?? document.querySelector('.global-bottom-bar');
+    if (!host || host.querySelector('#twm-user-chip')) return;
+
+    const cfg = window.__BUGDESK_CONFIG__ || {};
+    const name = cfg.humanAuthor || 'reviewer';
+
+    const btn = document.createElement('button');
+    btn.id = 'twm-user-chip';
+    btn.className = 'twm-user-chip has-tooltip';
+    btn.type = 'button';
+    btn.dataset.tooltip = `Signed in as ${name} — click to change`;
+    btn.dataset.tooltipPlacement = 'top';
+    btn.setAttribute('aria-label', `Signed in as ${name}. Change your name.`);
+    btn.innerHTML = `<span class="material-symbols-outlined">person</span><span>${
+        String(name).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+    }</span>`;
+    btn.addEventListener('click', () => wm.openInPrimary('settings'));
+    host.insertBefore(btn, host.firstChild);
 }
 
 function _installDesktopBar(wm) {

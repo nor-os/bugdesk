@@ -165,15 +165,82 @@
 }
 
 /* ── Backlog tree rows ───────────────────────────────────────────────
-   The hierarchy is drawn by indenting the Item cell — the bridge hands the
-   rows back in tree order, so depth is a padding, not a layout. */
+   The hierarchy is drawn IN the Title cell: one guide rail per ancestor
+   level, then this row's connector, then a fold caret. Guides are spans with
+   borders rather than box-drawing characters — `└─` renders ragged in a
+   proportional fallback font, and this column is precisely where the shape has
+   to be legible at a glance. */
+
+.bd-guide {
+    position: relative;
+    display: inline-block;
+    width: 14px;
+    flex: 0 0 14px;
+    align-self: stretch;
+}
+/* An ancestor whose sibling list continues below: its rail keeps running. */
+.bd-guide--line::before,
+.bd-guide--tee::before,
+.bd-guide--end::before {
+    content: '';
+    position: absolute;
+    left: 6px;
+    width: 1px;
+    background: var(--border-strong, #383838);
+}
+.bd-guide--line::before { top: 0; bottom: 0; }
+/* ├ — this row has siblings after it, so the rail continues past the elbow. */
+.bd-guide--tee::before  { top: 0; bottom: 0; }
+/* └ — last of its siblings: the rail stops at the elbow. */
+.bd-guide--end::before  { top: 0; height: 50%; }
+.bd-guide--tee::after,
+.bd-guide--end::after {
+    content: '';
+    position: absolute;
+    left: 6px;
+    top: 50%;
+    width: 7px;
+    height: 1px;
+    background: var(--border-strong, #383838);
+}
+
+.bd-caret {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 15px;
+    height: 15px;
+    flex: 0 0 15px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--text-muted, #888);
+    cursor: pointer;
+}
+.bd-caret:hover { color: var(--text-primary, #e0e0e0); }
+.bd-caret .material-symbols-outlined { font-size: 15px; }
+/* A leaf keeps the same box so its title lines up with its siblings' titles. */
+.bd-caret--none { cursor: default; }
+
+/* "+3" on a folded row: what you would see if you opened it. */
+.bd-item__hidden {
+    margin-left: 4px;
+    padding: 0 5px;
+    border-radius: var(--radius-pill, 999px);
+    background: var(--surface-3, #3c3c3c);
+    color: var(--text-muted, #888);
+    font-size: 9.5px;
+}
 
 .bd-item {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 3px;
     min-width: 0;
+    height: 100%;
 }
+.bd-item .bd-type { margin-left: 3px; }
+.bd-item__title { margin-left: 3px; }
 .bd-item__title {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -327,3 +394,45 @@
 }
 .bd-rail { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 .bd-rail__body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+
+/* Dropped is off every ladder, so it renders as an extra terminal chevron
+   rather than pretending to be a stage number. */
+.bd-stage--dropped {
+    color: var(--text-dim, #666);
+    text-decoration: line-through;
+}
+
+/* Rail: work packages. Epics sit one level in from their phase, matching the
+   tree they navigate to. */
+.td-nav__item--phase {
+    font-weight: var(--font-weight-semibold, 600);
+    letter-spacing: 0.02em;
+}
+.td-nav__item--epic { padding-left: 18px; }
+.td-nav__item--epic .bd-type { flex: 0 0 15px; }
+
+/* Who you are, bottom-left. Quiet by default — it is a status readout, not an
+   action — but it IS a button, because the thing you want on noticing a wrong
+   name is to change it. */
+.twm-user-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 18px;
+    padding: 0 7px;
+    margin-right: 6px;
+    font: inherit;
+    font-size: 10.5px;
+    color: var(--text-muted, #888);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-pill, 999px);
+    cursor: pointer;
+    white-space: nowrap;
+}
+.twm-user-chip:hover {
+    color: var(--text-primary, #e0e0e0);
+    background: var(--surface-2, #2d2d2d);
+    border-color: var(--border-strong, #383838);
+}
+.twm-user-chip .material-symbols-outlined { font-size: 13px; }

@@ -24,12 +24,27 @@
  * index chain) is the single addressing scheme linking DOM back to AST.
  */
 
-import {
-    FILTER_FIELDS, OPERATORS, FILTER_ICONS,
-    describeFilter, matcherFor, validateFilter, emptyExpr,
-    saveFilter, deleteFilter,
-} from './filters.js';
+import { OPERATORS, FILTER_ICONS, emptyExpr } from './filter_engine.js';
+import { saveFilter, deleteFilter } from './filter_store.js';
 import { esc } from './data.js';
+
+/* ── the model in play ───────────────────────────────────────────────
+ *
+ * The editor used to import the bug queue's field catalogue directly. It now
+ * edits either store's filters, so the catalogue — and the describe/validate/
+ * match functions bound to it — arrive as the `model` argument
+ * (see ./filter_engine.js's createFilterModel).
+ *
+ * It is held in a module-level slot rather than threaded through thirty
+ * functions because the editor is a BLOCKING, single-instance modal: it owns a
+ * focus trap and there is never a second one open to disagree with it. Set on
+ * entry to openFilterEditor, and every helper below reads it.
+ */
+let _model = null;
+const _fields = () => _model?.fields || [];
+const describeFilter = (expr) => _model.describeFilter(expr);
+const matcherFor = (expr) => _model.matcherFor(expr);
+const validateFilter = (expr) => _model.validateFilter(expr);
 
 /* Icon grid geometry — the CSS grid is a fixed 8 columns, and the arrow-key
    handler needs the same number to move up/down a row. Keep in sync with
@@ -67,7 +82,7 @@ const FOCUSABLE = [
 /** Deep copy. The AST is JSON-serialisable by contract, so this is total. */
 const clone = (v) => (v == null ? v : JSON.parse(JSON.stringify(v)));
 
-const fieldByKey = (key) => FILTER_FIELDS.find((f) => f.key === key) || null;
+const fieldByKey = (key) => _fields().find((f) => f.key === key) || null;
 
 /** Operators legal for a clause's field. Unknown field → no operators, which
  *  makes the clause render its "unknown" fallbacks and validateFilter flag it
@@ -78,14 +93,16 @@ function opsFor(fieldKey) {
 }
 const opDef = (fieldKey, opId) => opsFor(fieldKey).find((o) => o.id === opId) || null;
 
-/* FILTER_FIELDS[].options may be plain strings or {value,label} records —
-   normalise both rather than assuming one shape. */
+/* A field's `options` may be plain strings or {value,label} records — normalise
+   both rather than assuming one shape. It may also be a GETTER over live data
+   (the backlog's phases and epics are data, not constants), so it is read at
+   render time, never cached. */
 const optValue = (o) => (o && typeof o === 'object' ? (o.value ?? o.id ?? '') : String(o ?? ''));
 const optLabel = (o) => (o && typeof o === 'object' ? (o.label ?? o.value ?? o.id ?? '') : String(o ?? ''));
 
 /** "in the last N days" is the one arity-1 date operator whose control is a
- *  NUMBER, not a date. filters.js owns the id, so sniff id + label instead of
- *  hard-coding a string we don't own. */
+ *  NUMBER, not a date. filter_engine.js owns the id, so sniff id + label
+ *  instead of hard-coding a string we don't own. */
 const isRelativeDays = (op) => !!op && /day/i.test(`${op.id} ${op.label}`);
 
 /** The value a freshly-picked (field, operator) pair should start from. */
@@ -102,7 +119,7 @@ function defaultValueFor(field, op) {
 
 /** A clause seeded on the first field/operator — what "+ Condition" adds. */
 function makeClause() {
-    const field = FILTER_FIELDS[0];
+    const field = _fields()[0];
     const op = (OPERATORS[field.type] || [])[0] || null;
     return {
         kind: 'clause',
@@ -142,14 +159,27 @@ function normaliseRoot(expr) {
  *                               Cancel is lossless). Falsy → create mode.
  * @param {object?}  o.seedExpr  expression to pre-populate in create mode
  *                               (the queue's "Save as filter" button).
- * @param {Array}    o.tickets   mapped tickets (ticketdesk/data.js) driving
- *                               the live preview.
+ * @param {object}   o.model     the bound filter model whose fields this
+ *                               filter is written against — ./filters.js's for
+ *                               a bug filter, ./backlog_filters.js's for a
+ *                               backlog one. Supplies the field catalogue and
+ *                               the describe/validate/match functions.
+ * @param {string}   o.scope     which store the saved filter belongs to
+ *                               ('bugs' | 'backlog'). Keeps the two rails from
+ *                               listing each other's filters.
+ * @param {Array}    o.items     the rows driving the live preview.
+ * @param {Function?} o.rowLabel one preview row → its display text. Defaults to
+ *                               the bug shape; the backlog passes its own.
  * @param {Function?} o.onSaved  called with the persisted filter after Save.
  * @param {Function?} o.onDeleted called with the id after Delete.
  */
 export function openFilterEditor({
-    filter = null, seedExpr = null, tickets = [], onSaved = null, onDeleted = null,
+    model, scope = 'bugs', filter = null, seedExpr = null, items = [],
+    rowLabel = null, onSaved = null, onDeleted = null,
 } = {}) {
+    if (!model) throw new Error('openFilterEditor needs a filter model');
+    _model = model;
+    const noun = model.noun || 'row';
     const editing = !!(filter && filter.id && !filter.builtin);
 
     const state = {
@@ -258,7 +288,7 @@ export function openFilterEditor({
 
     function fieldSelectHtml(selectedKey) {
         const groups = new Map();
-        for (const f of FILTER_FIELDS) {
+        for (const f of _fields()) {
             const cap = TYPE_GROUP[f.type] || 'Other';
             if (!groups.has(cap)) groups.set(cap, []);
             groups.get(cap).push(f);
@@ -629,13 +659,25 @@ export function openFilterEditor({
 
     const sevOf = (t) => String(t.severity || '').toLowerCase();
 
+    /** One preview row. The bug shape is the default because it was the only
+     *  shape when this existed; a caller over different rows passes `rowLabel`
+     *  and gets the same list without a second renderer. */
+    const defaultRowLabel = (t) => ({
+        id: t.id,
+        title: t.summary || '',
+        status: t.status || '',
+        dot: sevOf(t) || 'low',
+        dotTitle: t.severity || '',
+    });
+
     function hitHtml(t) {
+        const r = (rowLabel || defaultRowLabel)(t) || {};
         return `
         <li class="td-fed__hit">
-            <span class="td-fed__hitid">${esc(t.id)}</span>
-            <span class="td-fed__dot td-fed__dot--${esc(sevOf(t) || 'low')}" title="${esc(t.severity || '')}"></span>
-            <span class="td-fed__hittitle">${esc(t.summary || '')}</span>
-            <span class="td-fed__hitstatus">${esc(t.status || '')}</span>
+            <span class="td-fed__hitid">${esc(r.id ?? '')}</span>
+            <span class="td-fed__dot td-fed__dot--${esc(r.dot || 'low')}" title="${esc(r.dotTitle || '')}"></span>
+            <span class="td-fed__hittitle">${esc(r.title ?? '')}</span>
+            <span class="td-fed__hitstatus">${esc(r.status ?? '')}</span>
         </li>`;
     }
 
@@ -658,9 +700,9 @@ export function openFilterEditor({
         let sentence = '';
         let hits = [];
         try {
-            sentence = describeFilter(state.expr) || 'Matches every bug';
+            sentence = describeFilter(state.expr) || `Matches every ${noun}`;
             const match = matcherFor(state.expr);
-            hits = tickets.filter((t) => match(t));
+            hits = items.filter((t) => match(t));
         } catch (err) {
             // Surface the failure rather than pretending the filter matches
             // nothing — a throwing matcher is a real bug worth seeing.
@@ -681,14 +723,14 @@ export function openFilterEditor({
         previewEl.innerHTML = `
             <div class="td-fed__sentence">${esc(sentence)}</div>
             <div class="td-fed__count">
-                <b>${hits.length}</b> of ${tickets.length} bug${tickets.length === 1 ? '' : 's'} match${hits.length === 1 ? 'es' : ''}
+                <b>${hits.length}</b> of ${items.length} ${esc(noun)}${items.length === 1 ? '' : 's'} match${hits.length === 1 ? 'es' : ''}
             </div>
             ${hits.length
                 ? `<ul class="td-fed__list">${shown.map(hitHtml).join('')}</ul>
                    ${more > 0 ? `<div class="td-fed__more">+ ${more} more not shown</div>` : ''}`
                 : `<div class="td-fed__none">
                        <span class="material-symbols-outlined">search_off</span>
-                       No bug matches this filter.
+                       No ${esc(noun)} matches this filter.
                    </div>`}`;
         updateSave();
     }
@@ -824,11 +866,12 @@ export function openFilterEditor({
         try {
             const saved = await saveFilter({
                 id: state.id || null,
+                scope,
                 label,
                 icon: state.icon,
                 expr: state.expr,
                 builtin: false,
-            });
+            }, scope);
             onSaved?.(saved);
             close();
         } catch (err) {

@@ -20,6 +20,7 @@
  */
 
 import { taxonomy } from './kind_taxonomy.js';
+import { ITEMS, itemRef } from '../ticketdesk/backlog_data.js';
 
 /** Build a breadcrumb strip element + render initial state. Returns
  *  `{ el, destroy }`. The strip is wired to the WM: clicking a crumb
@@ -119,6 +120,46 @@ function _segments(kind, props) {
             nav: { kind: 'agent', props: { id: props.id, label: props.id } },
         });
         segs.push({ icon: 'table_chart', label: AGENT_PANE[kind], nav: null });
+        return segs;
+    }
+
+    // A backlog item's path IS its hierarchy. Without this a task reads
+    // "Backlog › TASK-0031" and says nothing about which story — let alone
+    // which work package — it belongs to, which is exactly the context you open
+    // a task to get. Ancestors come from the live store rather than the props
+    // so a re-parent is reflected without reopening the tab.
+    if (kind === 'item' && props?.id) {
+        const backlogMeta = taxonomy.meta('backlog');
+        segs.push({
+            icon: backlogMeta?.icon || 'workspaces',
+            label: backlogMeta?.label || 'Backlog',
+            nav: { kind: 'backlog', props: props.filter ? { filter: props.filter } : {} },
+        });
+        const byId = new Map(ITEMS.map((i) => [Number(i.id), i]));
+        const self = byId.get(Number(String(props.id).replace(/^#/, '')));
+        if (self) {
+            // Walk up, then reverse: the path renders root-first.
+            const chain = [];
+            let cur = self;
+            const seen = new Set([cur.id]);
+            while (cur && Number(cur.parent) > 0) {
+                const next = byId.get(Number(cur.parent));
+                if (!next || seen.has(next.id)) break;   // cycle from a hand edit
+                seen.add(next.id);
+                chain.unshift(next);
+                cur = next;
+            }
+            for (const anc of chain) {
+                segs.push({
+                    icon: taxonomy.meta('item')?.icon || 'article',
+                    label: itemRef(anc),
+                    nav: { kind: 'item', props: { id: String(anc.id), label: `${itemRef(anc)} — ${anc.title}` } },
+                });
+            }
+            segs.push({ icon: taxonomy.meta('item')?.icon || 'article', label: itemRef(self), nav: null });
+        } else {
+            segs.push({ icon: 'article', label: props.label || String(props.id), nav: null });
+        }
         return segs;
     }
 

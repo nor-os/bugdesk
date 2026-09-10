@@ -24,17 +24,26 @@
  */
 
 import { DataTable } from '../ui/components/data_table.js';
+import { showContextMenu } from '../ecoagent/ui/context_menu.js';
 import { openForm } from '../ecoagent/ui/modal.js';
 import { renderMarkdown } from './markdown.js';
 import { attachMarkdownEditor } from './md_editor.js';
 import { attachTagInput } from './tag_input.js';
+import { openFilterEditor } from './filter_editor.js';
+import { onFiltersChanged } from './filter_store.js';
 import { shell, statusLine } from './pages.js';
 import { esc, initials, HUMAN_AUTHOR, AGENT_AUTHOR } from './data.js';
 import {
-    BACKLOG_VIEWS, DEFAULT_VIEW, ITEMS, LADDER, PHASES, TYPES, TYPE_ICON,
-    createItem, fetchItem, humanizeItemStatus, itemLabel, itemRef,
-    loadBacklog, patchItem, postItemComment, REFINEMENT_RULES, refinementGaps,
-    resolveView, rowsFor, stageOf, typeLabelOf,
+    BUILTIN_FILTERS, DEFAULT_FILTER, MODEL, SCOPE,
+    adhocFilter, deleteFilter, describeFilter, duplicateFilter, epicExpr,
+    getFilter, listFilters, matcherFor, resolveFilter,
+} from './backlog_filters.js';
+import {
+    ITEMS, PHASES, TYPES, TYPE_ICON,
+    collapsibleIds, createItem, fetchItem, humanizeItemStatus, isGated,
+    itemLabel, itemRef, ladderFor, loadBacklog, patchItem, postItemComment,
+    REFINEMENT_RULES, refinementGaps, stageActions, stageOf, treeRows,
+    typeLabelOf,
 } from './backlog_data.js';
 
 const md = renderMarkdown;
@@ -138,6 +147,44 @@ export async function openCreateForm({ type = 'story', parent = 0, phase = '' } 
     }
 }
 
+/* ── collapse state ──────────────────────────────────────────────────
+ *
+ * Which subtrees are folded is a per-person preference about a shared store, so
+ * it lives in the user's profile (`GET`/`POST /api/user/settings`) rather than
+ * localStorage: BugDesk is a tool you run from wherever the repo is checked
+ * out, and a fold that does not survive moving machines is a fold you re-do
+ * every morning.
+ *
+ * Reads are served from an in-memory cache so a render never awaits; the write
+ * is fire-and-forget for the same reason. A failed write costs a fold, which is
+ * not worth blocking a click over — but it is still reported, not swallowed.
+ */
+const COLLAPSE_KEY = 'backlog.collapsed';
+let _collapsed = new Set();
+let _collapseLoaded = false;
+
+async function loadCollapsed() {
+    if (_collapseLoaded) return _collapsed;
+    _collapseLoaded = true;
+    try {
+        const res = await fetch('/api/user/settings', { headers: { accept: 'application/json' } });
+        const j = res.ok ? await res.json() : null;
+        const ids = j?.settings?.[COLLAPSE_KEY];
+        if (Array.isArray(ids)) _collapsed = new Set(ids.map(Number).filter(Boolean));
+    } catch (err) {
+        console.warn('[bugdesk] could not read collapse state', err);
+    }
+    return _collapsed;
+}
+
+function saveCollapsed() {
+    fetch('/api/user/settings', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', accept: 'application/json' },
+        body: JSON.stringify({ [COLLAPSE_KEY]: Array.from(_collapsed) }),
+    }).catch((err) => statusLine(`Could not save the fold state: ${err?.message || err}`));
+}
+
 /* ── kind: backlog — the tree ────────────────────────────────────── */
 
 const BOARD_HEADERS = ['Item', 'Title', 'Type', 'Status', 'Pts', 'Criteria', 'Assignee', 'Phase', 'Updated'];
@@ -151,8 +198,32 @@ const boardRow = (i) => [
     i.assignee, i.phaseLabel, i.updated,
 ];
 
+/**
+ * The tree drawing for one row's Title cell: guide lines for every ancestor
+ * level, then this row's own connector, then a caret if it has children.
+ *
+ * Guides are spans rather than box-drawing characters so they line up at any
+ * font — `└─` in a proportional fallback font is ragged, and this column is
+ * where the hierarchy is supposed to be legible at a glance.
+ */
+function treeGuides(row) {
+    if (!row.depth) return '';
+    const parts = [];
+    // One rail per ancestor level. `ancestorsLast[k]` true means that ancestor
+    // was the last of its siblings, so its vertical line has already ended.
+    for (let k = 0; k < row.depth - 1; k++) {
+        parts.push(`<span class="bd-guide ${row.ancestorsLast[k + 1] ? '' : 'bd-guide--line'}"></span>`);
+    }
+    parts.push(`<span class="bd-guide bd-guide--${row.isLast ? 'end' : 'tee'}"></span>`);
+    return parts.join('');
+}
+
 function mountBacklogBoard(host, props, ctx) {
-    let view = resolveView(props?.view, props?.phase);
+    // props.expr (ad-hoc, e.g. a rail epic click) beats props.filter (a stored
+    // key or saved id) — same precedence as the bug queue.
+    let view = props?.expr
+        ? adhocFilter(props.expr, props.label)
+        : resolveFilter(props?.filter);
 
     host.innerHTML = `
     <div class="td-page">
@@ -160,20 +231,14 @@ function mountBacklogBoard(host, props, ctx) {
             <span class="td-page__title" data-slot="title">${icon(esc(view.icon))} ${esc(view.label)}</span>
             <span class="td-dim" data-slot="count"></span>
             <span class="td-spacer"></span>
-            <label class="td-dim" for="bd-phase">Phase</label>
-            <select class="ea-tin" id="bd-phase" data-f="phase"></select>
+            <button class="ea-btn" data-a="expand" title="Expand every item">${icon('unfold_more')}</button>
+            <button class="ea-btn" data-a="collapse" title="Collapse every item">${icon('unfold_less')}</button>
+            <button class="ea-btn" data-a="savefilter">${icon('filter_alt')} Save as filter</button>
             <button class="ea-btn" data-a="new-epic">${icon('workspaces')} Epic</button>
             <button class="ea-btn ea-btn--primary" data-a="new-story">${icon('add')} Story</button>
         </div>
         <div class="td-tablehost"></div>
     </div>`;
-
-    const phaseSel = host.querySelector('[data-f="phase"]');
-    const renderPhases = () => {
-        phaseSel.innerHTML = `<option value="">(all)</option>`
-            + PHASES.map((p) => `<option value="${esc(p)}" ${p === view.phase ? 'selected' : ''}>${esc(p)}</option>`).join('');
-    };
-    renderPhases();
 
     const openBoard = (p) => {
         if (ctx.wm?.navigate) ctx.wm.navigate('backlog', p, { ctx, dest: 'origin' });
@@ -181,21 +246,37 @@ function mountBacklogBoard(host, props, ctx) {
     };
     const openItem = (id, opts) => {
         const model = ITEMS.find((x) => Number(x.id) === Number(id));
-        const p = { id: String(id), label: itemLabel(model) || `#${id}`, view: view.key };
+        const p = { id: String(id), label: itemLabel(model) || `#${id}`, filter: view.key || DEFAULT_FILTER };
         if (ctx.wm?.navigate) ctx.wm.navigate('item', p, { ctx, ...opts });
         else ctx.wm?.openInTabFromContext?.(ctx, 'item', p);
     };
+    const openSavedFilter = (f) => openBoard({ filter: f.id, label: f.label });
 
-    /** Row models keyed by their reference, so a SORTED table can still find the
-     *  item behind a row — the row index after a sort is not the store index. */
+    /** Row models keyed by their reference, so a SORTED table can still find
+     *  the item behind a row — the row index after a sort is not the store
+     *  index. Rebuilt on every rows() call. */
     let byRef = new Map();
 
     const rows = () => {
-        const list = rowsFor(view);
+        const list = treeRows(view.match, _collapsed);
         byRef = new Map(list.map((i) => [i.ref, i]));
+        const matched = list.filter((i) => !i.context).length;
+        const context = list.length - matched;
         const countEl = host.querySelector('[data-slot="count"]');
-        if (countEl) countEl.textContent = `${list.length} item${list.length === 1 ? '' : 's'}`;
+        if (countEl) {
+            countEl.textContent = context
+                ? `${matched} item${matched === 1 ? '' : 's'} · ${context} shown for context`
+                : `${matched} item${matched === 1 ? '' : 's'}`;
+        }
         return list.map(boardRow);
+    };
+
+    const refresh = () => table.setData({ rows: rows() });
+
+    const toggleFold = (id) => {
+        if (_collapsed.has(id)) _collapsed.delete(id); else _collapsed.add(id);
+        saveCollapsed();
+        refresh();
     };
 
     const menuRefs = (cm) => (cm.selectedRows?.length ? cm.selectedRows : (cm.row ? [cm.row] : []))
@@ -203,14 +284,18 @@ function mountBacklogBoard(host, props, ctx) {
 
     const table = new DataTable(host.querySelector('.td-tablehost'), {
         headers: BOARD_HEADERS,
-        rows: rows(),
+        rows: [],
         pagination: false,
         selectable: true,
         copyable: true,
+        // Sorting flattens the hierarchy — a tree sorted by Updated is no longer
+        // a tree — so the Item/Title columns keep their tree order and the rest
+        // stay sortable for the "just find it" case.
         sortable: true,
         filterable: true,
         mode: 'compact',
         emptyMessage: 'Nothing in this view',
+        services: { eventBus: _eventBus },
         contextMenuItems: (cm) => {
             const refs = menuRefs(cm);
             const model = cm.row ? byRef.get(cm.row[REF_COL]) : null;
@@ -220,8 +305,13 @@ function mountBacklogBoard(host, props, ctx) {
                 { label: 'Open in new window', icon: 'web_asset', action: 'open-window', disabled: !model },
                 { label: 'Open in split right', icon: 'splitscreen_vertical_add', action: 'open-split-h', disabled: !model },
                 { separator: true },
-                // A task cannot hold children, so the entry is greyed rather than
-                // hidden — the menu keeps one shape whichever row you hit.
+                { label: model?.isCollapsed ? 'Expand' : 'Collapse', icon: 'account_tree',
+                  action: 'fold', disabled: !model?.hasChildren },
+                { label: 'Show only this work package', icon: 'filter_center_focus',
+                  action: 'focus-epic', disabled: !model?.epicRef },
+                { separator: true },
+                // A task cannot hold children, so the entry is greyed rather
+                // than hidden — the menu keeps one shape whichever row you hit.
                 { label: 'Add child…', icon: 'add', action: 'add-child',
                   disabled: !model || model.type === 'task' },
                 { separator: true },
@@ -236,13 +326,22 @@ function mountBacklogBoard(host, props, ctx) {
                 case 'open': refs.forEach((r) => { const m = byRef.get(r); if (m) openItem(m.id, { dest: 'origin', newTab: true }); }); break;
                 case 'open-window': if (model) openItem(model.id, { dest: 'window' }); break;
                 case 'open-split-h': if (model) openItem(model.id, { dest: 'split-h' }); break;
+                case 'fold': if (model?.hasChildren) toggleFold(Number(model.id)); break;
+                case 'focus-epic':
+                    if (model?.epicRef) openBoard({ expr: epicExpr(model.epicRef), label: model.epicRef });
+                    break;
                 case 'add-child': {
                     if (!model) break;
                     const created = await openCreateForm({
                         type: model.type === 'epic' ? 'story' : 'task',
                         parent: model.id,
                     });
-                    if (created) { table.setData({ rows: rows() }); openItem(created.id, { dest: 'origin', newTab: true }); }
+                    if (created) {
+                        // A new child under a folded parent would land invisible.
+                        _collapsed.delete(Number(model.id));
+                        refresh();
+                        openItem(created.id, { dest: 'origin', newTab: true });
+                    }
                     break;
                 }
                 case 'copy-ref':
@@ -264,11 +363,17 @@ function mountBacklogBoard(host, props, ctx) {
                 return true;
             }
             if (colIdx === 1) {
-                // The hierarchy IS this indent — the bridge hands rows back in
-                // tree order, so depth is the only thing the client adds.
-                const depth = model?.depth || 0;
-                td.innerHTML = `<span class="bd-item${model?.context ? ' bd-item--context' : ''}"
-                    style="padding-left:${depth * 14}px">${typeGlyph(model?.type || 'task')}<span class="bd-item__title">${esc(value)}</span></span>`;
+                // The hierarchy IS this cell: guides, a fold caret, the type
+                // glyph, the title. The bridge hands rows back in tree order and
+                // treeRows() works out the shape; this only draws it.
+                const caret = model?.hasChildren
+                    ? `<button type="button" class="bd-caret" data-fold="${model.id}"
+                               aria-label="${model.isCollapsed ? 'Expand' : 'Collapse'} ${esc(model.ref)}"
+                               aria-expanded="${model.isCollapsed ? 'false' : 'true'}">${icon(model.isCollapsed ? 'chevron_right' : 'expand_more')}</button>`
+                    : '<span class="bd-caret bd-caret--none"></span>';
+                td.innerHTML = `<span class="bd-item${model?.context ? ' bd-item--context' : ''}">
+                    ${treeGuides(model || {})}${caret}${typeGlyph(model?.type || 'task')}<span class="bd-item__title">${esc(value)}</span>
+                    ${model?.hidden ? `<span class="bd-item__hidden">+${model.hidden}</span>` : ''}</span>`;
                 return true;
             }
             if (colIdx === 3) { td.innerHTML = statusPill(model?.status || 'draft'); return true; }
@@ -284,17 +389,55 @@ function mountBacklogBoard(host, props, ctx) {
             if (model) openItem(model.id, { dest: 'origin', newTab: true });
         },
     });
+
+    // The caret lives INSIDE a row, so its click would also open the item.
+    // Caught in the capture phase, before DataTable's own row handler sees it.
+    const onCaret = (e) => {
+        const btn = e.target.closest?.('[data-fold]');
+        if (!btn) return;
+        e.stopPropagation();
+        e.preventDefault();
+        toggleFold(Number(btn.dataset.fold));
+    };
+    host.addEventListener('click', onCaret, true);
+
+    // Collapse state may not have arrived yet on the very first mount; render
+    // what we have, then repaint once it does.
+    table.setData({ rows: rows() });
     table.render();
+    loadCollapsed().then(() => { if (host.isConnected) refresh(); });
     requestAnimationFrame(() => { if (host.isConnected) table.focus(); });
 
-    phaseSel.addEventListener('change', () => openBoard({ view: view.key, phase: phaseSel.value }));
-    host.querySelector('[data-a="new-epic"]').addEventListener('click', async () => {
-        const created = await openCreateForm({ type: 'epic', phase: view.phase });
-        if (created) { renderPhases(); table.setData({ rows: rows() }); }
+    const actions = {
+        expand: () => { _collapsed.clear(); saveCollapsed(); refresh(); },
+        collapse: () => {
+            for (const id of collapsibleIds()) _collapsed.add(id);
+            saveCollapsed();
+            refresh();
+        },
+        savefilter: () => openFilterEditor({
+            model: MODEL, scope: SCOPE,
+            seedExpr: view.expr, items: ITEMS,
+            rowLabel: (i) => ({ id: i.ref, title: i.title, status: i.statusLabel, dot: i.type }),
+            onSaved: openSavedFilter,
+        }),
+        'new-epic': async () => { if (await openCreateForm({ type: 'epic' })) refresh(); },
+        'new-story': async () => { if (await openCreateForm({ type: 'story' })) refresh(); },
+    };
+    host.querySelector('.td-page__bar').addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-a]');
+        if (btn && actions[btn.dataset.a]) actions[btn.dataset.a]();
     });
-    host.querySelector('[data-a="new-story"]').addEventListener('click', async () => {
-        const created = await openCreateForm({ type: 'story' });
-        if (created) table.setData({ rows: rows() });
+
+    // A save/delete in the editor changes what this view means (or deletes it
+    // outright — resolveFilter then lands on the default). Ad-hoc views own
+    // their expression, so nothing in the store can move them.
+    const unsub = onFiltersChanged(() => {
+        if (view.adhoc) return;
+        view = resolveFilter(view.key);
+        const titleEl = host.querySelector('[data-slot="title"]');
+        if (titleEl) titleEl.innerHTML = `${icon(esc(view.icon))} ${esc(view.label)}`;
+        refresh();
     });
 
     // An edit made on an item page changes what this table shows. The bus event
@@ -303,34 +446,23 @@ function mountBacklogBoard(host, props, ctx) {
     // NOTE the handle: EventBus.on() returns { id, dispose } and off() takes
     // THAT, not (name, handler) — a call shaped like removeEventListener finds
     // no listener id, returns false and leaves the subscription in place.
-    const sub = _eventBus?.on?.('backlog:changed',
-        () => { renderPhases(); table.setData({ rows: rows() }); });
+    const sub = _eventBus?.on?.('backlog:changed', () => {
+        if (!view.adhoc) view = resolveFilter(view.key);
+        refresh();
+    });
 
     return {
         title: view.label,
         destroy: () => {
+            unsub();
             sub?.dispose?.();
+            host.removeEventListener('click', onCaret, true);
             table.dispose();
         },
     };
 }
 
 /* ── kind: item — one backlog record ─────────────────────────────── */
-
-/** Lifecycle actions per stage. Index === stage (0..4); `dropped` (stage -1)
- *  is handled separately below because it is not on the ladder. */
-const STAGE_ACTIONS = [
-    [['Mark refined', 'refined'], ['Drop', 'dropped']],                   // draft
-    [['Start work', 'in-progress'], ['Back to draft', 'draft']],          // refined
-    [['Send to review', 'review'], ['Back to refined', 'refined']],       // in-progress
-    [['Mark done', 'done'], ['Back to in progress', 'in-progress']],      // review
-    [['Reopen', 'in-progress']],                                          // done
-];
-const DROPPED_ACTIONS = [['Restore to draft', 'draft']];
-
-/** The one transition that has a precondition: you cannot call something
- *  refined that does not meet the definition. Every other move is judgement. */
-const GATED = { refined: true };
 
 function mountItem(host, props, ctx) {
     const id = Number(String(props?.id ?? '').replace(/^#/, ''));
@@ -467,16 +599,22 @@ function mountItem(host, props, ctx) {
 
     /* ── lifecycle ──────────────────────────────────────────────── */
 
+    // The chevrons and the buttons are BOTH derived from this item's own ladder
+    // (an epic has no `review`, a task no `refined`), so a type change repaints
+    // a different lifecycle rather than offering transitions the server rejects.
     const renderStages = () => {
-        const stage = stageOf(item.status);
-        $('[data-slot="stages"]').innerHTML = LADDER.map((s, i) =>
-            `<li class="td-stage ${i < stage ? 'td-stage--done' : ''} ${i === stage ? 'td-stage--active' : ''}"
-                 data-stage="${i}"><span class="td-stage__num">${i + 1}</span> ${esc(humanizeItemStatus(s))}</li>`).join('');
+        const ladder = item.ladder?.length ? item.ladder : ladderFor(item.type);
+        const stage = stageOf(item);
+        const dropped = item.status === 'dropped';
 
-        const actions = stage < 0 ? DROPPED_ACTIONS : STAGE_ACTIONS[stage];
+        $('[data-slot="stages"]').innerHTML = ladder.map((s, i) =>
+            `<li class="td-stage ${!dropped && i < stage ? 'td-stage--done' : ''} ${i === stage ? 'td-stage--active' : ''}"
+                 data-stage="${i}"><span class="td-stage__num">${i + 1}</span> ${esc(humanizeItemStatus(s))}</li>`).join('')
+            + (dropped ? `<li class="td-stage td-stage--active bd-stage--dropped">${esc(humanizeItemStatus('dropped'))}</li>` : '');
+
         const gaps = refinementGaps(item);
-        $('[data-slot="stageactions"]').innerHTML = actions.map(([label, target], i) => {
-            const blocked = GATED[target] && gaps.length > 0;
+        $('[data-slot="stageactions"]').innerHTML = stageActions(item).map(([label, target], i) => {
+            const blocked = isGated(target) && gaps.length > 0;
             return `<button class="ea-btn td-stageaction ${i === 0 && !blocked ? 'ea-btn--primary td-stageaction--primary' : ''}"
                         data-wf="${esc(target)}" ${blocked ? 'disabled' : ''}
                         title="${blocked ? esc(`${gaps.length} thing${gaps.length === 1 ? '' : 's'} still missing — see Refinement`) : ''}">${esc(label)}</button>`;
@@ -486,6 +624,21 @@ function mountItem(host, props, ctx) {
     /* ── refinement checklist ───────────────────────────────────── */
 
     const renderRefinement = () => {
+        // A task never passes through `refined` — it inherits its story's
+        // acceptance criteria, so there is nothing about it to refine. Showing
+        // it a checklist it can never need is how a lifecycle stops meaning
+        // anything; point at the story instead.
+        if (item.type === 'task') {
+            const parent = ITEMS.find((x) => Number(x.id) === Number(item.parent));
+            $('[data-slot="refinement"]').innerHTML = parent
+                ? `<div class="td-dim">A task inherits its parent's acceptance criteria —
+                   <button type="button" class="bd-item__ref" data-goto="${parent.id}">${esc(parent.ref)}</button>
+                   ${esc(parent.title)} (${parent.criteriaDone}/${parent.criteriaTotal} met).</div>`
+                : `<div class="td-dim">This task has no parent yet, so it inherits no acceptance
+                   criteria. Set one above.</div>`;
+            return;
+        }
+
         // Read the rules rather than restating them: the skill and this panel
         // must agree on what "refined" means, and a second copy of the list is
         // how they stop agreeing.
@@ -699,82 +852,229 @@ function mountItem(host, props, ctx) {
     };
 }
 
-/* ── the Backlog half of the left rail ───────────────────────────── */
+/* ── the Backlog half of the left rail ───────────────────────────────
+ *
+ * Three sections:
+ *   "Views"       BUILTIN_FILTERS, in store order (that IS the rail order)
+ *   "My filters"  the user's own backlog filters, with the same
+ *                 Open/Edit/Duplicate/Delete set the bug rail has
+ *   "Work packages"  phases → their epics, as a navigable tree
+ *
+ * The third one is the point. A flat list of views tells you what STATE things
+ * are in; the backlog's actual shape is phase → epic → story → task, and the
+ * rail is where you navigate that shape rather than scroll it. Clicking an epic
+ * opens the board scoped to that whole work package — an ad-hoc `epic is
+ * EPIC-0001` expression, which is the same thing "Show only this work package"
+ * does from the tree's context menu.
+ *
+ * Exported for pages.js's `mountTicketNav`, which owns the panel and the
+ * Bugs/Backlog tab strip — a panel kind can only be registered once, so the two
+ * rails are one mount with two bodies rather than two kinds fighting over
+ * `panel:left`.
+ */
+
+/** One action button, shared by the click handler and the context menu. */
+const navAction = (act, glyph, label, danger = false) =>
+    `<button type="button" class="td-nav__action${danger ? ' td-nav__action--danger' : ''}"
+             data-act="${act}" title="${esc(label)}" aria-label="${esc(label)}">${icon(glyph)}</button>`;
 
 /**
- * Views, then phases. Exported for pages.js's `mountTicketNav`, which owns the
- * panel and the Bugs/Backlog tab strip — a panel kind can only be registered
- * once, so the two rails are one mount with two bodies rather than two kinds
- * fighting over `panel:left`.
- *
  * @returns {{ render: () => void, destroy: () => void }}
  */
 export function mountBacklogRail(host, ctx) {
     const open = (p) => ctx.wm?.openInPrimary?.('backlog', p);
+    const openFilter = (f) => open({ filter: f.key || f.id, label: f.label });
+    const countFor = (expr) => ITEMS.filter(matcherFor(expr)).length;
 
-    const countFor = (view) => ITEMS.filter(view.match).length;
+    /** Epics grouped by their phase, plus a bucket for the unassigned ones.
+     *  Phases come from the store's live vocabulary, so a phase whose epics are
+     *  all done still lists — you navigate to finished work too. */
+    const workPackages = () => {
+        const epics = ITEMS.filter((i) => i.type === 'epic');
+        const groups = new Map(PHASES.map((p) => [p, []]));
+        const loose = [];
+        for (const e of epics) {
+            const phase = e.phaseLabel || '';
+            if (!phase) { loose.push(e); continue; }
+            if (!groups.has(phase)) groups.set(phase, []);
+            groups.get(phase).push(e);
+        }
+        const out = Array.from(groups.entries()).map(([phase, list]) => ({ phase, epics: list }));
+        if (loose.length) out.push({ phase: '', epics: loose });
+        return out;
+    };
+
+    /** Items in an epic's whole subtree — the number the epic row shows, since
+     *  "5" next to a work package means five things in it, not five children. */
+    const subtreeCount = (ref) => ITEMS.filter((i) => i.epicRef === ref).length;
+
+    const filterRow = (f, custom) => {
+        const key = custom ? f.id : f.key;
+        return `
+        <div class="td-nav__item${custom ? ' td-nav__item--custom' : ''}" data-filter="${esc(key)}"
+             data-custom="${custom ? '1' : ''}" role="button" tabindex="0"
+             title="${esc(describeFilter(f.expr))}">
+            ${icon(esc(f.icon || 'filter_alt'))}
+            <span>${esc(f.label)}</span>
+            <span class="td-nav__actions">
+                ${custom ? navAction('edit', 'edit', `Edit filter ${f.label}`) : ''}
+                ${navAction('duplicate', 'content_copy', custom ? `Duplicate filter ${f.label}` : `Duplicate ${f.label} as a filter of your own`)}
+                ${navAction('copydef', 'notes', `Copy the definition of ${f.label}`)}
+                ${custom ? navAction('delete', 'delete', `Delete filter ${f.label}`, true) : ''}
+            </span>
+            <span class="td-nav__badge">${countFor(f.expr)}</span>
+        </div>`;
+    };
 
     const render = () => {
+        const custom = listFilters();
+        const packages = workPackages();
         host.innerHTML = `
         <div class="td-nav">
             <div class="td-nav__section">Views</div>
-            ${BACKLOG_VIEWS.map((v) => {
-                const resolved = resolveView(v.key, '');
-                return `
-                <div class="td-nav__item" data-view="${esc(v.key)}" role="button" tabindex="0"
-                     title="${esc(v.label)}">
-                    ${icon(esc(v.icon))}
-                    <span>${esc(v.label)}</span>
-                    <span class="td-nav__badge">${countFor(resolved)}</span>
-                </div>`;
-            }).join('')}
-            <div class="td-nav__section">Phases</div>
-            ${PHASES.length
-                ? PHASES.map((p) => `
-                    <div class="td-nav__item" data-phase="${esc(p)}" role="button" tabindex="0"
-                         title="Everything in phase ${esc(p)}">
-                        ${icon('flag')}<span>${esc(p)}</span>
-                        <span class="td-nav__badge">${ITEMS.filter((i) => i.phaseLabel === p).length}</span>
-                    </div>`).join('')
-                : '<div class="td-nav__item"><span class="td-dim">No phases yet — set one on an epic</span></div>'}
-            <div class="td-nav__item" data-new="epic" role="button" tabindex="0">
+            ${BUILTIN_FILTERS.map((f) => filterRow(f, false)).join('')}
+
+            <div class="td-nav__section">My filters</div>
+            ${custom.length
+                ? custom.map((f) => filterRow(f, true)).join('')
+                : '<div class="td-nav__item"><span class="td-dim">No backlog filters yet</span></div>'}
+            <div class="td-nav__item" data-new="1" role="button" tabindex="0">
+                ${icon('add')}<span class="td-dim">New filter</span>
+            </div>
+
+            <div class="td-nav__section">Work packages</div>
+            ${packages.length
+                ? packages.map((g) => `
+                    <div class="td-nav__item td-nav__item--phase" data-phase="${esc(g.phase)}"
+                         role="button" tabindex="0"
+                         title="${g.phase ? `Everything in phase ${esc(g.phase)}` : 'Epics with no phase set'}">
+                        ${icon(g.phase ? 'flag' : 'flag_circle')}
+                        <span>${esc(g.phase || 'No phase')}</span>
+                        <span class="td-nav__badge">${g.epics.length}</span>
+                    </div>
+                    ${g.epics.map((e) => `
+                        <div class="td-nav__item td-nav__item--epic" data-epic="${esc(e.ref)}"
+                             role="button" tabindex="0" title="${esc(e.title)}">
+                            ${typeGlyph('epic')}
+                            <span>${esc(e.title)}</span>
+                            <span class="td-nav__badge">${subtreeCount(e.ref)}</span>
+                        </div>`).join('')}`).join('')
+                : '<div class="td-nav__item"><span class="td-dim">No epics yet</span></div>'}
+            <div class="td-nav__item" data-new-epic="1" role="button" tabindex="0">
                 ${icon('add')}<span class="td-dim">New epic</span>
             </div>
         </div>`;
     };
     render();
 
-    const activate = async (el) => {
-        if (el.dataset.view) { open({ view: el.dataset.view }); return; }
-        if (el.dataset.phase) { open({ view: 'board', phase: el.dataset.phase }); return; }
-        if (el.dataset.new) {
-            const created = await openCreateForm({ type: el.dataset.new });
-            if (created) { render(); open({ view: DEFAULT_VIEW }); }
+    const newFilter = () => openFilterEditor({
+        model: MODEL, scope: SCOPE, items: ITEMS,
+        rowLabel: (i) => ({ id: i.ref, title: i.title, status: i.statusLabel, dot: i.type }),
+        onSaved: openFilter,
+    });
+
+    /** The one command table behind both the buttons and the context menu. */
+    const runAction = (act, key, custom) => {
+        const f = getFilter(key);
+        if (!f) { statusLine(`Filter "${key}" no longer exists.`); return; }
+        switch (act) {
+            case 'open': openFilter(f); break;
+            case 'edit':
+                // Builtins have no editor path — they are duplicated instead.
+                if (custom) openFilterEditor({
+                    model: MODEL, scope: SCOPE, filter: f, items: ITEMS,
+                    rowLabel: (i) => ({ id: i.ref, title: i.title, status: i.statusLabel, dot: i.type }),
+                    onSaved: openFilter,
+                });
+                break;
+            case 'duplicate': {
+                const draft = duplicateFilter(key);  // id-less draft → editor opens as "New filter"
+                if (draft) openFilterEditor({
+                    model: MODEL, scope: SCOPE, filter: draft, items: ITEMS,
+                    rowLabel: (i) => ({ id: i.ref, title: i.title, status: i.statusLabel, dot: i.type }),
+                    onSaved: openFilter,
+                });
+                break;
+            }
+            case 'copydef': {
+                const text = describeFilter(f.expr);
+                navigator.clipboard.writeText(text)
+                    .then(() => statusLine(`Copied filter definition: ${text}`))
+                    .catch((err) => statusLine(`Copy failed: ${err?.message || err}`));
+                break;
+            }
+            case 'delete':
+                if (custom && window.confirm(`Delete filter "${f.label}"?`)) deleteFilter(f.id);
+                break;
+        }
+    };
+
+    const activate = async (el, target) => {
+        if (el.dataset.epic) { open({ expr: epicExpr(el.dataset.epic), label: el.dataset.epic }); return; }
+        if (el.dataset.phase !== undefined && el.classList.contains('td-nav__item--phase')) {
+            const phase = el.dataset.phase;
+            open(phase
+                ? { expr: { kind: 'group', op: 'AND', children: [{ kind: 'clause', field: 'phase', op: 'is', value: phase }] }, label: phase }
+                : { expr: { kind: 'group', op: 'AND', children: [{ kind: 'clause', field: 'phase', op: 'is_empty' }] }, label: 'No phase' });
+            return;
+        }
+        if (el.dataset.newEpic) { if (await openCreateForm({ type: 'epic' })) render(); return; }
+        if (el.dataset.new) { newFilter(); return; }
+        if (el.dataset.filter) {
+            const btn = target?.closest?.('.td-nav__action');
+            runAction(btn ? btn.dataset.act : 'open', el.dataset.filter, !!el.dataset.custom);
         }
     };
 
     const onClick = (e) => {
-        const row = e.target.closest('[data-view],[data-phase],[data-new]');
-        if (row) activate(row);
+        const row = e.target.closest('[data-filter],[data-epic],[data-phase],[data-new],[data-new-epic]');
+        if (row) activate(row, e.target);
     };
     const onKey = (e) => {
         if (e.key !== 'Enter' && e.key !== ' ') return;
-        const row = e.target.closest('[data-view],[data-phase],[data-new]');
+        if (e.target.closest('.td-nav__action')) return;   // native button, already handled
+        const row = e.target.closest('[data-filter],[data-epic],[data-phase],[data-new],[data-new-epic]');
         if (!row) return;
         e.preventDefault();
-        activate(row);
+        activate(row, null);
     };
+    const onContextMenu = (e) => {
+        const row = e.target.closest('[data-filter]');
+        if (!row) return;
+        e.preventDefault();
+        const custom = !!row.dataset.custom;
+        showContextMenu(e.clientX, e.clientY, custom
+            ? [
+                { label: 'Open', icon: 'open_in_new', action: 'open' },
+                { label: 'Edit filter…', icon: 'edit', action: 'edit' },
+                { label: 'Duplicate', icon: 'content_copy', action: 'duplicate' },
+                { label: 'Copy definition', icon: 'notes', action: 'copydef' },
+                { separator: true },
+                { label: 'Delete filter', icon: 'delete', action: 'delete', danger: true },
+            ]
+            : [
+                { label: 'Open', icon: 'open_in_new', action: 'open' },
+                { label: 'Duplicate as a filter of your own', icon: 'content_copy', action: 'duplicate' },
+                { label: 'Copy definition', icon: 'notes', action: 'copydef' },
+            ],
+        (action) => runAction(action, row.dataset.filter, custom));
+    };
+
     host.addEventListener('click', onClick);
     host.addEventListener('keydown', onKey);
+    host.addEventListener('contextmenu', onContextMenu);
 
+    const unsub = onFiltersChanged(render);
     const sub = _eventBus?.on?.('backlog:changed', () => render());
 
     return {
         render,
         destroy: () => {
+            unsub();
             sub?.dispose?.();
             host.removeEventListener('click', onClick);
             host.removeEventListener('keydown', onKey);
+            host.removeEventListener('contextmenu', onContextMenu);
         },
     };
 }

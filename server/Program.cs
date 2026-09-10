@@ -241,6 +241,12 @@ app.MapGet("/api/backlog/meta", () =>
         // Phases are the milestone axis the backlog page groups by, so the UI
         // needs the vocabulary even for phases whose epics are all done.
         phases = all.Select(i => phases[i.Id]).Where(p => p.Length > 0).Distinct().OrderBy(p => p).ToList(),
+        // The lifecycle table, so the UI renders chevrons and transition
+        // buttons from the server's definition instead of a second copy that
+        // gets to disagree about which types skip `review`.
+        ladders = BacklogItem.Ladders,
+        statuses = BacklogItem.Statuses,
+        types = BacklogItem.Prefixes.Keys.ToList(),
         byPhase = all.Where(i => phases[i.Id].Length > 0).GroupBy(i => phases[i.Id]).ToDictionary(g => g.Key, g => g.Count()),
     }, json);
 });
@@ -280,12 +286,16 @@ app.MapPost("/api/backlog", async (HttpRequest req) =>
     if (parent > 0 && all.All(i => i.Id != parent))
         return Results.Json(new { ok = false, error = $"no backlog item #{parent} to parent this to" }, json, statusCode: 400);
 
+    var status = Get("status", "draft");
+    if (!BacklogItem.StatusAllowed(type, status))
+        return Results.Json(new { ok = false, error = $"{Article(type)} {type} cannot be '{status}' — its lifecycle is {string.Join(" → ", BacklogItem.LadderFor(type))}" }, json, statusCode: 400);
+
     var item = new BacklogItem
     {
         Id = all.Select(i => i.Id).DefaultIfEmpty(0).Max() + 1,
         Type = type,
         Title = title,
-        Status = Get("status", "draft"),
+        Status = status,
         Parent = parent,
         Phase = Get("phase"),
         Assignee = Get("assignee"),
@@ -313,7 +323,8 @@ app.MapPost("/api/backlog/{id:int}", async (int id, HttpRequest req) =>
 
     var patch = await JsonSerializer.DeserializeAsync<Dictionary<string, JsonElement>>(req.Body, json) ?? new();
     var text = await File.ReadAllTextAsync(path);
-    string? retype = null;   // set when the patch changes the item's type
+    string? retype = null;      // set when the patch changes the item's type
+    string? newStatus = null;   // set when the patch changes the status
 
     foreach (var (k, v) in patch)
     {
@@ -321,7 +332,19 @@ app.MapPost("/api/backlog/{id:int}", async (int id, HttpRequest req) =>
         var str = v.ValueKind == JsonValueKind.String ? v.GetString()! : v.ToString();
         switch (key)
         {
-            case "status" or "phase" or "assignee" or "points" or "subsystem" or "title":
+            case "status":
+            {
+                // Against the type this patch LEAVES the item with, not the one
+                // it had: a single request may legitimately carry both
+                // `{type: task, status: in-progress}`.
+                var forType = retype ?? item.Type;
+                if (!BacklogItem.StatusAllowed(forType, str))
+                    return Results.Json(new { ok = false, error = $"{Article(forType)} {forType} cannot be '{str}' — its lifecycle is {string.Join(" → ", BacklogItem.LadderFor(forType))}" }, json, statusCode: 400);
+                text = Md.SetFrontmatter(text, "status", str);
+                newStatus = str;
+                break;
+            }
+            case "phase" or "assignee" or "points" or "subsystem" or "title":
                 text = Md.SetFrontmatter(text, key, key == "title" ? $"\"{Md.Quote(str)}\"" : str);
                 break;
             case "type":
@@ -366,6 +389,17 @@ app.MapPost("/api/backlog/{id:int}", async (int id, HttpRequest req) =>
                 text = Md.SetSection(text, "## Acceptance criteria", str);
                 break;
         }
+    }
+
+    // A retype can strand the item on a status its new ladder does not have —
+    // a story in `review` demoted to a task. Clamp AFTER the loop: JSON object
+    // keys have no order, so "did the status also change" is only answerable
+    // once every key has been applied.
+    if (retype is not null && retype != item.Type)
+    {
+        var effective = newStatus ?? item.Status;
+        var clamped = BacklogItem.ClampStatus(retype, effective);
+        if (clamped != effective) text = Md.SetFrontmatter(text, "status", clamped);
     }
 
     text = Md.SetFrontmatter(text, "updated", Md.Today());
@@ -591,6 +625,11 @@ static string? ExtensionForImage(string contentType, string? name)
 
 static string BugPath(string dir, int id) => Path.Combine(dir, $"BUG-{id:D4}.md");
 
+/// "an epic", "a story". These messages are read by people on every rejected
+/// edit, and "a epic" reads as a bug in the tool.
+static string Article(string word) =>
+    word.Length > 0 && "aeiou".Contains(char.ToLowerInvariant(word[0])) ? "an" : "a";
+
 static List<Bug> LoadAll(string dir) =>
     Directory.Exists(dir)
         ? Directory.EnumerateFiles(dir, "BUG-*.md").Select(Bug.Parse).Where(b => b != null).Select(b => b!).ToList()
@@ -682,6 +721,7 @@ static object FullItem(List<BacklogItem> all, BacklogItem item)
     return new
     {
         id = item.Id, type = item.Type, title = item.Title, status = item.Status, stage = item.Stage,
+        ladder = BacklogItem.LadderFor(item.Type),
         parent = item.Parent, phase = item.Phase, effectivePhase = EffectivePhase(all, item),
         assignee = item.Assignee, points = item.Points, subsystem = item.Subsystem,
         labels = item.Labels, links = item.Links, created = item.Created, updated = item.Updated,

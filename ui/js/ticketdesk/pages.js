@@ -42,7 +42,7 @@ import { mountTileBreadcrumb } from '../tiling/tile_breadcrumb.js';
 import { DataTable } from '../ui/components/data_table.js';
 import { showContextMenu } from '../ecoagent/ui/context_menu.js';
 import {
-    BUILTIN_FILTERS, FILTER_FIELDS,
+    BUILTIN_FILTERS, FILTER_FIELDS, MODEL, SCOPE,
     describeFilter, deleteFilter, duplicateFilter, getFilter,
     listFilters, loadFilters, matcherFor, onFiltersChanged,
 } from './filters.js';
@@ -388,7 +388,8 @@ function mountQueues(host, props, ctx) {
             }
             case 'filter-cell-save':
                 if (cc) openFilterEditor({
-                    seedExpr: andGroup([cc.clause]), tickets: TICKETS,
+                    model: MODEL, scope: SCOPE,
+                    seedExpr: andGroup([cc.clause]), items: TICKETS,
                     onSaved: openSavedFilter,
                 });
                 break;
@@ -437,7 +438,7 @@ function mountQueues(host, props, ctx) {
         const { expr, skipped } = seedExprFromQueue(table, resolved);
         if (skipped.length)
             statusLine(`Save as filter: column filter${skipped.length === 1 ? '' : 's'} ${skipped.join(', ')} could not be expressed and ${skipped.length === 1 ? 'was' : 'were'} left out.`);
-        openFilterEditor({ seedExpr: expr, tickets: TICKETS, onSaved: openSavedFilter });
+        openFilterEditor({ model: MODEL, scope: SCOPE, seedExpr: expr, items: TICKETS, onSaved: openSavedFilter });
     });
 
     // A save/delete in the editor changes what this view means (or deletes
@@ -501,7 +502,7 @@ function maskSections(t, mode) {
                     : '')}
             ${field('Status', statusCtrl)}
             <div class="td-field td-span2"><label class="${search ? '' : 'td-req'}">Title</label>${tin('summary', t.summary)}</div>
-            ${field('Type', sel('type', ['Bug', 'Regression', 'Task'], typeLabelOf(t.type)), true)}
+            ${field('Type', sel('type', ['Bug', 'Regression', 'Chore'], typeLabelOf(t.type)), true)}
             ${field('Severity', sel('severity', ['crash', 'high', 'medium', 'low'], t.severity || 'medium'), true)}
             ${field('Subsystem', tin('subsystem', t.subsystem))}
             ${mode === 'search' ? '' : field('Assignee', `<div class="td-assignee">${sel('assignee', [HUMAN_AUTHOR, AGENT_AUTHOR], t.assignee || HUMAN_AUTHOR)}<button type="button" class="ea-btn td-reassign" data-a="reassign" title="Reassign this bug">${icon('person_search')}</button></div>`)}
@@ -1189,7 +1190,8 @@ function mountTicketNav(host, props, ctx) {
     // rail is the one on screen; the Backlog tab has no filters to show.
     const unsub = onFiltersChanged(() => { if (tab === 'bugs') renderFilters(); });
 
-    const newFilter = () => openFilterEditor({ tickets: TICKETS, onSaved: openFilter });
+    const newFilter = () => openFilterEditor({
+        model: MODEL, scope: SCOPE, items: TICKETS, onSaved: openFilter });
 
     /** The one command table behind both the buttons and the menu. */
     const runAction = (act, key, custom) => {
@@ -1199,11 +1201,13 @@ function mountTicketNav(host, props, ctx) {
             case 'open': openFilter(f); break;
             case 'edit':
                 // Builtins have no editor path — they are duplicated instead.
-                if (custom) openFilterEditor({ filter: f, tickets: TICKETS, onSaved: openFilter });
+                if (custom) openFilterEditor({
+                    model: MODEL, scope: SCOPE, filter: f, items: TICKETS, onSaved: openFilter });
                 break;
             case 'duplicate': {
                 const draft = duplicateFilter(key); // id-less draft → editor opens as "New filter"
-                if (draft) openFilterEditor({ filter: draft, tickets: TICKETS, onSaved: openFilter });
+                if (draft) openFilterEditor({
+                    model: MODEL, scope: SCOPE, filter: draft, items: TICKETS, onSaved: openFilter });
                 break;
             }
             case 'copydef': {

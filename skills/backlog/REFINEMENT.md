@@ -10,6 +10,11 @@ just a convention. Everything else is judgment; this is a gate.
 /backlog refine phase <name>    refine every draft in a phase
 ```
 
+**Tasks are not refined.** A task has no `refined` state at all — it inherits
+its parent story's acceptance criteria and goes `draft → in-progress → done`.
+If you catch yourself writing criteria and an estimate for a task, what you
+have is a story: change its type and refine it as one.
+
 An item is **refined** when someone has answered three questions about it:
 
 1. **What does done look like?** → acceptance criteria
@@ -144,3 +149,5 @@ For each item you're refining:
 - **An epic, beyond checks 1, 2 and 4.** An epic's acceptance criteria are its
   stories. Give it a description worth reading and a phase, and refine the
   stories underneath.
+- **A task, at all.** It has no `refined` state; the bridge rejects the
+  transition. See the note at the top.

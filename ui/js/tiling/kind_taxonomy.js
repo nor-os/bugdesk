@@ -30,8 +30,17 @@ export const taxonomy = createTaxonomy({
         // `item` a sub-page of Backlog.
         home: { label: 'Home', icon: 'home' },
 
+        // NO shortLabel on either top-nav entry. FlexDesk renders the chip as
+        // `shortLabel || label` (see createTaxonomy's topNavEntries), so the
+        // abbreviations this used to carry put "QUE" and "BKL" in the top bar —
+        // two cryptic three-letter codes where the whole job of the strip is to
+        // say which of the two stores you are looking at.
+        //
+        // The kind id stays `queues` while the label reads "Bugs": the id is
+        // baked into saved tile layouts and every `props.filter` route, and
+        // renaming it would strand both for a cosmetic gain.
         queues: {
-            label: 'Queues', shortLabel: 'Que', icon: 'inbox',
+            label: 'Bugs', icon: 'bug_report',
             isTopNav: true, order: 20,
         },
         ticket: { label: 'Bug', icon: 'bug_report', topNav: 'queues' },
@@ -41,7 +50,7 @@ export const taxonomy = createTaxonomy({
         // route and one id space, and three kinds would only make the
         // breadcrumb and the palette pick between synonyms.
         backlog: {
-            label: 'Backlog', shortLabel: 'Bkl', icon: 'workspaces',
+            label: 'Backlog', icon: 'workspaces',
             isTopNav: true, order: 30,
         },
         item: { label: 'Item', icon: 'article', topNav: 'backlog' },

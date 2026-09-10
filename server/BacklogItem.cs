@@ -27,8 +27,69 @@ using System.Text;
 /// </summary>
 class BacklogItem
 {
-    /// <summary>The ladder, in order. Index === <see cref="Stage"/>.</summary>
-    public static readonly string[] Ladder = { "draft", "refined", "in-progress", "review", "done" };
+    /// <summary>
+    /// The status VOCABULARY is shared by every type; the LADDER each type walks
+    /// is not.
+    /// <para>
+    /// An epic is never "in review" — its stories are, and an epic reviewed as a
+    /// unit is a status nobody can act on. A task inherits its story's acceptance
+    /// criteria, so it has nothing of its own to refine and nothing separate to
+    /// review. Sharing the vocabulary keeps one status enum in the UI's filter
+    /// editor and one set of pills in its CSS; varying the ladder is what stops
+    /// either surface offering a transition that means nothing.
+    /// </para>
+    /// </summary>
+    public static readonly Dictionary<string, string[]> Ladders = new()
+    {
+        ["epic"] = new[] { "draft", "refined", "in-progress", "done" },
+        ["story"] = new[] { "draft", "refined", "in-progress", "review", "done" },
+        ["task"] = new[] { "draft", "in-progress", "done" },
+    };
+
+    /// <summary>Every legal status, including the off-ladder terminal.</summary>
+    public static readonly string[] Statuses = { "draft", "refined", "in-progress", "review", "done", "dropped" };
+
+    /// <summary>
+    /// Canonical ORDER across types, used to clamp a status when an item is
+    /// retyped onto a ladder that does not have it.
+    /// </summary>
+    static readonly string[] Canon = { "draft", "refined", "in-progress", "review", "done" };
+
+    /// <summary>A type's ladder. An unknown type is treated as a story (the full
+    /// ladder), so a hand-edited file with a bad <c>type</c> still offers every
+    /// transition rather than none.</summary>
+    public static string[] LadderFor(string type) =>
+        Ladders.TryGetValue(type ?? "", out var l) ? l : Ladders["story"];
+
+    /// <summary>Is this status legal for this type? <c>dropped</c> always is.</summary>
+    public static bool StatusAllowed(string type, string status) =>
+        status == "dropped" || Array.IndexOf(LadderFor(type), status) >= 0;
+
+    /// <summary>
+    /// The nearest status on <paramref name="type"/>'s ladder at or below where
+    /// the item currently stands.
+    /// <para>
+    /// Retyping is the only way to end up holding a status your ladder does not
+    /// have — a story in <c>review</c> demoted to a task, say. Clamping DOWN
+    /// rather than to the nearest index is the honest move: a story in review is
+    /// work in progress, so it becomes an in-progress task. Clamping by raw
+    /// index would make it <c>done</c>, which nobody decided.
+    /// </para>
+    /// </summary>
+    public static string ClampStatus(string type, string status)
+    {
+        if (StatusAllowed(type, status)) return status;
+        var rank = Array.IndexOf(Canon, status);
+        if (rank < 0) return LadderFor(type)[0];
+        var ladder = LadderFor(type);
+        var best = ladder[0];
+        foreach (var s in ladder)
+        {
+            var r = Array.IndexOf(Canon, s);
+            if (r >= 0 && r <= rank) best = s;
+        }
+        return best;
+    }
 
     /// <summary>File prefix per item type. Also the set of legal types.</summary>
     public static readonly Dictionary<string, string> Prefixes = new()
@@ -70,7 +131,9 @@ class BacklogItem
 
     public List<Comment> Comments { get; set; } = new();
 
-    public int Stage => Array.IndexOf(Ladder, Status);   // -1 for `dropped` / anything off-ladder
+    /// <summary>Index within this item's OWN ladder; -1 for <c>dropped</c> or
+    /// anything the type does not use.</summary>
+    public int Stage => Array.IndexOf(LadderFor(Type), Status);
     public bool Done => Status is "done" or "dropped";
 
     /// <summary>Sort weight: epics before their stories before their tasks.</summary>
@@ -102,6 +165,7 @@ class BacklogItem
     public object ToSummary(string phase, int childCount) => new
     {
         id = Id, type = Type, title = Title, status = Status, stage = Stage,
+        ladder = LadderFor(Type),
         parent = Parent, phase = Phase, effectivePhase = phase,
         assignee = Assignee, points = Points, subsystem = Subsystem,
         labels = Labels, links = Links, created = Created, updated = Updated,

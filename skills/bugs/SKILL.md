@@ -96,7 +96,11 @@ Field notes:
 
 - **status**: `open | investigation | testing | closed` — see Lifecycle below.
 - **severity**: `crash | high | medium | low` (drives sort priority, crash first).
-- **type**: `bug | regression | task`.
+- **type**: `bug | regression | task`. The value `task` **displays as "Chore"**
+  in the UI — the word "task" belongs to the backlog store (epic → story →
+  task) and one word meaning two things across two stores is a real source of
+  confusion. Keep writing `task` in the file; the rename is display-only, so no
+  existing bug had to be rewritten.
 - **assignee**: free text — whichever of the two configured names currently
   owns the bug. Always set explicitly; it is never derived from `status`.
 - **labels**, **links**: bracketed, comma-separated. A link is `"<verb> <id>"`

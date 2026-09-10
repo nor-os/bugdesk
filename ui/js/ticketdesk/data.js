@@ -67,11 +67,23 @@ export const humanizeStatus = (s) => STATUS_LABEL[s]
 export const machineStatus = (label) => STATUS_MACHINE[label]
     || String(label || '').toLowerCase().replace(/\s+/g, '-');
 
-const TYPE_CODE = { bug: 'BUG', regression: 'REG', task: 'TASK' };
-const TYPE_LABEL = { BUG: 'Bug', REG: 'Regression', TASK: 'Task' };
-const TYPE_MACHINE = { Bug: 'bug', Regression: 'regression', Task: 'task' };
-export const typeCode = (t) => TYPE_CODE[t] || 'TASK';
-export const typeLabelOf = (code) => TYPE_LABEL[code] || 'Task';
+/* A bug's type. The stored value `task` DISPLAYS as "Chore".
+ *
+ * The word "task" now belongs to the backlog store (epic → story → task), and
+ * one word meaning two different things across two stores is a genuine source
+ * of confusion — "is this a bug of type task, or a backlog task?". Renaming the
+ * DISPLAY costs nothing; renaming the stored value would rewrite every existing
+ * BUG-*.md and break anything that had already learned the format, for a
+ * cosmetic gain. So `task` stays on disk and "Chore" is what anyone sees.
+ *
+ * TYPE_MACHINE maps the label back, which is what keeps a round-trip through
+ * the mask lossless — without the explicit entry, machineType('Chore') would
+ * fall through to the lower-case default and write `chore` to the file. */
+const TYPE_CODE = { bug: 'BUG', regression: 'REG', task: 'CHORE' };
+const TYPE_LABEL = { BUG: 'Bug', REG: 'Regression', CHORE: 'Chore' };
+const TYPE_MACHINE = { Bug: 'bug', Regression: 'regression', Chore: 'task' };
+export const typeCode = (t) => TYPE_CODE[t] || 'CHORE';
+export const typeLabelOf = (code) => TYPE_LABEL[code] || 'Chore';
 export const machineType = (label) => TYPE_MACHINE[label] || String(label || '').toLowerCase();
 
 /* A bug is "closed" only in the closed state. */

@@ -27,8 +27,9 @@ bugdesk/
 | files | `BUG-NNNN.md` | `EPIC-`/`STORY-`/`TASK-NNNN.md` |
 | default location | `./bugs` | `./backlog`, beside the bug store |
 | override | `BUGDESK_BUGS` | `BUGDESK_BACKLOG` |
-| lifecycle | open → investigation ⇄ testing → closed | draft → refined → in-progress → review → done |
+| lifecycle | open → investigation ⇄ testing → closed | per type — see below |
 | distinguishing fields | severity, subsystem | parent, phase, points, acceptance criteria |
+| type | `bug`, `regression`, `chore` | `epic`, `story`, `task` |
 | skill | [`/bugs`](skills/bugs/SKILL.md) | [`/backlog`](skills/backlog/SKILL.md) |
 
 Both are directories of markdown files — a YAML-frontmatter block plus
@@ -122,7 +123,13 @@ Override the location with `BUGDESK_CONFIG`. Two people sharing one checkout
 can each start their own server with `BUGDESK_USER=<name>`, which selects a
 profile for that process without repointing `active.json`.
 
-The name is editable afterwards in **Settings › General › Authorship**.
+Who you are is shown in the **bottom-left corner** at all times — in a repo
+several people share, that is the one piece of state you want to be able to
+check before commenting as somebody else. Clicking it opens
+**Settings › General › Authorship**, where the name is editable; changing it
+switches BugDesk to that person's profile (creating it if the name is new),
+along with their saved filters, and writes through to the profile on disk so
+`/api/config` and the UI can never disagree about who you are.
 
 ## Authorship
 
@@ -164,7 +171,7 @@ Same-origin JSON, backed by the markdown files:
 | POST | `/api/backlog` | create; id assigned server-side, parent validated |
 | POST | `/api/backlog/{id}` | update frontmatter, `## Description` or `## Acceptance criteria` |
 | POST | `/api/backlog/{id}/comments` | append a comment |
-| GET  | `/api/backlog/meta` | counts by status/type/assignee, plus the phase vocabulary |
+| GET  | `/api/backlog/meta` | counts by status/type/assignee, the phase vocabulary, and the per-type lifecycle ladders |
 | GET  | `/api/config` | resolved names, whether a profile exists, the profiles there are |
 | POST | `/api/config/user` | adopt a profile by name (what the first-run screen posts) |
 | GET/POST | `/api/user/settings` | the UI's own preference bag, stored in the profile |
@@ -198,26 +205,98 @@ open ──▶ investigation ⇄ testing ──▶ closed
 
 The queue's left rail filters on the fields the summary API exposes — notably
 **"Needs my reply"** = bugs whose last comment was the agent's
-(`lastCommentAuthor == <agentAuthor>`), so the human hasn't responded yet. The
-rail's second tab carries the backlog's views and phases, and follows whichever
-page you're looking at until you pick a tab by hand.
+(`lastCommentAuthor == <agentAuthor>`), so the human hasn't responded yet.
+
+## Filters
+
+Both stores share one filter engine (`ui/js/ticketdesk/filter_engine.js`): a
+JSON expression tree of AND/OR groups over clauses, with a visual editor, a live
+preview and saved filters. What differs is the **field catalogue** each is bound
+to — there is no severity in a backlog, and there is no hierarchy in a bug
+queue:
+
+| | fields |
+|---|---|
+| bugs | id, priority, severity, status, type, summary, subsystem, assignee, labels, created, updated, comments, last comment by/on |
+| backlog | reference, type, status, title, **phase**, **epic**, **parent**, **depth**, assignee, estimate, subsystem, labels, children, criteria met/total, created, updated, comments, last comment by |
+
+Two of the backlog's fields exist only because of the hierarchy, and they are
+what make the tree navigable by *query* rather than only by scrolling:
+`epic` is the owning epic of any item however deep, so `Epic is EPIC-0001`
+selects a whole work package; `depth` expresses "only top-level things" without
+naming types.
+
+Saved filters carry a **scope**, so the two rails never list each other's. They
+live in your per-user profile, because two people on one repo have different
+questions to ask of the same records.
+
+## The left rail
+
+One panel, two bodies behind a **Bugs / Backlog** tab strip — a panel kind can
+only be registered once, so the alternative to tabs was picking a winner. It
+follows whichever page you're looking at until you click a tab yourself, at
+which point it stays put.
+
+The Backlog side carries **Views** (the builtins), **My filters**, and **Work
+packages** — phases and their epics as a navigable tree. Clicking an epic scopes
+the board to that whole subtree, which is the same ad-hoc `epic is …`
+expression the tree's own "Show only this work package" produces.
+
+## Hierarchy
+
+The backlog is a tree and reads like one:
+
+```
+▼ EPIC-0001  Auth rewrite
+  ├─▼ STORY-0007  Log in with SSO
+  │   ├── TASK-0031  wire OIDC client
+  │   └── TASK-0032  session cookie
+  └─▶ STORY-0008  Revoke propagation   +2
+```
+
+- **Guide lines and a fold caret** on every row with children. What's folded is
+  saved to your profile, so a big epic stays folded between sessions, and a
+  folded row shows how much it is hiding.
+- **A filtered tree keeps ancestors as context**, dimmed. A story that matches
+  is meaningless floating at the root with nothing saying which epic it belongs
+  to — and an *unparented* story reads as a problem precisely because every
+  other row sits under something.
+- **The tile breadcrumb is the ancestry**: opening a task shows
+  `Backlog › EPIC-0001 › STORY-0007 › TASK-0031`, each crumb navigable.
 
 ## Backlog lifecycle
 
+The status **vocabulary** is shared by all three types. The **ladder** each one
+walks is not:
+
 ```
-draft ──▶ refined ──▶ in-progress ──▶ review ──▶ done
-                                                  │
-  (any state) ──▶ dropped                    reopen to in-progress
+EPIC    draft ──▶ refined ──▶ in-progress ──────────────▶ done
+STORY   draft ──▶ refined ──▶ in-progress ──▶ review ──▶ done
+TASK    draft ──────────────▶ in-progress ──────────────▶ done
+
+(any state) ──▶ dropped        done ──▶ reopen to the previous state
 ```
 
-| status | stage | meaning |
-|---|---|---|
-| `draft` | 0 | captured, not yet worth starting |
-| `refined` | 1 | criteria, estimate, a place in the tree — **anyone can pick it up** |
-| `in-progress` | 2 | someone is on it (`assignee` says who) |
-| `review` | 3 | built; criteria being checked by someone other than the builder |
-| `done` | 4 | criteria met |
-| `dropped` | — | decided against. Off the ladder; the file stays, with a comment saying why. |
+| status | meaning |
+|---|---|
+| `draft` | captured, not yet worth starting |
+| `refined` | criteria, estimate, a place in the tree — **anyone can pick it up** |
+| `in-progress` | someone is on it (`assignee` says who) |
+| `review` | built; criteria being checked by someone other than the builder |
+| `done` | criteria met |
+| `dropped` | decided against. Off every ladder; the file stays, with a comment saying why. |
+
+**An epic is never `review`** — an epic is not reviewed as a unit, its stories
+are, one at a time. **A task is never `refined`** — it inherits its story's
+acceptance criteria, so it has nothing of its own to refine. Sharing the
+vocabulary keeps one status enum in the filter editor and one set of pills in
+the CSS; varying the ladder is what stops either surface offering a transition
+that means nothing.
+
+The bridge enforces it: a status the type's ladder does not contain is rejected
+with the ladder in the error, and retyping an item onto a shorter ladder clamps
+its status **downward** — a story in `review` demoted to a task becomes an
+`in-progress` task, never a `done` one, because nobody decided it was done.
 
 ## Claude Code integration
 
@@ -276,6 +355,10 @@ drill-down, store-specific breadcrumb segments), and its chrome is styled to
 match the rest of BugDesk's UI rather than FlexDesk's own default look. See
 `ui/js/tiling/kind_taxonomy.js` and `install.js` for exactly where the package
 boundary sits.
+
+## Changelog
+
+See [`CHANGELOG.md`](CHANGELOG.md).
 
 ## License
 

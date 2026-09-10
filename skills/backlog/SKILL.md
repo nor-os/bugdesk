@@ -27,7 +27,7 @@ field optional for half the rows.
 /backlog new <type> <title>       file an epic / story / task
 /backlog plan <phase>             lay out a phase: its epics, and what each still needs
 /backlog breakdown <epic>         split a work package into stories (and stories into tasks)
-/backlog refine [ref|phase]       run refinement — see REFINEMENT.md
+/backlog refine [ref|phase]       run refinement (epics + stories) — see REFINEMENT.md
 /backlog start <ref>              take an item: status in-progress, assignee you
 /backlog done <ref>               finish an item: check criteria, status review or done
 /backlog comment <ref> <text>     append a comment as the agent
@@ -116,7 +116,8 @@ Field notes:
   they ever disagree, **the filename wins** (that is what the server does), so
   fix the frontmatter, never the other way round.
 - **status**: `draft | refined | in-progress | review | done`, plus the
-  off-ladder terminal `dropped`. See Lifecycle.
+  off-ladder terminal `dropped`. **Which of these an item may hold depends on
+  its type** — see Lifecycle.
 - **parent**: another item's numeric id, or empty. Stories hang off epics,
   tasks off stories (or directly off an epic when a task needs no story around
   it). Epics have no parent. Both `parent: 7` and `parent: STORY-7` parse, but
@@ -187,20 +188,40 @@ is the work nobody can start.
 
 ## Lifecycle
 
+The status **vocabulary** is shared by all three types. The **ladder** each type
+walks is not:
+
 ```
-draft ──▶ refined ──▶ in-progress ──▶ review ──▶ done
-                                                  │
-  (any state) ──▶ dropped                    reopen to in-progress
+EPIC    draft ──▶ refined ──▶ in-progress ──────────────▶ done
+STORY   draft ──▶ refined ──▶ in-progress ──▶ review ──▶ done
+TASK    draft ──────────────▶ in-progress ──────────────▶ done
+
+(any state) ──▶ dropped        done ──▶ reopen to the previous state
 ```
 
-| status | stage | meaning |
-|---|---|---|
-| `draft` | 0 | captured, not yet worth starting — no criteria, maybe no parent |
-| `refined` | 1 | ready: criteria, estimate, a place in the tree. **Anyone can pick it up.** |
-| `in-progress` | 2 | someone is on it (`assignee` says who) |
-| `review` | 3 | built; criteria being checked by someone other than the builder |
-| `done` | 4 | criteria met |
-| `dropped` | — | decided against. Off the ladder; keep the file and say why in a comment. |
+| status | meaning |
+|---|---|
+| `draft` | captured, not yet worth starting — no criteria, maybe no parent |
+| `refined` | ready: criteria, estimate, a place in the tree. **Anyone can pick it up.** |
+| `in-progress` | someone is on it (`assignee` says who) |
+| `review` | built; criteria being checked by someone other than the builder |
+| `done` | criteria met |
+| `dropped` | decided against. Off every ladder; keep the file and say why in a comment. |
+
+**An epic is never `review`.** An epic is not reviewed as a unit — its stories
+are, one at a time. A status nobody can act on is worse than no status.
+
+**A task is never `refined`.** A task inherits its parent story's acceptance
+criteria, so there is nothing about it to refine: no criteria of its own, no
+independent estimate worth arguing about. A task goes from `draft` straight to
+`in-progress`. This also means `/backlog refine` **skips tasks** — if you find
+yourself refining one, what you actually have is a story.
+
+The server enforces this: `POST /api/backlog/{id}` with a status the type's
+ladder does not contain is rejected with the ladder in the error. And retyping
+an item onto a shorter ladder CLAMPS its status **downward** — a story in
+`review` demoted to a task becomes an `in-progress` task, never a `done` one,
+because nobody decided it was done.
 
 `refined` is the only transition with a **precondition** — see REFINEMENT.md.
 Every other move is a judgment call. Never delete an item to cancel it; drop
@@ -230,7 +251,7 @@ create tasks under a story until the story is refined — tasks written against
 an unrefined story are a plan for work nobody has agreed on yet.
 
 **Refine** — see [REFINEMENT.md](REFINEMENT.md). This is the operation the
-skill exists for.
+skill exists for. Epics and stories only; tasks have no `refined` state.
 
 **Start** — set `status: in-progress` and `assignee: <you>`. Read the
 acceptance criteria before you write any code; they are the definition of done
@@ -274,6 +295,9 @@ write the direction you're asserting.
 - Don't mark something `refined` that doesn't pass the checks in
   REFINEMENT.md. The UI shows the user exactly which checks failed, so a status
   you can't justify is visible immediately.
+- Don't try to put an epic in `review` or a task in `refined`. The bridge
+  rejects both, and the attempt means the item is the wrong type for the work
+  it describes.
 - Don't tick an acceptance criterion you haven't verified.
 - Don't restart or require the BugDesk server for any of this — it's optional
   tooling for the human, not a dependency of the file format.

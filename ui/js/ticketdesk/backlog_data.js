@@ -34,6 +34,35 @@ import { AGENT_AUTHOR, HUMAN_AUTHOR } from './data.js';
  * somebody has decided what "done" means for it (acceptance criteria), how big it
  * is (points) and where it belongs (a parent). Before that it is a note to self. */
 
+/**
+ * The status VOCABULARY is shared by every type; the LADDER each type walks is
+ * not. An epic is never "in review" — its stories are, and an epic reviewed as
+ * a unit is just a status nobody can act on. A task inherits its story's
+ * acceptance criteria, so it has nothing of its own to refine and nothing
+ * separate to review.
+ *
+ * Sharing the vocabulary is what keeps ONE status enum in the filter editor,
+ * ONE set of pills in the CSS and one thing for the skill to explain; varying
+ * the ladder is what stops the UI offering transitions that mean nothing.
+ *
+ * `dropped` is off every ladder: it is reachable from anywhere and returns to
+ * `draft`.
+ */
+export const STATUSES = ['draft', 'refined', 'in-progress', 'review', 'done', 'dropped'];
+
+export const LADDERS = {
+    epic:  ['draft', 'refined', 'in-progress', 'done'],
+    story: ['draft', 'refined', 'in-progress', 'review', 'done'],
+    task:  ['draft', 'in-progress', 'done'],
+};
+
+/** A type's ladder; an unknown type is treated as a story (the full ladder), so
+ *  a hand-edited file with a bad `type` still renders every transition rather
+ *  than none. */
+export const ladderFor = (type) => LADDERS[type] || LADDERS.story;
+
+/** The union ladder, for anything that needs a canonical ORDER across types —
+ *  clamping a status when an item is retyped, and sorting. */
 export const LADDER = ['draft', 'refined', 'in-progress', 'review', 'done'];
 
 export const STATUS_LABEL = {
@@ -52,8 +81,56 @@ export const humanizeItemStatus = (s) => STATUS_LABEL[s]
 export const machineItemStatus = (label) => STATUS_MACHINE[label]
     || String(label || '').toLowerCase().replace(/\s+/g, '-');
 
-/** Stage index, or -1 for anything off the ladder (`dropped`). */
-export const stageOf = (status) => LADDER.indexOf(status);
+/** Index of a status within its OWN type's ladder, or -1 for anything off it
+ *  (`dropped`, or a status the type never uses). */
+export const stageOf = (item) => ladderFor(item?.type).indexOf(item?.status);
+
+/* Button text per TARGET status. Deriving the actions from the ladder means a
+ * type that skips `review` simply never offers "Send to review" — there is no
+ * second table of transitions to keep in step with the first. */
+const ADVANCE_LABEL = {
+    refined: 'Mark refined',
+    'in-progress': 'Start work',
+    review: 'Send to review',
+    done: 'Mark done',
+};
+const BACK_LABEL = {
+    draft: 'Back to draft',
+    refined: 'Back to refined',
+    'in-progress': 'Back to in progress',
+    review: 'Back to review',
+};
+
+/**
+ * The lifecycle buttons for one item: advance, step back, and drop.
+ * @returns {Array<[label, targetStatus]>} first entry is the primary action.
+ */
+export function stageActions(item) {
+    if (item?.status === 'dropped') return [['Restore to draft', 'draft']];
+
+    const ladder = ladderFor(item?.type);
+    const i = ladder.indexOf(item?.status);
+    // A status this type does not use (left behind by a hand edit, or by a
+    // retype the server could not clamp) — offer the way back onto the ladder.
+    if (i < 0) return [[`Move to ${humanizeItemStatus(ladder[0])}`, ladder[0]], ['Drop', 'dropped']];
+
+    const out = [];
+    if (i + 1 < ladder.length) {
+        const next = ladder[i + 1];
+        out.push([ADVANCE_LABEL[next] || `Move to ${humanizeItemStatus(next)}`, next]);
+    }
+    if (i > 0) {
+        const prev = ladder[i - 1];
+        // From the terminal state this reads as reopening, not stepping back.
+        out.push([i === ladder.length - 1 ? 'Reopen' : (BACK_LABEL[prev] || `Back to ${humanizeItemStatus(prev)}`), prev]);
+    }
+    if (item?.status !== 'done') out.push(['Drop', 'dropped']);
+    return out;
+}
+
+/** The one transition with a precondition — and only for the types that have
+ *  it. A task never passes through `refined`, so nothing gates a task. */
+export const isGated = (target) => target === 'refined';
 
 export const TYPES = ['epic', 'story', 'task'];
 export const TYPE_LABEL = { epic: 'Epic', story: 'Story', task: 'Task' };
@@ -152,12 +229,32 @@ function depthOf(item, byId) {
     return depth;
 }
 
+/** The owning epic's reference — the item's own when it IS an epic, else the
+ *  nearest ancestor epic's. This is what makes "show me this whole work
+ *  package" one clause instead of a recursive walk in every consumer. */
+function epicRefOf(item, byId) {
+    let cur = item;
+    const seen = new Set([cur.id]);
+    while (cur) {
+        if (cur.type === 'epic') return itemRef(cur);
+        const next = byId.get(Number(cur.parent));
+        if (!next || seen.has(next.id)) return '';
+        seen.add(next.id);
+        cur = next;
+    }
+    return '';
+}
+
 function mapItem(raw, byId) {
     const criteria = Array.isArray(raw.criteria) ? raw.criteria : [];
+    const parent = byId.get(Number(raw.parent));
     return {
         ...raw,
         ref: itemRef(raw),
+        parentRef: parent ? itemRef(parent) : '',
+        epicRef: epicRefOf(raw, byId),
         depth: depthOf(raw, byId),
+        ladder: ladderFor(raw.type),
         statusLabel: humanizeItemStatus(raw.status),
         typeLabel: typeLabelOf(raw.type),
         criteria,
@@ -180,84 +277,106 @@ export async function loadBacklog() {
     return { count: ITEMS.length };
 }
 
-/* ── rail views ──────────────────────────────────────────────────────
+/* ── the tree ────────────────────────────────────────────────────────
  *
- * The backlog rail is a fixed set of views, not the bug queue's expression
- * editor. The bug filters exist because a bug queue is something you interrogate
- * from many angles; a backlog is something you walk down. Adding a second AST,
- * a second field catalogue and a second editor to answer "what is not refined
- * yet" would be machinery in search of a question.
+ * A filtered backlog still has to READ as a hierarchy: a story that matches is
+ * meaningless floating at the root with nothing saying which epic it belongs
+ * to. So every view keeps the ANCESTORS of every match, flagged `context` —
+ * they are shown so the matches have something to hang from, not because they
+ * matched.
  *
- * `match` is a plain predicate over a mapped item. `tree: true` means the view
- * keeps the hierarchy (ancestors of a match are shown as context); `tree: false`
- * renders a flat list, which is what you want when the whole point is "show me
- * the loose ends". */
+ * This replaced a `tree: true/false` flag per view. A flat mode existed for the
+ * "show me the loose ends" views, but hierarchy is the thing that makes a
+ * backlog a backlog: an unparented story reads as a problem precisely BECAUSE
+ * every other row sits under something. */
 
-export const BACKLOG_VIEWS = [
-    { key: 'board', label: 'Backlog', icon: 'workspaces', tree: true,
-      match: (i) => i.status !== 'done' && i.status !== 'dropped' },
-    { key: 'all', label: 'Everything', icon: 'list', tree: true,
-      match: () => true },
-    { key: 'unrefined', label: 'Needs refinement', icon: 'pending_actions', tree: false,
-      match: (i) => i.status === 'draft' },
-    { key: 'ready', label: 'Refined', icon: 'task_alt', tree: false,
-      match: (i) => i.status === 'refined' },
-    { key: 'active', label: 'In progress', icon: 'bolt', tree: false,
-      match: (i) => i.status === 'in-progress' },
-    { key: 'review', label: 'In review', icon: 'rate_review', tree: false,
-      match: (i) => i.status === 'review' },
-    { key: 'epics', label: 'Epics', icon: 'workspaces', tree: false,
-      match: (i) => i.type === 'epic' },
-    { key: 'mine', label: 'On me', icon: 'person', tree: false,
-      match: (i) => i.assignee === HUMAN_AUTHOR },
-    { key: 'agent', label: `On ${AGENT_AUTHOR}`, icon: 'smart_toy', tree: false,
-      match: (i) => i.assignee === AGENT_AUTHOR },
-    { key: 'done', label: 'Done', icon: 'check_circle', tree: false,
-      match: (i) => i.status === 'done' || i.status === 'dropped' },
-];
-
-export const DEFAULT_VIEW = 'board';
-
-/** A view key (and optional phase) → the resolved view. Unknown keys degrade to
- *  the default: a restored tab from a previous release must never throw. */
-export function resolveView(key, phase) {
-    const v = BACKLOG_VIEWS.find((x) => x.key === key)
-        || BACKLOG_VIEWS.find((x) => x.key === DEFAULT_VIEW);
-    const inPhase = (i) => !phase || i.phaseLabel === phase;
-    return {
-        ...v,
-        phase: phase || '',
-        label: phase ? `${v.label} · ${phase}` : v.label,
-        match: (i) => inPhase(i) && v.match(i),
-    };
+/** Ancestor ids of one item, nearest first. Guards a cycle from a hand edit. */
+function ancestorIds(item, byId) {
+    const out = [];
+    let cur = item;
+    const seen = new Set([cur.id]);
+    while (cur && Number(cur.parent) > 0) {
+        const next = byId.get(Number(cur.parent));
+        if (!next || seen.has(next.id)) break;
+        seen.add(next.id);
+        out.push(next.id);
+        cur = next;
+    }
+    return out;
 }
 
 /**
- * Rows for a view, in the order they render.
+ * Rows to render, in display order, with everything the tree drawing needs.
  *
- * A tree view keeps ANCESTORS of every match even when the ancestor itself does
- * not match, flagged `context: true` — an epic that is `in-progress` while all
- * its stories are `draft` would otherwise show its children floating at the root
- * with nothing saying what they belong to. Flat views drop the hierarchy
- * entirely and render at depth 0.
+ * @param {(item) => boolean} match      the compiled filter predicate
+ * @param {Set<number>}       collapsed  ids whose children are folded away
+ * @returns {Array} rows carrying:
+ *    depth          how far to indent
+ *    ancestorsLast  per ancestor level, whether it was the last of its siblings
+ *                   (false there means a vertical guide line continues)
+ *    isLast         last of its own siblings — picks └ over ├
+ *    hasChildren    within THIS view, so a caret never promises an empty fold
+ *    isCollapsed    folded right now
+ *    hidden         descendants folded away, for the "(3 hidden)" hint
+ *    context        kept as an ancestor, did not match
  */
-export function rowsFor(view) {
+export function treeRows(match, collapsed = new Set()) {
     const byId = new Map(ITEMS.map((i) => [Number(i.id), i]));
-    const matched = ITEMS.filter(view.match);
-    if (!view.tree) return matched.map((i) => ({ ...i, depth: 0, context: false }));
+    const matched = ITEMS.filter(match);
 
     const keep = new Set(matched.map((i) => i.id));
     for (const item of matched) {
-        let cur = item;
-        const seen = new Set([cur.id]);
-        while (cur && Number(cur.parent) > 0) {
-            const next = byId.get(Number(cur.parent));
-            if (!next || seen.has(next.id)) break;
-            seen.add(next.id);
-            keep.add(next.id);
-            cur = next;
+        for (const id of ancestorIds(item, byId)) keep.add(id);
+    }
+
+    // ITEMS arrives in tree order from the bridge, so grouping preserves it.
+    const kept = ITEMS.filter((i) => keep.has(i.id));
+    const byParent = new Map();
+    const roots = [];
+    for (const item of kept) {
+        const parent = Number(item.parent);
+        if (parent > 0 && keep.has(parent)) {
+            if (!byParent.has(parent)) byParent.set(parent, []);
+            byParent.get(parent).push(item);
+        } else {
+            // Either a genuine root, or an orphan whose parent is filtered out /
+            // deleted. Both render at the top level; neither may vanish.
+            roots.push(item);
         }
     }
-    // ITEMS is already in tree order, so filtering it preserves that order.
-    return ITEMS.filter((i) => keep.has(i.id)).map((i) => ({ ...i, context: !view.match(i) }));
+
+    const descendantCount = (id) => {
+        let n = 0;
+        for (const kid of byParent.get(id) || []) n += 1 + descendantCount(kid.id);
+        return n;
+    };
+
+    const rows = [];
+    const walk = (list, ancestorsLast) => {
+        list.forEach((item, idx) => {
+            const isLast = idx === list.length - 1;
+            const kids = byParent.get(item.id) || [];
+            const isCollapsed = collapsed.has(item.id) && kids.length > 0;
+            rows.push({
+                ...item,
+                depth: ancestorsLast.length,
+                ancestorsLast: [...ancestorsLast],
+                isLast,
+                hasChildren: kids.length > 0,
+                isCollapsed,
+                hidden: isCollapsed ? descendantCount(item.id) : 0,
+                context: !match(item),
+            });
+            if (kids.length && !isCollapsed) walk(kids, [...ancestorsLast, isLast]);
+        });
+    };
+    walk(roots, []);
+    return rows;
 }
+
+/** Every id in the current store that could be collapsed — what "collapse all"
+ *  needs, without the caller walking the tree itself. */
+export const collapsibleIds = () => {
+    const parents = new Set(ITEMS.map((i) => Number(i.parent)).filter((p) => p > 0));
+    return ITEMS.filter((i) => parents.has(Number(i.id))).map((i) => Number(i.id));
+};
