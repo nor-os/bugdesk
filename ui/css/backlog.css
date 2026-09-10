@@ -670,35 +670,56 @@
 .ea-picker__btn { flex: 0 0 auto; }
 .ea-picker__btn .material-symbols-outlined { font-size: 15px; }
 
-/* ── Collaborators editor ───────────────────────────────────────── */
+/* ── Collaborators editor ─────────────────────────────────────────────
+   A real managed window now (openModal), so the CHROME comes from the app
+   and only the body is ours. The roster rows carry `ea-modal__row` to pick
+   up the modal stylesheet's input styling — the fields have to look like
+   the fields in every other dialog — and everything below puts the LAYOUT
+   back, because that class also carries a 130px label / 1fr field template
+   this body does not want. */
 
-.bd-collabs__title {
-    flex: 1;
-    font-size: var(--font-size-lg, 14px);
-    font-weight: var(--font-weight-semibold, 600);
-    color: var(--text-primary, #e0e0e0);
-}
-.bd-collabs__lede { padding: 8px 12px 0; line-height: 1.5; }
+.bd-collabs { display: flex; flex-direction: column; min-height: 0; }
+.bd-collabs__lede { margin: 0 0 10px; line-height: 1.5; }
+
 .bd-collabs__grid {
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
-    display: grid;
-    grid-template-columns: 1fr 1fr 20px;
-    align-items: center;
-    gap: 5px 8px;
-    padding: 10px 12px;
+    margin-bottom: 10px;
 }
-.bd-collabs__hdr {
+
+/* Three columns, shared by the header and every row, so the labels sit over
+   the fields they name. `grid-template-columns` here beats the two-column
+   one `.ea-modal__row` sets — same specificity, and this file loads later. */
+.managed-window--modal .bd-collabs__hdr,
+.managed-window--modal .bd-collabs__row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 22px;
+    align-items: center;
+    column-gap: 8px;
+    margin-bottom: 5px;
+}
+.bd-collabs__hdr > span {
     font-size: 10px;
     font-weight: var(--font-weight-semibold, 600);
     letter-spacing: 0.05em;
     text-transform: uppercase;
     color: var(--text-muted, #888);
 }
-.bd-collabs__empty { grid-column: 1 / -1; font-style: italic; }
+/* The Agent column is absent in tracker mode — nobody there has one. */
+.bd-collabs--noagents .bd-collabs__hdr,
+.managed-window--modal .bd-collabs--noagents .bd-collabs__hdr,
+.managed-window--modal .bd-collabs--noagents .bd-collabs__row {
+    grid-template-columns: 1fr 22px;
+}
+.bd-collabs--noagents [data-agent],
+.bd-collabs--noagents .bd-collabs__hdr > span:nth-child(2) { display: none; }
+
+.bd-collabs__empty { font-style: italic; padding: 6px 0; }
 .bd-collabs__rm {
     display: inline-flex;
+    align-items: center;
+    justify-content: center;
     background: none;
     border: none;
     padding: 0;
@@ -707,21 +728,13 @@
 }
 .bd-collabs__rm:hover { background: none; color: var(--color-danger, #c74e4e); }
 .bd-collabs__rm .material-symbols-outlined { font-size: 14px; }
-.bd-collabs__addrow {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 0 12px 10px;
-    color: var(--text-dim, #666);
-}
-.bd-collabs__addrow .ea-tin { flex: 1; }
+
 .bd-collabs__path {
     font-family: var(--font-family-mono, ui-monospace, monospace);
     font-size: 10px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    max-width: 45%;
 }
 
 /* ── Custom choice control (select_field.js) ─────────────────────────

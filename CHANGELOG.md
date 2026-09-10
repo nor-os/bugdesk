@@ -115,6 +115,19 @@ a tile element stops working the first time that tile repaints.
 
 ### Changed
 
+- **The Collaborators editor is a real managed window**, with the app's own
+  chrome, drag, resize, focus trap and z-stacking, instead of a hand-rolled
+  overlay. The overlay was written when this could open on top of another modal,
+  which it no longer can — every caller closes its own dialog first — and it cost
+  more than the stacking it bought. Most visibly: **its inputs had no styling at
+  all.** `.ea-tin` is scoped to `.td-page`/`.td-modal`/`.td-nav`/`.td-rpanel`, and
+  a bare overlay is none of those, so every field rendered as a raw browser input
+  — white box, wrong font, wrong size — in the middle of a dark app. The roster
+  rows now carry `ea-modal__row`, which is the class the modal stylesheet hangs
+  its input styling off; a test asserts every field lives inside one and fails
+  against the old markup. The Agent column is dropped entirely in tracker mode,
+  where nobody has one.
+
 - **Clicking a row on the Tracker dashboard now opens a tab in the dashboard's
   own tile**, rather than splitting a pane beside it. The split kept the
   dashboard on screen, which was the point, but at the cost of two half-width

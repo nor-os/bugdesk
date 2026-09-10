@@ -1053,5 +1053,50 @@ await t('clicking a name opens that person\'s OPEN work in the main tile', async
     host.remove();
 });
 
+/* ── the collaborators editor ────────────────────────────────────── */
+
+console.log('\nCollaborators editor');
+
+await t('it opens as a real managed window, not a hand-rolled overlay', async () => {
+    const realFetchLocal = globalThis.fetch;
+    put('fetch', async () => ({
+        ok: true,
+        json: async () => ({ ok: true, path: '.bugdesk/project.json',
+                             config: { collaborators: [{ name: 'bob', agent: 'bob_agent' }] } }),
+    }));
+    const { openCollaborators } = await import(join(UI, 'ticketdesk', 'collaborators.js'));
+    const done = openCollaborators({ eventBus: null });
+    await tick(); await tick(); await tick();
+
+    const win = document.querySelector('.managed-window');
+    assert.ok(win, 'no ManagedWindow — it is still a bare overlay');
+    assert.ok(win.classList.contains('managed-window--modal'));
+    assert.ok(!document.querySelector('.bd-picker'), 'the old overlay is still being built');
+
+    const body = document.querySelector('.bd-collabs');
+    assert.ok(body, 'the roster body did not mount');
+
+    // THE STYLING BUG: `.ea-tin` is scoped to .td-page/.td-modal/.td-nav/
+    // .td-rpanel, so in a modal it styles nothing and the fields render as raw
+    // browser inputs. `ea-modal__row` is the class the modal stylesheet hangs
+    // its input styling off, so every field has to live inside one.
+    const fields = [...body.querySelectorAll('input')];
+    assert.ok(fields.length >= 3, `expected name, agent and add fields, got ${fields.length}`);
+    for (const f of fields) {
+        assert.ok(f.closest('.ea-modal__row'),
+            `an input is outside .ea-modal__row and will render unstyled: ${f.outerHTML}`);
+        assert.ok(!f.classList.contains('ea-tin'),
+            'still using .ea-tin, which is scoped to surfaces this is not one of');
+    }
+
+    // Cancel: the window closes and nothing is saved.
+    const cancel = [...document.querySelectorAll('.ea-modal__actions .ea-btn')]
+        .find((b) => b.textContent.trim() === 'Cancel');
+    assert.ok(cancel, 'no Cancel action');
+    cancel.click();
+    assert.equal(await done, null);
+    put('fetch', realFetchLocal);
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
