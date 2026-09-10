@@ -45,8 +45,9 @@ app.Logger.LogInformation("BugDesk: bugs={bugs} backlog={backlog} ui={ui} mode={
 // fixed. The human's name normally comes from the per-user profile the first-run
 // screen writes; BUGDESK_HUMAN/BUGDESK_AGENT override it for CI and for two
 // people sharing one checkout.
+string configDir = ResolveConfigDir(bugsDir);
 var users = new UserStore(
-    ResolveConfigDir(bugsDir),
+    configDir,
     Environment.GetEnvironmentVariable("BUGDESK_USER"),
     Environment.GetEnvironmentVariable("BUGDESK_HUMAN"),
     Environment.GetEnvironmentVariable("BUGDESK_AGENT"));
@@ -56,7 +57,7 @@ app.Logger.LogInformation("BugDesk: config={config} user={user}",
 // The SHARED roster — who works on this repo. Committed, unlike the per-user
 // profile: an assignee dropdown offering only "me and my agent" is useless the
 // moment a record belongs to somebody else.
-var project = new ProjectConfig(ResolveProjectConfig(bugsDir));
+var project = new ProjectConfig(ResolveProjectConfig(bugsDir, configDir));
 app.Logger.LogInformation("BugDesk: project={project}", project.Path);
 
 // Pre-profile UI state: a single shared filters.json. Read once, folded into
@@ -788,13 +789,30 @@ static string ResolveBacklogDir(string bugsDir)
     return dir;
 }
 
-// The shared roster, beside the stores and COMMITTED. See ProjectConfig.cs.
-static string ResolveProjectConfig(string bugsDir)
+// The shared roster — COMMITTED, unlike everything else in the config dir. See
+// ProjectConfig.cs.
+//
+// It lives at `.bugdesk/project.json`, in the same directory as the per-user
+// files, because a `bugdesk.json` at the project root sitting next to a
+// `.bugdesk/` directory reads as two names for one thing rather than as "the
+// team's" and "yours". The difference is real, and the place it actually has an
+// effect is git — so that is where it is now stated: `.bugdesk/.gitignore`
+// ignores everything in there EXCEPT this file (see UserStore.EnsureGitIgnore).
+//
+// A ROOT bugdesk.json still wins when one exists. Repos created before the move
+// have it committed and referenced in their history; silently reading a
+// different, empty file would look exactly like BugDesk losing the roster, and
+// moving a tracked file out from under someone mid-session is worse. It is a
+// `git mv` whenever they want it, and nothing breaks if they never do.
+static string ResolveProjectConfig(string bugsDir, string configDir)
 {
     var env = Environment.GetEnvironmentVariable("BUGDESK_PROJECT");
-    return !string.IsNullOrEmpty(env)
-        ? Path.GetFullPath(env)
-        : Path.GetFullPath(Path.Combine(bugsDir, "..", "bugdesk.json"));
+    if (!string.IsNullOrEmpty(env)) return Path.GetFullPath(env);
+
+    var legacy = Path.GetFullPath(Path.Combine(bugsDir, "..", "bugdesk.json"));
+    if (File.Exists(legacy)) return legacy;
+
+    return Path.GetFullPath(Path.Combine(configDir, UserStore.SharedFileName));
 }
 
 // Per-user config, beside the stores. See UserConfig.cs.

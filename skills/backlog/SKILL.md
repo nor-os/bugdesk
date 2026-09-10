@@ -59,7 +59,7 @@ operation(s) a request implies.
 
 ### The collaborator roster
 
-`bugdesk.json`, beside the stores and **committed**, lists everyone who can be
+`.bugdesk/project.json`, **committed**, lists everyone who can be
 assigned work here:
 
 ```json
@@ -70,6 +70,12 @@ assigned work here:
   ]
 }
 ```
+
+**Where it lives.** `.bugdesk/project.json` — the one file in that directory
+that is committed; its `.gitignore` ignores everything else there (names,
+filters, layouts, which are per-person). A repo set up before this moved has it
+at the project root as `bugdesk.json` instead, and that still wins when it
+exists — check both. `GET /api/project` reports the resolved `path`.
 
 Read it before you assign anything: `assignee` must be one of these names or
 one of their agents, or the UI's pickers and "On me" filters will not recognise

@@ -63,6 +63,23 @@ they are simply not *offered* outside tracker mode.
 
 ### Changed
 
+- **One BugDesk directory, not a directory and a file that look like duplicates.**
+  The shared collaborator roster moved from `bugdesk.json` at the project root
+  into `.bugdesk/project.json`, alongside the per-user files — and the
+  `.gitignore` in there now ignores everything *except* that one file, so the
+  rule states which half is shared at the exact point where the difference has
+  an effect. The split was always real (the team's list vs. your own identity,
+  filters and layout); nothing on disk said so, and two things called
+  `bugdesk.json` and `.bugdesk/` read as two names for one thing.
+
+  **Nothing moves under anyone's feet**: a root `bugdesk.json` still wins when
+  one exists, so an older repo keeps working untouched. `git mv bugdesk.json
+  .bugdesk/project.json` adopts the new layout whenever you want it, and an
+  existing `.bugdesk/.gitignore` gets the `!project.json` rule appended on
+  startup — without that the moved roster would be written, look fine locally,
+  and silently never reach anyone else's checkout, which is the one failure a
+  shared file cannot report.
+
 - **The board's columns are derived from a spec** rather than from a header
   array, a row array and hardcoded column indices in `renderCell`. Three
   hand-kept-in-step lists are fine only while the column list is fixed, and it

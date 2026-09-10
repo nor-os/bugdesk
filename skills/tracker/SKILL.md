@@ -53,11 +53,17 @@ message. That single fact drives every rule below.
 
 ### The collaborator roster
 
-`bugdesk.json`, beside the store and **committed**, is who can be assigned work:
+`.bugdesk/project.json`, **committed**, is who can be assigned work:
 
 ```json
 { "collaborators": [ { "name": "priya", "agent": "priya_agent", "added": "2026-09-10" } ] }
 ```
+
+**Where it lives.** `.bugdesk/project.json` — the one file in that directory
+that is committed; its `.gitignore` ignores everything else there (names,
+filters, layouts, which are per-person). A repo set up before this moved has it
+at the project root as `bugdesk.json` instead, and that still wins when it
+exists — check both. `GET /api/project` reports the resolved `path`.
 
 In a tracker this list is mostly **people, not agents** — colleagues, vendors,
 counterparts. Add anyone you assign to who is not on it: `POST
@@ -209,7 +215,7 @@ the format above with `status: draft`, `created`/`updated` today, `reporter`
 set to the human, and `parent` if you know it. Set `due` **only** if a date was
 actually given.
 
-**Assign** — set `assignee`, add the person to `bugdesk.json` if they are new,
+**Assign** — set `assignee`, add the person to the roster if they are new,
 and bump `updated`. If the assignment came with a date, set `due` too.
 
 **Intake** — see [INTAKE.md](INTAKE.md).

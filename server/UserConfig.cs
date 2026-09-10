@@ -19,14 +19,26 @@ using System.Text.Json.Nodes;
 ///   bugs/BUG-0001.md          tracked
 ///   backlog/EPIC-0001.md      tracked
 ///   .bugdesk/
-///     .gitignore              "*" — the directory ignores itself, so nothing
-///                             here can be committed by accident, and no edit
-///                             to the project's own .gitignore is needed
+///     .gitignore              ignores everything here EXCEPT project.json, so
+///                             the rule itself says which half is shared — and
+///                             the project's own .gitignore still needs no edit
+///     project.json            TRACKED — the collaborator roster (ProjectConfig)
 ///     active.json             which profile THIS checkout is using
 ///     user-alice.json         alice's name, filters and settings
 ///     user-bob.json           bob's
 ///     state-alice/            alice's workspace layout (desktops, tiles)
 /// </code>
+///
+/// <para>
+/// ONE directory, holding both halves, because two things at the project root
+/// called <c>bugdesk.json</c> and <c>.bugdesk/</c> read as duplicates of each
+/// other rather than as "the team's" and "yours". The split is real and it
+/// matters; what was missing was anything on disk that said so. Now the
+/// <c>.gitignore</c> does, at the exact point where the difference has an
+/// effect. A root <c>bugdesk.json</c> is still read when one exists — see
+/// <c>ResolveProjectConfig</c> — so no repo that predates this moves under
+/// anyone's feet.
+/// </para>
 ///
 /// <para>
 /// The first run has no profile, so <see cref="Configured"/> is false and the UI
@@ -287,23 +299,73 @@ class UserStore
         ["settings"] = new JsonObject(),
     };
 
+    /// <summary>The one file in here that IS committed. Everything else is yours alone.</summary>
+    public const string SharedFileName = "project.json";
+
+    static readonly string[] GitIgnoreLines =
+    {
+        "# BugDesk keeps two different things in this directory, and this file is",
+        "# what tells them apart.",
+        "#",
+        "# IGNORED — everything else here is YOURS: your name, your saved filters,",
+        "# your window layout. Committing it would have two people on this repo",
+        "# overwrite each other's identity on every pull.",
+        "#",
+        "# TRACKED — project.json is the SHARED roster: who can be assigned work",
+        "# here. Everybody has to agree on that one, so it is committed, and the",
+        "# negation below is what lets it be.",
+        "#",
+        "# The bug and backlog stores themselves are of course meant to be",
+        "# committed; they live outside this directory.",
+        "*",
+        "!.gitignore",
+        "!" + SharedFileName,
+        "",
+    };
+
     /// <summary>
-    /// "*" plus a note. Self-ignoring, so BugDesk never has to edit — or even
-    /// find — the surrounding project's own .gitignore.
+    /// Ignore this directory's private half and re-include the shared file.
+    /// Self-contained, so BugDesk never has to edit — or even find — the
+    /// surrounding project's own .gitignore.
+    ///
+    /// <para>
+    /// An EXISTING file is upgraded rather than left alone. Before the roster
+    /// moved in here this said a plain <c>*</c>, and leaving that in place on an
+    /// upgrade would ignore <c>project.json</c> — the roster would be written,
+    /// look fine locally, and silently never reach anybody else's checkout,
+    /// which is the exact failure a shared file has no way to report. The
+    /// negations are APPENDED, so a line anyone added by hand survives.
+    /// </para>
     /// </summary>
     void EnsureGitIgnore()
     {
         var path = Path.Combine(ConfigDir, ".gitignore");
-        if (File.Exists(path)) return;
-        File.WriteAllText(path, string.Join('\n', new[]
+        if (!File.Exists(path))
         {
-            "# Per-user BugDesk configuration — names, filters, workspace layout.",
-            "# Deliberately not committed: two people on this repo would otherwise",
-            "# overwrite each other's identity on every pull. The bug and backlog",
-            "# stores themselves ARE meant to be committed.",
-            "*",
-            "",
-        }));
+            File.WriteAllText(path, string.Join('\n', GitIgnoreLines));
+            return;
+        }
+        try
+        {
+            var text = File.ReadAllText(path);
+            if (text.Contains("!" + SharedFileName, StringComparison.Ordinal)) return;
+            var suffix = text.EndsWith('\n') ? "" : "\n";
+            File.AppendAllText(path, suffix + string.Join('\n', new[]
+            {
+                "",
+                "# project.json is the SHARED collaborator roster and belongs in git;",
+                "# everything else in here is per-user and does not.",
+                "!.gitignore",
+                "!" + SharedFileName,
+                "",
+            }));
+        }
+        catch (IOException)
+        {
+            // A .gitignore we cannot rewrite is not worth failing a boot over.
+            // The consequence is a roster that stays local, which the README's
+            // "Where config lives" section tells the user how to check.
+        }
     }
 
     static JsonObject? ReadJson(string path)

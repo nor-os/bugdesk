@@ -127,14 +127,23 @@ your-project/
   bugs/BUG-0001.md          tracked
   backlog/EPIC-0001.md      tracked
   .bugdesk/
-    .gitignore              "*" — the directory ignores itself, so nothing here
-                            can be committed by accident and your project's own
-                            .gitignore never needs an entry
+    .gitignore              ignores everything in here EXCEPT project.json, so
+                            the rule itself says which half is shared — and your
+                            project's own .gitignore never needs an entry
+    project.json            TRACKED — the collaborator roster (see below)
     active.json             which profile this checkout is using
     user-alice.json         alice's name, filters and settings
     user-bob.json           bob's
     state-alice/            alice's tile layout and desktops
 ```
+
+**One directory, two halves, and the `.gitignore` is what tells them apart.**
+`project.json` is the team's and is committed; everything else is yours and is
+not. The split matters — two people sharing a repo must agree on who exists and
+must *not* overwrite each other's identity — but it used to be expressed as a
+`bugdesk.json` at the project root next to a `.bugdesk/` directory, which reads
+as two names for one thing. It is now stated at the point where it actually has
+an effect.
 
 Override the location with `BUGDESK_CONFIG`. Two people sharing one checkout
 can each start their own server with `BUGDESK_USER=<name>`, which selects a
@@ -178,8 +187,8 @@ heartbeat every 25 s so proxies do not drop it as idle.
 
 ## Collaborators
 
-`bugdesk.json`, beside the stores and **committed**, is who can be assigned work
-here:
+`.bugdesk/project.json` is who can be assigned work here. It is the one file in
+that directory that is **committed**:
 
 ```json
 {
@@ -190,17 +199,30 @@ here:
 }
 ```
 
-It is the deliberate opposite of the per-user profile above: that file is
+It is the deliberate opposite of the per-user profiles beside it: those are
 private because two people must not overwrite each other's identity; this one is
 shared because they have to agree on who exists. Every assignee picker and both
 filter catalogues read it.
+
+**Upgrading.** This used to be `bugdesk.json` at the project root. That path
+still wins when a file is there, so nothing breaks and nothing moves under you.
+To adopt the new layout:
+
+```bash
+git mv bugdesk.json .bugdesk/project.json
+```
+
+BugDesk also appends the `!project.json` rule to an existing `.bugdesk/.gitignore`
+on startup, so the moved file is committable — without that it would be written,
+look fine locally, and silently never reach anyone else's checkout.
 
 The list maintains itself: setting your name adds you, **assigning to a name
 that is not on it adds that person**, and the `/bugs` and `/backlog` skills add
 the people they find in the git history. Edit it directly — add, rename, change
 an agent name, remove — from **Settings › General › Authorship › Manage
 collaborators**, the hamburger menu's **Collaborators…**, or the change-your-name
-dialog. Override the path with `BUGDESK_PROJECT`.
+dialog. Override the path with `BUGDESK_PROJECT`. `GET /api/project` reports the
+resolved `path`, which is the quickest way to see which file is in force.
 
 Each person's agent name is **derived** as `<name>_agent`. It is not a decision
 worth making per project, and two people whose assistants both sign as `agent`

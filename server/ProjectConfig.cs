@@ -16,10 +16,19 @@ using System.Text.Json.Nodes;
 ///
 /// <code>
 /// your-project/
-///   bugs/ backlog/          tracked
-///   bugdesk.json            tracked — the collaborator roster
-///   .bugdesk/               git-ignored — who *I* am, my filters, my layout
+///   bugs/ backlog/              tracked
+///   .bugdesk/
+///     .gitignore                ignores this directory EXCEPT project.json
+///     project.json              tracked — the collaborator roster
+///     user-alice.json           git-ignored — who *I* am, my filters, my layout
 /// </code>
+///
+/// <para>
+/// Both halves share one directory, and the <c>.gitignore</c> inside it is what
+/// distinguishes them — at the exact point where the distinction has an effect.
+/// A root <c>bugdesk.json</c> from before the move is still used when one
+/// exists; see <c>ResolveProjectConfig</c> in Program.cs.
+/// </para>
 ///
 /// <para>
 /// Each collaborator carries a human name and the name their AI assistant signs
@@ -30,9 +39,10 @@ using System.Text.Json.Nodes;
 /// </para>
 ///
 /// <para>
-/// The roster grows on its own: setting your name adds you. The
-/// <c>/bugs</c> and <c>/backlog</c> skills read it to know who they may assign
-/// to, and can add people they find in the git history.
+/// The roster grows on its own: setting your name adds you, and assigning to a
+/// name that is not on it adds that person. The <c>/bugs</c>, <c>/backlog</c>
+/// and <c>/tracker</c> skills read it to know who they may assign to, and can
+/// add people they find in the git history.
 /// </para>
 /// </summary>
 class ProjectConfig
