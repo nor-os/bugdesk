@@ -17,6 +17,8 @@
  *   you act on, so the row carries the person and the phrase rather than a date
  *   the reader has to subtract today from.
  *
+ * Clicking a row opens it as a TAB IN THIS TILE — see openHere below.
+ *
  *   WHAT THE TRACKER CANNOT ANSWER — work with no assignee, and work with no
  *   target date. These are given a section of their own rather than being left
  *   out of the schedule they have no place in. A tool that reports only on the
@@ -129,42 +131,32 @@ function mountTracker(host, props, ctx) {
 
     /* ── where a click goes ──────────────────────────────────────────
      *
-     * BESIDE the dashboard, never over it.
+     * A TAB IN THE DASHBOARD'S OWN TILE.
      *
-     * Every row here used to open in the dashboard's own tile, which took the
-     * dashboard off screen — you clicked a late ticket to see who had it and
-     * lost the list of everything else that was late. That is the wrong shape
-     * for a dashboard: it is a place you work FROM, and you come back to it
-     * after every single row.
+     * Not over it: the dashboard stays, one tab-click away, which is what makes
+     * it a place you work FROM — you come back to it after every row, and
+     * losing the list of everything else that is late in order to read one late
+     * thing is the wrong trade.
      *
-     * So the first click splits a detail pane off to the right, and every click
-     * after that REUSES it. One stable two-pane layout — the tracker on the
-     * left, whatever you are looking at on the right — rather than a pane per
-     * click, which is what a plain `dest: 'split-h'` would give.
+     * Not beside it either. A split gives two half-width tiles, and a ticket
+     * read at half width is a ticket whose description wraps every four words.
+     * The tab strip keeps the full width for whatever you are reading and keeps
+     * the tracker exactly where you left it. "Open beside the tracker" is still
+     * in the right-click menu, as the deliberate choice it is rather than the
+     * default.
      *
-     * `detailLeaf` is re-checked against the live tree each time rather than
-     * trusted: the user can close that pane, and a stale id would silently
-     * navigate nothing.
+     * `dest: 'origin'` is the tile this page is mounted in; `newTab` adds to its
+     * strip instead of replacing the page in it.
      */
-    let detailLeaf = null;
-
-    const openBeside = (kind, props) => {
-        const tree = ctx.wm?.desktops?.active?.()?.tree;
-        if (detailLeaf && tree?.get(detailLeaf)) {
-            ctx.wm?.navigate?.(kind, props, { ctx: { ...ctx, leafId: detailLeaf }, dest: 'origin' });
-            return;
-        }
-        detailLeaf = ctx.wm?.navigate?.(kind, props, { ctx, dest: 'split-h' }) || null;
-        // No WM, or a tile that cannot be split (it is already the only one in a
-        // window): fall back to the old behaviour rather than silently doing
-        // nothing at all.
-        if (!detailLeaf) ctx.wm?.openInTabFromContext?.(ctx, kind, props);
+    const openHere = (kind, itemProps) => {
+        if (ctx.wm?.navigate) ctx.wm.navigate(kind, itemProps, { ctx, dest: 'origin', newTab: true });
+        else ctx.wm?.openInTabFromContext?.(ctx, kind, itemProps);
     };
 
-    const openBoard = (p) => openBeside('backlog', p);
+    const openBoard = (p) => openHere('backlog', p);
     const openItem = (id) => {
         const model = ITEMS.find((x) => Number(x.id) === Number(id));
-        openBeside('item', { id: String(id), label: itemLabel(model) || `#${id}` });
+        openHere('item', { id: String(id), label: itemLabel(model) || `#${id}` });
     };
 
     /** Everything this dashboard is talking about, under the current scope. */
@@ -325,7 +317,8 @@ function mountTracker(host, props, ctx) {
         if (!model) return;
         e.preventDefault();
         showContextMenu(e.clientX, e.clientY, [
-            { label: 'Open beside the tracker', icon: 'open_in_new', action: 'open' },
+            { label: 'Open', icon: 'open_in_new', action: 'open' },
+            { label: 'Open beside the tracker', icon: 'splitscreen_vertical_add', action: 'split' },
             { label: 'Open in a window', icon: 'web_asset', action: 'window' },
             { separator: true },
             { label: `Everything on ${model.assignee || 'nobody'}`, icon: 'person', action: 'who' },
@@ -337,7 +330,12 @@ function mountTracker(host, props, ctx) {
             { label: 'Delete…', icon: 'delete', action: 'delete', danger: true },
         ], (action) => {
             if (action === 'open') openItem(model.id);
-            else if (action === 'window') {
+            else if (action === 'split') {
+                // Still here, just no longer what a plain click does: two
+                // half-width tiles is a deliberate choice, not a default.
+                ctx.wm?.navigate?.('item', { id: String(model.id), label: itemLabel(model) },
+                    { ctx, dest: 'split-h' });
+            } else if (action === 'window') {
                 ctx.wm?.navigate?.('item', { id: String(model.id), label: itemLabel(model) },
                     { ctx, dest: 'window' });
             } else if (action === 'who') {

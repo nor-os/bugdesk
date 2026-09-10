@@ -46,7 +46,10 @@ const put = (key, value) =>
     Object.defineProperty(globalThis, key, { value, writable: true, configurable: true });
 put('window', dom.window);
 for (const key of ['document', 'navigator', 'HTMLElement', 'Element', 'Node',
-                   'Event', 'CustomEvent', 'MouseEvent', 'KeyboardEvent', 'getComputedStyle']) {
+                   'Event', 'CustomEvent', 'MouseEvent', 'KeyboardEvent', 'getComputedStyle',
+                   // ticketdesk/pages.js reads location.hash at registration
+                   // (the #ticket headless-verification hook).
+                   'location']) {
     put(key, dom.window[key]);
 }
 put('localStorage', dom.window.localStorage);
@@ -588,7 +591,8 @@ const mountDashboard = () => {
         wm: {
             desktops: { active: () => ({ tree: { get: (id) => (panes.has(id) ? { id } : null) } }) },
             navigate: (kind, props, opts) => {
-                opened.push({ kind, props, dest: opts?.dest, into: opts?.ctx?.leafId });
+                opened.push({ kind, props, dest: opts?.dest, newTab: !!opts?.newTab,
+                              into: opts?.ctx?.leafId });
                 if (opts?.dest !== 'split-h') return opts?.ctx?.leafId || null;
                 const id = `pane${++paneSeq}`;
                 panes.add(id);
@@ -651,40 +655,35 @@ await t('people are ordered worst-first, not alphabetically', () => {
     assert.equal(names[0], 'bob', `expected bob first, got ${JSON.stringify(names)}`);
 });
 
-await t('clicking a row opens the ticket BESIDE the dashboard, not over it', () => {
-    // The reported bug: a click took the dashboard off screen. You clicked a
-    // late ticket to see who had it and lost the list of everything else late.
+await t('clicking a row opens a TAB in the dashboard\'s own tile', () => {
+    // Not over the dashboard — it stays, one tab-click away — and not beside
+    // it: a split gives two half-width tiles, and a ticket read at half width
+    // is a ticket whose description wraps every four words.
     opened.length = 0;
     board.host.querySelector('[data-sec="overdue"] [data-open]').click();
     assert.equal(opened.length, 1);
     assert.equal(opened[0].kind, 'item');
     assert.equal(opened[0].props.id, '2');
-    assert.equal(opened[0].dest, 'split-h', 'the dashboard was navigated away from');
+    assert.equal(opened[0].dest, 'origin', 'left the dashboard tile');
+    assert.equal(opened[0].newTab, true, 'replaced the dashboard instead of adding a tab');
 });
 
-await t('the next click REUSES that pane instead of splitting again', () => {
-    // Otherwise every row costs a pane and the tracker is a sliver by the
-    // fourth one.
+await t('every click lands in the same tile — no pane per row', () => {
     opened.length = 0;
     board.host.querySelector('[data-sec="soon"] [data-open]').click();
-    assert.equal(opened.length, 1);
-    assert.equal(opened[0].dest, 'origin');
-    assert.equal(opened[0].into, 'pane1');
-});
-
-await t('closing that pane makes the next click open a fresh one', () => {
-    panes.clear();
-    opened.length = 0;
     board.host.querySelector('[data-sec="gaps"] [data-open]').click();
-    assert.equal(opened[0].dest, 'split-h', 'navigated a tile that no longer exists');
+    assert.equal(opened.length, 2);
+    assert.ok(opened.every((o) => o.dest === 'origin' && o.newTab),
+        `a click escaped the tile: ${JSON.stringify(opened)}`);
 });
 
-await t('clicking a person opens their list beside the dashboard too', () => {
+await t('clicking a person opens their list the same way', () => {
     opened.length = 0;
     board.host.querySelector('[data-who="bob"]').click();
     assert.equal(opened[0].kind, 'backlog');
     assert.match(JSON.stringify(opened[0].props.expr), /"bob"/);
-    assert.equal(opened[0].into, 'pane2');
+    assert.equal(opened[0].dest, 'origin');
+    assert.equal(opened[0].newTab, true);
 });
 
 await t('the scope switch narrows to what I handed out', async () => {
@@ -1013,6 +1012,45 @@ await t('the placeholder for an empty description is never loaded as text', asyn
     page.destroy?.();
     host.remove();
     put('fetch', realFetchLocal);
+});
+
+/* ── the Inspector's team rows ───────────────────────────────────── */
+
+console.log('\nTeam overview');
+
+const { createTicketDeskContent } = await import(join(UI, 'ticketdesk', 'pages.js'));
+
+await t('clicking a name opens that person\'s OPEN work in the main tile', async () => {
+    const opened2 = [];
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const wm = {
+        // The panel asks which section it is reporting on; say Backlog.
+        desktops: { active: () => ({ tree: {
+            focusedLeafId: 'leaf',
+            get: () => ({ content: { kind: 'backlog' } }),
+            primaryLeafId: () => 'leaf',
+        } }) },
+        openInPrimary: (kind, props) => opened2.push({ kind, props }),
+    };
+    const panel = createTicketDeskContent({ eventBus: null })['panel:right'](host, {}, { wm });
+    await tick(); await tick();
+
+    const rows = [...host.querySelectorAll('[data-member]')].map((e) => e.dataset.member);
+    assert.ok(rows.includes('bob'), `no row for bob among ${JSON.stringify(rows)}`);
+
+    host.querySelector('[data-member="bob"]').click();
+    await tick();
+    assert.equal(opened2.length, 1, 'the click reached nothing');
+    assert.equal(opened2[0].kind, 'backlog', 'opened the wrong store');
+    const expr = JSON.stringify(opened2[0].props.expr);
+    assert.match(expr, /"bob"/, 'the filter is not about bob');
+    // OPEN work: the row's own count is of things in flight, so the list it
+    // opens has to be the same set or the number and the body disagree.
+    assert.match(expr, /"done"/, `not restricted to open work: ${expr}`);
+
+    panel.destroy?.();
+    host.remove();
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

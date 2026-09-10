@@ -379,8 +379,10 @@ field look empty.
 
 The right-hand Inspector lists everyone with work in the store you are looking
 at, weighted by what is still in flight. **Clicking a name opens that person's
-active work** — the same set the row's own count is of, so the number and the
-list it opens can never disagree about what it meant.
+open work in the main tile** — the same set the row's own count is of, so the
+number and the list it opens can never disagree about what it meant. It follows
+the top nav like the left rail does, so it opens tickets from the ticket list
+and bugs from the bug queue, never the store you are not looking at.
 
 ## Filters
 
@@ -610,12 +612,15 @@ not top-level entries: a tracker has no bug store at all, and the ticket list is
 something you reach *from* the dashboard rather than a competing place to be.
 
 That is also why **clicking a row keeps you on the tracker**. The ticket opens
-in a pane **beside** the dashboard — reusing the same pane on every subsequent
-click, so you get one stable two-pane layout rather than a pane per row — and
-the ticket page sits *under* Tracker in the section hierarchy, so the lit chip
-and the left rail do not change under you. You clicked a late ticket to see who
-had it; losing the list of everything else that was late is not a reasonable
-price.
+as a **tab in the dashboard's own tile** — the dashboard stays, one tab-click
+away — and the ticket page sits *under* Tracker in the section hierarchy, so the
+lit chip and the left rail do not change under you. You clicked a late ticket to
+see who had it; losing the list of everything else that was late is not a
+reasonable price.
+
+Not a split, either: two half-width tiles means a ticket whose description wraps
+every four words. **Open beside the tracker** is in the right-click menu for when
+you do want them side by side — a deliberate choice rather than the default.
 
 ### The project level
 

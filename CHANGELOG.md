@@ -113,6 +113,17 @@ One document-level listener pair serves every tile, rather than per-tile wiring:
 tiles are created, destroyed and repainted constantly, and a drop target bound to
 a tile element stops working the first time that tile repaints.
 
+### Changed
+
+- **Clicking a row on the Tracker dashboard now opens a tab in the dashboard's
+  own tile**, rather than splitting a pane beside it. The split kept the
+  dashboard on screen, which was the point, but at the cost of two half-width
+  tiles — and a ticket read at half width is a ticket whose description wraps
+  every four words. A tab keeps the full width for what you are reading and the
+  tracker exactly where you left it, one click away. **Open beside the tracker**
+  moved to the right-click menu, as the deliberate choice it is rather than the
+  default.
+
 **Acceptance criteria can be written when a record is filed**, rather than only
 after it exists. That is when what "done" means is freshest — filing a story and
 immediately reopening it to say so was ceremony.
