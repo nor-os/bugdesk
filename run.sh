@@ -3,6 +3,9 @@
 #
 #   ./run.sh                          # serve on http://127.0.0.1:8766, stores in ./bugs + ./backlog
 #   ./run.sh --seed                   # + pre-seed empty stores with the examples
+#   ./run.sh --tracker                # TRACKER mode: follow-up tracker for work
+#                                     #   you have handed to other people
+#   BUGDESK_MODE=tracker ./run.sh     # the same, as an environment variable
 #   ASPNETCORE_URLS=http://127.0.0.1:9000 ./run.sh
 #   BUGDESK_BUGS=/path/to/bugs ./run.sh
 #   BUGDESK_BACKLOG=/path/to/backlog ./run.sh
@@ -23,11 +26,21 @@ root="$(cd "$(dirname "$0")" && pwd)"
 bugs_dir="${BUGDESK_BUGS:-$root/bugs}"
 backlog_dir="${BUGDESK_BACKLOG:-$(dirname "$bugs_dir")/backlog}"
 
+# --tracker is consumed HERE and re-exported as BUGDESK_MODE rather than being
+# forwarded: `dotnet run` treats an unrecognised leading flag as its own and
+# would reject it before the app ever saw it. The server accepts the flag too,
+# for anyone running `dotnet run -- --tracker` directly.
 seed=0
 args=()
 for a in "$@"; do
-    if [ "$a" = "--seed" ]; then seed=1; else args+=("$a"); fi
+    case "$a" in
+        --seed) seed=1 ;;
+        --tracker) BUGDESK_MODE=tracker ;;
+        --mode=*) BUGDESK_MODE="${a#--mode=}" ;;
+        *) args+=("$a") ;;
+    esac
 done
+export BUGDESK_MODE="${BUGDESK_MODE:-bugs}"
 
 # Seed each store INDEPENDENTLY: a repo that already tracks bugs but has no
 # backlog yet is the normal way into this feature, and refusing to seed the
@@ -54,12 +67,20 @@ seed_store() {
     echo "BugDesk: seeded $dir with ${#incoming[@]} example $what."
 }
 
+# Tracker mode seeds from its own examples: a project with dated work on it,
+# so the dashboard has something to be late about. Seeding a plain backlog there
+# would show an empty "what is overdue" on a store with no dates in it, which
+# demonstrates nothing.
 if [ "$seed" = "1" ]; then
-    seed_store "$bugs_dir"    'BUG-*.md'    "$root/examples/bugs"    "bug(s)"
-    seed_store "$backlog_dir" '*-[0-9]*.md' "$root/examples/backlog" "backlog item(s)"
+    seed_store "$bugs_dir" 'BUG-*.md' "$root/examples/bugs" "bug(s)"
+    if [ "$BUGDESK_MODE" = "tracker" ]; then
+        seed_store "$backlog_dir" '*-[0-9]*.md' "$root/examples/tracker" "tracked item(s)"
+    else
+        seed_store "$backlog_dir" '*-[0-9]*.md' "$root/examples/backlog" "backlog item(s)"
+    fi
 fi
 
 cd "$root/server"
 export ASPNETCORE_URLS="${ASPNETCORE_URLS:-http://127.0.0.1:8766}"
-echo "BugDesk → ${ASPNETCORE_URLS}   (bugs: ${bugs_dir}, backlog: ${backlog_dir})"
+echo "BugDesk → ${ASPNETCORE_URLS}   (mode: ${BUGDESK_MODE}, bugs: ${bugs_dir}, backlog: ${backlog_dir})"
 exec dotnet run "${args[@]}"

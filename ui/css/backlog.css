@@ -278,6 +278,9 @@
     flex: 0 0 15px;
 }
 .bd-type .material-symbols-outlined { font-size: 14px; }
+/* A project is the outermost container, so it takes the warmest colour — the
+   glyph is how you tell the four levels apart in a dense tree at a glance. */
+.bd-type--project .material-symbols-outlined { color: #dcb67a; }
 .bd-type--epic  .material-symbols-outlined { color: #c586c0; }
 .bd-type--story .material-symbols-outlined { color: #4ec9b0; }
 .bd-type--task  .material-symbols-outlined { color: var(--text-muted, #888); }
@@ -641,7 +644,19 @@
 
 /* The picker FIELD inside a form: a read-only display plus its search button. */
 .ea-picker { display: flex; gap: 4px; align-items: center; }
-.ea-picker__display { flex: 1; cursor: pointer; }
+/* The display is an <input>, and an input does NOT inherit the page's font —
+   it takes the browser's own (~13.3px Arial), which is why this sat visibly
+   larger than the Assignee control beside it. It carries .ea-tin too, but that
+   is scoped to .td-page / .td-modal / .td-nav / .td-rpanel; restated here so the
+   control is right wherever it is mounted, and matched to .bd-sel__button below
+   so the two rows of the same form are the same size. */
+.ea-picker__display {
+    flex: 1;
+    min-width: 0;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: var(--ea-font-body, 11px);
+}
 .ea-picker__btn { flex: 0 0 auto; }
 .ea-picker__btn .material-symbols-outlined { font-size: 15px; }
 

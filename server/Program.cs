@@ -18,7 +18,25 @@ var app = builder.Build();
 string bugsDir = ResolveBugsDir(app.Environment.ContentRootPath);
 string backlogDir = ResolveBacklogDir(bugsDir);
 string uiDir = Path.GetFullPath(Path.Combine(app.Environment.ContentRootPath, "..", "ui"));
-app.Logger.LogInformation("BugDesk: bugs={bugs} backlog={backlog} ui={ui}", bugsDir, backlogDir, uiDir);
+
+// ---- Mode ------------------------------------------------------------------
+// BugDesk runs in one of two modes, chosen at launch and never switched at
+// runtime — it decides what the app is FOR, and a toggle inside the UI would
+// invite flipping it per tab.
+//
+//   bugs      (default) a bug tracker with a backlog beside it. What BugDesk
+//             has always been.
+//   tracker   a follow-up tracker: work you have handed to other people, who
+//             may have no access to this checkout at all. Adds the `project`
+//             level above epics, target dates, and the dashboard that answers
+//             "what did I assign, and what is late".
+//
+// It changes the CHROME and the vocabulary, not the store format: both modes
+// read and write the same markdown, so a tracker's PROJ- records still open in
+// a plain backlog and vice versa. Nothing is hidden — tracker mode is additive.
+string mode = ResolveMode(args);
+app.Logger.LogInformation("BugDesk: bugs={bugs} backlog={backlog} ui={ui} mode={mode}",
+    bugsDir, backlogDir, uiDir, mode);
 
 // ---- Authorship (configurable — see README "Authorship") ------------------
 // BugDesk's lifecycle assumes exactly two roles: a human who files/triages/tests
@@ -269,6 +287,11 @@ app.MapGet("/api/backlog/meta", () =>
         ladders = BacklogItem.Ladders,
         statuses = BacklogItem.Statuses,
         types = BacklogItem.Prefixes.Keys.ToList(),
+        prefixes = BacklogItem.Prefixes,
+        // How much of the store has a target date at all. The dashboard leads
+        // with the gap rather than the schedule: items nobody has dated are
+        // invisible to every "what is due" question asked of them.
+        dated = all.Count(i => i.Due.Length > 0),
         byPhase = all.Where(i => phases[i.Id].Length > 0).GroupBy(i => phases[i.Id]).ToDictionary(g => g.Key, g => g.Count()),
     }, json);
 });
@@ -312,6 +335,10 @@ app.MapPost("/api/backlog", async (HttpRequest req) =>
     if (!BacklogItem.StatusAllowed(type, status))
         return Results.Json(new { ok = false, error = $"{Article(type)} {type} cannot be '{status}' — its lifecycle is {string.Join(" → ", BacklogItem.LadderFor(type))}" }, json, statusCode: 400);
 
+    var due = Get("due");
+    if (!BacklogItem.IsValidDate(due))
+        return Results.Json(new { ok = false, error = $"due must be YYYY-MM-DD (got '{due}')" }, json, statusCode: 400);
+
     var item = new BacklogItem
     {
         Id = all.Select(i => i.Id).DefaultIfEmpty(0).Max() + 1,
@@ -321,6 +348,12 @@ app.MapPost("/api/backlog", async (HttpRequest req) =>
         Parent = parent,
         Phase = Get("phase"),
         Assignee = Get("assignee"),
+        // Who is following this up. Defaults to whoever is running BugDesk —
+        // in tracker mode that is the whole point of the record, and asking
+        // "who are you filing this as" of a single-operator tool would be a
+        // question with one possible answer.
+        Reporter = Get("reporter", users.HumanAuthor),
+        Due = BacklogItem.NormalizeDate(due),
         Points = Get("points"),
         Subsystem = Get("subsystem", "unsorted"),
         Labels = GetList("labels"),
@@ -366,9 +399,19 @@ app.MapPost("/api/backlog/{id:int}", async (int id, HttpRequest req) =>
                 newStatus = str;
                 break;
             }
-            case "phase" or "assignee" or "points" or "subsystem" or "title":
+            case "phase" or "assignee" or "reporter" or "points" or "subsystem" or "title":
                 text = Md.SetFrontmatter(text, key, key == "title" ? $"\"{Md.Quote(str)}\"" : str);
                 break;
+            case "due":
+            {
+                // Rejected rather than silently dropped: a target date the user
+                // typed and the tracker quietly discarded is the one edit whose
+                // failure they would never notice.
+                if (!BacklogItem.IsValidDate(str))
+                    return Results.Json(new { ok = false, error = $"due must be YYYY-MM-DD (got '{str}')" }, json, statusCode: 400);
+                text = Md.SetFrontmatter(text, "due", BacklogItem.NormalizeDate(str));
+                break;
+            }
             case "type":
             {
                 // The FILE NAME carries the type (BacklogItem.Parse trusts it over
@@ -510,6 +553,10 @@ app.MapPost("/api/backlog/{id:int}/comments", async (int id, HttpRequest req) =>
 app.MapGet("/api/config", () => Results.Json(new
 {
     ok = true,
+    // Which app this is. The UI reads it before it evaluates a single page
+    // module (see ui/index.html) because the taxonomy — which top-nav chips
+    // exist, and what they are called — is built at module load.
+    mode,
     humanAuthor = users.HumanAuthor,
     agentAuthor = users.AgentAuthor,
     configured = users.Configured,
@@ -544,6 +591,7 @@ app.MapPost("/api/config/user", async (HttpRequest req) =>
     return Results.Json(new
     {
         ok = true,
+        mode,
         humanAuthor = users.HumanAuthor,
         agentAuthor = users.AgentAuthor,
         configured = users.Configured,
@@ -695,6 +743,24 @@ app.MapMethods("/api/{**rest}", new[] { "GET", "POST" },
     () => Results.Json(new { ok = true, result = new { ok = true } }, json));
 
 app.Run();
+
+// ---- mode -----------------------------------------------------------------
+// `--tracker` on the command line, or BUGDESK_MODE=tracker. The flag wins: it
+// is the more local statement of intent, and run.sh forwards it verbatim.
+// Anything unrecognised is "bugs" rather than an error — a typo should start
+// the app you already had, not refuse to start at all.
+static string ResolveMode(string[] argv)
+{
+    foreach (var a in argv)
+    {
+        if (a is "--tracker") return "tracker";
+        if (a is "--bugs") return "bugs";
+        if (a.StartsWith("--mode=", StringComparison.OrdinalIgnoreCase))
+            return a[7..].Trim().ToLowerInvariant() == "tracker" ? "tracker" : "bugs";
+    }
+    var env = (Environment.GetEnvironmentVariable("BUGDESK_MODE") ?? "").Trim().ToLowerInvariant();
+    return env == "tracker" ? "tracker" : "bugs";
+}
 
 // ---- store resolution -----------------------------------------------------
 static string ResolveBugsDir(string contentRoot)
@@ -874,7 +940,8 @@ static object FullItem(List<BacklogItem> all, BacklogItem item)
         id = item.Id, type = item.Type, title = item.Title, status = item.Status, stage = item.Stage,
         ladder = BacklogItem.LadderFor(item.Type),
         parent = item.Parent, phase = item.Phase, effectivePhase = EffectivePhase(all, item),
-        assignee = item.Assignee, points = item.Points, subsystem = item.Subsystem,
+        assignee = item.Assignee, reporter = item.Reporter, due = item.Due,
+        points = item.Points, subsystem = item.Subsystem,
         labels = item.Labels, links = item.Links, created = item.Created, updated = item.Updated,
         description = item.Description, acceptance = item.Acceptance, criteria = item.Criteria(),
         comments = item.Comments, children = childCount,
@@ -884,7 +951,8 @@ static object FullItem(List<BacklogItem> all, BacklogItem item)
             .Reverse().ToList(),
         childItems = all.Where(i => i.Parent == item.Id)
             .OrderBy(i => i.TypeOrder).ThenBy(i => i.Id)
-            .Select(c => new { id = c.Id, type = c.Type, title = c.Title, status = c.Status, points = c.Points, assignee = c.Assignee })
+            .Select(c => new { id = c.Id, type = c.Type, title = c.Title, status = c.Status,
+                               points = c.Points, assignee = c.Assignee, due = c.Due })
             .ToList(),
     };
 }

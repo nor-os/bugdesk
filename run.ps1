@@ -3,6 +3,9 @@
 #
 #   .\run.ps1                          # serve on http://127.0.0.1:8766, stores in .\bugs + .\backlog
 #   .\run.ps1 --seed                   # + pre-seed empty stores with the examples
+#   .\run.ps1 --tracker                # TRACKER mode: follow-up tracker for work
+#                                      #   you have handed to other people
+#   $env:BUGDESK_MODE='tracker'; .\run.ps1
 #   $env:ASPNETCORE_URLS='http://127.0.0.1:9000'; .\run.ps1
 #   $env:BUGDESK_BUGS='C:\path\to\bugs'; .\run.ps1
 #   $env:BUGDESK_BACKLOG='C:\path\to\backlog'; .\run.ps1
@@ -30,11 +33,18 @@ $bugsDir = if ($env:BUGDESK_BUGS) { $env:BUGDESK_BUGS } else { Join-Path $root '
 $backlogDir = if ($env:BUGDESK_BACKLOG) { $env:BUGDESK_BACKLOG }
               else { Join-Path (Split-Path -Parent $bugsDir) 'backlog' }
 
+# --tracker is consumed HERE and re-exported as BUGDESK_MODE rather than being
+# forwarded: `dotnet run` treats an unrecognised leading flag as its own and
+# would reject it before the app ever saw it.
 $seed = $false
 $dotnetArgs = @()
 foreach ($a in $args) {
-    if ($a -eq '--seed') { $seed = $true } else { $dotnetArgs += $a }
+    if ($a -eq '--seed') { $seed = $true }
+    elseif ($a -eq '--tracker') { $env:BUGDESK_MODE = 'tracker' }
+    elseif ($a -like '--mode=*') { $env:BUGDESK_MODE = $a.Substring(7) }
+    else { $dotnetArgs += $a }
 }
+if (-not $env:BUGDESK_MODE) { $env:BUGDESK_MODE = 'bugs' }
 
 # Seed each store INDEPENDENTLY - a repo that already tracks bugs but has no
 # backlog yet is the normal way into this feature, and refusing to seed the
@@ -56,9 +66,15 @@ function Seed-Store {
     Write-Host "BugDesk: seeded $Dir with $($incoming.Count) example $What."
 }
 
+# Tracker mode seeds from its own examples: a project with dated work on it, so
+# the dashboard has something to be late about.
 if ($seed) {
-    Seed-Store $bugsDir    'BUG-*.md' (Join-Path $root 'examples\bugs')    'bug(s)'
-    Seed-Store $backlogDir '*-*.md'   (Join-Path $root 'examples\backlog') 'backlog item(s)'
+    Seed-Store $bugsDir 'BUG-*.md' (Join-Path $root 'examples\bugs') 'bug(s)'
+    if ($env:BUGDESK_MODE -eq 'tracker') {
+        Seed-Store $backlogDir '*-*.md' (Join-Path $root 'examples\tracker') 'tracked item(s)'
+    } else {
+        Seed-Store $backlogDir '*-*.md' (Join-Path $root 'examples\backlog') 'backlog item(s)'
+    }
 }
 
 if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
@@ -68,6 +84,6 @@ if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
 
 Set-Location (Join-Path $root 'server')
 if (-not $env:ASPNETCORE_URLS) { $env:ASPNETCORE_URLS = 'http://127.0.0.1:8766' }
-Write-Host "BugDesk -> $($env:ASPNETCORE_URLS)   (bugs: $bugsDir, backlog: $backlogDir)"
+Write-Host "BugDesk -> $($env:ASPNETCORE_URLS)   (mode: $($env:BUGDESK_MODE), bugs: $bugsDir, backlog: $backlogDir)"
 & dotnet run @dotnetArgs
 exit $LASTEXITCODE

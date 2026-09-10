@@ -39,12 +39,13 @@ import { esc, initials, HUMAN_AUTHOR, assigneeChoices, rememberAssignee } from '
 import {
     BUILTIN_FILTERS, DEFAULT_FILTER, MODEL, SCOPE,
     adhocFilter, deleteFilter, describeFilter, duplicateFilter, epicExpr,
-    getFilter, listFilters, matcherFor, resolveFilter,
+    getFilter, listFilters, matcherFor, projectExpr, resolveFilter,
 } from './backlog_filters.js';
 import {
-    ITEMS, PHASES, TYPES, TYPE_ICON,
-    collapsibleIds, fetchItem, humanizeItemStatus, isGated, parentOptions,
-    itemLabel, itemRef, ladderFor, loadBacklog, patchItem, postItemComment,
+    ALL_TYPES, ITEMS, PHASES, TRACKER, TYPES, TYPE_ICON,
+    DUE_LABEL, collapsibleIds, dueState, duePhrase, fetchItem, humanizeItemStatus,
+    isGated, itemLabel, itemRef, ladderFor, loadBacklog, parentTypesFor,
+    patchItem, postItemComment,
     REFINEMENT_RULES, refinementGaps, stageActions, stageOf, treeRows,
     typeLabelOf,
 } from './backlog_data.js';
@@ -58,6 +59,15 @@ const icon = (name) => `<span class="material-symbols-outlined">${name}</span>`;
 /** Status pill. `dropped` is deliberately off the ladder and styled as such. */
 const statusPill = (status) =>
     `<span class="bd-status bd-status--${esc(status)}">${esc(humanizeItemStatus(status))}</span>`;
+
+/** Where a target date stands, as a pill. `none` is drawn too: an item nobody
+ *  has dated is the gap a tracker exists to surface, not an empty cell. */
+const duePill = (item) => {
+    const state = dueState(item);
+    if (state === 'done') return item.due ? `<span class="bd-due bd-due--done">${esc(item.due)}</span>` : '';
+    if (state === 'none') return '<span class="bd-due bd-due--none">no date</span>';
+    return `<span class="bd-due bd-due--${state}" title="${esc(DUE_LABEL[state])} — ${esc(item.due)}">${esc(duePhrase(item))}</span>`;
+};
 
 const typeGlyph = (type) =>
     `<span class="bd-type bd-type--${esc(type)}" title="${esc(typeLabelOf(type))}">${icon(TYPE_ICON[type] || 'task')}</span>`;
@@ -110,16 +120,40 @@ function saveCollapsed() {
 
 /* ── kind: backlog — the tree ────────────────────────────────────── */
 
-const BOARD_HEADERS = ['Item', 'Title', 'Type', 'Status', 'Pts', 'Criteria', 'Assignee', 'Phase', 'Updated'];
+/**
+ * The board's columns, as a spec rather than two parallel literals.
+ *
+ * There used to be a header array, a row-building array and a set of hardcoded
+ * column indices in renderCell. That is fine only while the column list is
+ * fixed — and it is not: tracker mode adds Due. One conditional column against
+ * three hand-kept-in-step lists is how a Status pill ends up painted over an
+ * Assignee, so the indices are derived from the spec instead.
+ */
+const BOARD_COLS = [
+    { key: 'ref', label: 'Item', get: (i) => i.ref },
+    { key: 'title', label: 'Title', get: (i) => i.title },
+    { key: 'type', label: 'Type', get: (i) => i.typeLabel },
+    { key: 'status', label: 'Status', get: (i) => i.statusLabel },
+    { key: 'points', label: 'Pts', get: (i) => i.points || '' },
+    { key: 'criteria', label: 'Criteria',
+      get: (i) => (i.criteriaTotal ? `${i.criteriaDone}/${i.criteriaTotal}` : '') },
+    { key: 'assignee', label: 'Assignee', get: (i) => i.assignee },
+    // Tracker mode only. In a plain backlog the column would be empty on every
+    // row — the target date is the axis a follow-up tracker turns on and very
+    // little else. The CELL still carries the raw `YYYY-MM-DD` so the column
+    // sorts chronologically; the pill is painted over it in renderCell.
+    ...(TRACKER ? [{ key: 'due', label: 'Due', get: (i) => i.due || '' }] : []),
+    { key: 'phase', label: 'Phase', get: (i) => i.phaseLabel },
+    { key: 'updated', label: 'Updated', get: (i) => i.updated },
+];
+const BOARD_HEADERS = BOARD_COLS.map((c) => c.label);
+/** key → column index, so nothing reads a magic number. */
+const COL = Object.fromEntries(BOARD_COLS.map((c, i) => [c.key, i]));
 /* The column every "act on this row" command reads back. Reference, not id:
    it is the only cell that survives a sort as a stable key into the store. */
-const REF_COL = 0;
+const REF_COL = COL.ref;
 
-const boardRow = (i) => [
-    i.ref, i.title, i.typeLabel, i.statusLabel, i.points || '',
-    i.criteriaTotal ? `${i.criteriaDone}/${i.criteriaTotal}` : '',
-    i.assignee, i.phaseLabel, i.updated,
-];
+const boardRow = (i) => BOARD_COLS.map((c) => c.get(i));
 
 /**
  * The tree drawing for one row's Title cell: guide lines for every ancestor
@@ -159,9 +193,8 @@ function mountBacklogBoard(host, props, ctx) {
             <button class="ea-btn" data-a="savefilter">${icon('filter_alt')} Save as filter</button>
             <span class="bd-newgroup">
                 <span class="td-dim">New</span>
-                <button class="ea-btn" data-a="new-epic" title="New epic">${icon('workspaces')} Epic</button>
-                <button class="ea-btn" data-a="new-story" title="New story">${icon('article')} Story</button>
-                <button class="ea-btn" data-a="new-task" title="New task">${icon('check_box_outline_blank')} Task</button>
+                ${TYPES.map((t) => `<button class="ea-btn" data-a="new-${t}"
+                        title="New ${esc(typeLabelOf(t).toLowerCase())}">${icon(TYPE_ICON[t])} ${esc(typeLabelOf(t))}</button>`).join('')}
             </span>
         </div>
         <div class="td-tablehost"></div>
@@ -240,7 +273,7 @@ function mountBacklogBoard(host, props, ctx) {
                 // A task cannot hold children, so the entry is greyed rather
                 // than hidden — the menu keeps one shape whichever row you hit.
                 { label: 'Add child…', icon: 'add', action: 'add-child',
-                  disabled: !model || model.type === 'task' },
+                  disabled: !model || childTypesFor(model.type).length === 0 },
                 { separator: true },
                 { label: refs.length > 1 ? `Copy ${refs.length} references` : 'Copy reference',
                   icon: 'content_copy', action: 'copy-ref', disabled: !refs.length },
@@ -262,7 +295,7 @@ function mountBacklogBoard(host, props, ctx) {
                     // A new child under a folded parent would land invisible.
                     _collapsed.delete(Number(model.id));
                     openNewItem(ctx.wm, {
-                        kind: model.type === 'epic' ? 'story' : 'task',
+                        kind: childTypesFor(model.type)[0] || 'task',
                         parent: model.id, ctx,
                     });
                     break;
@@ -285,7 +318,7 @@ function mountBacklogBoard(host, props, ctx) {
                 td.innerHTML = `<span class="bd-item__ref">${esc(value)}</span>`;
                 return true;
             }
-            if (colIdx === 1) {
+            if (colIdx === COL.title) {
                 // The hierarchy IS this cell: guides, a fold caret, the type
                 // glyph, the title. The bridge hands rows back in tree order and
                 // treeRows() works out the shape; this only draws it.
@@ -299,9 +332,13 @@ function mountBacklogBoard(host, props, ctx) {
                     ${model?.hidden ? `<span class="bd-item__hidden">+${model.hidden}</span>` : ''}</span>`;
                 return true;
             }
-            if (colIdx === 3) { td.innerHTML = statusPill(model?.status || 'draft'); return true; }
-            if (colIdx === 5) {
+            if (colIdx === COL.status) { td.innerHTML = statusPill(model?.status || 'draft'); return true; }
+            if (colIdx === COL.criteria) {
                 td.innerHTML = criteriaCell(model?.criteriaDone || 0, model?.criteriaTotal || 0);
+                return true;
+            }
+            if (COL.due !== undefined && colIdx === COL.due) {
+                td.innerHTML = model ? duePill(model) : '';
                 return true;
             }
             return false;
@@ -344,9 +381,8 @@ function mountBacklogBoard(host, props, ctx) {
             rowLabel: (i) => ({ id: i.ref, title: i.title, status: i.statusLabel, dot: i.type }),
             onSaved: openSavedFilter,
         }),
-        'new-epic': () => openNewItem(ctx.wm, { kind: 'epic', ctx }),
-        'new-story': () => openNewItem(ctx.wm, { kind: 'story', ctx }),
-        'new-task': () => openNewItem(ctx.wm, { kind: 'task', ctx }),
+        ...Object.fromEntries(TYPES.map((t) =>
+            [`new-${t}`, () => openNewItem(ctx.wm, { kind: t, ctx })])),
     };
     host.querySelector('.td-page__bar').addEventListener('click', (e) => {
         const btn = e.target.closest('[data-a]');
@@ -479,7 +515,6 @@ function mountItem(host, props, ctx) {
     /* ── record ─────────────────────────────────────────────────── */
 
     const renderRecord = () => {
-        const parents = parentOptions(item.type);
         const field = (label, ctrl, span) =>
             `<div class="td-field${span ? ' td-span2' : ''}"><label>${label}</label>${ctrl}</div>`;
         const sel = (k, opts, cur) => `<select class="ea-tin" data-f="${k}">
@@ -490,20 +525,28 @@ function mountItem(host, props, ctx) {
             }).join('')}</select>`;
         const tin = (k, v) => `<input class="ea-tin" data-f="${k}" value="${esc(v ?? '')}">`;
 
+        // Which rows this type actually has. `authorsPhase` and `hasParent` are
+        // DERIVED — from where the milestone label is written, and from the
+        // hierarchy rules in ./backlog_data.js — rather than being a second
+        // per-type table here that could disagree with the New item form's.
+        const authorsPhase = item.type === 'project' || item.type === 'epic';
+        const hasParent = parentTypesFor(item.type).length > 0;
+        const hasPoints = item.type !== 'project';
+
         $('[data-slot="record"]').innerHTML = `
             ${field('Reference', `<input class="ea-tin td-mono" value="${esc(itemRef(item))}" readonly>`)}
             ${field('Status', `<input class="ea-tin td-mono" data-f="status" value="${esc(humanizeItemStatus(item.status))}" readonly>`)}
             <div class="td-field td-span2"><label class="td-req">Title</label>${tin('title', item.title)}</div>
             ${field('Type', sel('type', TYPES.map((t) => ({ value: t, label: typeLabelOf(t) })), item.type))}
-            ${field('Estimate', tin('points', item.points))}
-            ${item.type === 'epic'
+            ${hasPoints ? field('Estimate', tin('points', item.points)) : ''}
+            ${hasParent ? field('Parent', tin('parent', item.parent || '')) : ''}
+            ${authorsPhase
                 ? field('Phase', tin('phase', item.phase))
-                : field('Parent', tin('parent', item.parent || ''))}
+                : field('Phase', `<input class="ea-tin" value="${esc(item.effectivePhase || '—')}" readonly title="Inherited from the owning project or epic">`)}
             ${field('Assignee', '<select class="ea-tin" data-f="assignee"></select>')}
+            ${field('Target date', `<input class="ea-tin" type="date" data-f="due" value="${esc(item.due || '')}">`)}
             ${field('Subsystem', tin('subsystem', item.subsystem))}
-            ${item.type !== 'epic'
-                ? field('Phase', `<input class="ea-tin" value="${esc(item.effectivePhase || '—')}" readonly title="Inherited from the owning epic">`)
-                : ''}
+            ${field('Reporter', '<select class="ea-tin" data-f="reporter"></select>')}
             <div class="td-field td-span2"><label>Labels</label>${tin('labels', (item.labels || []).join(', '))}</div>
             ${field('Created', `<input class="ea-tin td-mono" value="${esc(item.created || '—')}" readonly>`)}
             ${field('Updated', `<input class="ea-tin td-mono" value="${esc(item.updated || '—')}" readonly>`)}`;
@@ -526,8 +569,14 @@ function mountItem(host, props, ctx) {
             const el = host.querySelector(`[data-f="${name}"]`);
             if (el && el.tagName === 'SELECT') fieldSelects.push(attachSelect(el, spec));
         };
+        // The offered list, plus this item's OWN type if the deployment does not
+        // offer it — a PROJ record opened in a plain backlog must still show
+        // "Project" in its Type control rather than silently reading as the
+        // first entry in a list it is not in.
+        const typeChoices = (TYPES.includes(item.type) ? TYPES : ALL_TYPES.filter(
+            (t) => TYPES.includes(t) || t === item.type));
         attach('type', {
-            options: TYPES.map((t) => ({ value: t, label: typeLabelOf(t), icon: TYPE_ICON[t] })),
+            options: typeChoices.map((t) => ({ value: t, label: typeLabelOf(t), icon: TYPE_ICON[t] })),
             value: item.type,
         });
         attach('assignee', {
@@ -535,6 +584,15 @@ function mountItem(host, props, ctx) {
             value: item.assignee || '', emptyLabel: 'Unassigned', allowNew: true,
             // Naming somebody not on the roster adds them to it — see
             // rememberAssignee in ./data.js.
+            onChange: (v) => { rememberAssignee(v); },
+        });
+        // Who is FOLLOWING THIS UP, as opposed to who is doing it. Editable
+        // rather than stamped at creation: handing a follow-up to a colleague is
+        // a normal thing to do, and a reporter you cannot correct makes the
+        // dashboard's "assigned by me" scope wrong for good.
+        attach('reporter', {
+            optionsFor: assigneeChoices,
+            value: item.reporter || '', emptyLabel: 'Nobody', allowNew: true,
             onChange: (v) => { rememberAssignee(v); },
         });
         // The SAME control the New item page uses — changing an item's parent is
@@ -600,6 +658,27 @@ function mountItem(host, props, ctx) {
     /* ── refinement checklist ───────────────────────────────────── */
 
     const renderRefinement = () => {
+        // A project never passes through `refined` either, and for the same
+        // reason a task does not: it has no acceptance criteria of its own. What
+        // it does have is a subtree, so the panel answers the question you
+        // actually opened a project to ask — how much of it is late.
+        if (item.type === 'project') {
+            const ref = itemRef(item);
+            const inside = ITEMS.filter((x) => x.projectRef === ref && Number(x.id) !== Number(item.id));
+            const open = inside.filter((x) => x.status !== 'done' && x.status !== 'dropped');
+            const late = open.filter((x) => x.dueState === 'overdue');
+            const undated = open.filter((x) => x.dueState === 'none');
+            $('[data-slot="refinement"]').innerHTML = inside.length
+                ? `<ul class="bd-gaps${late.length ? '' : ' bd-gaps--met'}">
+                     <li>${inside.length} item${inside.length === 1 ? '' : 's'} under this project,
+                         ${open.length} still open</li>
+                     ${late.length ? `<li>${late.length} overdue</li>` : ''}
+                     ${undated.length ? `<li>${undated.length} with no target date</li>` : ''}
+                   </ul>`
+                : '<div class="td-dim">Nothing under this project yet.</div>';
+            return;
+        }
+
         // A task never passes through `refined` — it inherits its story's
         // acceptance criteria, so there is nothing about it to refine. Showing
         // it a checklist it can never need is how a lifecycle stops meaning
@@ -723,14 +802,15 @@ function mountItem(host, props, ctx) {
     const renderChildren = () => {
         const box = $('[data-slot="childrenbox"]');
         const kids = Array.isArray(item.childItems) ? item.childItems : [];
-        box.hidden = item.type === 'task' && kids.length === 0;
+        box.hidden = childTypesFor(item.type).length === 0 && kids.length === 0;
         $('[data-slot="children"]').innerHTML = kids.length
             ? kids.map((c) => `
                 <div class="bd-childrow">
                     ${typeGlyph(c.type)}
                     <button type="button" class="bd-item__ref" data-goto="${c.id}">${esc(itemRef(c))}</button>
                     <span class="bd-childrow__title">${esc(c.title)}</span>
-                    <span class="td-dim">${esc(c.points || '')}</span>
+                    <span class="td-dim">${esc(c.assignee || '')}</span>
+                    ${TRACKER ? duePill(c) : `<span class="td-dim">${esc(c.points || '')}</span>`}
                     ${statusPill(c.status)}
                 </div>`).join('')
             : '<div class="td-dim">No children yet.</div>';
@@ -852,13 +932,18 @@ function mountItem(host, props, ctx) {
             const patch = {
                 title: fval('title'),
                 type: fval('type'),
-                points: fval('points'),
                 assignee: fval('assignee'),
+                reporter: fval('reporter'),
+                due: fval('due'),
                 subsystem: fval('subsystem') || 'unsorted',
                 labels: fval('labels') ? fval('labels').split(',').map((s) => s.trim()).filter(Boolean) : [],
             };
-            if (item.type === 'epic') patch.phase = fval('phase');
-            else patch.parent = parentPicker ? parentPicker.value() : 0;
+            // Only send what the rendered form actually had: a row that was not
+            // drawn must not reach the record, or retyping a story to a project
+            // would post the parent the form never showed.
+            if (item.type === 'project' || item.type === 'epic') patch.phase = fval('phase');
+            if (parentTypesFor(item.type).length > 0) patch.parent = parentPicker ? parentPicker.value() : 0;
+            if (item.type !== 'project') patch.points = fval('points');
             apply(await patchItem(item.id, patch));
             await broadcast();
             live.clear();
@@ -961,7 +1046,7 @@ function mountItem(host, props, ctx) {
         else if (act === 'acceptance-list') { acceptanceRaw = false; renderAcceptance(); }
         else if (act === 'addchild') {
             openNewItem(ctx.wm, {
-                kind: item.type === 'epic' ? 'story' : 'task',
+                kind: childTypesFor(item.type)[0] || 'task',
                 parent: item.id, ctx,
             });
         }
@@ -1011,6 +1096,7 @@ function mountItem(host, props, ctx) {
  *   "My filters"  the user's own backlog filters, with the same
  *                 Open/Edit/Duplicate/Delete set the bug rail has
  *   "Work packages"  phases → their epics, as a navigable tree
+ *                    (TRACKER mode: "Projects" instead — see trackerSection)
  *
  * The third one is the point. A flat list of views tells you what STATE things
  * are in; the backlog's actual shape is phase → epic → story → task, and the
@@ -1038,6 +1124,25 @@ export function mountBacklogRail(host, ctx) {
     const openFilter = (f) => open({ filter: f.key || f.id, label: f.label });
     const countFor = (expr) => ITEMS.filter(matcherFor(expr)).length;
 
+    /**
+     * TRACKER: projects, each with what sits under it.
+     *
+     * The rail's bottom section is where you navigate the store's actual SHAPE
+     * rather than its states, and the shape differs by mode: a backlog is
+     * phase → epic, a tracker is project → the work inside it. One section
+     * either way — two similar trees, one of them mostly empty, would just make
+     * the reader pick.
+     *
+     * The "No project" bucket is not a tidy-up prompt: a story you were asked
+     * for in a corridor legitimately belongs to no project, and it still has to
+     * be reachable.
+     */
+    const projects = () => {
+        const list = ITEMS.filter((i) => i.type === 'project');
+        const loose = ITEMS.filter((i) => !i.projectRef && i.type !== 'project');
+        return { list, loose };
+    };
+
     /** Epics grouped by their phase, plus a bucket for the unassigned ones.
      *  Phases come from the store's live vocabulary, so a phase whose epics are
      *  all done still lists — you navigate to finished work too. */
@@ -1060,6 +1165,13 @@ export function mountBacklogRail(host, ctx) {
      *  "5" next to a work package means five things in it, not five children. */
     const subtreeCount = (ref) => ITEMS.filter((i) => i.epicRef === ref).length;
 
+    /** The same for a project, and how many of those are late — which is the
+     *  number a manager is actually scanning the rail for. */
+    const projectCounts = (ref) => {
+        const inside = ITEMS.filter((i) => i.projectRef === ref);
+        return { total: inside.length, late: inside.filter((i) => i.dueState === 'overdue').length };
+    };
+
     const filterRow = (f, custom) => {
         const key = custom ? f.id : f.key;
         return `
@@ -1078,6 +1190,32 @@ export function mountBacklogRail(host, ctx) {
         </div>`;
     };
 
+    const trackerSection = () => {
+        const { list, loose } = projects();
+        return `
+            <div class="td-nav__section">Projects</div>
+            ${list.length
+                ? list.map((pr) => {
+                    const { total, late } = projectCounts(pr.ref);
+                    return `
+                    <div class="td-nav__item td-nav__item--epic" data-project="${esc(pr.ref)}"
+                         role="button" tabindex="0" title="${esc(pr.title)}">
+                        ${typeGlyph('project')}
+                        <span>${esc(pr.title)}</span>
+                        ${late ? `<span class="td-nav__badge td-nav__badge--late"
+                                        title="${late} overdue">${late}</span>` : ''}
+                        <span class="td-nav__badge">${total}</span>
+                    </div>`;
+                }).join('')
+                : '<div class="td-nav__item"><span class="td-dim">No projects yet</span></div>'}
+            ${loose.length
+                ? `<div class="td-nav__item td-nav__item--phase" data-loose="1" role="button" tabindex="0"
+                        title="Work that belongs to no project">
+                       ${icon('inbox')}<span>Not in a project</span>
+                       <span class="td-nav__badge">${loose.length}</span>
+                   </div>`
+                : ''}`;
+    };
     const render = () => {
         const custom = listFilters();
         const packages = workPackages();
@@ -1094,6 +1232,7 @@ export function mountBacklogRail(host, ctx) {
                 ${icon('add')}<span class="td-dim">New filter</span>
             </div>
 
+            ${TRACKER ? trackerSection() : `
             <div class="td-nav__section">Work packages</div>
             ${packages.length
                 ? packages.map((g) => `
@@ -1111,9 +1250,10 @@ export function mountBacklogRail(host, ctx) {
                             <span>${esc(e.title)}</span>
                             <span class="td-nav__badge">${subtreeCount(e.ref)}</span>
                         </div>`).join('')}`).join('')
-                : '<div class="td-nav__item"><span class="td-dim">No epics yet</span></div>'}
+                : '<div class="td-nav__item"><span class="td-dim">No epics yet</span></div>'}`}
         </div>`;
     };
+
     render();
 
     const newFilter = () => openFilterEditor({
@@ -1160,6 +1300,12 @@ export function mountBacklogRail(host, ctx) {
 
     const activate = (el, target) => {
         if (el.dataset.epic) { open({ expr: epicExpr(el.dataset.epic), label: el.dataset.epic }); return; }
+        if (el.dataset.project) { open({ expr: projectExpr(el.dataset.project), label: el.dataset.project }); return; }
+        if (el.dataset.loose) {
+            open({ expr: { kind: 'group', op: 'AND', children: [{ kind: 'clause', field: 'project', op: 'is_empty' }] },
+                   label: 'Not in a project' });
+            return;
+        }
         if (el.dataset.phase !== undefined && el.classList.contains('td-nav__item--phase')) {
             const phase = el.dataset.phase;
             open(phase
@@ -1175,13 +1321,13 @@ export function mountBacklogRail(host, ctx) {
     };
 
     const onClick = (e) => {
-        const row = e.target.closest('[data-filter],[data-epic],[data-phase],[data-new]');
+        const row = e.target.closest('[data-filter],[data-epic],[data-project],[data-loose],[data-phase],[data-new]');
         if (row) activate(row, e.target);
     };
     const onKey = (e) => {
         if (e.key !== 'Enter' && e.key !== ' ') return;
         if (e.target.closest('.td-nav__action')) return;   // native button, already handled
-        const row = e.target.closest('[data-filter],[data-epic],[data-phase],[data-new]');
+        const row = e.target.closest('[data-filter],[data-epic],[data-project],[data-loose],[data-phase],[data-new]');
         if (!row) return;
         e.preventDefault();
         activate(row, null);

@@ -3,8 +3,10 @@
  *
  * BugDesk has two stores, and this is one mask spanning both. One Type select:
  *
- *     Bug · Regression · Chore   →  bugs/BUG-NNNN.md
- *     Epic · Story · Task        →  backlog/{EPIC,STORY,TASK}-NNNN.md
+ *     Bug · Regression · Chore          →  bugs/BUG-NNNN.md
+ *     [Project ·] Epic · Story · Task   →  backlog/{PROJ,EPIC,STORY,TASK}-NNNN.md
+ *
+ * Project appears in TRACKER mode only — see ./backlog_data.js's TYPES.
  *
  * Picking the type picks the store, and the form follows it: a bug is asked for
  * a severity, a story for a parent and an estimate, an epic for the phase its
@@ -28,7 +30,10 @@ import { attachParentPicker } from './item_picker.js';
 import {
     HUMAN_AUTHOR, TICKETS, assigneeChoices, createBug, loadData, rememberAssignee,
 } from './data.js';
-import { ITEMS, PHASES, createItem, itemRef, loadBacklog } from './backlog_data.js';
+import {
+    ITEMS, PHASES, TRACKER, TYPES, TYPE_ICON, TYPE_LABEL,
+    createItem, itemRef, loadBacklog, parentTypesFor,
+} from './backlog_data.js';
 
 const icon = (name) => `<span class="material-symbols-outlined">${name}</span>`;
 
@@ -40,16 +45,23 @@ const icon = (name) => `<span class="material-symbols-outlined">${name}</span>`;
  * why the display name differs. It sits in the bug group because that is where
  * the record lives.
  */
+const BACKLOG_KIND = (type) => ({
+    id: type, label: TYPE_LABEL[type], store: 'backlog', value: type, icon: TYPE_ICON[type],
+});
+
 export const KINDS = [
     { id: 'bug', label: 'Bug', store: 'bugs', value: 'bug', icon: 'bug_report' },
     { id: 'regression', label: 'Regression', store: 'bugs', value: 'regression', icon: 'history' },
     { id: 'chore', label: 'Chore', store: 'bugs', value: 'task', icon: 'build' },
-    { id: 'epic', label: 'Epic', store: 'backlog', value: 'epic', icon: 'workspaces' },
-    { id: 'story', label: 'Story', store: 'backlog', value: 'story', icon: 'article' },
-    { id: 'task', label: 'Task', store: 'backlog', value: 'task', icon: 'check_box_outline_blank' },
+    // `project` only in tracker mode: it is the level a follow-up tracker hangs
+    // everything from, and in a plain backlog it is a menu entry that could only
+    // ever file the wrong thing. The store still READS a project either way.
+    ...(TRACKER ? [BACKLOG_KIND('project')] : []),
+    BACKLOG_KIND('epic'),
+    BACKLOG_KIND('story'),
+    BACKLOG_KIND('task'),
 ];
 const kindById = (id) => KINDS.find((k) => k.id === id) || KINDS[0];
-const typeLabelOf = (t) => ({ epic: 'Epic', story: 'Story', task: 'Task' })[t] || 'Item';
 
 /**
  * Which fields each kind actually has — the one table both the form's
@@ -60,13 +72,44 @@ export const FIELDS_FOR = {
     bug:        { severity: true },
     regression: { severity: true },
     chore:      { severity: true },
-    // An epic carries the milestone label its descendants inherit, and has no
-    // parent of its own.
-    epic:       { phase: true, points: true },
-    story:      { parent: true, points: true },
-    task:       { parent: true, points: true },
+    // A project and an epic carry the milestone label everything below them
+    // inherits. Whether either has a PARENT is derived, not asserted: an epic
+    // has one only in tracker mode, where a project exists to hold it, and
+    // `parentTypesFor` is the single place that says so.
+    project:    { phase: true, due: true },
+    epic:       { phase: true, points: true, due: true },
+    story:      { points: true, due: true },
+    task:       { points: true, due: true },
 };
-const ADAPTIVE = ['severity', 'parent', 'phase', 'points'];
+const ADAPTIVE = ['severity', 'parent', 'phase', 'points', 'due'];
+
+/**
+ * The fields one kind actually has, with `parent` resolved against the
+ * hierarchy rules rather than hardcoded a second time here.
+ *
+ * A Parent row is drawn when something this deployment OFFERS could hold the
+ * new record. Both halves matter, and they are why this is derived rather than
+ * listed:
+ *
+ *   - the format says an epic hangs off a project (`parentTypesFor`), so in
+ *     tracker mode an epic gets a Parent row without a mode check in the table;
+ *   - a plain backlog offers no project type, so filing an epic there would open
+ *     a picker onto a level that cannot exist — the row is absent instead.
+ *
+ * The test is against TYPES, not against what happens to be in the store: chrome
+ * that appears and disappears as records are created is chrome nobody can learn.
+ * The item page is deliberately more permissive — an EXISTING record shows its
+ * Parent control whenever the format allows one, because re-parenting something
+ * that was mis-filed has to stay possible in either mode.
+ */
+export function fieldsFor(kindId) {
+    const spec = { ...(FIELDS_FOR[kindId] || {}) };
+    const kind = kindById(kindId);
+    if (kind.store === 'backlog') {
+        spec.parent = parentTypesFor(kind.value).some((t) => TYPES.includes(t));
+    }
+    return spec;
+}
 
 const toList = (v) => String(v ?? '').trim()
     ? String(v).split(',').map((s) => s.trim()).filter(Boolean) : [];
@@ -110,6 +153,8 @@ export function mountNewItem(host, props, ctx) {
                         <select class="ea-tin" data-f="phase"></select></div>
                     <div class="td-field" data-row="points"><label>Estimate</label>
                         <input class="ea-tin" data-f="points" placeholder="e.g. 3"></div>
+                    <div class="td-field" data-row="due"><label>Target date</label>
+                        <input class="ea-tin" type="date" data-f="due"></div>
                     <div class="td-field"><label>Subsystem</label>
                         <select class="ea-tin" data-f="subsystem"></select></div>
                     <div class="td-field td-span2"><label>Labels</label>
@@ -184,7 +229,7 @@ export function mountNewItem(host, props, ctx) {
     /* ── field visibility ────────────────────────────────────────── */
 
     function syncFields() {
-        const shown = FIELDS_FOR[kindId] || {};
+        const shown = fieldsFor(kindId);
         for (const f of ADAPTIVE) setRowVisible(row(f), !!shown[f]);
         const title = host.querySelector('[data-f="title"]');
         if (title) {
@@ -213,7 +258,7 @@ export function mountNewItem(host, props, ctx) {
             return;
         }
         const chosen = kindById(kindId);
-        const shown = FIELDS_FOR[kindId] || {};
+        const shown = fieldsFor(kindId);
         const btn = actionsEl?.querySelector('[data-a="create"]');
         if (btn) btn.disabled = true;
         try {
@@ -242,6 +287,7 @@ export function mountNewItem(host, props, ctx) {
                     parent: shown.parent ? parentId : 0,
                     phase: shown.phase ? selects.phase.value() : '',
                     points: shown.points ? fval('points') : '',
+                    due: shown.due ? fval('due') : '',
                     assignee: selects.assignee.value(),
                     subsystem: selects.subsystem.value() || 'unsorted',
                     labels: toList(fval('labels')),

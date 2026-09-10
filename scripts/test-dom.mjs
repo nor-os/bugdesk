@@ -289,18 +289,212 @@ console.log('\nHierarchy rules');
 
 const picker = await import(join(UI, 'ticketdesk', 'item_picker.js'));
 
-await t('a story may hang under an epic only', () =>
-    assert.deepEqual(picker.parentTypesFor('story'), ['epic']));
-await t('a task may hang under an epic or a story', () =>
-    assert.deepEqual(picker.parentTypesFor('task'), ['epic', 'story']));
-await t('an epic has no parent', () =>
-    assert.deepEqual(picker.parentTypesFor('epic'), []));
+// Conventional level FIRST in every list — the picker preselects the whole
+// list, but the New item form and "Add child" take [0] as the default type.
+await t('a story hangs under an epic, or straight off a project', () =>
+    assert.deepEqual(picker.parentTypesFor('story'), ['epic', 'project']));
+await t('a task hangs under a story, an epic or a project', () =>
+    assert.deepEqual(picker.parentTypesFor('task'), ['story', 'epic', 'project']));
+await t('an epic hangs under a project', () =>
+    assert.deepEqual(picker.parentTypesFor('epic'), ['project']));
+await t('a project is the top of the tree', () =>
+    assert.deepEqual(picker.parentTypesFor('project'), []));
+await t('a project offers epics, stories and tasks as children', () =>
+    // "a story and a task can be added directly to a project": the epic in
+    // between is often ceremony, so the picker must not require one.
+    assert.deepEqual(picker.childTypesFor('project'), ['epic', 'story', 'task']));
 await t('an epic offers stories as children', () =>
     assert.deepEqual(picker.childTypesFor('epic'), ['story']));
 await t('a story offers tasks', () =>
     assert.deepEqual(picker.childTypesFor('story'), ['task']));
 await t('a task offers nothing', () =>
     assert.deepEqual(picker.childTypesFor('task'), []));
+
+await t('every preselected type gets a chip to unselect it', async () => {
+    // Parenting an epic preselects `project`, which a plain backlog does not
+    // offer. Without a chip for it the dialog shows nothing and there is no
+    // control that explains why or lets the user widen the filter.
+    const done = picker.openItemPicker({ types: ['project'], title: 'Parent for this epic' });
+    await tick();
+    const chips = [...document.querySelectorAll('.bd-picker__chip')].map((c) => c.dataset.type);
+    const on = [...document.querySelectorAll('.bd-picker__chip--on')].map((c) => c.dataset.type);
+    document.querySelector('.bd-picker [data-a="cancel"]').click();
+    assert.equal(await done, null);
+    assert.ok(chips.includes('project'), `chips were ${JSON.stringify(chips)}`);
+    assert.deepEqual(on, ['project']);
+});
+
+await t('parent and child rules are exact mirrors', () => {
+    // The two functions are read from opposite ends of the same operation
+    // ("set my parent" / "add a child"), so a pair that disagrees means one
+    // surface offers a move the other refuses.
+    for (const parent of ['project', 'epic', 'story', 'task']) {
+        for (const child of picker.childTypesFor(parent)) {
+            assert.ok(picker.parentTypesFor(child).includes(parent),
+                `${parent} offers a ${child} child, but a ${child} may not sit under a ${parent}`);
+        }
+    }
+});
+
+/* ── the Tracker dashboard ───────────────────────────────────────────
+ *
+ * Mounted for real, over a store loaded through the actual `loadBacklog()` path
+ * (fetch is stubbed; everything downstream of it is the shipping code). So this
+ * exercises mapItem's derived fields — projectRef, dueState — and the page that
+ * reads them, together.
+ *
+ * The page is mode-AGNOSTIC: only its registration in install.js is gated on
+ * tracker mode, so it mounts here without a second process. What the dashboard
+ * says about a store is the thing worth pinning down, and most of it is about
+ * what it must NOT say: a closed item is not overdue however old its date, and
+ * an undated item is not "on time".
+ */
+
+console.log('\nTracker dashboard');
+
+const backlogData = await import(join(UI, 'ticketdesk', 'backlog_data.js'));
+
+// Dates relative to the real today — dueState reads the reader's own clock, so
+// a fixture with literal dates would start failing on a particular morning.
+const shift = (days) => {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    const p2 = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`;
+};
+
+const FIXTURE = [
+    { id: 1, type: 'project', title: 'Vendor migration', status: 'in-progress',
+      parent: 0, assignee: 'alice', reporter: 'alice', due: shift(60), criteria: [] },
+    { id: 2, type: 'story', title: 'Finance feed cutover', status: 'in-progress',
+      parent: 1, assignee: 'bob', reporter: 'alice', due: shift(-9), criteria: [] },
+    { id: 3, type: 'task', title: 'DPA to legal', status: 'done',
+      parent: 2, assignee: 'bob', reporter: 'alice', due: shift(-40), criteria: [] },
+    { id: 4, type: 'story', title: 'Operations feed cutover', status: 'draft',
+      parent: 1, assignee: 'bob', reporter: 'carol', due: shift(3), criteria: [] },
+    { id: 5, type: 'task', title: 'Confirm analytics owner', status: 'draft',
+      parent: 1, assignee: '', reporter: 'alice', due: '', criteria: [] },
+];
+
+const realFetch = globalThis.fetch;
+put('fetch', async (url) => {
+    const path = String(url);
+    if (path.endsWith('/api/backlog')) {
+        return { ok: true, json: async () => ({ ok: true, items: FIXTURE }) };
+    }
+    if (path.endsWith('/api/backlog/meta')) {
+        return { ok: true, json: async () => ({ ok: true, phases: ['q4'] }) };
+    }
+    return { ok: true, json: async () => ({ ok: true }) };
+});
+await backlogData.loadBacklog();
+
+await t('the store derives an owning project for every descendant', () => {
+    const byId = new Map(backlogData.ITEMS.map((i) => [i.id, i]));
+    assert.equal(byId.get(1).projectRef, 'PROJ-0001');   // a project answers for itself
+    assert.equal(byId.get(3).projectRef, 'PROJ-0001');   // two levels down
+    assert.equal(byId.get(2).ref, 'STORY-0002');
+});
+
+const { createTrackerContent } = await import(join(UI, 'ticketdesk', 'tracker_pages.js'));
+
+const opened = [];
+const mountDashboard = () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const ctx = {
+        wm: {
+            openInPrimary: (kind, props) => opened.push({ how: 'primary', kind, props }),
+            openInTabFromContext: (_c, kind, props) => opened.push({ how: 'tab', kind, props }),
+            navigate: (kind, props) => opened.push({ how: 'navigate', kind, props }),
+        },
+    };
+    const handle = createTrackerContent({ eventBus: null }).tracker(host, {}, ctx);
+    return { host, handle };
+};
+
+const sectionRefs = (host, sec) =>
+    [...host.querySelectorAll(`[data-sec="${sec}"] [data-open]`)]
+        .map((el) => el.querySelector('.tk-row__ref')?.textContent.trim());
+
+const board = mountDashboard();
+
+await t('every section renders, empty or not', () => {
+    for (const sec of ['overdue', 'soon', 'people', 'gaps']) {
+        assert.ok(board.host.querySelector(`[data-sec="${sec}"]`), `no ${sec} section`);
+    }
+});
+
+await t('an overdue item is listed, with how late it is and who has it', () => {
+    assert.deepEqual(sectionRefs(board.host, 'overdue'), ['STORY-0002']);
+    const row = board.host.querySelector('[data-sec="overdue"] [data-open]');
+    assert.match(row.textContent, /9 days late/);
+    assert.match(row.textContent, /bob/);
+});
+
+await t('a CLOSED item is never overdue, however old its date', () =>
+    // TASK-0003 is 40 days past its date and done. A date that passed after the
+    // work was delivered must not burn red forever.
+    assert.ok(!sectionRefs(board.host, 'overdue').includes('TASK-0003')));
+
+await t('an item due inside the week is in "due soon", not in overdue', () => {
+    assert.deepEqual(sectionRefs(board.host, 'soon'), ['STORY-0004']);
+    assert.ok(!sectionRefs(board.host, 'overdue').includes('STORY-0004'));
+});
+
+await t('the gaps section holds what the tracker cannot answer', () => {
+    // TASK-0005 has neither an assignee nor a date — one row, not two sections.
+    assert.deepEqual(sectionRefs(board.host, 'gaps'), ['TASK-0005']);
+    const row = board.host.querySelector('[data-sec="gaps"] [data-open]');
+    assert.match(row.textContent, /nobody/);
+    assert.match(row.textContent, /no date/);
+});
+
+await t('unassigned work gets a person row of its own', () => {
+    const names = [...board.host.querySelectorAll('[data-who]')].map((el) => el.dataset.who);
+    assert.ok(names.includes(''), `no "nobody" row among ${JSON.stringify(names)}`);
+    assert.ok(names.includes('bob'));
+});
+
+await t('people are ordered worst-first, not alphabetically', () => {
+    // bob holds the only overdue item; alice and "nobody" do not.
+    const names = [...board.host.querySelectorAll('[data-who]')].map((el) => el.dataset.who);
+    assert.equal(names[0], 'bob', `expected bob first, got ${JSON.stringify(names)}`);
+});
+
+await t('clicking a row opens that item', () => {
+    opened.length = 0;
+    board.host.querySelector('[data-sec="overdue"] [data-open]').click();
+    assert.equal(opened.length, 1);
+    assert.equal(opened[0].kind, 'item');
+    assert.equal(opened[0].props.id, '2');
+});
+
+await t('clicking a person opens the board scoped to them', () => {
+    opened.length = 0;
+    board.host.querySelector('[data-who="bob"]').click();
+    assert.equal(opened[0].kind, 'backlog');
+    assert.match(JSON.stringify(opened[0].props.expr), /"bob"/);
+});
+
+await t('the scope switch narrows to what I handed out', async () => {
+    // "Assigned by me" reads REPORTER: STORY-0004 is carol's to chase, so it
+    // leaves the board even though bob is doing it.
+    board.host.querySelector('[data-scope="byme"]').click();
+    await tick();
+    assert.deepEqual(sectionRefs(board.host, 'soon'), []);
+    assert.deepEqual(sectionRefs(board.host, 'overdue'), ['STORY-0002']);
+    board.host.querySelector('[data-scope="all"]').click();
+    await tick();
+    assert.deepEqual(sectionRefs(board.host, 'soon'), ['STORY-0004']);
+});
+
+await t('the page tears down without throwing', () => {
+    board.handle.destroy();
+    board.host.remove();
+});
+
+put('fetch', realFetch);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

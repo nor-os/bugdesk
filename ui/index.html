@@ -67,6 +67,7 @@
     <link href="css/ticketdesk_filters.css" rel="stylesheet" />
     <link href="css/ticketdesk_md.css" rel="stylesheet" />
     <link href="css/backlog.css" rel="stylesheet" />
+    <link href="css/tracker.css" rel="stylesheet" />
 
     <link rel="stylesheet" href="vendor/katex/katex.min.css" />
     <script defer src="vendor/katex/katex.min.js"></script>
@@ -158,6 +159,12 @@
         const { resolveIdentity } = await import('./js/ticketdesk/first_run.js');
         const cfg = await resolveIdentity();
         window.__BUGDESK_CONFIG__ = {
+            // Which app this is: 'bugs' (default) or 'tracker'. Read at module
+            // load by kind_taxonomy.js (which top-nav chips exist) and by
+            // ticketdesk/backlog_data.js (which types are offered), so it has to
+            // be resolved here, before either is evaluated — same reason as the
+            // two names below.
+            mode: cfg.mode === 'tracker' ? 'tracker' : 'bugs',
             humanAuthor: cfg.humanAuthor || 'reviewer',
             agentAuthor: cfg.agentAuthor || 'agent',
             // The shared roster (bugdesk.json). Every assignee picker reads it,

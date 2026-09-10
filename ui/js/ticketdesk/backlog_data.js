@@ -24,6 +24,21 @@
 
 import { AGENT_AUTHOR, HUMAN_AUTHOR } from './data.js';
 
+/* ── mode ────────────────────────────────────────────────────────────
+ *
+ * BugDesk runs as a bug tracker (default) or as a TRACKER: work handed to other
+ * people, who may have no access to this checkout at all. The bridge decides at
+ * launch (`--tracker`, or BUGDESK_MODE) and reports it through /api/config,
+ * which ui/index.html resolves BEFORE any of these modules are evaluated —
+ * exactly as it already does for the two author names.
+ *
+ * Read once, at module load, like HUMAN_AUTHOR: the mode cannot change without
+ * restarting the bridge, so a getter would only invite the belief that it can.
+ */
+const _cfg = (typeof window !== 'undefined' && window.__BUGDESK_CONFIG__) || {};
+export const MODE = _cfg.mode === 'tracker' ? 'tracker' : 'bugs';
+export const TRACKER = MODE === 'tracker';
+
 /* ── lifecycle ───────────────────────────────────────────────────────
  *
  * draft → refined → in-progress → review → done, plus the off-ladder terminal
@@ -51,6 +66,10 @@ import { AGENT_AUTHOR, HUMAN_AUTHOR } from './data.js';
 export const STATUSES = ['draft', 'refined', 'in-progress', 'review', 'done', 'dropped'];
 
 export const LADDERS = {
+    // A project is a container, not a unit of work: nothing about it is refined
+    // (it has no acceptance criteria of its own) and nothing about it is
+    // reviewed — its epics and stories are, one at a time.
+    project: ['draft', 'in-progress', 'done'],
     epic:  ['draft', 'refined', 'in-progress', 'done'],
     story: ['draft', 'refined', 'in-progress', 'review', 'done'],
     task:  ['draft', 'in-progress', 'done'],
@@ -132,14 +151,45 @@ export function stageActions(item) {
  *  it. A task never passes through `refined`, so nothing gates a task. */
 export const isGated = (target) => target === 'refined';
 
-export const TYPES = ['epic', 'story', 'task'];
-export const TYPE_LABEL = { epic: 'Epic', story: 'Story', task: 'Task' };
-export const TYPE_ICON = { epic: 'workspaces', story: 'article', task: 'check_box_outline_blank' };
+/**
+ * Every type the STORE can hold, in hierarchy order. Anything that has to
+ * RENDER a record it found on disk reads this — a PROJ- file written by a
+ * tracker still has to draw with the right glyph and label when the same store
+ * is opened as a plain backlog.
+ */
+export const ALL_TYPES = ['project', 'epic', 'story', 'task'];
+
+/**
+ * The types this deployment OFFERS. Tracker mode adds `project` as the level
+ * above epics; a plain backlog does not, because a Type select carrying a level
+ * the store never uses is a menu entry that only ever files the wrong thing.
+ *
+ * Offering and rendering are deliberately different lists: a store is shared and
+ * may have been written in the other mode, so nothing may refuse to draw a type
+ * merely because this deployment would not create one.
+ */
+export const TYPES = TRACKER ? ALL_TYPES : ['epic', 'story', 'task'];
+
+export const TYPE_LABEL = { project: 'Project', epic: 'Epic', story: 'Story', task: 'Task' };
+export const TYPE_ICON = {
+    project: 'folder_special', epic: 'workspaces',
+    story: 'article', task: 'check_box_outline_blank',
+};
+
+/**
+ * File prefix per type — the SAME table as BacklogItem.Prefixes on the bridge.
+ *
+ * A project is `PROJ`, not `PROJECT`, so nothing may derive a reference by
+ * upper-casing the type. This used to do exactly that, which was correct only
+ * for as long as every prefix happened to be the type in capitals.
+ */
+export const TYPE_PREFIX = { project: 'PROJ', epic: 'EPIC', story: 'STORY', task: 'TASK' };
+
 export const typeLabelOf = (t) => TYPE_LABEL[t] || 'Task';
 
 /** `EPIC-0007` — how an item is referred to from a bug's `links` and in prose. */
 export const itemRef = (item) =>
-    `${String(item?.type || 'task').toUpperCase()}-${String(item?.id ?? '').padStart(4, '0')}`;
+    `${TYPE_PREFIX[item?.type] || 'TASK'}-${String(item?.id ?? '').padStart(4, '0')}`;
 
 /** Tab / tile label. The bare id says nothing about which item you left open. */
 export const itemLabel = (item) =>
@@ -161,14 +211,87 @@ export const REFINEMENT_RULES = [
       test: (i) => (i.criteria || []).length > 0 },
     { key: 'points', label: 'Has an estimate',
       test: (i) => String(i.points || '').trim().length > 0 },
-    { key: 'parent', label: 'Sits under a parent (epics are exempt)',
-      test: (i) => i.type === 'epic' || Number(i.parent) > 0 },
+    { key: 'parent', label: 'Sits under a parent (top-level items are exempt)',
+      test: (i) => i.type === 'epic' || i.type === 'project' || Number(i.parent) > 0 },
 ];
 
 /** Every unmet rule, so the UI can list what is still missing rather than
  *  just disabling a button with no explanation. */
 export const refinementGaps = (item) =>
     REFINEMENT_RULES.filter((r) => { try { return !r.test(item); } catch { return true; } });
+
+/* ── target dates ────────────────────────────────────────────────────
+ *
+ * A target date is the axis TRACKER mode turns on: the question a follow-up
+ * tracker exists to answer is "what is late", and everything else on the
+ * dashboard is a way of grouping that answer.
+ *
+ * Derived HERE rather than on the bridge, once, so the dashboard, the filter
+ * catalogue and the board's Due column cannot disagree about what "overdue"
+ * means. The bridge stores the plain `YYYY-MM-DD` string and nothing else — a
+ * server that computed "overdue" would be answering with ITS today, which is
+ * the wrong one the moment a browser is left open past midnight or sits in
+ * another timezone.
+ */
+
+/** Today as `YYYY-MM-DD`, in the reader's own timezone. */
+export function todayISO(now = new Date()) {
+    const p = (n) => String(n).padStart(2, '0');
+    return `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`;
+}
+
+/** Whole days from `a` to `b`, both `YYYY-MM-DD`. Negative means `b` is past. */
+export function daysBetween(a, b) {
+    const [ay, am, ad] = String(a).split('-').map(Number);
+    const [by, bm, bd] = String(b).split('-').map(Number);
+    if (!ay || !by) return null;
+    // UTC on both sides: local midnights differ in length across a DST change,
+    // so "3 days" would come out 2.958 twice a year and floor to 2.
+    return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86400000);
+}
+
+/** What "due soon" means, in days. One week: the horizon of the weekly
+ *  check-in the dashboard is read in. */
+export const DUE_SOON_DAYS = 7;
+
+/**
+ * Where a target date stands, as one word the UI can style and filter on.
+ *
+ * `none` and `done` are separate from the schedule on purpose. An item nobody
+ * has dated is not "on time" — it is unanswerable, and a tracker that reports
+ * it as fine is hiding exactly the thing it exists to surface. A finished item
+ * has no schedule left to be late for, so a date that passed after the work was
+ * delivered must not go on burning red forever.
+ *
+ * @returns {'done'|'none'|'overdue'|'today'|'soon'|'later'}
+ */
+export function dueState(item, today = todayISO()) {
+    if (item?.status === 'done' || item?.status === 'dropped') return 'done';
+    const due = String(item?.due || '').trim();
+    if (!due) return 'none';
+    const days = daysBetween(today, due);
+    if (days === null) return 'none';
+    if (days < 0) return 'overdue';
+    if (days === 0) return 'today';
+    return days <= DUE_SOON_DAYS ? 'soon' : 'later';
+}
+
+export const DUE_LABEL = {
+    overdue: 'Overdue', today: 'Due today', soon: 'Due soon',
+    later: 'Scheduled', none: 'No date', done: 'Closed',
+};
+
+/** "3 days late" / "in 5 days" — the phrase, not the date, because the number
+ *  of days is the part you act on. */
+export function duePhrase(item, today = todayISO()) {
+    const state = dueState(item, today);
+    if (state === 'none') return 'no target date';
+    if (state === 'done') return item?.due ? `target was ${item.due}` : 'no target date';
+    const days = daysBetween(today, item.due);
+    if (days === 0) return 'due today';
+    if (days < 0) return `${-days} day${days === -1 ? '' : 's'} late`;
+    return `in ${days} day${days === 1 ? '' : 's'}`;
+}
 
 /* ── bridge client ───────────────────────────────────────────────── */
 
@@ -245,6 +368,25 @@ function epicRefOf(item, byId) {
     return '';
 }
 
+/**
+ * The owning PROJECT's reference — the item's own when it IS a project, else the
+ * nearest ancestor project's. The exact mirror of epicRefOf one level up, and
+ * what makes "everything I am tracking under PROJ-0003" a single filter clause
+ * however deep the row sits.
+ */
+function projectRefOf(item, byId) {
+    let cur = item;
+    const seen = new Set([cur.id]);
+    while (cur) {
+        if (cur.type === 'project') return itemRef(cur);
+        const next = byId.get(Number(cur.parent));
+        if (!next || seen.has(next.id)) return '';
+        seen.add(next.id);
+        cur = next;
+    }
+    return '';
+}
+
 function mapItem(raw, byId) {
     const criteria = Array.isArray(raw.criteria) ? raw.criteria : [];
     const parent = byId.get(Number(raw.parent));
@@ -253,6 +395,7 @@ function mapItem(raw, byId) {
         ref: itemRef(raw),
         parentRef: parent ? itemRef(parent) : '',
         epicRef: epicRefOf(raw, byId),
+        projectRef: projectRefOf(raw, byId),
         depth: depthOf(raw, byId),
         ladder: ladderFor(raw.type),
         statusLabel: humanizeItemStatus(raw.status),
@@ -263,6 +406,10 @@ function mapItem(raw, byId) {
         // The phase actually in force, own or inherited — what the rail filters on.
         phaseLabel: raw.effectivePhase || '',
         assignee: raw.assignee || '',
+        reporter: raw.reporter || '',
+        due: raw.due || '',
+        dueState: dueState(raw),
+        duePhrase: duePhrase(raw),
         updated: raw.updated || '',
     };
 }
@@ -375,19 +522,42 @@ export function treeRows(match, collapsed = new Set()) {
 }
 
 /**
- * Items that may legally be the parent of a new/edited item of `type`: stories
- * hang off epics, tasks off stories (or an epic directly, when a task needs no
- * story around it). An epic has no parent at all, so it gets an empty list.
+ * Which types may legally HOLD an item of `childType`, conventional level first.
  *
- * Lives here rather than in a page because BOTH the item page's Parent select
- * and the New item dialog need it, and they were about to hold two copies with
- * two chances to disagree about what may hold what.
+ * ONE definition, here rather than in the picker, because three surfaces read it
+ * — the picker's type chips, the New item form deciding whether to show a Parent
+ * row at all, and the item page's Parent control — and three copies would be
+ * three chances to disagree about whether a task may hang off an epic.
+ *
+ * A flat `parentOptions(type)` list used to live here as well, for the dropdowns
+ * these controls replaced. It is gone rather than kept: a second answer to
+ * "what may hold this" is the duplication this function exists to prevent, and
+ * an unused one drifts silently.
+ *
+ * A level may always be SKIPPED: a story directly under a project, a task
+ * directly under an epic. The intermediate record is often ceremony, and the
+ * bridge does not enforce type pairs either (it enforces existence and
+ * acyclicity, the two failures that actually break the tree).
  */
-export const parentOptions = (type) => ITEMS
-    .filter((i) => (type === 'story' ? i.type === 'epic'
-                  : type === 'task' ? i.type !== 'task'
-                  : false))
-    .map((i) => ({ value: String(i.id), label: `${i.ref} — ${i.title}` }));
+export const parentTypesFor = (childType) =>
+    childType === 'epic' ? ['project']
+    : childType === 'story' ? ['epic', 'project']
+    : childType === 'task' ? ['story', 'epic', 'project']
+    : [];
+
+/**
+ * The mirror: types that may hang UNDER `parentType`, which is what the picker
+ * preselects when attaching an existing item as a child.
+ *
+ * A project offers all three — "a story and a task can be added straight to a
+ * project" is the arrangement a follow-up tracker is mostly made of, where an
+ * epic in between would be an empty ceremony record.
+ */
+export const childTypesFor = (parentType) =>
+    parentType === 'project' ? ['epic', 'story', 'task']
+    : parentType === 'epic' ? ['story']
+    : parentType === 'story' ? ['task']
+    : [];
 
 /** Every id in the current store that could be collapsed — what "collapse all"
  *  needs, without the caller walking the tree itself. */

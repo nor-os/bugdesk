@@ -1,19 +1,30 @@
 using System.Text;
 
 /// <summary>
-/// One record in the backlog store — <c>EPIC-NNNN.md</c>, <c>STORY-NNNN.md</c> or
-/// <c>TASK-NNNN.md</c>.
+/// One record in the backlog store — <c>PROJ-NNNN.md</c>, <c>EPIC-NNNN.md</c>,
+/// <c>STORY-NNNN.md</c> or <c>TASK-NNNN.md</c>.
 ///
 /// <para>
-/// Hierarchy is <b>epic → story → task</b>, expressed by a single <c>parent</c>
-/// field holding another item's numeric id. A "phase" is NOT a record type: it is
-/// a plain milestone label on an EPIC (<c>phase: foundation</c>), which stories
-/// and tasks inherit through their ancestors. That keeps the store to three file
-/// prefixes while still letting you ask "what is left in the foundation phase".
+/// Hierarchy is <b>project → epic → story → task</b>, expressed by a single
+/// <c>parent</c> field holding another item's numeric id. A "phase" is NOT a
+/// record type: it is a plain milestone label on a project or an epic
+/// (<c>phase: foundation</c>), which everything below inherits through its
+/// ancestors. That keeps the store to four file prefixes while still letting you
+/// ask "what is left in the foundation phase".
 /// </para>
 ///
 /// <para>
-/// IDs are a SINGLE sequence shared by all three prefixes, so <c>parent: 7</c> is
+/// The hierarchy is not enforced as a type pair. A story may sit directly under
+/// a project, a task directly under an epic: the intermediate level is often
+/// ceremony, and refusing the arrangement would mean rejecting a store somebody
+/// hand-arranged perfectly sensibly. What IS enforced is that a parent exists
+/// and that the graph stays acyclic — the two failures that make the tree
+/// unrenderable. The UI's picker preselects the conventional level, which is
+/// where guidance belongs.
+/// </para>
+///
+/// <para>
+/// IDs are a SINGLE sequence shared by all four prefixes, so <c>parent: 7</c> is
 /// unambiguous without also naming the type, and so is a bug's
 /// <c>links: [implements STORY-7]</c>.
 /// </para>
@@ -41,6 +52,14 @@ class BacklogItem
     /// </summary>
     public static readonly Dictionary<string, string[]> Ladders = new()
     {
+        // A PROJECT is a container with a start and an end, not a unit of work:
+        // there is nothing about it to refine (no acceptance criteria of its
+        // own, no estimate) and nothing to review, so it walks the short ladder.
+        // It exists for TRACKER mode — see the Tracker section of the README —
+        // where the top level is "the thing I am tracking for somebody", and it
+        // is a legal type in every mode so a store written by a tracker still
+        // reads in a plain backlog.
+        ["project"] = new[] { "draft", "in-progress", "done" },
         ["epic"] = new[] { "draft", "refined", "in-progress", "done" },
         ["story"] = new[] { "draft", "refined", "in-progress", "review", "done" },
         ["task"] = new[] { "draft", "in-progress", "done" },
@@ -91,10 +110,18 @@ class BacklogItem
         return best;
     }
 
-    /// <summary>File prefix per item type. Also the set of legal types.</summary>
+    /// <summary>
+    /// File prefix per item type. Also the set of legal types.
+    /// <para>
+    /// <c>project</c> is <c>PROJ</c>, not <c>PROJECT</c>: the reference is read
+    /// and typed constantly ("PROJ-0004 is late") and the four prefixes line up
+    /// in a fixed-width column. Nothing may derive the prefix by upper-casing
+    /// the type — this table is the only mapping, on both sides of the bridge.
+    /// </para>
+    /// </summary>
     public static readonly Dictionary<string, string> Prefixes = new()
     {
-        ["epic"] = "EPIC", ["story"] = "STORY", ["task"] = "TASK",
+        ["project"] = "PROJ", ["epic"] = "EPIC", ["story"] = "STORY", ["task"] = "TASK",
     };
 
     public int Id { get; set; }
@@ -107,11 +134,36 @@ class BacklogItem
     /// refinement exists to resolve).</summary>
     public int Parent { get; set; }
 
-    /// <summary>Milestone label. Authored on epics; see <c>effectivePhase</c> in
-    /// the summary for the inherited value.</summary>
+    /// <summary>Milestone label. Authored on projects and epics; see
+    /// <c>effectivePhase</c> in the summary for the inherited value.</summary>
     public string Phase { get; set; } = "";
 
     public string Assignee { get; set; } = "";
+
+    /// <summary>
+    /// Target date, <c>YYYY-MM-DD</c>, or empty for "no date set".
+    /// <para>
+    /// Empty is a real and distinct state, not a missing value: an item nobody
+    /// has committed to a date for is exactly what a tracker exists to surface,
+    /// so it must never be filled in with a default. Stored as the plain ISO
+    /// string the rest of the frontmatter uses (<c>created</c>, <c>updated</c>)
+    /// so a date sorts correctly as text and diffs readably.
+    /// </para>
+    /// </summary>
+    public string Due { get; set; } = "";
+
+    /// <summary>
+    /// Who asked for this — the person the follow-up belongs to, which in
+    /// TRACKER mode is the manager who assigned the work.
+    /// <para>
+    /// Distinct from <c>Assignee</c>, and the reason "what I assigned" is
+    /// answerable at all: assignee says whose court it is in, reporter says
+    /// whose list it is on. Set once, when the record is created, from the
+    /// configured human name; empty on records written before it existed, which
+    /// is why the dashboard's "by me" scope is a filter rather than the default.
+    /// </para>
+    /// </summary>
+    public string Reporter { get; set; } = "";
 
     /// <summary>Relative estimate. Empty string means "not estimated", which is
     /// a real and distinct state from "estimated at 0" — refinement checks it.</summary>
@@ -136,8 +188,8 @@ class BacklogItem
     public int Stage => Array.IndexOf(LadderFor(Type), Status);
     public bool Done => Status is "done" or "dropped";
 
-    /// <summary>Sort weight: epics before their stories before their tasks.</summary>
-    public int TypeOrder => Type switch { "epic" => 0, "story" => 1, _ => 2 };
+    /// <summary>Sort weight: projects before epics before stories before tasks.</summary>
+    public int TypeOrder => Type switch { "project" => 0, "epic" => 1, "story" => 2, _ => 3 };
 
     public string FileName => $"{Prefixes.GetValueOrDefault(Type, "TASK")}-{Id:D4}.md";
 
@@ -167,7 +219,8 @@ class BacklogItem
         id = Id, type = Type, title = Title, status = Status, stage = Stage,
         ladder = LadderFor(Type),
         parent = Parent, phase = Phase, effectivePhase = phase,
-        assignee = Assignee, points = Points, subsystem = Subsystem,
+        assignee = Assignee, reporter = Reporter, due = Due,
+        points = Points, subsystem = Subsystem,
         labels = Labels, links = Links, created = Created, updated = Updated,
         typeOrder = TypeOrder, children = childCount,
         criteria = Criteria(), comments = Comments.Count,
@@ -191,6 +244,8 @@ class BacklogItem
                 case "parent": item.Parent = ParseRef(val); break;
                 case "phase": item.Phase = val; break;
                 case "assignee": item.Assignee = val; break;
+                case "due": item.Due = NormalizeDate(val); break;
+                case "reporter": item.Reporter = val; break;
                 case "points": item.Points = val; break;
                 case "subsystem": item.Subsystem = val; break;
                 case "created": item.Created = val; break;
@@ -219,6 +274,31 @@ class BacklogItem
     }
 
     /// <summary>
+    /// A date the store will accept: <c>YYYY-MM-DD</c>, or empty.
+    /// <para>
+    /// Anything else reads as empty rather than being stored verbatim. A
+    /// <c>due</c> that does not parse is worse than no due date at all: it looks
+    /// set, so nothing flags it as missing, and it can never be overdue — it
+    /// would sit in the one blind spot a tracker must not have.
+    /// </para>
+    /// </summary>
+    public static string NormalizeDate(string? val)
+    {
+        var s = (val ?? "").Trim();
+        if (s.Length == 0) return "";
+        return DateOnly.TryParseExact(s, "yyyy-MM-dd",
+            System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.None, out var d)
+            ? d.ToString("yyyy-MM-dd")
+            : "";
+    }
+
+    /// <summary>Is this a date the store will accept? Empty counts — clearing a
+    /// target date is a legitimate edit, and only a malformed one is an error.</summary>
+    public static bool IsValidDate(string? val) =>
+        (val ?? "").Trim().Length == 0 || NormalizeDate(val).Length > 0;
+
+    /// <summary>
     /// A parent/link target, written either bare ("7") or prefixed ("STORY-7",
     /// "EPIC-0001"). Both forms appear in hand-authored files, so both parse.
     /// </summary>
@@ -244,6 +324,8 @@ class BacklogItem
         Field("parent", Parent > 0 ? Parent.ToString() : "");
         Field("phase", Phase);
         Field("assignee", Assignee);
+        Field("reporter", Reporter);
+        Field("due", Due);
         Field("points", Points);
         Field("subsystem", Subsystem);
         Field("labels", Md.ListValue(Labels));

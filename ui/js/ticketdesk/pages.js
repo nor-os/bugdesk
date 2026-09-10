@@ -1226,7 +1226,10 @@ function mountTicketNav(host, props, ctx) {
     const syncToTopNav = () => {
         const topNav = activeTopNavKind(getWm());
         if (!topNav) { if (!shown) show('bugs'); return; }
-        show(topNav === 'backlog' ? 'backlog' : 'bugs');
+        // The Tracker dashboard is a view over the backlog store, so it gets the
+        // backlog rail: its saved filters and its project tree are exactly what
+        // you want one click away from "who has what".
+        show(topNav === 'backlog' || topNav === 'tracker' ? 'backlog' : 'bugs');
     };
     const renderFilters = () => {
         const custom = listFilters();
@@ -1407,7 +1410,7 @@ function mountTicketInspector(host, props, ctx) {
     const getWm = () => ctx?.wm || window.__twm?.wm || null;
 
     const render = async () => {
-        const backlog = activeTopNavKind(getWm()) === 'backlog';
+        const backlog = ['backlog', 'tracker'].includes(activeTopNavKind(getWm()));
         let rows = [];
         let empty = '';
         if (backlog) {

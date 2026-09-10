@@ -49,7 +49,7 @@ const t = (name, fn) => {
 
 const { createFilterModel } = await import(UI + 'filter_engine.js');
 const data = await import(UI + 'backlog_data.js');
-const { activeTopNavKind } = await import(TILING + 'kind_taxonomy.js');
+const { activeTopNavKind, taxonomy: taxonomyDefault } = await import(TILING + 'kind_taxonomy.js');
 const newItem = await import(UI + 'new_item.js');
 const live = await import(UI + 'live.js');
 
@@ -270,9 +270,13 @@ t('nothing resolvable yields null, not a wrong guess', () => {
 
 console.log('\nnew_item field adaptation');
 
+// `fieldsFor`, not the raw FIELDS_FOR table: `parent` is DERIVED from the
+// hierarchy rules rather than listed per kind, so the table alone no longer
+// says what the form draws.
+const ORDER = ['severity', 'parent', 'phase', 'points', 'due'];
 const visible = (kindId) => {
-    const f = newItem.FIELDS_FOR[kindId] || {};
-    return ['severity', 'parent', 'phase', 'points'].filter((k) => f[k]);
+    const f = newItem.fieldsFor(kindId);
+    return ORDER.filter((k) => f[k]);
 };
 
 t('a bug is asked for a severity and nothing backlog-shaped', () =>
@@ -281,12 +285,24 @@ t('regression and chore match bug', () => {
     assert.deepEqual(visible('regression'), ['severity']);
     assert.deepEqual(visible('chore'), ['severity']);
 });
-t('an epic is asked for a phase, never a parent', () =>
-    assert.deepEqual(visible('epic'), ['phase', 'points']));
+t('an epic is asked for a phase, and for no parent outside tracker mode', () =>
+    assert.deepEqual(visible('epic'), ['phase', 'points', 'due']));
 t('a story is asked for a parent, never a phase', () =>
-    assert.deepEqual(visible('story'), ['parent', 'points']));
+    assert.deepEqual(visible('story'), ['parent', 'points', 'due']));
 t('a task matches a story', () =>
-    assert.deepEqual(visible('task'), ['parent', 'points']));
+    assert.deepEqual(visible('task'), ['parent', 'points', 'due']));
+t('every backlog kind can carry a target date', () => {
+    for (const k of ['epic', 'story', 'task']) {
+        assert.ok(visible(k).includes('due'), `${k} cannot be given a target date`);
+    }
+});
+t('no bug kind is offered a target date', () => {
+    // `due` lives on backlog records only — Bug.cs has no such field, so a
+    // date entered here would be silently dropped on save.
+    for (const k of ['bug', 'regression', 'chore']) {
+        assert.ok(!visible(k).includes('due'), `${k} offers a target date`);
+    }
+});
 t('no backlog kind is ever asked for a severity', () => {
     for (const k of ['epic', 'story', 'task']) {
         assert.ok(!visible(k).includes('severity'), `${k} offers severity`);
@@ -302,14 +318,118 @@ t('every kind in the Type select has a field map', () => {
         assert.ok(newItem.FIELDS_FOR[k.id], `${k.id} has no FIELDS_FOR entry`);
     }
 });
-t('the six kinds route to the two stores', () => {
+t('the kinds route to the two stores', () => {
     const byStore = {};
     for (const k of newItem.KINDS) (byStore[k.store] ??= []).push(k.id);
     assert.deepEqual(byStore.bugs, ['bug', 'regression', 'chore']);
     assert.deepEqual(byStore.backlog, ['epic', 'story', 'task']);
 });
+t('Project is not offered outside tracker mode', () =>
+    assert.equal(newItem.KINDS.some((k) => k.id === 'project'), false));
 t('Chore is stored as the bug type `task`', () =>
     assert.equal(newItem.KINDS.find((k) => k.id === 'chore').value, 'task'));
+
+/* ── target dates ────────────────────────────────────────────────────
+ *
+ * The axis tracker mode turns on. `dueState` is read by the dashboard, by the
+ * board's Due column and by the `dueState` filter field, so getting it wrong is
+ * wrong in three places at once — and the two states that are NOT about the
+ * schedule (`none`, `done`) are the ones a naive date comparison gets wrong. */
+
+console.log('\ntarget dates');
+
+const TODAY = '2026-09-10';
+const withDue = (due, status = 'in-progress') => ({ due, status });
+
+t('a date in the past is overdue', () =>
+    assert.equal(data.dueState(withDue('2026-09-01'), TODAY), 'overdue'));
+t('today is its own state', () =>
+    assert.equal(data.dueState(withDue(TODAY), TODAY), 'today'));
+t('inside a week is due soon', () =>
+    assert.equal(data.dueState(withDue('2026-09-16'), TODAY), 'soon'));
+t('the seventh day is still soon, the eighth is not', () => {
+    assert.equal(data.dueState(withDue('2026-09-17'), TODAY), 'soon');
+    assert.equal(data.dueState(withDue('2026-09-18'), TODAY), 'later');
+});
+t('no date is `none`, never "on time"', () => {
+    // The whole point: an undated item must not read as healthy. It is the gap
+    // the dashboard has a section for.
+    assert.equal(data.dueState(withDue(''), TODAY), 'none');
+    assert.equal(data.dueState({ status: 'draft' }, TODAY), 'none');
+});
+t('a malformed date reads as no date rather than as overdue', () =>
+    assert.equal(data.dueState(withDue('next tuesday'), TODAY), 'none'));
+t('a closed item is off the schedule however old its date', () => {
+    // A date that passed AFTER the work was delivered must not burn red forever.
+    assert.equal(data.dueState(withDue('2020-01-01', 'done'), TODAY), 'done');
+    assert.equal(data.dueState(withDue('2020-01-01', 'dropped'), TODAY), 'done');
+});
+t('lateness is counted in whole days', () => {
+    assert.equal(data.daysBetween(TODAY, '2026-09-13'), 3);
+    assert.equal(data.daysBetween(TODAY, '2026-09-07'), -3);
+    assert.equal(data.daysBetween(TODAY, TODAY), 0);
+});
+t('a day count survives a DST boundary', () => {
+    // Local midnights are 23 or 25 hours apart twice a year; a naive
+    // (b - a) / 86400000 on local dates floors those to the wrong day.
+    assert.equal(data.daysBetween('2026-03-28', '2026-03-30'), 2);
+    assert.equal(data.daysBetween('2026-10-24', '2026-10-26'), 2);
+});
+t('the phrase names the number of days, not the date', () => {
+    assert.equal(data.duePhrase(withDue('2026-09-07'), TODAY), '3 days late');
+    assert.equal(data.duePhrase(withDue('2026-09-11'), TODAY), 'in 1 day');
+    assert.equal(data.duePhrase(withDue(TODAY), TODAY), 'due today');
+    assert.equal(data.duePhrase(withDue(''), TODAY), 'no target date');
+});
+t('todayISO is the local date, zero-padded', () =>
+    assert.equal(data.todayISO(new Date(2026, 8, 3, 23, 30)), '2026-09-03'));
+
+/* ── the project level ───────────────────────────────────────────── */
+
+console.log('\nproject type');
+
+t('a project file is PROJ-, not PROJECT-', () => {
+    // The reference is derived from a TABLE, not by upper-casing the type —
+    // it has to match the filename the bridge writes (BacklogItem.Prefixes).
+    assert.equal(data.itemRef({ type: 'project', id: 4 }), 'PROJ-0004');
+    assert.equal(data.itemRef({ type: 'epic', id: 4 }), 'EPIC-0004');
+    assert.equal(data.itemRef({ type: 'story', id: 12 }), 'STORY-0012');
+    assert.equal(data.itemRef({ type: 'task', id: 7 }), 'TASK-0007');
+});
+t('a project is never refined and never reviewed', () => {
+    // It is a container: no acceptance criteria of its own to refine, and its
+    // stories are what get reviewed, one at a time.
+    assert.deepEqual(data.ladderFor('project'), ['draft', 'in-progress', 'done']);
+    assert.ok(!data.ladderFor('project').includes('refined'));
+    assert.ok(!data.ladderFor('project').includes('review'));
+});
+t('a project never offers a refinement transition', () => {
+    const targets = data.stageActions({ type: 'project', status: 'draft' }).map(([, s]) => s);
+    assert.ok(!targets.includes('refined'), `project offered ${targets.join(', ')}`);
+});
+t('a project is exempt from the parent refinement rule', () => {
+    const rule = data.REFINEMENT_RULES.find((r) => r.key === 'parent');
+    assert.equal(rule.test({ type: 'project', parent: 0 }), true);
+    assert.equal(rule.test({ type: 'epic', parent: 0 }), true);
+    assert.equal(rule.test({ type: 'story', parent: 0 }), false);
+});
+t('every type the store can hold has a ladder, a label and a prefix', () => {
+    for (const type of data.ALL_TYPES) {
+        assert.ok(data.LADDERS[type], `${type} has no ladder`);
+        assert.ok(data.TYPE_LABEL[type], `${type} has no label`);
+        assert.ok(data.TYPE_PREFIX[type], `${type} has no file prefix`);
+        assert.ok(data.TYPE_ICON[type], `${type} has no icon`);
+    }
+});
+t('a plain backlog offers three types; the store still knows four', () => {
+    assert.deepEqual(data.TYPES, ['epic', 'story', 'task']);
+    assert.deepEqual(data.ALL_TYPES, ['project', 'epic', 'story', 'task']);
+    assert.equal(data.TRACKER, false);
+});
+t('the default mode has no Tracker chip', () =>
+    // The tracker-mode counterpart of this lives in test-tracker.mjs, which
+    // runs in its own process — the mode is read once, at module load.
+    assert.deepEqual(taxonomyDefault.topNavEntries().map((e) => e.kind), ['queues', 'backlog']));
 
 /* ── live updates ────────────────────────────────────────────────────
  *

@@ -22,11 +22,29 @@
 
 import { createTaxonomy } from '@flexdesk/wm';
 
+/* ── mode ────────────────────────────────────────────────────────────
+ *
+ * BugDesk runs as a bug tracker (default) or as a TRACKER — a manager's record
+ * of work handed to other people. The bridge decides at launch and reports it
+ * through /api/config, which ui/index.html resolves BEFORE this module is
+ * evaluated. Read here rather than imported from ticketdesk/backlog_data.js so
+ * the tiling shell keeps no dependency on the ticketdesk modules (the arrow
+ * runs the other way — see install.js's lazy imports).
+ *
+ * The taxonomy is built ONCE, at module load, because the WM bakes it into
+ * saved layouts and the top bar. That is fine precisely because the mode cannot
+ * change without restarting the bridge.
+ */
+const TRACKER = (typeof window !== 'undefined'
+    && window.__BUGDESK_CONFIG__?.mode) === 'tracker';
+
 export const taxonomy = createTaxonomy({
     root: 'home',
     kinds: {
-        // BugDesk taxonomy — two top-navs, one per store. `home` maps to the
-        // Queues landing (WM default leaf); `ticket` is a sub-page of Queues,
+        // BugDesk taxonomy — one top-nav per store, plus the Tracker dashboard
+        // in tracker mode. `home` is the WM default leaf and maps to the Queues
+        // landing (in tracker mode, to the dashboard — see
+        // ticketdesk/tracker_pages.js). `ticket` is a sub-page of Queues,
         // `item` a sub-page of Backlog.
         home: { label: 'Home', icon: 'home' },
 
@@ -45,21 +63,47 @@ export const taxonomy = createTaxonomy({
         },
         ticket: { label: 'Bug', icon: 'bug_report', topNav: 'queues' },
 
-        // The second store: epics → stories → tasks. `item` covers all three
-        // types rather than getting a kind each — they share one page, one
-        // route and one id space, and three kinds would only make the
-        // breadcrumb and the palette pick between synonyms.
+        // TRACKER MODE's landing page: what is late, and whose it is. First in
+        // the strip and therefore the WM's default leaf, because it is the
+        // question the mode exists to answer — you open a tracker to find out
+        // what needs chasing, not to browse a tree.
+        //
+        // Absent entirely in the default mode rather than present-and-empty: a
+        // chip that leads to a dashboard over a store with no target dates in it
+        // says nothing, every time you look at it.
+        ...(TRACKER ? {
+            tracker: {
+                label: 'Tracker', icon: 'space_dashboard',
+                isTopNav: true, order: 10,
+            },
+        } : {}),
+
+        // The second store: [projects →] epics → stories → tasks. `item` covers
+        // every type rather than getting a kind each — they share one page, one
+        // route and one id space, and four kinds would only make the breadcrumb
+        // and the palette pick between synonyms.
+        //
+        // The kind id stays `backlog` in both modes, for the same reason
+        // `queues` stays `queues` while reading "Bugs": it is baked into saved
+        // tile layouts and every `props.filter` route. Only the LABEL changes —
+        // "backlog" is a word about work you plan for yourself, and a tracker is
+        // a list of things other people owe you.
         backlog: {
-            label: 'Backlog', icon: 'workspaces',
+            label: TRACKER ? 'Tickets' : 'Backlog',
+            icon: 'workspaces',
             isTopNav: true, order: 30,
         },
         item: { label: 'Item', icon: 'article', topNav: 'backlog' },
 
-        // The create mask. Sits under Bugs in the breadcrumb because that is
-        // BugDesk's home section; the Type select inside it is what actually
-        // decides which store the record lands in, and the page is reachable
-        // from both.
-        'new-item': { label: 'New item', icon: 'add_circle', topNav: 'queues' },
+        // The create mask. Its breadcrumb sits under whichever section this
+        // deployment files INTO by default — Bugs normally, Tickets in tracker
+        // mode, where the bug queue is not where anything starts. The Type
+        // select inside it is what actually decides which store the record lands
+        // in, and the page is reachable from every section either way.
+        'new-item': {
+            label: 'New item', icon: 'add_circle',
+            topNav: TRACKER ? 'backlog' : 'queues',
+        },
 
         // Settings reachable from the hamburger; no top-nav slot. App-global
         // (localStorage-backed, openable with no project loaded), so its

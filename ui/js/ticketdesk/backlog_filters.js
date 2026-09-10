@@ -13,8 +13,17 @@
  *   `epic`   the OWNING epic of any item, however deep. `Epic is EPIC-0001`
  *            selects a whole work package — the epic, its stories and their
  *            tasks — which is what "scope the board to this epic" means.
+ *   `project` the same one level up, for tracker mode.
  *   `depth`  how far down the tree a row sits, so "only top-level things" is
  *            expressible without naming types.
+ *
+ * `dueState` is the other derived field, and the one TRACKER mode turns on:
+ * "overdue" as a single clause rather than date arithmetic the user rebuilds
+ * every week, computed once on load so every surface means the same thing by it.
+ *
+ * The BUILTIN VIEWS differ by mode — a manager chasing work does not groom a
+ * backlog — but the FIELD CATALOGUE does not: a filter someone saved in one
+ * mode has to keep resolving in the other.
  *
  * `phase` and `epic` take their options from the LIVE store: both vocabularies
  * are data, not constants, and a filter editor offering last-reload's phases is
@@ -27,14 +36,17 @@ import {
     getFilter as storeGet, listFilters as storeList, saveFilter as storeSave,
 } from './filter_store.js';
 import { ASSIGNEES, HUMAN_AUTHOR, AGENT_AUTHOR } from './data.js';
-import { ITEMS, PHASES, STATUSES, TYPES, itemRef, typeLabelOf } from './backlog_data.js';
+import {
+    DUE_LABEL, ITEMS, PHASES, STATUSES, TRACKER, TYPES, typeLabelOf,
+} from './backlog_data.js';
 
 export const SCOPE = 'backlog';
 
-/** Every epic currently in the store, as `{ value: 'EPIC-0001', label }`. */
-const epicOptions = () => ITEMS
-    .filter((i) => i.type === 'epic')
+/** Every item of one type currently in the store, as `{ value: 'EPIC-0001' }`. */
+const refOptionsFor = (type) => ITEMS
+    .filter((i) => i.type === type)
     .map((i) => ({ value: i.ref, label: `${i.ref} — ${i.title}` }));
+const epicOptions = () => refOptionsFor('epic');
 
 export const FILTER_FIELDS = [
     { key: 'ref', label: 'Reference', type: 'text', get: (i) => i.ref || '' },
@@ -60,12 +72,38 @@ export const FILTER_FIELDS = [
         get options() { return epicOptions(); },
         get: (i) => i.epicRef || '',
     },
+    {
+        // The whole project, at any depth — the tracker's equivalent of `epic`
+        // one level up, and what "everything I am tracking for this client"
+        // resolves to as a single clause.
+        key: 'project', label: 'Project', type: 'enum',
+        get options() { return refOptionsFor('project'); },
+        get: (i) => i.projectRef || '',
+    },
     { key: 'parent', label: 'Parent', type: 'text', get: (i) => i.parentRef || '' },
     { key: 'depth', label: 'Depth', type: 'number', get: (i) => i.depth || 0 },
     {
         key: 'assignee', label: 'Assignee', type: 'enum',
         options: [...ASSIGNEES, 'none'],
         get: (i) => i.assignee || 'none',
+    },
+    {
+        // Who is following it up, as opposed to who is doing it. The pair is
+        // what makes "what did I hand out" a question with an answer.
+        key: 'reporter', label: 'Reporter', type: 'enum',
+        options: [...ASSIGNEES, 'none'],
+        get: (i) => i.reporter || 'none',
+    },
+    { key: 'due', label: 'Target date', type: 'date', get: (i) => i.due || '' },
+    {
+        // The DERIVED standing of that date, so "overdue" is one clause rather
+        // than a date arithmetic expression the user has to rebuild each week —
+        // and so every surface means the same thing by it. Recomputed on load
+        // (see mapItem), not at query time: an item's state must not change
+        // under a filter halfway through a session.
+        key: 'dueState', label: 'Due', type: 'enum',
+        options: Object.entries(DUE_LABEL).map(([value, label]) => ({ value, label })),
+        get: (i) => i.dueState || 'none',
     },
     { key: 'points', label: 'Estimate', type: 'number', get: (i) => i.points },
     { key: 'subsystem', label: 'Subsystem', type: 'text', get: (i) => i.subsystem || '' },
@@ -99,7 +137,67 @@ const and = (...children) => ({ kind: 'group', op: 'AND', children });
  * them as ASTs is what makes "duplicate this and tweak it" a data operation
  * rather than a feature request. */
 
-export const BUILTIN_FILTERS = [
+const OPEN = clause('status', 'none_of', ['done', 'dropped']);
+
+/**
+ * TRACKER views. A different job asks different questions: a manager following
+ * up work handed to other people does not groom a backlog, so "Needs
+ * refinement" and "Ready to start" are not on this rail — and the two questions
+ * a plain backlog cannot ask at all, "what is late" and "what has nobody
+ * committed to a date for", lead it.
+ *
+ * `Unassigned` and `No target date` are deliberately near the top. They are the
+ * holes in the tracker itself, and a tool that only reports the work it knows
+ * about is most confident exactly where it is least complete.
+ */
+const TRACKER_FILTERS = [
+    {
+        key: 'overdue', label: 'Overdue', icon: 'running_with_errors', builtin: true,
+        expr: and(clause('dueState', 'is', 'overdue')),
+    },
+    {
+        key: 'duesoon', label: 'Due this week', icon: 'event_upcoming', builtin: true,
+        expr: and(clause('dueState', 'one_of', ['today', 'soon'])),
+    },
+    {
+        key: 'active', label: 'In progress', icon: 'bolt', builtin: true,
+        expr: and(clause('status', 'is', 'in-progress')),
+    },
+    {
+        key: 'unassigned', label: 'Nobody on it', icon: 'person_off', builtin: true,
+        expr: and(OPEN, clause('assignee', 'is', 'none')),
+    },
+    {
+        key: 'undated', label: 'No target date', icon: 'event_busy', builtin: true,
+        expr: and(OPEN, clause('dueState', 'is', 'none')),
+    },
+    {
+        key: 'byme', label: 'Assigned by me', icon: 'outbound', builtin: true,
+        // Reporter, not assignee: "what I handed out", which is the whole
+        // premise of the mode. Items written before `reporter` existed carry
+        // none, which is why this is a view rather than a global scope.
+        expr: and(OPEN, clause('reporter', 'is', HUMAN_AUTHOR)),
+    },
+    {
+        key: 'mine', label: 'On me', icon: 'person', builtin: true,
+        expr: and(OPEN, clause('assignee', 'is', HUMAN_AUTHOR)),
+    },
+    {
+        key: 'projects', label: 'Projects', icon: 'folder_special', builtin: true,
+        expr: and(clause('type', 'is', 'project')),
+    },
+    {
+        key: 'board', label: 'Everything open', icon: 'list', builtin: true,
+        expr: and(OPEN),
+    },
+    { key: 'all', label: 'Everything', icon: 'list_alt', builtin: true, expr: emptyExpr() },
+    {
+        key: 'done', label: 'Closed', icon: 'check_circle', builtin: true,
+        expr: and(clause('status', 'one_of', ['done', 'dropped'])),
+    },
+];
+
+const BACKLOG_FILTERS = [
     {
         key: 'board', label: 'Backlog', icon: 'workspaces', builtin: true,
         expr: and(clause('status', 'none_of', ['done', 'dropped'])),
@@ -142,6 +240,12 @@ export const BUILTIN_FILTERS = [
     },
 ];
 
+/** The rail's views for this deployment. Rail order IS this order. */
+export const BUILTIN_FILTERS = TRACKER ? TRACKER_FILTERS : BACKLOG_FILTERS;
+
+/* `board` is the key both sets share, so a saved tile layout or a restored tab
+ * pointing at it resolves in either mode — to "Backlog" or to "Everything
+ * open", which are the same question asked of two different stores. */
 export const DEFAULT_FILTER = 'board';
 
 /* ── scope-bound store access ────────────────────────────────────── */
@@ -181,3 +285,12 @@ export function adhocFilter(expr, label) {
 
 /** The expression that selects one whole work package. */
 export const epicExpr = (ref) => and(clause('epic', 'is', ref));
+
+/** The same, one level up: everything under one project, at any depth. */
+export const projectExpr = (ref) => and(clause('project', 'is', ref));
+
+/** Everything on one person's plate, open. What a dashboard row navigates to. */
+export const assigneeExpr = (name) => and(OPEN, clause('assignee', 'is', name || 'none'));
+
+/** One due standing, e.g. everything overdue. */
+export const dueStateExpr = (state) => and(clause('dueState', 'is', state));

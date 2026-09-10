@@ -7,9 +7,10 @@
  * search: type any part of a reference or title, filter by type, pick.
  *
  * The type filter is PRESELECTED to what can legally hold the thing being
- * parented — epics for a story, epics and stories for a task — because that is
- * the answer nine times in ten, and it is still loosened with one click rather
- * than being a hard constraint the user has to fight.
+ * parented — projects for an epic, epics and projects for a story — because
+ * that is the answer nine times in ten, and it is still loosened with one click
+ * rather than being a hard constraint the user has to fight. The rules
+ * themselves live in ./backlog_data.js, next to the store they describe.
  *
  * Its own overlay rather than a ManagedWindow: it opens ON TOP of the New item
  * dialog, which is itself a modal, and it stacks in the same z-tier the filter
@@ -18,29 +19,18 @@
  */
 
 import { esc } from './data.js';
-import { ITEMS, TYPES, TYPE_ICON, typeLabelOf } from './backlog_data.js';
+import {
+    ALL_TYPES, ITEMS, TYPES, TYPE_ICON, TYPE_LABEL, childTypesFor, parentTypesFor, typeLabelOf,
+} from './backlog_data.js';
 
 const icon = (name) => `<span class="material-symbols-outlined">${name}</span>`;
 
-/** Types that may legally be the parent of `childType`. */
-export const parentTypesFor = (childType) =>
-    childType === 'story' ? ['epic']
-    : childType === 'task' ? ['epic', 'story']
-    : [];
-
-/**
- * Types that may legally hang UNDER `parentType` — the mirror of the above, and
- * what the picker preselects when attaching an existing item as a child.
- *
- * An epic offers stories and a story offers tasks: the level immediately below.
- * A task under an epic is legal (parentTypesFor says so) but it is not what you
- * mean nine times in ten, and the picker's type chips loosen this in one click
- * rather than enforcing it.
- */
-export const childTypesFor = (parentType) =>
-    parentType === 'epic' ? ['story']
-    : parentType === 'story' ? ['task']
-    : [];
+/* The hierarchy rules live in ./backlog_data.js — `parentTypesFor` and
+ * `childTypesFor` — beside the store they describe, and are re-exported here
+ * because the picker is where most callers meet them. One definition: the same
+ * two functions answer the picker's chips, the New item form's Parent row and
+ * the item page's "add an existing child". */
+export { childTypesFor, parentTypesFor };
 
 /**
  * Open the picker.
@@ -59,8 +49,27 @@ export function openItemPicker({
     title = 'Find an item', types = [], exclude = 0, excludeIds = [], current = 0,
 } = {}) {
     const blocked = new Set([...(excludeIds || []), exclude].map(Number).filter(Boolean));
+
+    /**
+     * Which type chips to draw. The invariant: EVERY type that could be active
+     * has a chip, so the filter is always something the user can undo.
+     *
+     * Three sources, and each one is a hole the others leave:
+     *   - what this deployment offers (`TYPES`);
+     *   - what is actually in the store — `TYPES` omits `project` outside
+     *     tracker mode, and a chip set built from it alone would make a PROJ-
+     *     record, written by whoever ran the same store as a tracker,
+     *     permanently excluded here rather than merely unfiltered;
+     *   - what the CALLER preselected — parenting an epic preselects `project`,
+     *     and a preselected type with no chip is a dialog showing nothing with
+     *     no control that explains why or lets you widen it.
+     */
+    const chipTypes = ALL_TYPES.filter((t) => TYPES.includes(t)
+        || types.includes(t)
+        || ITEMS.some((i) => i.type === t));
+
     return new Promise((resolve) => {
-        const active = new Set(types.length ? types : TYPES);
+        const active = new Set(types.length ? types : chipTypes);
         let query = '';
         let cursor = 0;                 // index into the rendered result list
         let results = [];
@@ -77,7 +86,7 @@ export function openItemPicker({
                             aria-label="Cancel">${icon('close')}</button>
                 </div>
                 <div class="bd-picker__filters" role="group" aria-label="Filter by type">
-                    ${TYPES.map((t) => `
+                    ${chipTypes.map((t) => `
                         <button type="button" class="bd-picker__chip${active.has(t) ? ' bd-picker__chip--on' : ''}"
                                 data-type="${t}" aria-pressed="${active.has(t)}">
                             ${icon(TYPE_ICON[t])}${esc(typeLabelOf(t))}
@@ -224,7 +233,7 @@ export function attachParentPicker(el, { typeOf, value = 0, excludeId = null, on
     const root = document.createElement('div');
     root.className = 'ea-picker';
     root.innerHTML = `
-        <input class="ea-picker__display" type="text" readonly
+        <input class="ea-tin ea-picker__display" type="text" readonly
                placeholder="none — click to search">
         <button type="button" class="ea-btn ea-picker__btn" aria-label="Find a parent">
             <span class="material-symbols-outlined">search</span>
@@ -256,7 +265,7 @@ export function attachParentPicker(el, { typeOf, value = 0, excludeId = null, on
     const open = async () => {
         const childType = typeOf?.() || 'task';
         const picked = await openItemPicker({
-            title: `Parent for this ${(TYPE_LABEL_FOR[childType] || 'item').toLowerCase()}`,
+            title: `Parent for this ${(TYPE_LABEL[childType] || 'item').toLowerCase()}`,
             types: parentTypesFor(childType),
             current,
             exclude: excludeId?.() || 0,
@@ -278,4 +287,3 @@ export function attachParentPicker(el, { typeOf, value = 0, excludeId = null, on
     };
 }
 
-const TYPE_LABEL_FOR = { epic: 'Epic', story: 'Story', task: 'Task' };

@@ -6,13 +6,17 @@ are plain markdown files that an AI coding agent edits directly and a human
 triages through a tiling UI — no API round-trip, no `gh`-token authorship
 ambiguity, git-tracked alongside the code they describe.
 
+It also runs as a **[tracker](#tracker-mode)** (`./run.sh --tracker`) — a
+follow-up list for work you have handed to other people, with target dates and
+a dashboard of what is late.
+
 ![BugDesk's queue view: a filterable bug list with priority/status/assignee columns, a filter rail on the left, and a team inspector on the right](screenshot.png)
 
 ```
 bugdesk/
   server/    C# bridge (.NET 10 minimal API): serves ui/ + JSON API over both stores
   ui/        Tiling shell + bug/backlog UI, depending on the FlexDesk package
-  skills/    /bugs and /backlog — Claude Code skills that teach an agent the formats
+  skills/    /bugs, /backlog and /tracker — Claude Code skills that teach an agent the formats
   scripts/   sync-flexdesk.mjs — refresh ui/vendor/flexdesk/ from the npm package
   examples/  sample bugs and backlog items for --seed
   run.sh     dotnet run wrapper (Linux/macOS/WSL)
@@ -24,13 +28,13 @@ bugdesk/
 | | bugs | backlog |
 |---|---|---|
 | what it holds | what broke | what you meant to build |
-| files | `BUG-NNNN.md` | `EPIC-`/`STORY-`/`TASK-NNNN.md` |
+| files | `BUG-NNNN.md` | `PROJ-`/`EPIC-`/`STORY-`/`TASK-NNNN.md` |
 | default location | `./bugs` | `./backlog`, beside the bug store |
 | override | `BUGDESK_BUGS` | `BUGDESK_BACKLOG` |
 | lifecycle | open → investigation ⇄ testing → closed | per type — see below |
-| distinguishing fields | severity, subsystem | parent, phase, points, acceptance criteria |
-| type | `bug`, `regression`, `chore` | `epic`, `story`, `task` |
-| skill | [`/bugs`](skills/bugs/SKILL.md) | [`/backlog`](skills/backlog/SKILL.md) |
+| distinguishing fields | severity, subsystem | parent, phase, points, acceptance criteria, target date |
+| type | `bug`, `regression`, `chore` | `project`, `epic`, `story`, `task` |
+| skill | [`/bugs`](skills/bugs/SKILL.md) | [`/backlog`](skills/backlog/SKILL.md), [`/tracker`](skills/tracker/SKILL.md) |
 
 Both are directories of markdown files — a YAML-frontmatter block plus
 `## Description` and `## Comments` sections (the backlog adds
@@ -53,9 +57,13 @@ EPIC-0001  Auth rewrite            phase: foundation
  └ STORY-0008  Revoke propagation  parent: 1
 ```
 
-IDs are **one sequence shared by all three prefixes**, which is what makes
+IDs are **one sequence shared by all four prefixes**, which is what makes
 `parent: 7` unambiguous without also naming a type — and what lets a bug point
 at backlog work with `links: [relates STORY-7]`.
+
+`PROJ` is the fourth level, above epics. It is offered in the Type select only
+in [tracker mode](#tracker-mode), but it is a legal record everywhere: a store
+written by a tracker opens correctly in a plain backlog, and vice versa.
 
 A **phase** is a milestone label carried on an *epic* (`phase: foundation`);
 stories and tasks inherit it from their nearest ancestor. So a work package
@@ -81,6 +89,8 @@ that the checklist never parsed survives the first time anyone ticks a box.
 ```bash
 ./run.sh                              # http://127.0.0.1:8766, ./bugs + ./backlog
 ./run.sh --seed                       # + pre-seed empty stores with the examples
+./run.sh --tracker                    # TRACKER mode — see below
+./run.sh --tracker --seed             # + an example project with dated work on it
 BUGDESK_BUGS=/path/to/bugs ./run.sh   # backlog follows as its sibling
 BUGDESK_USER=alice ./run.sh           # pick a profile without the first-run prompt
 BUGDESK_HUMAN=alice BUGDESK_AGENT=claude ./run.sh
@@ -91,6 +101,7 @@ On Windows, `run.ps1` is the same wrapper for PowerShell (5.1 or 7):
 ```powershell
 .\run.ps1                     # http://127.0.0.1:8766, .\bugs + .\backlog
 .\run.ps1 --seed              # + pre-seed empty stores with the examples
+.\run.ps1 --tracker           # TRACKER mode
 $env:BUGDESK_BUGS='C:\path\to\bugs'; .\run.ps1
 $env:BUGDESK_HUMAN='alice'; $env:BUGDESK_AGENT='claude'; .\run.ps1
 ```
@@ -236,8 +247,8 @@ Same-origin JSON, backed by the markdown files:
 | POST | `/api/backlog/{id}` | update frontmatter, `## Description` or `## Acceptance criteria` |
 | POST | `/api/backlog/{id}/comments` | append a comment |
 | POST | `/api/backlog/{id}/criteria` | tick / add / edit / remove one acceptance criterion |
-| GET  | `/api/backlog/meta` | counts by status/type/assignee, the phase vocabulary, and the per-type lifecycle ladders |
-| GET  | `/api/config` | resolved names, whether a profile exists, the profiles there are |
+| GET  | `/api/backlog/meta` | counts by status/type/assignee, the phase vocabulary, the file prefixes, how many items carry a target date, and the per-type lifecycle ladders |
+| GET  | `/api/config` | the **mode** (`bugs`/`tracker`), resolved names, whether a profile exists, the profiles there are |
 | POST | `/api/config/user` | adopt a profile by name (what the first-run screen posts) |
 | GET/POST | `/api/user/settings` | the UI's own preference bag, stored in the profile |
 | GET/POST | `/api/filters` | the user's saved queue filters — **per profile** |
@@ -287,13 +298,18 @@ queue:
 | | fields |
 |---|---|
 | bugs | id, priority, severity, status, type, summary, subsystem, assignee, labels, created, updated, comments, last comment by/on |
-| backlog | reference, type, status, title, **phase**, **epic**, **parent**, **depth**, assignee, estimate, subsystem, labels, children, criteria met/total, created, updated, comments, last comment by |
+| backlog | reference, type, status, title, **phase**, **epic**, **project**, **parent**, **depth**, assignee, **reporter**, **target date**, **due** (the derived standing), estimate, subsystem, labels, children, criteria met/total, created, updated, comments, last comment by |
 
 Two of the backlog's fields exist only because of the hierarchy, and they are
 what make the tree navigable by *query* rather than only by scrolling:
 `epic` is the owning epic of any item however deep, so `Epic is EPIC-0001`
-selects a whole work package; `depth` expresses "only top-level things" without
-naming types.
+selects a whole work package; `project` is the same one level up; `depth`
+expresses "only top-level things" without naming types.
+
+The **builtin views differ by mode** — a manager chasing work does not groom a
+backlog, so the tracker's rail leads with Overdue and drops "Needs refinement"
+— but the **field catalogue does not**, so a filter saved in one mode keeps
+resolving in the other.
 
 Saved filters carry a **scope**, so the two rails never list each other's. They
 live in your per-user profile, because two people on one repo have different
@@ -309,7 +325,11 @@ contradict it (BACKLOG lit above, bug filters below). The chip and the rail read
 the same `activeTopNavKind(wm)`, so they cannot disagree.
 
 The Backlog side carries **Views** (the builtins), **My filters**, and **Work
-packages** — phases and their epics as a navigable tree. Clicking an epic scopes
+packages** — phases and their epics as a navigable tree. In tracker mode that
+last section is **Projects** instead, each with its overdue count: one section
+either way, because the store's shape is what you navigate there and the shape
+differs by mode. The Tracker dashboard gets the same rail — it is a view over
+the same store, so its saved filters belong one click away. Clicking an epic scopes
 the board to that whole subtree, which is the same ad-hoc `epic is …`
 expression the tree's own "Show only this work package" produces.
 
@@ -320,9 +340,16 @@ The rail navigates; it does not create.
 There is one dialog, and one Type select spanning both stores:
 
 ```
-New item ▸ Type:  Bug · Regression · Chore  →  bugs/BUG-NNNN.md
-                  Epic · Story · Task       →  backlog/{EPIC,STORY,TASK}-NNNN.md
+New item ▸ Type:  Bug · Regression · Chore         →  bugs/BUG-NNNN.md
+                  [Project ·] Epic · Story · Task  →  backlog/{PROJ,EPIC,STORY,TASK}-NNNN.md
 ```
+
+**The form follows the Type.** A bug is asked for a severity, a story for a
+parent and an estimate, a project for the phase its descendants inherit — and
+in tracker mode every backlog type is also asked for a target date. Whether a
+Parent row appears at all is derived from the hierarchy rules rather than listed
+per type, which is why an epic is offered one in tracker mode (there are
+projects to hold it) and not outside it (there are none).
 
 **New Item** in the top bar opens it with nothing preselected — you say what the
 thing is, and that decides which store it lands in. Two per-store buttons asked
@@ -335,7 +362,7 @@ sits beside the list the new record will appear in:
 | page | buttons |
 |---|---|
 | Bugs | **Bug** — opens the full mask, with a markdown editor and link staging |
-| Backlog | **Epic · Story · Task** — the dialog, preselected and titled for the type |
+| Backlog | **[Project ·] Epic · Story · Task** — the page, preselected and titled for the type |
 
 ## Hierarchy
 
@@ -365,6 +392,7 @@ The status **vocabulary** is shared by all three types. The **ladder** each one
 walks is not:
 
 ```
+PROJECT draft ──────────────▶ in-progress ──────────────▶ done
 EPIC    draft ──▶ refined ──▶ in-progress ──────────────▶ done
 STORY   draft ──▶ refined ──▶ in-progress ──▶ review ──▶ done
 TASK    draft ──────────────▶ in-progress ──────────────▶ done
@@ -383,7 +411,9 @@ TASK    draft ──────────────▶ in-progress ──�
 
 **An epic is never `review`** — an epic is not reviewed as a unit, its stories
 are, one at a time. **A task is never `refined`** — it inherits its story's
-acceptance criteria, so it has nothing of its own to refine. Sharing the
+acceptance criteria, so it has nothing of its own to refine. **A project is
+neither**, for both reasons at once: it is a container with no criteria of its
+own, and what gets reviewed is the work inside it. Sharing the
 vocabulary keeps one status enum in the filter editor and one set of pills in
 the CSS; varying the ladder is what stops either surface offering a transition
 that means nothing.
@@ -393,12 +423,142 @@ with the ladder in the error, and retyping an item onto a shorter ladder clamps
 its status **downward** — a story in `review` demoted to a task becomes an
 `in-progress` task, never a `done` one, because nobody decided it was done.
 
+## Tracker mode
+
+```bash
+./run.sh --tracker          # or BUGDESK_MODE=tracker ./run.sh
+```
+
+A different job, over the same files. The bug queue and the backlog are things
+you work **in**: you pick something up, change it, close it. A tracker is
+something you work **from** — a record of work you have handed to other people,
+most of whom never open this checkout and some of whom have no idea it exists.
+
+**Nobody else updates it.** Everything in it arrived because you, or an agent on
+your behalf, put it there after a meeting, an email or a message. That is the
+fact the whole mode is designed around, and it is why the dashboard leads with
+what the tracker *cannot* tell you as prominently as with what it can.
+
+Tracker mode **adds and relabels; it never removes**. The bug store is still
+there, the same markdown is on disk, and a store written in one mode opens
+correctly in the other.
+
+| | changes |
+|---|---|
+| top nav | **TRACKER · BUGS · TICKETS** — the dashboard leads and is the landing page; BACKLOG reads "Tickets" (the kind id is unchanged, so saved layouts survive) |
+| types | adds **`project`** above epics, in the Type select and the pickers |
+| fields | **`due`** (target date) and **`reporter`** on every backlog record |
+| board | a **Due** column, sorted chronologically, painted as a pill |
+| left rail | **Projects** instead of Work packages; views lead with Overdue |
+| skill | [`/tracker`](skills/tracker/SKILL.md) |
+
+### The project level
+
+```
+PROJ-0001  Q4 vendor migration          due: 2026-12-15
+ ├ STORY-0002  Finance feed cutover     assignee: priya  due: 2026-09-05
+ │  └ TASK-0003  DPA to legal
+ ├ STORY-0004  Operations feed cutover  assignee: sam    due: 2026-10-01
+ └ TASK-0005   Confirm analytics owner  assignee:        due:
+```
+
+**A story or a task may hang directly off a project** — `TASK-0005` above does.
+Most tracked work is one or two levels deep, and an epic that exists only to
+hold one task is a record nobody reads, so the level in between is optional
+rather than required. The picker preselects the conventional level and loosens
+in one click.
+
+A project is a **container**, so it is never `refined` and never in `review`:
+it has no acceptance criteria of its own, and its stories are what get
+reviewed, one at a time. Its ladder is `draft → in-progress → done`, and the
+bridge rejects anything else with the ladder in the error.
+
+### Target dates
+
+`due: 2026-09-05`, or **empty**. Empty is a real state, not a missing value: it
+means nobody has committed to a date, which is exactly what a tracker exists to
+surface. The bridge rejects anything that is not `YYYY-MM-DD` rather than
+storing it — a date that cannot be parsed can never be overdue, so it would sit
+in the one blind spot this tool must not have.
+
+"Overdue" is computed **in the browser**, from the reader's own today. A server
+answering with *its* today is wrong the moment a tab is left open past midnight
+or someone is in another timezone. It is one definition
+(`dueState` in `ui/js/ticketdesk/backlog_data.js`) read by the dashboard, the
+Due column and the `dueState` filter field, so the three cannot disagree.
+
+Two states are deliberately **not** on the schedule:
+
+- **`none`** — no date. Not "on time": unanswerable, and given its own section.
+- **`done`** — closed. A date that passed after the work was delivered must not
+  burn red forever.
+
+### `reporter` — what makes "what I assigned" answerable
+
+`assignee` says whose court something is in. `reporter` says whose *list* it is
+on. Without the second field, "what did I hand out" has no answer at all — so
+every record created in BugDesk stamps `reporter` with the configured human
+name, and the dashboard offers **Everyone / Assigned by me / Out with others**.
+
+It is a scope rather than the default because records written before the field
+existed carry none, and a dashboard that silently hid all of them would look
+like a tracker with nothing in it.
+
+### The dashboard
+
+Four sections, in the order a manager reads them:
+
+| section | what it answers |
+|---|---|
+| **Overdue** | worst first, **with a name on every row** — "3 overdue" is a number you nod at, "Priya, 9 days late, the finance sign-off" is one you act on |
+| **Due in the next 7 days** | what is about to become the first section |
+| **Who has what** | one row per person, sorted by overdue count then by how late their worst item is — the list is read top-down and stopped at, so the order *is* the priority. Unassigned work is a row here called "Nobody" |
+| **Needs a name or a date** | open work with no assignee or no target date — the holes in the tracker itself |
+
+The last one is the point. A tool that reports only on the work it knows about
+is most confident exactly where it is least complete, and an undated item is
+invisible to every other question on the page.
+
+Every row opens the item; every heading opens the same set as a filtered list;
+right-click gives "everything on this person" and "everything in this project".
+
+### Keeping it current with an agent
+
+The [`/tracker`](skills/tracker/SKILL.md) skill teaches an agent the format, and
+[`INTAKE.md`](skills/tracker/INTAKE.md) is the operation the mode exists for:
+
+```
+/tracker intake <meeting minutes | email thread | chat export | standup notes>
+```
+
+It extracts statements about tracked work, matches them to items, **shows you
+the whole changeset before writing anything**, and records a provenance comment
+on every item it touches — quoting the source, dated to the *source's* date, and
+saying what it could not resolve.
+
+The rules that matter are the refusals, and they are in the skill because an
+agent writing a lot of records at once from prose, about people who are not
+there to correct it, is the most dangerous thing in this repo:
+
+- **Never invent a target date.** Not to fill a gap, not because one seems
+  reasonable. An empty `due` is information.
+- **Never move a date without a comment saying why.** The slip history is
+  usually the real finding.
+- **A missed date with no replacement stays missed.** Moving it forward to keep
+  the tracker tidy deletes the fact you needed.
+- **If the source does not say it, it did not happen.** "The migration went
+  well" is a comment, not a `done`.
+- **Silence is a finding** — an item nobody mentioned gets reported to you, not
+  commented on.
+
 ## Claude Code integration
 
 BugDesk ships two skills that teach Claude the file formats, the lifecycles,
 and how to read/write the stores directly — no server or API calls required,
 just the markdown files:
 
+- [`skills/tracker/SKILL.md`](skills/tracker/SKILL.md) — `/tracker`, including
+  the source→update pass in [`INTAKE.md`](skills/tracker/INTAKE.md)
 - [`skills/bugs/SKILL.md`](skills/bugs/SKILL.md) — `/bugs`
 - [`skills/backlog/SKILL.md`](skills/backlog/SKILL.md) — `/backlog`, including
   `/backlog refine`, whose playbook is
@@ -412,11 +572,13 @@ stores via `BUGDESK_BUGS`):
 # available in every project:
 ln -s "$(pwd)/skills/bugs"    ~/.claude/skills/bugs
 ln -s "$(pwd)/skills/backlog" ~/.claude/skills/backlog
+ln -s "$(pwd)/skills/tracker" ~/.claude/skills/tracker
 
 # or scoped to one project:
 mkdir -p /path/to/your-project/.claude/skills
 ln -s "$(pwd)/skills/bugs"    /path/to/your-project/.claude/skills/bugs
 ln -s "$(pwd)/skills/backlog" /path/to/your-project/.claude/skills/backlog
+ln -s "$(pwd)/skills/tracker" /path/to/your-project/.claude/skills/tracker
 ```
 
 Then make sure `BUGDESK_AGENT` matches however you start the BugDesk server, so

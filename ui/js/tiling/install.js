@@ -104,6 +104,8 @@ export async function installTilingShell({ eventBus, logger, runtime } = {}) {
     const pageStubsContent = createPageStubsContent({ api: window.pywebview?.api, eventBus });
     let ticketDeskContent = {};
     let backlogContent = {};
+    let trackerContent = {};
+    const trackerMode = window.__BUGDESK_CONFIG__?.mode === 'tracker';
     // loadData()/loadBacklog() fetch both stores from the bridge and populate
     // the live stores BEFORE the first page renders (wm.load() below) so
     // queues/backlog/team start with real data rather than empty arrays.
@@ -125,10 +127,20 @@ export async function installTilingShell({ eventBus, logger, runtime } = {}) {
 
         ticketDeskContent = createTicketDeskContent({ eventBus });
         backlogContent = { ...createBacklogContent({ eventBus }), ...createNewItemContent({ eventBus }) };
+        // Tracker mode only, and imported only then: the dashboard is dead
+        // weight in a deployment whose taxonomy has no chip pointing at it.
+        if (trackerMode) {
+            const { createTrackerContent } = await import('../ticketdesk/tracker_pages.js');
+            trackerContent = createTrackerContent({ eventBus });
+        }
     } catch (err) {
         console.error('[bugdesk] page registration failed', err);
     }
-    const content = createContentRegistry({ ...pageStubsContent, ...ticketDeskContent, ...backlogContent });
+    // Order is the override order. Tracker last: it deliberately re-points
+    // `home` at the dashboard (see createTrackerContent).
+    const content = createContentRegistry({
+        ...pageStubsContent, ...ticketDeskContent, ...backlogContent, ...trackerContent,
+    });
 
     // The host port (see @flexdesk/host's createPywebviewHost doc comment —
     // "the adapter a standalone consumer copies"). The bridge implements
@@ -336,7 +348,7 @@ function _installTicketActions(wm) {
     const wrap = document.createElement('div');
     wrap.className = 'td-topbar-actions';
     wrap.innerHTML = `
-        <button class="ea-btn" data-td="search" title="Search bugs">
+        <button class="ea-btn" data-td="search" title="Search">
             <span class="material-symbols-outlined">search</span> Search</button>
         <button class="ea-btn ea-btn--primary" data-td="item" title="New item">
             <span class="material-symbols-outlined">add</span> New Item</button>`;

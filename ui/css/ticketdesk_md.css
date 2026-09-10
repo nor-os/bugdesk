@@ -96,6 +96,22 @@
 
 /* ── rendered markdown ──────────────────────────────────────────── */
 
+/* Match the FIELDS, not the document. `body` is 12px (--font-size-sm) and
+   .td-md inherited it, so a description and a comment rendered a step larger
+   than every label and input on the same page — the free text read as the
+   headline of a form it is only one section of. The composer is set to the same
+   size just below, so what you type and what you get are the same text. */
+.td-md,
+.td-mde__area { font-size: var(--ea-font-body, 11px); }
+
+/* Headings inside a body stay in proportion to it: these are the levels a
+   description actually uses, and they are relative so the block scales with the
+   rule above rather than being pinned to it. */
+.td-md h1 { font-size: 1.25em; }
+.td-md h2 { font-size: 1.15em; }
+.td-md h3 { font-size: 1.06em; }
+.td-md h4, .td-md h5, .td-md h6 { font-size: 1em; }
+
 .td-md > :first-child { margin-top: 0; }
 .td-md > :last-child { margin-bottom: 0; }
 .td-md h1, .td-md h2, .td-md h3,
@@ -105,10 +121,6 @@
     font-weight: 600;
     line-height: 1.3;
 }
-.td-md h1 { font-size: 14px; }
-.td-md h2 { font-size: 13px; }
-.td-md h3 { font-size: 12px; }
-.td-md h4, .td-md h5, .td-md h6 { font-size: 11px; }
 .td-md p { margin: 0 0 6px; }
 .td-md ul, .td-md ol { margin: 0 0 6px; padding-left: 18px; }
 .td-md li { margin: 1px 0; }

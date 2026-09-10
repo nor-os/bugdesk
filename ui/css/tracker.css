@@ -1,0 +1,162 @@
+/* ════════════════════════════════════════════════════════════════════
+   tracker.css — TRACKER mode: the dashboard, and the target-date pill
+   it shares with the board, the rail and the item page.
+
+   Same tokens and the same compact density as the rest of the pages
+   (see ticketdesk.css). Only what tracker mode adds lives here; nothing
+   in this file loads any differently in the default mode, it simply has
+   nothing to match.
+   ──────────────────────────────────────────────────────────────────── */
+
+/* ── the target-date pill ────────────────────────────────────────────
+   The one place "how late is this" is styled, used by the board's Due
+   column, the child rows on an item page and every dashboard row.
+
+   Colour is the whole point: overdue reads as an error, due-today as a
+   warning, and anything further out stays quiet so it does not compete.
+   `--none` is deliberately NOT quiet-and-grey-and-ignorable: an item with
+   no date is a hole in the tracker, so it is dashed rather than absent. */
+
+.bd-due {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: var(--radius-pill, 999px);
+    font-size: 10px;
+    font-weight: var(--font-weight-semibold, 600);
+    letter-spacing: 0.03em;
+    border: 1px solid transparent;
+    white-space: nowrap;
+}
+.bd-due--overdue { color: #f07178; background: rgb(240 113 120 / 14%); border-color: #7d3a3e; }
+.bd-due--today   { color: #ff9800; background: rgb(255 152 0 / 12%);   border-color: #7d5410; }
+.bd-due--soon    { color: #dcdcaa; background: rgb(220 220 170 / 10%); border-color: #6f6b3f; }
+.bd-due--later   { color: var(--text-muted, #888); background: transparent; border-color: #3a3a3a; }
+.bd-due--done    { color: var(--text-dim, #666);  background: transparent; border-color: transparent; }
+.bd-due--none {
+    color: var(--text-dim, #666);
+    background: transparent;
+    border: 1px dashed #4a4a4a;
+    font-weight: var(--font-weight-regular, 400);
+}
+
+/* An overdue count in the left rail, next to the plain subtree count. */
+.td-nav__badge--late {
+    margin-left: 0;
+    color: #f07178;
+    font-weight: var(--font-weight-semibold, 600);
+}
+
+/* ── the dashboard ─────────────────────────────────────────────────── */
+
+.tk-page { display: flex; flex-direction: column; min-height: 0; }
+
+.tk-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+    gap: 10px;
+    padding: 10px;
+    align-content: start;
+    overflow-y: auto;
+    min-height: 0;
+}
+
+.tk-sec {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    border: 1px solid var(--ea-border, #333);
+    border-radius: 2px;
+    background: var(--ea-bg-content, #212121);
+}
+/* Overdue spans the full width when the grid has room for two columns:
+   it is the section the page exists for, and a list of names is unreadable
+   squeezed into half a screen. */
+.tk-sec[data-sec="overdue"] { grid-column: 1 / -1; }
+
+.tk-sec__head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 8px;
+    border-bottom: 1px solid var(--ea-border, #333);
+    background: var(--ea-bg-chrome, #1a1a1a);
+    font-size: var(--ea-font-body, 11px);
+}
+.tk-sec__head .material-symbols-outlined { font-size: 15px; color: var(--text-muted, #888); }
+.tk-sec[data-sec="overdue"] .tk-sec__head .material-symbols-outlined { color: #f07178; }
+.tk-sec__body { padding: 2px 0; max-height: 340px; overflow-y: auto; }
+
+.tk-empty {
+    padding: 10px;
+    font-size: var(--ea-font-body, 11px);
+    color: var(--text-muted, #888);
+}
+
+/* ── a row ─────────────────────────────────────────────────────────── */
+
+.tk-row {
+    display: grid;
+    grid-template-columns: 18px 74px 1fr 110px 96px auto;
+    align-items: center;
+    gap: 8px;
+    padding: 3px 8px;
+    font-size: var(--ea-font-body, 11px);
+    cursor: pointer;
+    border-left: 2px solid transparent;
+}
+.tk-row:hover { background: rgba(255, 255, 255, 0.04); }
+.tk-row:focus-visible { outline: 1px solid var(--accent-bright, #007acc); outline-offset: -1px; }
+.tk-sec[data-sec="overdue"] .tk-row { border-left-color: rgb(240 113 120 / 45%); }
+
+.tk-row__ref { font-family: ui-monospace, Consolas, monospace; font-size: 10px; }
+.tk-row__title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tk-row__who,
+.tk-row__due { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tk-row__who { color: var(--text-muted, #888); }
+/* "nobody" is a value, not a blank — it is one of the two things this page
+   is looking for, so it reads as a state rather than as missing text. */
+.tk-row__nobody { color: var(--text-dim, #666); font-style: italic; }
+
+/* ── who has what ──────────────────────────────────────────────────── */
+
+.tk-person {
+    display: grid;
+    grid-template-columns: 18px minmax(90px, 160px) 1fr auto;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 8px;
+    font-size: var(--ea-font-body, 11px);
+    cursor: pointer;
+}
+.tk-person:hover { background: rgba(255, 255, 255, 0.04); }
+.tk-person:focus-visible { outline: 1px solid var(--accent-bright, #007acc); outline-offset: -1px; }
+.tk-person .material-symbols-outlined { font-size: 15px; color: var(--text-muted, #888); }
+.tk-person__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tk-person__bar { display: flex; gap: 4px; flex-wrap: wrap; min-width: 0; }
+.tk-person__count { color: var(--text-dim, #666); font-family: ui-monospace, Consolas, monospace; font-size: 10px; }
+
+.tk-pill {
+    display: inline-block;
+    padding: 0 6px;
+    border-radius: var(--radius-pill, 999px);
+    font-size: 9.5px;
+    color: var(--text-muted, #888);
+    border: 1px solid #3a3a3a;
+    white-space: nowrap;
+}
+.tk-pill--overdue { color: #f07178; border-color: #7d3a3e; background: rgb(240 113 120 / 12%); }
+.tk-pill--none { color: var(--text-dim, #666); border-style: dashed; }
+
+/* ── the scope switch ──────────────────────────────────────────────── */
+
+.tk-scopes { display: inline-flex; gap: 2px; }
+.tk-scope--on {
+    color: var(--text-primary, #e0e0e0);
+    border-color: var(--accent-bright, #007acc);
+    background: rgb(0 122 204 / 16%);
+}
+
+@media (max-width: 760px) {
+    .tk-row { grid-template-columns: 18px 68px 1fr auto; }
+    .tk-row__who { display: none; }
+}

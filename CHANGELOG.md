@@ -3,6 +3,93 @@
 Notable changes to BugDesk. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.3.0 — 2026-09-10
+
+### Added
+
+**Tracker mode** (`./run.sh --tracker`, or `BUGDESK_MODE=tracker`). A second
+job for the same files: a follow-up list for work handed to other people, most
+of whom never open the checkout. Nobody else updates it, which is the fact the
+whole mode is designed around.
+
+It **adds and relabels; it never removes**. The bug store is still there, the
+markdown on disk is unchanged, and a store written in one mode opens correctly
+in the other — `project`, `due` and `reporter` are legal records everywhere,
+they are simply not *offered* outside tracker mode.
+
+- **A `project` level above epics** (`PROJ-NNNN.md`, one id sequence with the
+  other three). A story or a task may hang **directly off a project**: most
+  tracked work is one or two levels deep, and an epic that exists only to hold
+  one task is a record nobody reads. A project is a container, so it is never
+  `refined` and never in `review` — its ladder is `draft → in-progress → done`,
+  and the bridge rejects anything else with the ladder in the error.
+- **Target dates.** `due: YYYY-MM-DD`, or **empty** — and empty is a real state,
+  not a missing value: it means nobody has committed to a date, which is exactly
+  what a tracker exists to surface. The bridge **rejects** a date it cannot
+  parse rather than storing it, because a date that never parses can never be
+  overdue; it would sit in the one blind spot this tool must not have.
+- **"Overdue" is computed in the browser**, from the reader's own today. A
+  server answering with *its* today is wrong the moment a tab is left open past
+  midnight or somebody is in another timezone. One definition (`dueState`) is
+  read by the dashboard, the board's Due column and the `dueState` filter field,
+  so the three cannot disagree. `none` (no date) and `done` (closed) are
+  deliberately off the schedule rather than being treated as "on time".
+- **A `reporter` field** — whose *list* something is on, as opposed to
+  `assignee`, whose court it is in. Without it "what did I hand out" has no
+  answer at all. Stamped on create from the configured human name, and offered
+  as a dashboard scope rather than as the default, because records written
+  before it existed carry none.
+- **The dashboard**, the landing page in tracker mode: Overdue (worst first,
+  with a name on every row), Due in the next 7 days, Who has what (sorted by
+  overdue count, then by how late their worst item is — the list is read
+  top-down and stopped at, so the order *is* the priority), and **Needs a name
+  or a date**. That last section is the point: a tool that reports only on the
+  work it knows about is most confident exactly where it is least complete.
+- **A Due column** on the board, sorted chronologically and painted as a pill;
+  **Projects** in the left rail in place of Work packages, each with its overdue
+  count; and rail views that lead with Overdue instead of Needs refinement.
+- **`/tracker`**, a Claude Code skill, with
+  [`INTAKE.md`](skills/tracker/INTAKE.md) — the operation the mode exists for:
+  turning meeting minutes, an email thread or a chat log into tracker edits. It
+  shows the whole changeset before writing anything and records a provenance
+  comment on every item it touches, quoting the source and dated to the
+  *source's* date. Its rules are mostly refusals, because an agent writing many
+  records at once from prose, about people who are not there to correct it, is
+  the most dangerous thing in this repo: never invent a date, never move one
+  without saying why, a missed date with no replacement stays missed, and if the
+  source does not say it then it did not happen.
+- `examples/tracker/` and `--tracker --seed`, so the dashboard has something to
+  be late about on a first run.
+
+### Changed
+
+- **The board's columns are derived from a spec** rather than from a header
+  array, a row array and hardcoded column indices in `renderCell`. Three
+  hand-kept-in-step lists are fine only while the column list is fixed, and it
+  no longer is — one conditional column is how a status pill ends up painted
+  over an assignee.
+- **The hierarchy rules are one definition.** `parentTypesFor` / `childTypesFor`
+  moved to `backlog_data.js` beside the store they describe, and the flat
+  `parentOptions` list they superseded is gone rather than left to drift. The
+  picker, the New item form and the item page all read the same pair, and a test
+  asserts the two are exact mirrors.
+- **Rendered markdown matches the fields, not the document.** Descriptions and
+  comments inherited the 12px body size while every label and input beside them
+  is 11px, so free text read as the headline of a form it is one section of.
+  Headings inside a body are now relative, and the composer is set to the same
+  size, so what you type and what you get are the same text.
+
+### Fixed
+
+- **The Parent picker's display was visibly larger than every control beside
+  it.** It is an `<input>`, and an input does not inherit the page font — it
+  takes the browser's own (~13.3px Arial). Now matched to the choice control it
+  sits next to.
+- The item picker could not reach a type this deployment does not offer, so a
+  `PROJ-` record written by a tracker was permanently unfindable in a plain
+  backlog — not merely unfiltered, but with no control to say so. Its chips now
+  cover every type actually in the store.
+
 ## 0.2.0 — 2026-09-10
 
 BugDesk stops being a single-user bug tracker. It now knows who is using it,
