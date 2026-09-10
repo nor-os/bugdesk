@@ -244,8 +244,29 @@ packages** — phases and their epics as a navigable tree. Clicking an epic scop
 the board to that whole subtree, which is the same ad-hoc `epic is …`
 expression the tree's own "Show only this work package" produces.
 
-The rail navigates; it does not create. Epics, stories and tasks are all filed
-from the backlog page's toolbar, next to the thing they will appear in.
+The rail navigates; it does not create.
+
+## Filing something
+
+There is one dialog, and one Type select spanning both stores:
+
+```
+New item ▸ Type:  Bug · Regression · Chore  →  bugs/BUG-NNNN.md
+                  Epic · Story · Task       →  backlog/{EPIC,STORY,TASK}-NNNN.md
+```
+
+**New Item** in the top bar opens it with nothing preselected — you say what the
+thing is, and that decides which store it lands in. Two per-store buttons asked
+you to choose a store before saying what you were filing, which is backwards:
+the store is a property of the thing.
+
+Each page also files its own kind, next to **Save as filter**, so the button
+sits beside the list the new record will appear in:
+
+| page | buttons |
+|---|---|
+| Bugs | **Bug** — opens the full mask, with a markdown editor and link staging |
+| Backlog | **Epic · Story · Task** — the dialog, preselected and titled for the type |
 
 ## Hierarchy
 

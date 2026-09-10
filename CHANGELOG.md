@@ -109,9 +109,16 @@ invisible, since the app boots perfectly well on last release's code.
   tabs is a second, competing answer to a question the top bar has already
   answered, and the two can then disagree (BACKLOG lit above, bug filters
   below).
-- Creating a backlog item lives on the backlog page, not in the rail — the rail
-  navigates, and all three types (**epic, story and task**) are creatable
-  there. "New epic" is gone from the rail.
+- Creating lives on the page, not in the rail — the rail navigates. The Backlog
+  page files **epic, story and task**; the Bugs page files a **bug**, both next
+  to "Save as filter". "New epic" is gone from the rail.
+- **One "New item" dialog spans both stores.** Its Type select carries
+  Bug · Regression · Chore (→ the bug store) and Epic · Story · Task (→ the
+  backlog), so picking the type picks the store. The top bar's separate "New
+  Bug" button is gone: two per-store buttons asked the user to choose a store
+  before saying what they were filing, and the store is a property of the
+  thing. Opened with no preselection the dialog is titled "New item"; opened
+  from a typed button it is titled for that type.
 - `--seed` seeds each store independently: a repo that already tracks bugs but
   has no backlog still gets seeded backlog examples.
 - `server/Program.cs` split into `Markdown.cs`, `Bug.cs`, `BacklogItem.cs` and

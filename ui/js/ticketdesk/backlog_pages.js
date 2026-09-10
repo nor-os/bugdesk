@@ -25,11 +25,11 @@
 
 import { DataTable } from '../ui/components/data_table.js';
 import { showContextMenu } from '../ecoagent/ui/context_menu.js';
-import { openForm } from '../ecoagent/ui/modal.js';
 import { renderMarkdown } from './markdown.js';
 import { attachMarkdownEditor } from './md_editor.js';
 import { attachTagInput } from './tag_input.js';
 import { openFilterEditor } from './filter_editor.js';
+import { openNewItem } from './new_item.js';
 import { onFiltersChanged } from './filter_store.js';
 import { shell, statusLine } from './pages.js';
 import { esc, initials, HUMAN_AUTHOR, AGENT_AUTHOR } from './data.js';
@@ -40,7 +40,7 @@ import {
 } from './backlog_filters.js';
 import {
     ITEMS, PHASES, TYPES, TYPE_ICON,
-    collapsibleIds, createItem, fetchItem, humanizeItemStatus, isGated,
+    collapsibleIds, fetchItem, humanizeItemStatus, isGated,
     itemLabel, itemRef, ladderFor, loadBacklog, patchItem, postItemComment,
     REFINEMENT_RULES, refinementGaps, stageActions, stageOf, treeRows,
     typeLabelOf,
@@ -62,89 +62,6 @@ function criteriaCell(done, total) {
     if (!total) return '<span class="bd-crit bd-crit--none">none</span>';
     const pct = Math.round((done / total) * 100);
     return `<span class="bd-crit"><span class="bd-crit__bar"><span class="bd-crit__fill" style="width:${pct}%"></span></span>${done}/${total}</span>`;
-}
-
-/* ── the create form ─────────────────────────────────────────────────
- *
- * One form for all three types. `parent` is a combobox over the items that can
- * legally hold this one, pre-filled when you create from a row's "Add child"
- * — which is how most items are born, since an item's place in the tree is
- * usually the reason you are creating it at all. */
-
-const parentOptions = (type) => ITEMS
-    // Only a shallower type can be a parent: stories hang off epics, tasks off
-    // stories (or an epic directly, when a task needs no story around it).
-    // An epic has no parent at all, so it gets an empty list.
-    .filter((i) => (type === 'story' ? i.type === 'epic' : type === 'task' ? i.type !== 'task' : false))
-    .map((i) => ({ value: String(i.id), label: `${i.ref} — ${i.title}` }));
-
-/**
- * Open the "new backlog item" form and create what it returns.
- * Exported as `openBacklogCreate` for install.js's top-bar New Item button —
- * filing an item is something you do from wherever you are, not only from the
- * backlog page.
- * @returns {Promise<object|null>} the created item, or null if cancelled.
- */
-export async function openCreateForm({ type = 'story', parent = 0, phase = '' } = {}) {
-    const parents = parentOptions(type);
-    const result = await openForm({
-        title: `New ${typeLabelOf(type).toLowerCase()}`,
-        submitLabel: 'Create',
-        fields: [
-            { name: 'type', label: 'Type', type: 'select', required: true,
-              options: TYPES.map((t) => ({ value: t, label: typeLabelOf(t) })),
-              hint: 'Epics hold stories; stories hold tasks.' },
-            { name: 'title', label: 'Title', type: 'text', required: true,
-              placeholder: 'What outcome does this deliver?' },
-            // BOTH fields, always — the Type select above can be changed after
-            // this form is built, and a form that showed only the field the
-            // INITIAL type wanted silently dropped the parent off every story
-            // filed from the "New epic" button. The hints say which applies.
-            { name: 'parent', label: 'Parent', type: 'select', create: true,
-              options: parentOptions('task'),
-              placeholder: parents.length ? 'pick an item…' : 'no parent available yet',
-              hint: 'For a story or task. Leave empty to file it loose — refinement is where it gets placed. Ignored for an epic.' },
-            { name: 'phase', label: 'Phase', type: 'select', create: true,
-              options: PHASES, placeholder: 'e.g. foundation',
-              hint: 'For an epic: the milestone it belongs to. Its stories and tasks inherit it, so leave this blank on them.' },
-            { name: 'points', label: 'Estimate', type: 'text', placeholder: 'e.g. 3' },
-            { name: 'assignee', label: 'Assignee', type: 'select',
-              options: ['', HUMAN_AUTHOR, AGENT_AUTHOR] },
-            { name: 'description', label: 'Description', type: 'textarea', rows: 5 },
-        ],
-        defaults: { type, parent: parent ? String(parent) : '', phase, assignee: '' },
-    });
-    if (!result || !String(result.title || '').trim()) return null;
-
-    // The combobox hands back whatever was typed; "EPIC-0004 — Auth" and "4"
-    // both have to resolve to the id 4.
-    const parentId = (() => {
-        const raw = String(result.parent || '').trim();
-        if (!raw) return 0;
-        const m = raw.match(/(\d+)/);
-        return m ? Number(m[1]) : 0;
-    })();
-
-    try {
-        const chosen = result.type || type;
-        const created = await createItem({
-            type: chosen,
-            title: String(result.title).trim(),
-            // An epic has no parent, and a story/task has no authored phase —
-            // it inherits one. Sending either anyway is how the two drift.
-            parent: chosen === 'epic' ? 0 : parentId,
-            phase: chosen === 'epic' ? String(result.phase || '').trim() : '',
-            points: String(result.points || '').trim(),
-            assignee: String(result.assignee || '').trim(),
-            description: String(result.description || '').trim(),
-        });
-        await loadBacklog();
-        statusLine(`${itemRef(created)} created.`);
-        return created;
-    } catch (err) {
-        statusLine(`Create failed: ${err?.message || err}`);
-        return null;
-    }
 }
 
 /* ── collapse state ──────────────────────────────────────────────────
@@ -336,15 +253,15 @@ function mountBacklogBoard(host, props, ctx) {
                     break;
                 case 'add-child': {
                     if (!model) break;
-                    const created = await openCreateForm({
-                        type: model.type === 'epic' ? 'story' : 'task',
+                    const created = await openNewItem({
+                        kind: model.type === 'epic' ? 'story' : 'task',
                         parent: model.id,
                     });
                     if (created) {
                         // A new child under a folded parent would land invisible.
                         _collapsed.delete(Number(model.id));
                         refresh();
-                        openItem(created.id, { dest: 'origin', newTab: true });
+                        openItem(created.record.id, { dest: 'origin', newTab: true });
                     }
                     break;
                 }
@@ -425,9 +342,9 @@ function mountBacklogBoard(host, props, ctx) {
             rowLabel: (i) => ({ id: i.ref, title: i.title, status: i.statusLabel, dot: i.type }),
             onSaved: openSavedFilter,
         }),
-        'new-epic': async () => { if (await openCreateForm({ type: 'epic' })) refresh(); },
-        'new-story': async () => { if (await openCreateForm({ type: 'story' })) refresh(); },
-        'new-task': async () => { if (await openCreateForm({ type: 'task' })) refresh(); },
+        'new-epic': async () => { if (await openNewItem({ kind: 'epic' })) refresh(); },
+        'new-story': async () => { if (await openNewItem({ kind: 'story' })) refresh(); },
+        'new-task': async () => { if (await openNewItem({ kind: 'task' })) refresh(); },
     };
     host.querySelector('.td-page__bar').addEventListener('click', (e) => {
         const btn = e.target.closest('[data-a]');
@@ -832,8 +749,8 @@ function mountItem(host, props, ctx) {
         else if (act === 'cancel') await cancel();
         else if (act === 'save-acceptance') await saveAcceptance();
         else if (act === 'addchild') {
-            const created = await openCreateForm({
-                type: item.type === 'epic' ? 'story' : 'task',
+            const created = await openNewItem({
+                kind: item.type === 'epic' ? 'story' : 'task',
                 parent: item.id,
             });
             if (created) { apply(await fetchItem(item.id)); await broadcast(); }
@@ -1096,5 +1013,3 @@ export function createBacklogContent({ eventBus } = {}) {
         item: shell('item', mountItem),
     };
 }
-
-export { openCreateForm as openBacklogCreate };

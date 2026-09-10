@@ -285,9 +285,11 @@ function mountQueues(host, props, ctx) {
     // props.expr (ad-hoc, unsaved) beats props.filter (a stored key/id).
     let resolved = props?.expr ? adhocFilter(props.expr) : resolveFilter(props?.filter);
 
-    // The Search / New Bug pair used to live here; it is the SAME pair the
-    // top bar mounts globally (install.js _installTicketActions), so the
-    // duplicate is gone and the slot carries the filter affordance instead.
+    // New Bug sits HERE, beside Save as filter, mirroring the backlog board's
+    // Epic/Story/Task group: filing belongs next to the list the new record
+    // will appear in. The top bar carries the cross-store "New item" dialog
+    // instead — this button opens the full bug mask, which is richer (markdown
+    // editor, link staging) and is the reason it is a page and not a dialog.
     host.innerHTML = `
     <div class="td-page">
         <div class="td-page__bar">
@@ -297,6 +299,11 @@ function mountQueues(host, props, ctx) {
                 : 'Ctrl+K quick-searches bugs'}</span>
             <span class="td-spacer"></span>
             <button class="ea-btn" data-a="savefilter">${icon('filter_alt')} Save as filter</button>
+            <span class="bd-newgroup">
+                <span class="td-dim">New</span>
+                <button class="ea-btn ea-btn--primary" data-a="newbug"
+                        title="New bug — the full mask, with a markdown editor and link staging">${icon('bug_report')} Bug</button>
+            </span>
         </div>
         <div class="td-tablehost"></div>
     </div>`;
@@ -434,6 +441,10 @@ function mountQueues(host, props, ctx) {
     table._restorePersisted?.({ colWidths: { 0: 48 } });
     table.render();
     requestAnimationFrame(() => { if (host.isConnected) table.focus(); });
+
+    host.querySelector('[data-a="newbug"]').addEventListener('click', () => {
+        ctx.wm?.openInPrimary?.('ticket', { mode: 'new', label: 'New Bug' });
+    });
 
     host.querySelector('[data-a="savefilter"]').addEventListener('click', () => {
         const { expr, skipped } = seedExprFromQueue(table, resolved);

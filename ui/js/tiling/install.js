@@ -312,39 +312,39 @@ function _syncPageShortcuts(wm) {
     });
 }
 
-/** TicketDesk: Search + New Ticket buttons in the top bar, left of the
- *  panel toggles. Both open the SAME ticket mask page in a tab of the
- *  primary tile — `mode` decides create vs. search semantics. */
+/** Search + New Item in the top bar, left of the panel toggles.
+ *
+ *  There is NO "New Bug" button here any more. Two per-store buttons asked the
+ *  user to choose a store before saying what they were filing, which is
+ *  backwards — the store is a property of the thing. One "New item" dialog now
+ *  covers both (see ticketdesk/new_item.js), and the full-page bug mask, which
+ *  is still richer, is reached from the Bugs page's own New Bug button. */
 function _installTicketActions(wm) {
     const barRight = document.querySelector('.global-top-bar .bar-right');
     if (!barRight || barRight.querySelector('.td-topbar-actions')) return;
     const wrap = document.createElement('div');
     wrap.className = 'td-topbar-actions';
     wrap.innerHTML = `
-        <button class="ea-btn" data-td="search" title="Bug search — same mask, entered data becomes criteria">
+        <button class="ea-btn" data-td="search" title="Bug search — a mask whose entered data becomes the criteria">
             <span class="material-symbols-outlined">search</span> Search</button>
-        <button class="ea-btn" data-td="item" title="New backlog item — epic, story or task">
-            <span class="material-symbols-outlined">workspaces</span> New Item</button>
-        <button class="ea-btn ea-btn--primary" data-td="new" title="New bug — same mask, entered data creates the bug (local only)">
-            <span class="material-symbols-outlined">add</span> New Bug</button>`;
+        <button class="ea-btn ea-btn--primary" data-td="item" title="File anything — bug, regression, chore, epic, story or task">
+            <span class="material-symbols-outlined">add</span> New Item</button>`;
     wrap.addEventListener('click', async (e) => {
         const btn = e.target.closest('[data-td]');
         if (!btn) return;
         if (btn.dataset.td === 'item') {
-            // A backlog item is created through a form, not a page: unlike a
-            // bug it has almost no free text, and the one thing that matters —
-            // where it hangs in the tree — is a picker.
-            const { openBacklogCreate } = await import('../ticketdesk/backlog_pages.js');
-            const created = await openBacklogCreate({ type: 'story' });
-            if (created) wm.openInPrimary('backlog', { view: 'board' });
+            // No preselected type: the dialog opens as "New item" and the Type
+            // select is where the user says what it is — and therefore which
+            // store it lands in. createAndOpen then opens whichever it made.
+            const { createAndOpen } = await import('../ticketdesk/new_item.js');
+            await createAndOpen(wm);
             return;
         }
-        if (btn.dataset.td === 'new') wm.openInPrimary('ticket', { mode: 'new', label: 'New Bug' });
         // Search always opens as a NEW TAB, never in place. openInPrimary swaps the primary tile's
         // page, so hitting Search would take over whatever you were reading - and searching is
         // something you do while looking at something else, so it has to arrive alongside it.
         // openInTabFromContext with an empty context appends a tab to the primary tile.
-        else wm.openInTabFromContext({}, 'ticket', { mode: 'search', label: 'Bug Search' });
+        wm.openInTabFromContext({}, 'ticket', { mode: 'search', label: 'Bug Search' });
     });
     const togglesGroup = barRight.querySelector('.panel-toggles');
     if (togglesGroup) barRight.insertBefore(wrap, togglesGroup);
