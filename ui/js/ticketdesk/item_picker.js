@@ -29,6 +29,20 @@ export const parentTypesFor = (childType) =>
     : [];
 
 /**
+ * Types that may legally hang UNDER `parentType` — the mirror of the above, and
+ * what the picker preselects when attaching an existing item as a child.
+ *
+ * An epic offers stories and a story offers tasks: the level immediately below.
+ * A task under an epic is legal (parentTypesFor says so) but it is not what you
+ * mean nine times in ten, and the picker's type chips loosen this in one click
+ * rather than enforcing it.
+ */
+export const childTypesFor = (parentType) =>
+    parentType === 'epic' ? ['story']
+    : parentType === 'story' ? ['task']
+    : [];
+
+/**
  * Open the picker.
  *
  * @param {object}   o
@@ -36,10 +50,15 @@ export const parentTypesFor = (childType) =>
  * @param {string[]} [o.types]      types selected in the filter on open
  * @param {number}   [o.exclude]    an id that cannot be picked (an item may not
  *                                  be its own parent)
+ * @param {number[]} [o.excludeIds] ids that cannot be picked — an item's own
+ *                                  descendants, which would make a cycle
  * @param {number}   [o.current]    the currently chosen id, highlighted
  * @returns {Promise<{id:number, ref:string, title:string}|null>} null on cancel.
  */
-export function openItemPicker({ title = 'Find an item', types = [], exclude = 0, current = 0 } = {}) {
+export function openItemPicker({
+    title = 'Find an item', types = [], exclude = 0, excludeIds = [], current = 0,
+} = {}) {
+    const blocked = new Set([...(excludeIds || []), exclude].map(Number).filter(Boolean));
     return new Promise((resolve) => {
         const active = new Set(types.length ? types : TYPES);
         let query = '';
@@ -93,7 +112,7 @@ export function openItemPicker({ title = 'Find an item', types = [], exclude = 0
             const q = query.trim().toLowerCase();
             return ITEMS.filter((i) => {
                 if (!active.has(i.type)) return false;
-                if (exclude && Number(i.id) === Number(exclude)) return false;
+                if (blocked.has(Number(i.id))) return false;
                 if (!q) return true;
                 return i.ref.toLowerCase().includes(q) || String(i.title || '').toLowerCase().includes(q);
             });
@@ -168,3 +187,95 @@ export function openItemPicker({ title = 'Find an item', types = [], exclude = 0
         requestAnimationFrame(() => input.focus());
     });
 }
+
+/**
+ * The PARENT CONTROL: a read-only display of the current parent plus a search
+ * button that opens the picker above.
+ *
+ * ONE implementation, used by the New item page and by the item detail page —
+ * changing an item's parent is the same act whether the item exists yet or not,
+ * and a second copy would be a second set of rules about which types may hold
+ * which.
+ *
+ * `el` is replaced, and its attributes move onto a hidden carrier holding the
+ * parent ID, so `[data-f="parent"]` reads keep working.
+ *
+ * @param {HTMLElement} el
+ * @param {object}   o
+ * @param {() => string} o.typeOf     the CHILD's type, read at click time (the
+ *                                    type select can change after this is built)
+ * @param {number}   [o.value]        current parent id
+ * @param {() => number} [o.excludeId] an item cannot be its own parent
+ * @param {Function} [o.onChange]     `(id) => void`
+ * @returns {{ value(): number, set(id): void, destroy(): void }}
+ */
+export function attachParentPicker(el, { typeOf, value = 0, excludeId = null, onChange = null } = {}) {
+    if (!el || !el.parentNode) return { value: () => 0, set() {}, destroy() {} };
+
+    let current = Number(value) || 0;
+
+    const carrier = document.createElement('input');
+    carrier.type = 'hidden';
+    for (const attr of el.attributes) carrier.setAttribute(attr.name, attr.value);
+    carrier.removeAttribute('class');
+    carrier.type = 'hidden';
+    carrier.value = current ? String(current) : '';
+
+    const root = document.createElement('div');
+    root.className = 'ea-picker';
+    root.innerHTML = `
+        <input class="ea-picker__display" type="text" readonly
+               placeholder="none — click to search">
+        <button type="button" class="ea-btn ea-picker__btn" aria-label="Find a parent">
+            <span class="material-symbols-outlined">search</span>
+        </button>
+        <button type="button" class="ea-btn ea-picker__clear" aria-label="Clear parent" hidden>
+            <span class="material-symbols-outlined">close</span>
+        </button>`;
+    el.replaceWith(root);
+    root.appendChild(carrier);
+
+    const display = root.querySelector('.ea-picker__display');
+    const clearBtn = root.querySelector('.ea-picker__clear');
+
+    const paint = () => {
+        const item = ITEMS.find((i) => Number(i.id) === current);
+        display.value = item ? `${item.ref} — ${item.title}` : '';
+        clearBtn.hidden = !current;
+    };
+    paint();
+
+    const commit = (id) => {
+        current = Number(id) || 0;
+        carrier.value = current ? String(current) : '';
+        paint();
+        carrier.dispatchEvent(new Event('change', { bubbles: true }));
+        onChange?.(current);
+    };
+
+    const open = async () => {
+        const childType = typeOf?.() || 'task';
+        const picked = await openItemPicker({
+            title: `Parent for this ${(TYPE_LABEL_FOR[childType] || 'item').toLowerCase()}`,
+            types: parentTypesFor(childType),
+            current,
+            exclude: excludeId?.() || 0,
+        });
+        if (!picked) return;
+        commit(picked.id);
+    };
+
+    const onClick = (e) => {
+        if (e.target.closest('.ea-picker__clear')) { commit(0); return; }
+        if (e.target.closest('.ea-picker__btn') || e.target === display) open();
+    };
+    root.addEventListener('click', onClick);
+
+    return {
+        value: () => current,
+        set: (id) => commit(id),
+        destroy: () => { root.removeEventListener('click', onClick); root.remove(); },
+    };
+}
+
+const TYPE_LABEL_FOR = { epic: 'Epic', story: 'Story', task: 'Task' };

@@ -24,6 +24,22 @@
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+/**
+ * Show or hide a form row.
+ *
+ * The `hidden` ATTRIBUTE alone is not enough: it only carries `display: none`
+ * from the UA stylesheet, and any class rule with its own `display` beats it.
+ * This codebase is full of them — `.td-field` is a grid, `.ea-modal__row` is a
+ * grid — so `el.hidden = true` left the row on screen while every line of
+ * JavaScript said it was hidden. An inline style wins over both; the attribute
+ * stays for assistive tech.
+ */
+export function setRowVisible(el, on) {
+    if (!el) return;
+    el.hidden = !on;
+    el.style.display = on ? '' : 'none';
+}
+
 const norm = (o) => (typeof o === 'string' || typeof o === 'number')
     ? { value: String(o), label: String(o) }
     : { value: String(o?.value ?? o?.id ?? ''), label: String(o?.label ?? o?.value ?? o?.id ?? ''),

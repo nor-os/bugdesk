@@ -30,11 +30,12 @@ import { attachMarkdownEditor } from './md_editor.js';
 import { attachTagInput } from './tag_input.js';
 import { attachSelect } from './select_field.js';
 import { watchRecord } from './live.js';
+import { attachParentPicker, childTypesFor, openItemPicker } from './item_picker.js';
 import { openFilterEditor } from './filter_editor.js';
 import { openNewItem } from './new_item.js';
 import { onFiltersChanged } from './filter_store.js';
 import { shell, statusLine } from './pages.js';
-import { esc, initials, HUMAN_AUTHOR, assigneeOptions } from './data.js';
+import { esc, initials, HUMAN_AUTHOR, assigneeChoices, rememberAssignee } from './data.js';
 import {
     BUILTIN_FILTERS, DEFAULT_FILTER, MODEL, SCOPE,
     adhocFilter, deleteFilter, describeFilter, duplicateFilter, epicExpr,
@@ -424,7 +425,10 @@ function mountItem(host, props, ctx) {
             <section class="td-group" data-slot="childrenbox" hidden>
                 <div class="td-group__title">Children
                     <span class="td-group__actions">
-                        <button class="ea-btn ea-btn--small" data-a="addchild">${icon('add')} Add</button>
+                        <button class="ea-btn ea-btn--small" data-a="attachchild"
+                                title="Attach an existing item">${icon('search')} Add existing</button>
+                        <button class="ea-btn ea-btn--small" data-a="addchild"
+                                title="File a new one under this">${icon('add')} New</button>
                     </span>
                 </div>
                 <div class="td-group__body bd-children" data-slot="children"></div>
@@ -462,11 +466,13 @@ function mountItem(host, props, ctx) {
     let composer = null;
     let acceptanceEditor = null;
     const fieldSelects = [];      // custom dropdowns replacing the bare <select>s
+    let parentPicker = null;      // the shared search control (item_picker.js)
     const destroyWidgets = () => {
-        for (const w of [tagInput, composer, acceptanceEditor, ...fieldSelects]) {
+        for (const w of [tagInput, composer, acceptanceEditor, parentPicker, ...fieldSelects]) {
             try { w?.destroy(); } catch { /* already gone */ }
         }
         fieldSelects.length = 0;
+        parentPicker = null;
         tagInput = composer = acceptanceEditor = null;
     };
 
@@ -492,8 +498,8 @@ function mountItem(host, props, ctx) {
             ${field('Estimate', tin('points', item.points))}
             ${item.type === 'epic'
                 ? field('Phase', tin('phase', item.phase))
-                : field('Parent', sel('parent', [{ value: '', label: '(none)' }, ...parents], item.parent || ''))}
-            ${field('Assignee', sel('assignee', assigneeOptions(), item.assignee))}
+                : field('Parent', tin('parent', item.parent || ''))}
+            ${field('Assignee', '<select class="ea-tin" data-f="assignee"></select>')}
             ${field('Subsystem', tin('subsystem', item.subsystem))}
             ${item.type !== 'epic'
                 ? field('Phase', `<input class="ea-tin" value="${esc(item.effectivePhase || '—')}" readonly title="Inherited from the owning epic">`)
@@ -525,16 +531,25 @@ function mountItem(host, props, ctx) {
             value: item.type,
         });
         attach('assignee', {
-            optionsFor: () => assigneeOptions().map((n) => ({
-                value: n, label: n || 'Unassigned',
-                icon: !n ? '' : (n.endsWith('_agent') ? 'smart_toy' : 'person'),
-            })),
-            value: item.assignee || '', emptyLabel: 'Unassigned',
+            optionsFor: assigneeChoices,
+            value: item.assignee || '', emptyLabel: 'Unassigned', allowNew: true,
+            // Naming somebody not on the roster adds them to it — see
+            // rememberAssignee in ./data.js.
+            onChange: (v) => { rememberAssignee(v); },
         });
-        attach('parent', {
-            optionsFor: () => [{ value: '', label: '(none)' }, ...parentOptions(item.type)],
-            value: item.parent || '', emptyLabel: '(none)',
-        });
+        // The SAME control the New item page uses — changing an item's parent is
+        // the same act whether the item exists yet or not, and a second copy
+        // would be a second set of rules about which types may hold which.
+        try { parentPicker?.destroy(); } catch { /* first render */ }
+        parentPicker = null;
+        const parentEl = host.querySelector('[data-f="parent"]');
+        if (parentEl) {
+            parentPicker = attachParentPicker(parentEl, {
+                typeOf: () => item.type,
+                value: Number(item.parent) || 0,
+                excludeId: () => Number(item.id) || 0,
+            });
+        }
         const phaseEl = host.querySelector('[data-f="phase"]');
         if (phaseEl && phaseEl.tagName === 'INPUT') {
             const holder = document.createElement('select');
@@ -770,6 +785,44 @@ function mountItem(host, props, ctx) {
         });
     };
 
+    /* ── attaching an existing child ─────────────────────────────────
+     *
+     * The same picker the Parent field uses, from the other end: re-parenting
+     * X under Y is one operation, and "add a child" and "set my parent" are two
+     * views of it. Descendants are excluded because a cycle is the one thing
+     * the tree cannot render — the bridge rejects it too, but offering a choice
+     * that will be refused is worse than not offering it. */
+
+    const descendantIds = (rootId) => {
+        const out = new Set();
+        const walk = (pid) => {
+            for (const child of ITEMS.filter((i) => Number(i.parent) === Number(pid))) {
+                if (out.has(child.id)) continue;
+                out.add(child.id);
+                walk(child.id);
+            }
+        };
+        walk(rootId);
+        return [...out];
+    };
+
+    const attachChild = async () => {
+        const picked = await openItemPicker({
+            title: `Add an existing item under ${itemRef(item)}`,
+            types: childTypesFor(item.type),
+            excludeIds: [Number(item.id), ...descendantIds(item.id)],
+        });
+        if (!picked || !picked.id) return;
+        try {
+            await patchItem(picked.id, { parent: item.id });
+            apply(await fetchItem(item.id));
+            await broadcast();
+            statusLine(`${picked.ref} moved under ${itemRef(item)}.`);
+        } catch (err) {
+            statusLine(`Could not attach ${picked.ref}: ${err?.message || err}`);
+        }
+    };
+
     /* ── the write path ─────────────────────────────────────────── */
 
     /** One place where a fresh record becomes the rendered page, so no caller
@@ -805,7 +858,7 @@ function mountItem(host, props, ctx) {
                 labels: fval('labels') ? fval('labels').split(',').map((s) => s.trim()).filter(Boolean) : [],
             };
             if (item.type === 'epic') patch.phase = fval('phase');
-            else patch.parent = Number(fval('parent') || 0);
+            else patch.parent = parentPicker ? parentPicker.value() : 0;
             apply(await patchItem(item.id, patch));
             await broadcast();
             live.clear();
@@ -912,6 +965,7 @@ function mountItem(host, props, ctx) {
                 parent: item.id, ctx,
             });
         }
+        else if (act === 'attachchild') await attachChild();
     };
     host.addEventListener('click', onClick);
     actionsEl?.addEventListener('click', onClick);

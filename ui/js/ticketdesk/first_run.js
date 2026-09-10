@@ -278,10 +278,15 @@ export async function openIdentityDialog({ eventBus } = {}) {
             { name: 'agentName', label: 'Agent name', type: 'text',
               placeholder: 'derived from your name',
               hint: 'The name your AI assistant signs its comments with.' },
+            { name: 'manage', label: 'Everyone else', type: 'select',
+              options: [{ value: '', label: 'Leave the collaborator list alone' },
+                        { value: 'yes', label: 'Open the collaborator list…' }],
+              hint: 'Who else can be assigned work on this repo.' },
         ],
         defaults: {
             name: cfg.humanAuthor || '',
             agentName: cfg.agentAuthor === 'agent' ? '' : (cfg.agentAuthor || ''),
+            manage: '',
         },
         // Follow the name: an agent called `<you>_agent` needs no explaining and
         // no decision, and two people's agents can never end up signing
@@ -296,6 +301,11 @@ export async function openIdentityDialog({ eventBus } = {}) {
         },
     });
     if (!result) return null;
+
+    if (result.manage === 'yes') {
+        const { openCollaborators } = await import('./collaborators.js');
+        return openCollaborators({ eventBus });
+    }
 
     const name = String(result.name || '').trim();
     if (!name) return null;

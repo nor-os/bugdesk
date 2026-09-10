@@ -513,8 +513,14 @@
 
 /* Adaptive form rows (openForm's onFieldChange). `.ea-modal__row` is a grid, so
    the `hidden` attribute alone loses to it — display has to be forced. */
+/* `[hidden]` carries only the UA stylesheet's `display: none`, which any class
+   rule with its own `display` beats — and both of these are grids. Without
+   this, a row marked hidden stays on screen. select_field.js's setRowVisible
+   also sets an inline style; this covers anything that does not use it. */
 .ea-modal__form .ea-modal__row[hidden],
-.ea-modal__form .ea-modal__section[hidden] { display: none !important; }
+.ea-modal__form .ea-modal__section[hidden],
+.td-field[hidden],
+.td-group[hidden] { display: none !important; }
 
 /* ── Search picker / collaborators editor ────────────────────────────
    Own overlay rather than a ManagedWindow: both can open ON TOP of a modal

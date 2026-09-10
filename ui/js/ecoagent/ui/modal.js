@@ -151,7 +151,10 @@ export function openForm({ title, fields = [], defaults = {}, submitLabel = 'OK'
             const api = {
                 setVisible(name, on) {
                     const row = rowOf(name);
-                    if (row) row.hidden = !on;
+                    if (!row) return;
+                    // The attribute alone loses to `.ea-modal__row { display: grid }`.
+                    row.hidden = !on;
+                    row.style.display = on ? '' : 'none';
                 },
                 get(name) {
                     const el = body.querySelector(`[name="${name}"]`);

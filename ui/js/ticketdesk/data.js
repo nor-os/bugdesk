@@ -78,6 +78,53 @@ export const ASSIGNEES = (() => {
 export const assigneeOptions = (includeBlank = true) =>
     (includeBlank ? [''] : []).concat(ASSIGNEES);
 
+/** The same list dressed for the choice control: a glyph per entry, so a
+ *  person and their assistant are distinguishable at a glance. */
+export const assigneeChoices = () => assigneeOptions().map((n) => ({
+    value: n,
+    label: n || 'Unassigned',
+    icon: !n ? '' : (n.endsWith('_agent') ? 'smart_toy' : 'person'),
+}));
+
+/**
+ * Assigning to somebody not on the roster ADDS them to it.
+ *
+ * The alternative is an assignee that only exists inside one file: nobody
+ * else's picker offers it, no "On <them>" filter matches it, and the Inspector
+ * shows a name with no row. Names arrive from outside all the time — a
+ * colleague mentioned in standup, an author from `git log` — so the roster has
+ * to be able to learn one at the moment it is first used.
+ *
+ * Fire-and-forget on purpose: the assignment itself is already valid, and a
+ * roster write that fails should not block it. It is reported, not swallowed.
+ */
+export async function rememberAssignee(name) {
+    const clean = String(name || '').trim();
+    if (!clean) return null;
+    if (ASSIGNEES.some((n) => n.toLowerCase() === clean.toLowerCase())) return null;
+    try {
+        const res = await fetch('/api/project/collaborator', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', accept: 'application/json' },
+            body: JSON.stringify({ name: clean }),
+        });
+        const j = await res.json().catch(() => null);
+        if (!res.ok || !j?.ok) throw new Error(j?.error || `HTTP ${res.status}`);
+        // Keep the in-memory list in step so the next picker in this session
+        // offers them without a reload.
+        for (const n of j.assignees || []) {
+            if (!ASSIGNEES.some((x) => x.toLowerCase() === n.toLowerCase())) ASSIGNEES.push(n);
+        }
+        const el = document.getElementById('sim-status');
+        if (el) el.textContent = `Added ${clean} to the collaborators.`;
+        return j.collaborator;
+    } catch (err) {
+        const el = document.getElementById('sim-status');
+        if (el) el.textContent = `Could not add ${clean} to the collaborators: ${err?.message || err}`;
+        return null;
+    }
+}
+
 /** The agent a person's comments are signed by, when it is not me. */
 export const agentFor = (name) =>
     COLLABORATORS.find((c) => c.name?.toLowerCase() === String(name || '').toLowerCase())?.agent

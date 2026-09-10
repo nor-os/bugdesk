@@ -184,11 +184,12 @@ private because two people must not overwrite each other's identity; this one is
 shared because they have to agree on who exists. Every assignee picker and both
 filter catalogues read it.
 
-The list maintains itself — setting your name adds you, and the `/bugs` and
-`/backlog` skills add the people they find in the git history. Edit it by hand,
-or in **Settings › General › Authorship › Manage collaborators**, for the cases
-that cannot: somebody who has not opened BugDesk yet, a name spelled two ways,
-a person who has left. Override the path with `BUGDESK_PROJECT`.
+The list maintains itself: setting your name adds you, **assigning to a name
+that is not on it adds that person**, and the `/bugs` and `/backlog` skills add
+the people they find in the git history. Edit it directly — add, rename, change
+an agent name, remove — from **Settings › General › Authorship › Manage
+collaborators**, the hamburger menu's **Collaborators…**, or the change-your-name
+dialog. Override the path with `BUGDESK_PROJECT`.
 
 Each person's agent name is **derived** as `<name>_agent`. It is not a decision
 worth making per project, and two people whose assistants both sign as `agent`

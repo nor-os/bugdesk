@@ -23,10 +23,10 @@
 import { mountTileBreadcrumb } from '../tiling/tile_breadcrumb.js';
 import { attachMarkdownEditor } from './md_editor.js';
 import { attachTagInput } from './tag_input.js';
-import { attachSelect } from './select_field.js';
-import { openItemPicker, parentTypesFor } from './item_picker.js';
+import { attachSelect, setRowVisible } from './select_field.js';
+import { attachParentPicker } from './item_picker.js';
 import {
-    ASSIGNEES, HUMAN_AUTHOR, TICKETS, assigneeOptions, createBug, loadData,
+    HUMAN_AUTHOR, TICKETS, assigneeChoices, createBug, loadData, rememberAssignee,
 } from './data.js';
 import { ITEMS, PHASES, createItem, itemRef, loadBacklog } from './backlog_data.js';
 
@@ -105,12 +105,7 @@ export function mountNewItem(host, props, ctx) {
                     <div class="td-field" data-row="severity"><label>Severity</label>
                         <select class="ea-tin" data-f="severity"></select></div>
                     <div class="td-field" data-row="parent"><label>Parent</label>
-                        <div class="ea-picker">
-                            <input class="ea-picker__display" data-f="parentLabel" type="text"
-                                   placeholder="none — click to search" readonly>
-                            <button type="button" class="ea-btn ea-picker__btn" data-a="pickparent"
-                                    aria-label="Find a parent">${icon('search')}</button>
-                        </div></div>
+                        <input class="ea-tin" data-f="parent"></div>
                     <div class="td-field" data-row="phase"><label>Phase</label>
                         <select class="ea-tin" data-f="phase"></select></div>
                     <div class="td-field" data-row="points"><label>Estimate</label>
@@ -144,13 +139,12 @@ export function mountNewItem(host, props, ctx) {
         onChange: (v) => { kindId = v; syncFields(); },
     });
     selects.assignee = attachSelect($('[data-f="assignee"]'), {
-        // Read at OPEN time: the roster can grow while this page is open.
-        optionsFor: () => assigneeOptions().map((n) => ({
-            value: n,
-            label: n || 'Unassigned',
-            icon: !n ? '' : (n.endsWith('_agent') ? 'smart_toy' : 'person'),
-        })),
-        value: '', emptyLabel: 'Unassigned',
+        optionsFor: assigneeChoices,
+        value: '', emptyLabel: 'Unassigned', allowNew: true,
+        // Naming somebody who is not on the roster yet ADDS them to it. The
+        // alternative is an assignee nobody else's picker offers and no filter
+        // matches — a name that exists only in one file.
+        onChange: (v) => { rememberAssignee(v); },
     });
     selects.severity = attachSelect($('[data-f="severity"]'), {
         options: ['crash', 'high', 'medium', 'low'], value: 'medium',
@@ -176,35 +170,22 @@ export function mountNewItem(host, props, ctx) {
         onStatus: setStatus, minHeight: 220,
     });
 
-    /* ── parent ──────────────────────────────────────────────────── */
+    /* ── parent ──────────────────────────────────────────────────────
+     * The SHARED control (item_picker.js): a display plus a search button,
+     * identical to the one on the item detail page. `typeOf` is read at click
+     * time because the Type select above can change after this is built. */
 
-    const paintParent = () => {
-        const item = ITEMS.find((i) => Number(i.id) === parentId);
-        const el = $('[data-f="parentLabel"]');
-        if (el) el.value = item ? `${item.ref} — ${item.title}` : '';
-    };
-    paintParent();
-
-    const pickParent = async () => {
-        const childType = kindById(kindId).value;
-        const picked = await openItemPicker({
-            title: `Parent for this ${typeLabelOf(childType).toLowerCase()}`,
-            types: parentTypesFor(childType),
-            current: parentId,
-        });
-        if (!picked) return;
-        parentId = picked.id || 0;
-        paintParent();
-    };
+    const parentPicker = attachParentPicker(host.querySelector('[data-f="parent"]'), {
+        typeOf: () => kindById(kindId).value,
+        value: parentId,
+        onChange: (id) => { parentId = id; },
+    });
 
     /* ── field visibility ────────────────────────────────────────── */
 
     function syncFields() {
         const shown = FIELDS_FOR[kindId] || {};
-        for (const f of ADAPTIVE) {
-            const el = row(f);
-            if (el) el.hidden = !shown[f];
-        }
+        for (const f of ADAPTIVE) setRowVisible(row(f), !!shown[f]);
         const title = host.querySelector('[data-f="title"]');
         if (title) {
             title.placeholder = kindById(kindId).store === 'bugs'
@@ -283,8 +264,7 @@ export function mountNewItem(host, props, ctx) {
 
     const reset = () => {
         host.querySelectorAll('input[data-f], textarea[data-f]').forEach((el) => { el.value = ''; });
-        parentId = 0;
-        paintParent();
+        parentPicker.set(0);
         try { tagInput?.setTags([]); } catch { /* no carrier */ }
         selects.assignee.set('');
         selects.severity.set('medium');
@@ -295,8 +275,7 @@ export function mountNewItem(host, props, ctx) {
 
     const onClick = (e) => {
         const act = e.target.closest('[data-a]')?.dataset.a;
-        if (act === 'pickparent') pickParent();
-        else if (act === 'create') create();
+        if (act === 'create') create();
         else if (act === 'reset') reset();
     };
     host.addEventListener('click', onClick);
@@ -310,6 +289,7 @@ export function mountNewItem(host, props, ctx) {
             host.removeEventListener('click', onClick);
             actionsEl?.removeEventListener('click', onClick);
             for (const s of Object.values(selects)) { try { s.destroy(); } catch { /* gone */ } }
+            try { parentPicker.destroy(); } catch { /* gone */ }
             try { tagInput?.destroy(); } catch { /* gone */ }
             try { descEditor?.destroy(); } catch { /* gone */ }
         },

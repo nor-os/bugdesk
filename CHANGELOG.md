@@ -164,6 +164,12 @@ invisible, since the app boots perfectly well on last release's code.
 
 ### Fixed
 
+- **Changing the Type on the New item page did not change the fields.** They
+  were correctly marked `hidden`, and stayed on screen: the `hidden` attribute
+  carries only the UA stylesheet's `display: none`, which `.td-field { display:
+  grid }` beats. Hiding a row now also sets an inline style, which wins over any
+  sheet — `setRowVisible` in `select_field.js`, used everywhere a row is
+  toggled.
 - **Clicking a backlog filter switched to the bug view.** Both rails mount into
   the same panel body, and the bugs rail's delegated listeners stayed attached
   when the backlog rail replaced its content. Both stores have a builtin keyed
@@ -190,6 +196,18 @@ invisible, since the app boots perfectly well on last release's code.
   opened in the *primary* tile — from a focused side tile the change happened
   somewhere the user was not looking. It is a dialog now, as its ellipsis
   promised, and the bottom-bar chip opens the same one.
+- **One parent control, used everywhere.** The search picker was only on the
+  New item page; the item detail page still had a plain dropdown. Re-parenting
+  is the same act whether the item exists yet or not, so there is now one
+  implementation (`attachParentPicker`) on both, with a clear button.
+- **Children › Add existing** attaches an item you search for, preselected to
+  the types that belong under this one (an epic offers stories, a story offers
+  tasks) and excluding this item's own descendants, which would make a cycle.
+  The separate **New** button still files a fresh child.
+- **Assignee is searchable, and learns.** Naming somebody who is not on the
+  roster adds them to it. The alternative is an assignee that exists in one file
+  and nowhere else — no other picker offers it, no "On them" filter matches it,
+  and the Inspector shows a name with no row.
 - **Parent is a search, not a combobox.** A datalist matches on the literal
   prefix of the option text, so finding "Auth rewrite" meant typing the
   reference you opened the control to look up. The field is now a read-only
@@ -256,6 +274,14 @@ invisible, since the app boots perfectly well on last release's code.
   like it worked. The file is renamed now.
 
 ### Tooling
+
+- `scripts/test-dom.mjs` — component tests in jsdom. The bugs that have cost
+  most here were not logic errors: a control that rendered but did nothing, a
+  row that never appeared, a handler on the wrong element. None are visible to a
+  test over a pure function, and without a browser they were invisible full
+  stop. It asserts structure and behaviour only; jsdom has no layout, so it can
+  verify that a row carries the inline style that hides it but never that it
+  looks right.
 
 - `npm test` — the module-graph check, eslint, and 42 unit tests over the filter
   engine, the tree builder, the lifecycle ladders and the top-nav derivation.

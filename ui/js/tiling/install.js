@@ -457,6 +457,14 @@ function _installHamburgerMenu() {
             icon: 'badge',
             action: 'twm-change-name',
         });
+        // Also in Settings › General › Authorship. Here too because "who can I
+        // assign this to" is a question you have while looking at a record, not
+        // while browsing settings.
+        items.push({
+            label: 'Collaborators…',
+            icon: 'group',
+            action: 'twm-collaborators',
+        });
         const rect = ham.getBoundingClientRect();
         showContextMenu(rect.left, rect.bottom, items, (action) => {
             if (action === 'twm-open-shortcuts') {
@@ -465,6 +473,12 @@ function _installHamburgerMenu() {
             }
             if (action === 'twm-open-settings') {
                 window.__twm?.wm?.openInPrimary?.('settings');
+                return;
+            }
+            if (action === 'twm-collaborators') {
+                import('../ticketdesk/collaborators.js')
+                    .then((m) => m.openCollaborators({ eventBus: window.__ecoagent?.eventBus }))
+                    .catch((err) => console.error('[bugdesk] collaborators dialog failed', err));
                 return;
             }
             if (action === 'twm-change-name') {
