@@ -59,7 +59,7 @@ import { ITEMS, isClosedItem } from './backlog_data.js';
 import { watchRecord } from './live.js';
 import {
     esc, STAGES, TICKETS, TEAM, HUMAN_AUTHOR, AGENT_AUTHOR, assigneeOptions,
-    fetchBug, patchBug, postComment, createBug, loadData, initials,
+    fetchBug, patchBug, postComment, createBug, loadData, initials, teamNames,
     machineStatus, machineType, typeCode, typeLabelOf, humanizeStatus,
 } from './data.js';
 
@@ -1422,28 +1422,38 @@ function memberRow(m) {
 
 /** The backlog's equivalent of data.js's TEAM: one row per assignee, weighted
  *  by the items still in flight. Built here rather than in backlog_data.js
- *  because the shape it produces exists only to feed memberRow. */
+ *  because the shape it produces exists only to feed memberRow.
+ *
+ *  Which names get a row is teamNames()'s decision, shared with the bug store:
+ *  the roster, plus anyone carrying work that is still open. */
 function backlogTeam(items) {
-    const open = {}, done = {};
+    const open = new Map(), done = new Map(), seen = new Map();
     for (const i of items) {
-        const who = i.assignee || '';
+        const who = String(i.assignee || '').trim();
         if (!who) continue;                       // unassigned is not a person
-        if (i.status === 'done' || i.status === 'dropped') done[who] = (done[who] || 0) + 1;
-        else open[who] = (open[who] || 0) + 1;
+        const key = who.toLowerCase();
+        if (!seen.has(key)) seen.set(key, { name: who, open: 0 });
+        const bucket = (i.status === 'done' || i.status === 'dropped') ? done : open;
+        bucket.set(key, (bucket.get(key) || 0) + 1);
     }
-    const names = Array.from(new Set([...Object.keys(open), ...Object.keys(done)])).sort();
-    const maxOpen = Math.max(1, ...names.map((n) => open[n] || 0));
-    return names.map((name) => ({
-        name,
-        initials: initials(name),
-        presence: (open[name] || 0) > 0 ? 'online' : 'away',
-        inc: open[name] || 0,
-        other: done[name] || 0,
-        openLabel: 'in flight',
-        doneLabel: 'done',
-        load: Math.round(((open[name] || 0) / maxOpen) * 100) / 100,
-        me: name.toLowerCase() === HUMAN_AUTHOR.toLowerCase(),
-    }));
+    for (const [key, entry] of seen) entry.open = open.get(key) || 0;
+
+    const names = teamNames(seen);
+    const maxOpen = Math.max(1, ...names.map((n) => open.get(n.toLowerCase()) || 0));
+    return names.map((name) => {
+        const key = name.toLowerCase();
+        return {
+            name,
+            initials: initials(name),
+            presence: (open.get(key) || 0) > 0 ? 'online' : 'away',
+            inc: open.get(key) || 0,
+            other: done.get(key) || 0,
+            openLabel: 'in flight',
+            doneLabel: 'done',
+            load: Math.round(((open.get(key) || 0) / maxOpen) * 100) / 100,
+            me: key === HUMAN_AUTHOR.toLowerCase(),
+        };
+    });
 }
 
 function mountTicketInspector(host, props, ctx) {
@@ -1487,7 +1497,10 @@ function mountTicketInspector(host, props, ctx) {
             rows = TEAM;
             empty = TICKETS.length ? 'No bug has an assignee yet.' : 'No bugs yet.';
         }
-        const active = rows.filter((m) => m.presence !== 'offline').length;
+        // Who is actually carrying something, now that the roster puts an
+        // idle colleague on the list too. `presence !== 'offline'` counted
+        // every row ever built — a badge that could only ever read "N/N".
+        const active = rows.filter((m) => m.inc > 0).length;
         host.innerHTML = `
             <div class="td-rpanel">
                 <div class="twm-bp__tabs td-rpanel__tabs">
@@ -1520,7 +1533,11 @@ function mountTicketInspector(host, props, ctx) {
         if (!wm || !name) return;
         if (showing === 'backlog') {
             const { assigneeExpr } = await import('./backlog_filters.js');
-            wm.openInPrimary('backlog', { expr: assigneeExpr(name), label: `On ${name}` });
+            // `flat`: a person's plate is a LIST. Drawn as a tree it would carry
+            // epics and stories that are not theirs (kept for context) and drop
+            // the items of theirs that sit under a folded parent — so the table
+            // would disagree with the count on the row that opened it.
+            wm.openInPrimary('backlog', { expr: assigneeExpr(name), label: `On ${name}`, flat: true });
         } else {
             const { assigneeExpr } = await import('./filters.js');
             wm.openInPrimary('queues', { expr: assigneeExpr(name), label: `On ${name}` });

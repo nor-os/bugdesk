@@ -186,10 +186,6 @@
             enableConsoleLogging: window.__ECOAGENT_DEBUG__,
         }).then(async (runtime) => {
             const bus = runtime?.eventBus;
-            if (bus) {
-                bus.on?.('welcome-screen:shown', () => bus.emit?.('welcome-screen:hidden'));
-                bus.emit?.('welcome-screen:hidden');
-            }
             try {
                 const { installTilingShell } = await import('./js/tiling/install.js');
                 await installTilingShell({

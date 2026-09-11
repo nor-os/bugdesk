@@ -49,7 +49,7 @@ import {
     dueOf, dueOverrun, isClosedItem, isGated, itemLabel, itemRef, ladderFor,
     loadBacklog, parentTypesFor,
     patchItem, postItemComment,
-    REFINEMENT_RULES, refinementGaps, stageActions, stageOf, treeRows,
+    REFINEMENT_RULES, refinementGaps, flatRows, stageActions, stageOf, treeRows,
     typeLabelOf,
 } from './backlog_data.js';
 
@@ -185,14 +185,22 @@ function mountBacklogBoard(host, props, ctx) {
         ? adhocFilter(props.expr, props.label)
         : resolveFilter(props?.filter);
 
+    // A plain list of what matched, with no hierarchy around it: what a
+    // person's name opens (the Inspector, the tracker dashboard). The tree is
+    // the right shape for a backlog and the wrong one for "everything on
+    // Alice" — see flatRows() in ./backlog_data.js. The fold controls go with
+    // it: there is nothing folded to expand.
+    const flat = props?.flat === true;
+
     host.innerHTML = `
     <div class="td-page">
         <div class="td-page__bar">
             <span class="td-page__title" data-slot="title">${icon(esc(view.icon))} ${esc(view.label)}</span>
             <span class="td-dim" data-slot="count"></span>
             <span class="td-spacer"></span>
+            ${flat ? '' : `
             <button class="ea-btn" data-a="expand" title="Expand every item">${icon('unfold_more')}</button>
-            <button class="ea-btn" data-a="collapse" title="Collapse every item">${icon('unfold_less')}</button>
+            <button class="ea-btn" data-a="collapse" title="Collapse every item">${icon('unfold_less')}</button>`}
             <button class="ea-btn" data-a="savefilter">${icon('filter_alt')} Save as filter</button>
             <span class="bd-newgroup">
                 <span class="td-dim">New</span>
@@ -221,7 +229,7 @@ function mountBacklogBoard(host, props, ctx) {
     let byRef = new Map();
 
     const rows = () => {
-        const list = treeRows(view.match, _collapsed);
+        const list = flat ? flatRows(view.match) : treeRows(view.match, _collapsed);
         byRef = new Map(list.map((i) => [i.ref, i]));
         const matched = list.filter((i) => !i.context).length;
         const context = list.length - matched;

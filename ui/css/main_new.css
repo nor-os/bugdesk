@@ -4506,6 +4506,22 @@ body.dt-col-resizing {
     justify-content: center;
 }
 
+/* The store's project name, centred in the top bar (see index.html's
+   _showProjectLabel). Quieter than the brand wordmark to its left — it is an
+   answer to "which project am I looking at", not a heading. */
+.bugdesk-project {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-secondary, #9aa4b2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    cursor: default;
+}
+
 .bar-right {
     flex: 1;
     display: flex;

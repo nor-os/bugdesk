@@ -280,7 +280,8 @@ function mountTracker(host, props, ctx) {
         const person = e.target.closest('[data-who]');
         if (person) {
             const who = person.dataset.who;
-            openBoard({ expr: assigneeExpr(who), label: who ? `On ${who}` : 'Nobody on it' });
+            // A flat list, not the tree: see mountBacklogBoard's `flat`.
+            openBoard({ expr: assigneeExpr(who), label: who ? `On ${who}` : 'Nobody on it', flat: true });
             return;
         }
         const row = e.target.closest('[data-open]');
@@ -339,7 +340,7 @@ function mountTracker(host, props, ctx) {
                 ctx.wm?.navigate?.('item', { id: String(model.id), label: itemLabel(model) },
                     { ctx, dest: 'window' });
             } else if (action === 'who') {
-                openBoard({ expr: assigneeExpr(model.assignee), label: model.assignee ? `On ${model.assignee}` : 'Nobody on it' });
+                openBoard({ expr: assigneeExpr(model.assignee), label: model.assignee ? `On ${model.assignee}` : 'Nobody on it', flat: true });
             } else if (action === 'project' && model.projectRef) {
                 openBoard({ expr: projectExpr(model.projectRef), label: model.projectRef });
             } else if (action === 'delete') {

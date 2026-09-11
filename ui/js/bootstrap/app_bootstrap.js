@@ -303,10 +303,6 @@ export async function bootstrapApplication(options = {}) {
 
     const disposers = [];
 
-    // ProjectModel drives Notes (right panel) and the File menu's project
-    // actions — the shell reads it directly for those, no page registry needed.
-    applicationShell.projectModel = projectModel;
-
     const updateRecentMenu = async () => {
         // EcoAgent's File menu surfaces projects only — workspace.json
         // recents are no longer wired through this menu (the Ecosim
@@ -493,9 +489,10 @@ export async function bootstrapApplication(options = {}) {
         }
     });
 
-    // Switch to simulation-run mode when a project is opened
+    // The shell has no page modes any more — the tiling WM owns what is on
+    // screen — so opening a project only refreshes the menu and drops cached
+    // table state.
     eventBus.on('project:opened', async () => {
-        applicationShell.setMode('simulation-run');
         updateRecentMenu();
         // Drop cached DataTable view-state so the next project loads its
         // own persisted sort/filters/column-widths, not the old one's.
@@ -504,7 +501,7 @@ export async function bootstrapApplication(options = {}) {
 
     // Restore the last project early so that every page starts with the
     // project already open. Must come AFTER the project:opened handler above
-    // so that setMode('simulation-run') fires.
+    // so that its handler fires.
     if (!projectModel.isOpen) {
         await projectModel.restoreLastProject();
     }
@@ -795,7 +792,6 @@ function setupMenuActions({
     const handleNew = async () => {
         clearWorkspacePersistedState();
         projectModel?.close?.();
-        applicationShell.setMode('notebook');
     };
 
     const handleOpenDialog = async (path) => {

@@ -740,6 +740,10 @@ await t('clicking a person opens their list the same way', () => {
     assert.match(JSON.stringify(opened[0].props.expr), /"bob"/);
     assert.equal(opened[0].dest, 'origin');
     assert.equal(opened[0].newTab, true);
+    // A LIST, not the tree: a person's plate is not a work package, and drawn
+    // as a tree it carries rows that are not theirs and folds away rows that
+    // are. See `flat` in mountBacklogBoard.
+    assert.equal(opened[0].props.flat, true, 'the person list opens as a tree');
 });
 
 await t('the scope switch narrows to what I handed out', async () => {
@@ -1177,6 +1181,59 @@ console.log('\nTeam overview');
 
 const { createTicketDeskContent } = await import(join(UI, 'ticketdesk', 'pages.js'));
 
+/* WHO GETS A ROW. The roster in bugdesk.json is the spine — everyone
+ * assignable is listed, so this panel and the assignee picker cannot disagree
+ * about who works here — and beyond it only somebody actually carrying open
+ * work. A name that reached the store once and has nothing open is a fossil of
+ * an old assignment; it used to sit in this list forever with nothing pointing
+ * at it and no way to remove it. */
+const { teamNames } = await import(join(UI, 'ticketdesk', 'data.js'));
+
+await t('the roster is listed in full, busy or not', () => {
+    // Nobody is carrying anything at all here: the four roster names are still
+    // the four rows.
+    assert.deepEqual(teamNames(new Map()), ['alice', 'alice_agent', 'bob', 'bob_agent']);
+});
+
+await t('somebody off the roster is listed only while they are carrying work', () => {
+    const seen = new Map([
+        ['carol', { name: 'carol', open: 1 }],   // not on the roster, but busy
+        ['dave', { name: 'dave', open: 0 }],     // not on the roster, all done
+    ]);
+    const names = teamNames(seen);
+    assert.ok(names.includes('carol'), `carol is carrying work: ${names}`);
+    assert.ok(!names.includes('dave'), `dave has nothing open and is on no roster: ${names}`);
+});
+
+await t('one person with two spellings is one row, spelled as the roster does', () => {
+    const names = teamNames(new Map([['bob', { name: 'Bob', open: 3 }]]));
+    assert.deepEqual(names.filter((n) => n.toLowerCase() === 'bob'), ['bob']);
+});
+
+await t('every roster member has a row in the panel, including the idle ones', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const wm = {
+        desktops: { active: () => ({ tree: {
+            focusedLeafId: 'leaf',
+            get: () => ({ content: { kind: 'backlog' } }),
+            primaryLeafId: () => 'leaf',
+        } }) },
+        openInPrimary: () => {},
+    };
+    const panel = createTicketDeskContent({ eventBus: null })['panel:right'](host, {}, { wm });
+    await tick(); await tick();
+
+    const rows = [...host.querySelectorAll('[data-member]')].map((e) => e.dataset.member);
+    // The backlog fixture only ever assigns alice and bob; the two agents are
+    // on the roster and carry nothing, and they are listed all the same.
+    assert.deepEqual(rows, ['alice', 'alice_agent', 'bob', 'bob_agent'],
+        `the panel and the roster disagree: ${JSON.stringify(rows)}`);
+
+    panel.destroy?.();
+    host.remove();
+});
+
 await t('clicking a name opens that person\'s OPEN work in the main tile', async () => {
     const opened2 = [];
     const host = document.createElement('div');
@@ -1324,6 +1381,58 @@ await t('a focus change does NOT rebuild the panel under the pointer', async () 
  * registry and asserts what the user can see — what is in the primary tile
  * afterwards.
  */
+
+/* ── a person's plate is a LIST ──────────────────────────────────────
+ *
+ * The backlog page draws a tree, which is right for a backlog and wrong for
+ * "everything on bob": the tree keeps his items' ANCESTORS as context rows
+ * (work that is not his, in a list of his work), and it drops any of his items
+ * that sit under a folded parent — so the table can contradict the count on the
+ * row that opened it. `flat` is what the Inspector and the dashboard pass.
+ */
+
+console.log('\nEverything on one person');
+
+await t('a flat board lists that person\'s open items and nothing else', async () => {
+    const { assigneeExpr } = await import(join(UI, 'ticketdesk', 'backlog_filters.js'));
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const page = createBacklogContent({ eventBus: null })
+        .backlog(host, { expr: assigneeExpr('bob'), label: 'On bob', flat: true }, { wm: null });
+    await tick(); await tick();
+
+    const refs = [...host.querySelectorAll('tbody tr')]
+        .map((tr) => tr.querySelector('.bd-item__ref')?.textContent?.trim())
+        .filter(Boolean);
+    // bob's open work, and only that: STORY-0003 is done, TASK-0005 is nobody's,
+    // and the project the two stories hang from is alice's.
+    assert.deepEqual(refs.sort(), ['STORY-0002', 'STORY-0004'],
+        `a flat list of bob's work should be exactly his open items: ${refs}`);
+    assert.equal(host.querySelector('.bd-item--context'), null,
+        'a context row from the tree survived into the flat list');
+    assert.equal(host.querySelector('[data-a="collapse"]'), null,
+        'the fold controls are still offered for a list with no hierarchy');
+
+    page.destroy?.();
+    host.remove();
+});
+
+await t('the tree is still a tree when it is not a person\'s list', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const page = createBacklogContent({ eventBus: null })
+        .backlog(host, { filter: 'all' }, { wm: null });
+    await tick(); await tick();
+
+    assert.ok(host.querySelector('[data-a="collapse"]'), 'the board lost its fold controls');
+    const refs = [...host.querySelectorAll('tbody tr')]
+        .map((tr) => tr.querySelector('.bd-item__ref')?.textContent?.trim())
+        .filter(Boolean);
+    assert.ok(refs.includes('PROJ-0001'), `the whole store should be here: ${refs}`);
+
+    page.destroy?.();
+    host.remove();
+});
 
 console.log('\nInspector, end to end');
 

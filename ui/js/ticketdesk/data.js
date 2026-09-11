@@ -147,6 +147,40 @@ export async function rememberAssignee(name) {
     }
 }
 
+/**
+ * Who the Assignees list is allowed to name, in display order.
+ *
+ * THE ROSTER IS THE SPINE. Everyone assignable gets a row — including the
+ * people carrying nothing at the moment — so the Inspector and the assignee
+ * picker can never disagree about who works here. Beyond the roster, only
+ * somebody actually carrying OPEN work earns a row.
+ *
+ * That last rule is the one that was missing. A name reached the panel by
+ * having ever appeared in an `assignee:` field, so a person who left, or a
+ * spelling used once two years ago, sat in the team list forever — a row with
+ * no open work, no roster entry, and no way to act on it. Nothing pointed at
+ * them and nothing could remove them.
+ *
+ * Matching is case-insensitive and the ROSTER'S spelling wins, for the same
+ * reason the server matches collaborators that way (ProjectConfig.Upsert):
+ * "Alice" and "alice" are one person, and two rows for them split the counts.
+ *
+ * @param {Map<string, {name: string, open: number}>} seen  lowercased name →
+ *        how the store spells it and how much of their work is still in flight
+ * @returns {string[]} display names
+ */
+export function teamNames(seen) {
+    const out = new Map();
+    for (const n of ASSIGNEES) {
+        const clean = String(n || '').trim();
+        if (clean) out.set(clean.toLowerCase(), clean);
+    }
+    for (const [key, entry] of seen) {
+        if (!out.has(key) && entry.open > 0) out.set(key, entry.name);
+    }
+    return [...out.values()].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+}
+
 /** The agent a person's comments are signed by, when it is not me. */
 export const agentFor = (name) =>
     COLLABORATORS.find((c) => c.name?.toLowerCase() === String(name || '').toLowerCase())?.agent
@@ -284,19 +318,35 @@ export async function loadData() {
 
     // TEAM: one row per assignee. `inc` = open bugs,
     // `other` = closed, `load` = open relative to the busiest assignee.
-    const openByAssignee = {}, closedByAssignee = {};
+    //
+    // Counted case-insensitively, and WHICH names get a row is teamNames()'s
+    // decision — the roster plus whoever is actually carrying something. The
+    // aggregate from /api/meta contributes names, not counts: it knows every
+    // assignee the store has ever had, which is exactly the set that needs
+    // filtering rather than listing.
+    const openByAssignee = new Map(), closedByAssignee = new Map(), seen = new Map();
+    const note = (name) => {
+        const clean = String(name || '').trim();
+        if (!clean) return null;
+        const key = clean.toLowerCase();
+        if (!seen.has(key)) seen.set(key, { name: clean, open: 0 });
+        return key;
+    };
+    for (const name of Object.keys(byAssignee)) note(name);
     for (const t of TICKETS) {
-        const a = t.assignee || HUMAN_AUTHOR;
-        if (isClosed(t)) closedByAssignee[a] = (closedByAssignee[a] || 0) + 1;
-        else openByAssignee[a] = (openByAssignee[a] || 0) + 1;
+        const key = note(t.assignee || HUMAN_AUTHOR);
+        if (!key) continue;
+        const bucket = isClosed(t) ? closedByAssignee : openByAssignee;
+        bucket.set(key, (bucket.get(key) || 0) + 1);
     }
-    const names = Object.keys(byAssignee).length
-        ? Object.keys(byAssignee)
-        : Array.from(new Set(TICKETS.map((t) => t.assignee)));
-    const maxOpen = Math.max(1, ...names.map((n) => openByAssignee[n] || 0));
-    TEAM = names.sort().map((name) => {
-        const inc = openByAssignee[name] || 0;
-        const other = closedByAssignee[name] || 0;
+    for (const [key, entry] of seen) entry.open = openByAssignee.get(key) || 0;
+
+    const names = teamNames(seen);
+    const maxOpen = Math.max(1, ...names.map((n) => openByAssignee.get(n.toLowerCase()) || 0));
+    TEAM = names.map((name) => {
+        const key = name.toLowerCase();
+        const inc = openByAssignee.get(key) || 0;
+        const other = closedByAssignee.get(key) || 0;
         const presence = inc > 0 ? 'online' : 'away';
         return {
             name,

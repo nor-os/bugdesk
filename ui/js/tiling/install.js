@@ -3,21 +3,21 @@
  *
  * Flow:
  *
- *   1. Ecosim shell mounts (global-top-bar, .container with workspace
- *      shell + panels, global-bottom-bar).
+ *   1. The shell mounts its two bars (global-top-bar, global-bottom-bar)
+ *      with the space between them left empty for us.
  *   2. installProjectSelector resolves the active project.
- *      (BugDesk drops the "Model OK" status indicator entirely; there
- *      never was a sim-controls topbar to decorate, so that step is gone.)
- *   4. We RELOCATE the populated `.sim-controls` (Run cluster, Step,
- *      Pause, Stop, batch toggle) from `.workspace-top-bar` up into
- *      `.global-top-bar .bar-right`. Sim controls now live in the
- *      very top bar, next to the panel-toggle buttons.
- *   5. We DELETE — not hide — the entire workspace container
- *      (`.container`, `.workspace-top-bar`, the global search input)
- *      and everything inside it. No leftover invisible DOM.
- *   6. Restructure body: top bar → tiling WM host → bottom bar.
- *   7. Mount the WM in the middle, install palette + keymap, add
- *      the desktop selector to the bottom bar.
+ *   3. Fill the top bar: page shortcuts in the centre, the menu folded
+ *      into a hamburger beside the brand.
+ *   4. Insert the WM host between the two bars and mount the window
+ *      manager in it, with the palette, the keymap and the desktop strip.
+ *
+ * THERE IS NO TEARDOWN STEP ANY MORE. This used to begin by deleting the
+ * Ecosim workspace the shell had just built — the `.container` with its tool
+ * rail, template sidebar, resizer and right-hand "AI Assistant" panel, the
+ * workspace top bar, the "Model OK" indicator, the File/Edit/View/Run menus —
+ * all of it built during boot and removed a few hundred milliseconds later,
+ * which is exactly how long it was visible for. The shell no longer builds any
+ * of it; see ui/js/ui/shell/application_shell.js.
  */
 
 import { installProjectSelector } from '../ecoagent/project_selector.js';
@@ -39,51 +39,34 @@ import { createPywebviewHost } from '@flexdesk/host';
 export async function installTilingShell({ eventBus, logger, runtime } = {}) {
     const log = logger ?? { info(){}, warn(){}, error(){}, debug(){} };
 
-    // 1. Project must be open before we tear down the workspace area.
+    // 1. Project must be open before anything is mounted.
     let project;
     try { project = await installProjectSelector({ eventBus, logger }); }
     catch (err) { console.error('[tiling-shell] project selector threw', err); return null; }
     if (!project) { log.info?.('tiling-shell: no project active, deferring install'); return null; }
 
-    // 2. BugDesk: no model/simulation health. Remove the bottom-left status
-    // indicator ("Model OK") entirely rather than decorating it.
-    document.getElementById('status-indicator')?.remove();
-
-    // 2b. Dispose the GlobalSearchController — it owns the .bar-center
-    //     search input AND a global Ctrl+K keydown listener that hijacks
-    //     the chord. Removing just its DOM leaves the keydown listener
-    //     stealing Ctrl+K and the controller is unreachable from here.
+    // 2. Dispose the GlobalSearchController — it owns a global Ctrl+K keydown
+    //    listener that hijacks the chord, and it is unreachable from here once
+    //    boot is over. (Its .bar-center input is never built any more, but the
+    //    listener is installed regardless of the DOM.)
     try { runtime?.globalSearchController?.dispose?.(); } catch (err) {
         console.warn('[tiling-shell] could not dispose globalSearchController', err);
     }
 
-    // 3. TicketDesk: no simulation — drop the sim-controls cluster and
-    //    skip the Ecosim scenario picker entirely.
-    document.querySelector('.workspace-top-bar .sim-controls')?.remove();
+    // A no-op stand-in for Ecosim's scenario tab service: BugDesk has no
+    // scenarios, but the widgets that ask for one still expect the shape.
     const scenarioTabsShim = {
         openTab: ({ kind, entityId, label, icon, subTab }) => null,
         registerProvider: () => {},
         getActiveTab: () => null,
     };
 
-    // 4. Replace the global search bar (.bar-center) with the page
-    //    shortcuts: home / sfc / markets / agents / analytics / settings.
+    // 3. Fill the top bar: page shortcuts in the centre, and the menu
+    //    collapsed into a single hamburger button beside the brand.
     _installPageShortcuts();
-
-    // 4b. Trim the menu bar — View and Run aren't needed (panel toggles
-    //    live next door; Run is in the sim controls cluster), then
-    //    collapse the remaining File/Edit/Help into a single hamburger
-    //    button mounted to the left of the EcoAgent brand.
-    _trimMenuBar();
     _installHamburgerMenu();
 
-    // 5. Delete the entire workspace shell (sidebars, panels, resizers,
-    //    bottom panel, fl-bar, fixed-200). Don't hide — remove.
-    document.querySelector('.container')?.remove();
-    document.querySelector('.workspace-top-bar')?.remove();
-    document.querySelector('.workspace-shell')?.remove();
-
-    // 6. Make body a 3-row flex column: top bar / WM host / bottom bar.
+    // 4. Make body a 3-row flex column: top bar / WM host / bottom bar.
     document.body.classList.add('twm-body');
     const top = document.querySelector('.global-top-bar');
     const bottom = document.querySelector('.global-bottom-bar');
@@ -92,7 +75,7 @@ export async function installTilingShell({ eventBus, logger, runtime } = {}) {
     if (top && bottom) document.body.insertBefore(wmHost, bottom);
     else document.body.appendChild(wmHost);
 
-    // 7. Build the content registry, then the WM + palette + keymap.
+    // 5. Build the content registry, then the WM + palette + keymap.
     //
     // Content is built as a plain { kind: factory } map and handed to
     // @flexdesk/wm's createContentRegistry(...) up front — content_registry.js
@@ -185,11 +168,9 @@ export async function installTilingShell({ eventBus, logger, runtime } = {}) {
     scenarioTabsShim.openTab = ({ kind, entityId, label, icon, subTab }) =>
         wm.openInPrimary(kind, { id: entityId, label, icon, subTab });
 
-    // 8. Take panel ownership away from the legacy shell FSMs (they would
-    //    otherwise keep writing .active/.pinned/disabled to the same toggle
-    //    buttons the WM owns), then rewire the top-bar toggles to the WM,
-    //    add the palette button and the desktop bar.
-    runtime?.shell?.retireLegacyPanels?.();
+    // 6. Wire the top-bar panel toggles to the WM (nothing else drives them
+    //    any more — the legacy panel state machines are gone), then add the
+    //    palette button and the desktop bar.
     _rewirePanelToggles(wm);
     _installPaletteButton(palette);
     _installTopBarResponsive();
@@ -281,19 +262,6 @@ export async function installTilingShell({ eventBus, logger, runtime } = {}) {
     return { wm, palette };
 }
 
-/** Move `.workspace-top-bar > .sim-controls` (+ batch toggle, step btn,
- *  time-display etc. that runtime_controls inserts there) into
- *  `.global-top-bar .bar-right`, before the existing panel-toggles. */
-function _relocateSimControls() {
-    const sim = document.querySelector('.workspace-top-bar .sim-controls');
-    if (!sim) return;
-    const barRight = document.querySelector('.global-top-bar .bar-right');
-    if (!barRight) return;
-    sim.classList.add('twm-sim-controls');
-    const togglesGroup = barRight.querySelector('.panel-toggles');
-    if (togglesGroup) barRight.insertBefore(sim, togglesGroup);
-    else barRight.insertBefore(sim, barRight.firstChild);
-}
 
 /* The old search bar's DOM home was `.global-top-bar .bar-center`;
  * its container is now repurposed by _installPageShortcuts as the page-
@@ -402,29 +370,6 @@ function _installTicketActions(wm, trackerMode = false) {
     else barRight.insertBefore(wrap, barRight.firstChild);
 }
 
-/**
- * Strip the menus that mean nothing in BugDesk, leaving only Help for the
- * hamburger to collect.
- *
- *   View  — the panel toggles next door do this, visibly and in one click.
- *   Run   — there is no simulation.
- *   File  — New…, Open Project…, Save, Save All, Exit. BugDesk has no project
- *           to open and nothing to save: the store is a directory of markdown
- *           files and every edit is written the moment it is made. A Save that
- *           does nothing is worse than no Save, because it implies the rest of
- *           the app might not have saved.
- *   Edit  — Undo and Redo ship permanently disabled, and Find duplicates the
- *           per-column filters and Ctrl+K.
- */
-function _trimMenuBar() {
-    const drop = new Set(['view', 'run', 'file', 'edit']);
-    const menu = document.querySelector('.global-top-bar .app-menu');
-    if (!menu) return;
-    for (const item of menu.querySelectorAll('.menu-item')) {
-        const label = item.querySelector('span')?.textContent?.trim().toLowerCase();
-        if (drop.has(label)) item.remove();
-    }
-}
 
 /** Insert a hamburger button to the LEFT of the EcoAgent brand. Clicking
  *  it opens a unified context menu listing the entries of every

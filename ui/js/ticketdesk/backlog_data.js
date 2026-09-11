@@ -463,6 +463,33 @@ export async function loadBacklog() {
  * backlog a backlog: an unparented story reads as a problem precisely BECAUSE
  * every other row sits under something. */
 
+/**
+ * The same rows WITHOUT the hierarchy: every match, and nothing else.
+ *
+ * For the questions that are about a person rather than about a work package —
+ * "everything on Alice" — where the tree is not the answer but the thing in the
+ * way of it. Two things go wrong when that list is drawn as a tree: epics and
+ * stories nobody assigned to Alice appear in it (as `context`, but they are
+ * still rows in her list), and any of her items sitting under a FOLDED parent
+ * is not drawn at all — so a row that says "7 in flight" opens a table with
+ * four items in it, three of them not hers.
+ *
+ * Row shape is treeRows()'s, so the table's cell renderer draws these without
+ * knowing which one it got: depth 0, no guides, no caret, nothing for context.
+ */
+export function flatRows(match) {
+    return ITEMS.filter(match).map((item) => ({
+        ...item,
+        depth: 0,
+        ancestorsLast: [],
+        isLast: true,
+        hasChildren: false,
+        isCollapsed: false,
+        hidden: 0,
+        context: false,
+    }));
+}
+
 /** Ancestor ids of one item, nearest first. Guards a cycle from a hand edit. */
 function ancestorIds(item, byId) {
     const out = [];

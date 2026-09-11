@@ -137,6 +137,27 @@ none, because you try it first.
 
 ### Changed
 
+- **The boot no longer shows another application's UI first.** BugDesk starts on
+  Ecosim's shell, and that shell used to build Ecosim's whole workspace — a left
+  tool rail, a template sidebar, a drag resizer, an ETL drawer and a right-hand
+  panel carrying Notes, Parameters and an **"AI Assistant"** box — which the
+  tiling shell then deleted outright a few hundred milliseconds later. Those
+  milliseconds were a bridge round trip long, so what you saw on every start was
+  a foreign right panel, and then the real UI dropped over it.
+
+  None of it is built any more, and it is **removed rather than hidden**: with
+  the chrome went the two panel state machines that drove it, the mode switcher
+  (`notebook` / `simulation-run` / `database` / `etl` / `paper`) and its
+  persisted mode, the collapsible-section store, the Notes load/save, the AI chat
+  box nothing ever mounted into, an unreachable `#contextMenu`, a
+  `.toast-container` the notification centre ignores in favour of its own
+  body-level root, and the "Model OK" indicator of a model BugDesk does not have.
+  The File / Edit / View / Run menus are gone for the same reason — the tiling
+  shell was deleting them too — leaving the menu bar as brand plus Help, which is
+  what the hamburger has offered all along. `installTilingShell` no longer has a
+  teardown step at all: the shell mounts two bars, and the window manager fills
+  the space between them.
+
 - **Settings only offers what BugDesk actually does.** `@flexdesk/core` registers
   a schema written for a different application — a simulation IDE with ETL
   pipelines, an AI assistant, an autosaving editor, a projects directory — and
@@ -471,6 +492,34 @@ bridge rejects.
   size, so what you type and what you get are the same text.
 
 ### Fixed
+
+- **The Assignees panel and the collaborator roster now say the same thing.** A
+  name got a row there by having ever appeared in an `assignee:` field, so
+  somebody who left the project — or a spelling used once and never again — sat
+  in the team list forever: no open work, no roster entry, nothing pointing at
+  them and no way to remove them. The list is now the roster in
+  `.bugdesk/project.json` **plus anyone actually carrying open work**, which
+  means every assignable person appears (idle or not, so the panel and the
+  assignee picker cannot disagree about who works here) and a name with nothing
+  open and no roster entry does not appear at all. Counting is
+  case-insensitive and the roster's spelling wins, so "Alice" and "alice" are
+  one row rather than two half-counted ones. One rule, shared by both stores.
+
+  The badge beside the heading now counts who is **carrying** something.
+  `presence !== 'offline'` counted every row that existed, so it could only ever
+  read "N/N active" — which was already meaningless and would have become
+  actively wrong now that idle colleagues are listed.
+
+- **Clicking a name in the Assignees panel opens a plain list of that person's
+  work.** It opened the backlog **tree** filtered to them, and a tree answers a
+  different question: it keeps their items' ancestors as context rows, so epics
+  and stories belonging to somebody else appeared in the list, and it honours
+  the saved fold state, so any of their items sitting under a collapsed parent
+  was not drawn at all. A row reading "7 in flight" could open a table of four
+  things, three of them not theirs. The same click from the tracker dashboard's
+  "Who has what" took the same route and now takes the new one: `assignee is
+  <them>` and `status is not done/dropped`, flat, one row per item. The board is
+  still a tree everywhere it is a board.
 
 - **"Change your name" did not take effect.** Reported as "this feature has not
   been developed properly yet", and that was fair — three faults stacked on one
