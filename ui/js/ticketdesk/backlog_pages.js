@@ -46,7 +46,7 @@ import { displayRef, formatRef, itemRefOf, parseKey, parseRef, refKey } from './
 import { allRows, canonRef, findRow, openRow, storesAvailable } from './records.js';
 import { renderHistory } from './history.js';
 import {
-    BUILTIN_FILTERS, DEFAULT_FILTER, MODEL, SCOPE,
+    BUILTIN_FILTERS, DEFAULT_FILTER, FILTER_FIELDS, MODEL, SCOPE,
     adhocFilter, deleteFilter, describeFilter, duplicateFilter, epicExpr,
     getFilter, listFilters, matcherFor, projectExpr, resolveFilter,
 } from './backlog_filters.js';
@@ -150,21 +150,27 @@ function saveCollapsed() {
  * Assignee, so the indices are derived from the spec instead.
  */
 const BOARD_COLS = [
-    { key: 'ref', label: 'Item', get: (i) => i.ref },
+    // `filter` names the filter field a right-click "Filter by" uses, and
+    // `filterValue` the value it matches, read from the ITEM rather than the
+    // cell: a cell shows "In progress" where the store says `in-progress`. A
+    // column with no `filter` cannot be filtered by its cell (a whole title as
+    // an exact match finds one row, which is what the row already is).
+    { key: 'ref', label: 'Item', get: (i) => i.ref, filter: 'ref', filterValue: (i) => i.ref },
     { key: 'title', label: 'Title', get: (i) => i.title },
-    { key: 'type', label: 'Type', get: (i) => i.typeLabel },
-    { key: 'status', label: 'Status', get: (i) => i.statusLabel },
-    { key: 'points', label: 'Pts', get: (i) => i.points || '' },
+    { key: 'type', label: 'Type', get: (i) => i.typeLabel, filter: 'type', filterValue: (i) => i.type },
+    { key: 'status', label: 'Status', get: (i) => i.statusLabel, filter: 'status', filterValue: (i) => i.status },
+    { key: 'points', label: 'Pts', get: (i) => i.points || '', filter: 'points', filterValue: (i) => i.points },
     { key: 'criteria', label: 'Criteria',
       get: (i) => (i.criteriaTotal ? `${i.criteriaDone}/${i.criteriaTotal}` : '') },
-    { key: 'assignee', label: 'Assignee', get: (i) => i.assignee },
+    { key: 'assignee', label: 'Assignee', get: (i) => i.assignee,
+      filter: 'assignee', filterValue: (i) => i.assignee || 'none' },
     // Tracker mode only. In a plain backlog the column would be empty on every
     // row — the target date is the axis a follow-up tracker turns on and very
     // little else. The CELL still carries the raw `YYYY-MM-DD` so the column
     // sorts chronologically; the pill is painted over it in renderCell.
-    ...(TRACKER ? [{ key: 'due', label: 'Due', get: (i) => i.dueLabel || '' }] : []),
-    { key: 'phase', label: 'Phase', get: (i) => i.phaseLabel },
-    { key: 'updated', label: 'Updated', get: (i) => i.updated },
+    ...(TRACKER ? [{ key: 'due', label: 'Due', get: (i) => i.dueLabel || '', filter: 'due', filterValue: (i) => i.due }] : []),
+    { key: 'phase', label: 'Phase', get: (i) => i.phaseLabel, filter: 'phase', filterValue: (i) => i.phaseLabel },
+    { key: 'updated', label: 'Updated', get: (i) => i.updated, filter: 'updated', filterValue: (i) => i.updated },
 ];
 const BOARD_HEADERS = BOARD_COLS.map((c) => c.label);
 /** key → column index, so nothing reads a magic number. */
@@ -267,6 +273,23 @@ function mountBacklogBoard(host, props, ctx) {
         refresh();
     };
 
+    /** The right-clicked CELL as a filter clause on the item behind its row, or
+     *  null for a column with no filter field or an empty value. */
+    const cellClause = (cm) => {
+        const col = cm.colIdx == null ? null : BOARD_COLS[cm.colIdx];
+        const model = cm.row ? byRef.get(cm.row[REF_COL]) : null;
+        if (!col?.filter || !model) return null;
+        const value = col.filterValue(model);
+        if (value === '' || value == null) return null;
+        const label = FILTER_FIELDS.find((f) => f.key === col.filter)?.label || col.label;
+        return {
+            label,
+            shown: String(cm.value ?? value) || String(value),
+            clause: { kind: 'clause', field: col.filter, op: 'is', value },
+        };
+    };
+    const andGroup = (children) => ({ kind: 'group', op: 'AND', children });
+
     const menuRefs = (cm) => (cm.selectedRows?.length ? cm.selectedRows : (cm.row ? [cm.row] : []))
         .map((r) => r?.[REF_COL]).filter(Boolean);
 
@@ -294,6 +317,7 @@ function mountBacklogBoard(host, props, ctx) {
         contextMenuItems: (cm) => {
             const refs = menuRefs(cm);
             const model = cm.row ? byRef.get(cm.row[REF_COL]) : null;
+            const cc = cellClause(cm);
             return [
                 { label: refs.length > 1 ? `Open ${refs.length} items in tabs` : 'Open',
                   icon: 'open_in_new', action: 'open', disabled: !refs.length },
@@ -317,12 +341,33 @@ function mountBacklogBoard(host, props, ctx) {
                 { separator: true },
                 { label: refs.length > 1 ? `Copy ${refs.length} references` : 'Copy reference',
                   icon: 'content_copy', action: 'copy-ref', disabled: !refs.length },
+                { separator: true },
+                // The same two entries as the bug queue's, greyed rather than
+                // hidden so the menu keeps its shape whichever cell was hit.
+                { label: cc ? `Filter by ${cc.label} “${cc.shown}”` : 'Filter by this cell',
+                  icon: 'filter_alt', action: 'filter-cell', disabled: !cc },
+                { label: 'Save as filter…', icon: 'bookmark_add', action: 'filter-cell-save', disabled: !cc },
             ];
         },
         onContextMenuAction: async (action, cm) => {
             const refs = menuRefs(cm);
             const model = cm.row ? byRef.get(cm.row[REF_COL]) : null;
+            const cc = cellClause(cm);
             switch (action) {
+                case 'filter-cell':
+                    if (cc) {
+                        const expr = andGroup([cc.clause]);
+                        openBoard({ expr, label: describeFilter(expr) });
+                    }
+                    break;
+                case 'filter-cell-save':
+                    if (cc) {
+                        openFilterEditor({
+                            model: MODEL, scope: SCOPE, seedExpr: andGroup([cc.clause]),
+                            items: ITEMS, onSaved: openSavedFilter,
+                        });
+                    }
+                    break;
                 case 'open': refs.forEach((r) => { const m = byRef.get(r); if (m) openItem(m.id, { dest: 'origin', newTab: true }); }); break;
                 case 'open-window': if (model) openItem(model.id, { dest: 'window' }); break;
                 case 'open-split-h': if (model) openItem(model.id, { dest: 'split-h' }); break;

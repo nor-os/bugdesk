@@ -7,6 +7,14 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Filter the backlog by a cell, as in the bug queue.** Right-click a cell
+  on the backlog board or flat list for **Filter by <field> "<value>"** and
+  **Save as filter…**. It matches the item's stored value, not the cell text:
+  the Status cell reads "In progress" where the store says `in-progress`.
+  Item, Type, Status, Points, Assignee, Due (tracker mode), Phase and Updated
+  can be filtered this way. Title and Criteria are greyed out, as Summary is
+  in the queue.
+
 - **Lists remember your place, and every way of opening a row has a key.** In
   the bug queue, the backlog, search results and the Tracker dashboard, the row
   you move to with the arrow keys is remembered like the sort, filters and

@@ -1612,6 +1612,52 @@ await t('an item\'s breadcrumb is its hierarchy, and every crumb climbs through 
     crumb.destroy();
 });
 
+/* The bug queue's right-click menu offers "Filter by <field> <this cell>"; the
+ * backlog board's did not. It filters by the ITEM's stored value, not by the
+ * cell text: the Status cell reads "In progress" where the store says
+ * `in-progress`, and a filter on the label would match nothing. */
+await t('right-click a board cell and filter the board by it', async () => {
+    const navigated = [];
+    const wm = { navigate: (kind, props) => navigated.push({ kind, props }) };
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const page = createBacklogContent({ eventBus: null })
+        .backlog(host, { filter: 'all', flat: true }, { wm });
+    await tick(); await tick();
+
+    const headers = [...host.querySelectorAll('.preview-table-header-wrap thead tr:first-child th')]
+        .map((th) => th.textContent.trim());
+    const statusCol = headers.findIndex((h) => h.startsWith('Status'));
+    const titleCol = headers.findIndex((h) => h.startsWith('Title'));
+    const row = host.querySelector('tbody tr');
+    const ref = row.children[0].textContent.trim();
+    const item = backlogData.ITEMS.find((i) => i.ref === ref);
+
+    const menuFor = async (col) => {
+        row.children[col].dispatchEvent(new dom.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 }));
+        await new Promise((r) => setTimeout(r, 5));
+        return [...document.querySelectorAll('.data-context-menu .context-menu-item')];
+    };
+
+    const onStatus = await menuFor(statusCol);
+    const filterItem = onStatus.find((el) => /Filter by/.test(el.textContent));
+    assert.ok(filterItem, `no Filter by entry: ${onStatus.map((e) => e.textContent.trim())}`);
+    assert.match(filterItem.textContent, /Filter by Status/);
+    assert.ok(!filterItem.classList.contains('disabled'), 'filter by a status cell is greyed out');
+    assert.ok(onStatus.some((el) => /Save as filter/.test(el.textContent)), 'no Save as filter entry');
+    filterItem.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+    assert.equal(navigated.length, 1, 'the board did not navigate');
+    assert.equal(navigated[0].kind, 'backlog');
+    assert.deepEqual(navigated[0].props.expr.children, [{ kind: 'clause', field: 'status', op: 'is', value: item.status }]);
+
+    const onTitle = await menuFor(titleCol);
+    assert.ok(onTitle.find((el) => /Filter by/.test(el.textContent)).classList.contains('disabled'),
+        'a whole title is offered as a filter');
+
+    page.destroy?.();
+    host.remove();
+});
+
 /* A tile mounts only its ACTIVE tab, so opening an item in a new tab destroys
  * the board and going back builds a fresh one. Its sort used to die with it.
  * The table's state lives in the shell's table store, keyed by the view. */
