@@ -215,6 +215,42 @@ none, because you try it first.
 
 ### Changed
 
+- **The bug pages read at the same size as the backlog, and the whole UI has a
+  zoom.** The two halves of the app were on two different type scales: backlog
+  reads the shared `--font-size-*` tokens (12px body), while the bug pages read
+  `--ea-font-body` (11px) plus a drift of bare 9 / 9.5 / 10 / 10.5px literals.
+  Nobody chose that; it is just where the two came from. The bug side now uses
+  the same scale — one step up throughout, with glyph sizes left alone, since an
+  icon's size next to 12px text is a separate decision from the text's.
+
+  On top of that, a zoom control in the bottom bar: − / track / + / a readout
+  that resets, 50–200%, double-click the track to go back to 100%. It scales
+  every page in the tiled host and the content of floating windows, so the same
+  page reads the same size wherever it is. It deliberately does not scale the
+  top and bottom bars (chrome, and a zoom that moved them would push the control
+  off its own bar at 200%) or the floating window FRAME — `zoom` establishes a
+  scaled coordinate space, and a zoomed frame would put every drag, resize and
+  snap edge probe in units that no longer match the pointer. The scale lives in
+  your profile, like the backlog's fold state, so it survives moving machines.
+
+  **This one is not a FlexDesk feature.** Tables built its own (`web/js/grid/
+  zoom.js` plus a strip in its status bar) and FlexDesk ships no UI-scale API at
+  all, so this is BugDesk's, written to feel like the same control.
+
+- **Floating windows snap to the screen edges.** Drag one to the left or right
+  edge and it takes that half; drag it off the top and it maximises; drag it
+  back off and it returns to its pre-snap size. This IS a FlexDesk feature —
+  `ManagedWindow` has implemented the edge probe, the preview rectangle and the
+  restore since 0.3.0, behind a `snap` option that defaults off so upgrading
+  never changes a consumer's behaviour on its own. BugDesk simply switches it
+  on, on both paths that float a window.
+
+  No `snapController` is passed, which is the other half of the decision. A
+  controller is for a consumer that wants a drop on an edge to mean something
+  other than "move here" — under a tiling WM that usually means "stop being a
+  window and become a leaf in the tree". That is a different feature; without
+  one this is plain aero snap.
+
 - **Both stores are settable on the command line: `--bugs-dir` and
   `--backlog-dir`.** Pointing BugDesk at another repo's records needed an
   environment variable, which is the wrong shape for a thing you decide per run

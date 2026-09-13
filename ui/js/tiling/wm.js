@@ -763,6 +763,22 @@ export class WindowManager {
             canMaximize: true,
             canResize: true,
             modal: false,
+            // Aero snap: drag to a screen edge, release, and the window takes
+            // that half — or maximises, off the top edge — with the pre-snap
+            // size restored when you drag back off it. FlexDesk implements the
+            // whole thing (the edge probe, the preview rectangle, the restore)
+            // behind this one flag. It defaults OFF so that upgrading FlexDesk
+            // never changes a consumer's behaviour on its own; BugDesk's
+            // floating windows are exactly the case it exists for, so it is
+            // simply switched on.
+            //
+            // No `snapController` is passed, and that is the other half of the
+            // decision. A controller is for a consumer that wants a drop on an
+            // edge to mean something OTHER than "move here" — under a tiling WM
+            // that usually means "stop being a window and become a leaf in the
+            // tree". That is a different feature, and without a controller this
+            // reduces to plain aero snap, which is what was asked for.
+            snap: true,
             onClose: () => this._onManagedWindowClosed(winId, mountInfo),
         });
 
@@ -1432,6 +1448,9 @@ export class WindowManager {
             canMaximize: true,
             canResize: true,
             modal: false,
+            // Aero snap, same as the promote path above — see the note there
+            // for why no snapController comes with it.
+            snap: true,
             onClose: () => this._onManagedWindowClosed(winId, mountInfo),
         });
         // leafId is null — `_onManagedWindowClosed` already short-circuits

@@ -26,6 +26,7 @@ import { WindowManager } from './wm.js';
 import { createCommandPalette } from './command_palette.js';
 import { installKeymap } from './keymap.js';
 import { installHistoryBack } from './history_nav.js';
+import { installUiScale } from './ui_scale.js';
 import { createPageStubsContent } from './page_stubs.js';
 import { showContextMenu } from '../ecoagent/ui/context_menu.js';
 import { openForm } from '../ecoagent/ui/modal.js';
@@ -180,6 +181,10 @@ export async function installTilingShell({ eventBus, logger, runtime } = {}) {
     // add and switch between multiple desktops again.
     _installDesktopBar(wm);
     _installUserChip(wm, eventBus);
+    // The bottom bar's zoom. Installed alongside the other two bar widgets and
+    // before wm.load(), so the saved scale is already on the root element when
+    // the first tiles paint rather than snapping into place a moment later.
+    installUiScale({ eventBus });
     _wirePageShortcuts(wm);
 
     await wm.load();

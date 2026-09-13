@@ -1408,5 +1408,44 @@ t('deletion is distinguished from modification', () => {
 t('a deletion of another record does not read as ours', () =>
     assert.equal(live.eventDeleted(ev(file('bugs', 9, true)), 'bugs', 3), false));
 
+console.log('\nUI scale');
+
+const scale = await import(new URL('../ui/js/tiling/ui_scale.js', import.meta.url));
+
+t('the range is the one the slider advertises', () => {
+    // The control draws its min/max/step from these, and clampScale enforces
+    // them. A range that disagreed with its own slider is a track whose last
+    // notch does nothing, with nothing on screen saying which half is right.
+    assert.equal(scale.SCALE_MIN, 50);
+    assert.equal(scale.SCALE_MAX, 200);
+    assert.equal(scale.SCALE_DEFAULT, 100);
+    assert.equal(scale.SCALE_DEFAULT % scale.SCALE_STEP, 0,
+        'the default must sit ON a notch or neither button can return to it');
+});
+t('a scale is clamped to the range', () => {
+    assert.equal(scale.clampScale(10), 50);
+    assert.equal(scale.clampScale(9999), 200);
+    assert.equal(scale.clampScale(125), 125);
+});
+t('a scale is quantised onto the track', () =>
+    // A stored 97 must land on a notch; between two of them, neither the slider
+    // nor the buttons can leave.
+    assert.equal(scale.clampScale(97), 95));
+t('junk reads as the default rather than breaking the page', () => {
+    for (const bad of [null, undefined, '', 'wat', NaN, Infinity])
+        assert.equal(scale.clampScale(bad), scale.SCALE_DEFAULT);
+});
+t('every nudge from the default stays on the track', () => {
+    // The buttons step by SCALE_NUDGE, the track by SCALE_STEP. If the two were
+    // not commensurate a button press would quantise to somewhere it did not
+    // ask for, and repeated presses would drift.
+    assert.equal(scale.SCALE_NUDGE % scale.SCALE_STEP, 0);
+    let v = scale.SCALE_DEFAULT;
+    for (let i = 0; i < 12; i++) v = scale.clampScale(v - scale.SCALE_NUDGE);
+    assert.equal(v, scale.SCALE_MIN);
+    for (let i = 0; i < 30; i++) v = scale.clampScale(v + scale.SCALE_NUDGE);
+    assert.equal(v, scale.SCALE_MAX);
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
