@@ -570,6 +570,13 @@ export class DataTable {
     render() {
         // Capture active filter input before re-render
         const activeFilterColIdx = this._getActiveFilterColIdx();
+        // KEYBOARD FOCUS SURVIVES A RE-RENDER. Rendering replaces the table
+        // element, and a focused element that is removed hands focus to the
+        // page body, where the arrow keys reach nobody. A data refresh does
+        // exactly that (a record changed on disk, a live reload), so keyboard
+        // navigation silently died the first time the store moved.
+        const doc = this.container.ownerDocument;
+        const hadTableFocus = !!this._tableEl && doc?.activeElement === this._tableEl;
 
         this._cleanup();
         this.container.innerHTML = '';
@@ -752,6 +759,9 @@ export class DataTable {
         // Restore focus to filter input if it was active
         if (activeFilterColIdx !== null) {
             this._restoreFilterFocus(activeFilterColIdx);
+        }
+        else if (hadTableFocus && this._tableEl) {
+            try { this._tableEl.focus({ preventScroll: true }); } catch (_) { /* detached */ }
         }
         if (this._revealCursor) {
             this._revealCursor = false;

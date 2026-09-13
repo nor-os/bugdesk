@@ -30,6 +30,12 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **Double-click a column's edge to size it automatically again.**
 
+- **Thin scrollbars that appear when needed, everywhere.** Every scrollable
+  element in BugDesk shows FlexDesk's overlay scrollbar while you hover or
+  scroll it, and it fades away afterwards. Before, the browser's own bars
+  showed. No element reserves layout width for a scrollbar anymore, so tables
+  use their full width. The thumb drags and the track pages as usual.
+
 - **Columns are sized by what is in them.** Ids, dates, statuses, types,
   people and points keep their full values, and the summary or title takes
   the rest of the table. Before, spare room was spread evenly: on a real
@@ -640,6 +646,16 @@ in whichever store the panel is currently reporting on.
   in the browser, and nothing copied the profile's names into them at startup,
   so a fresh browser or a new port showed both empty while the profile named
   you. The confirmed names are copied in on every start.
+
+- **Keyboard navigation in a list survives a change on disk.** When a record
+  changed outside BugDesk, the list reloaded, rebuilt its table and dropped
+  keyboard focus onto the page, so the arrow keys stopped working until you
+  clicked. The table now keeps focus through a re-render.
+
+- **The navigator and inspector panels can no longer be split.** Alt+H or
+  Alt+Shift+H with a panel focused split the panel itself. A panel is now never
+  split by any route, and those keys act on the content area instead, the way
+  Backspace already did.
 
 - **A click on a column's edge no longer resizes it.** The table froze and
   pinned every column on mousedown, reading their widths in screen pixels and

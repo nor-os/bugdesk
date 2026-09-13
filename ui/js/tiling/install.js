@@ -32,7 +32,7 @@ import {
     WindowManager, createContentRegistry, installKeymap, mountZoomControl, openTileTabMenu,
 } from '@flexdesk/wm';
 import { createPywebviewHost } from '@flexdesk/host';
-import { createTableStateStore, openForm, showContextMenu } from '@flexdesk/widgets';
+import { createTableStateStore, installAutoScrollbars, openForm, showContextMenu } from '@flexdesk/widgets';
 
 export async function installTilingShell({ eventBus, logger } = {}) {
     const log = logger ?? { info(){}, warn(){}, error(){}, debug(){} };
@@ -308,6 +308,11 @@ export async function installTilingShell({ eventBus, logger } = {}) {
     } catch (err) {
         log.warn?.('record link clicks failed to install', { err });
     }
+
+    // Every scrollable element gets FlexDesk's thin overlay scrollbar, which
+    // shows on hover or while scrolling and fades away, instead of the
+    // browser's own. See auto_scrollbars.js.
+    installAutoScrollbars(document.body);
 
     log.info?.('tiling shell installed');
     window.__bugdesk = { eventBus, wm, palette };

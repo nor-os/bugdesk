@@ -954,6 +954,18 @@ await t('the keys that open a row, for lists that are not a table', () => {
         a.done();
     });
 
+    await t('a record changing on disk does not take the keyboard away from the list', () => {
+        saved.clear();
+        const a = mountKeys();
+        a.table._tableEl.focus();
+        a.press('ArrowDown');
+        a.table.setData({ rows: [...rows, ['#4', 'd']] });   // what a live reload does
+        assert.equal(document.activeElement, a.table._tableEl, 'focus fell to the page when the table re-rendered');
+        a.press('ArrowDown');
+        assert.deepEqual(a.highlighted(), ['#2']);
+        a.done();
+    });
+
     await t('a click on a column edge changes nothing; a double-click hands it back to auto', () => {
         saved.clear();
         const a = mountKeys();
