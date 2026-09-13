@@ -550,6 +550,45 @@ in whichever store the panel is currently reporting on.
 
 ### Fixed
 
+- **A view with more than 100 records shows all of them.** The table cut every
+  view to its first 100 rows, even with its page controls switched off, and the
+  bug queue, backlog board and search had them off. The rest of the store was
+  unreachable and nothing said so. Those tables now page, with first, previous,
+  next and last controls once a view outgrows a page, and they remember the
+  page you were on. A table without paging shows every row. The truncation
+  fix is also in FlexDesk's copy of the table.
+
+- **The bottom bar says how much of the open work you are looking at.** It
+  reads "83 of 259 open bugs shown" for the table in front of you: open records
+  on screen, after column filters and on the current page, out of every open
+  record in the store. Open means not closed, so a bug in any state but
+  `closed` and an item in any state but `done` or `dropped`. It follows focus,
+  says "items" on the backlog ("tickets" in tracker mode) and "records" in
+  search, and clears on a page with no table.
+
+- **Clicking a filter, a work package or a name changes the list.** A saved
+  view in the navigator, a work package, or a person in the team panel did
+  nothing while a list of that page was already showing: FlexDesk matched the
+  open list tab and re-activated it with its old filter. BugDesk's own tiling
+  fork had corrected this, and the correction was lost in the move to
+  FlexDesk's window manager. It is in FlexDesk now.
+
+- **A breadcrumb crumb and Backspace do the same thing, for bugs and backlog
+  items alike.** Clicking "Bugs" in a bug, or "Backlog" in a story, opened a
+  second copy of the list beside the one already open, where Backspace closes
+  the record onto it. A first fix worked for bugs only: BugDesk's own
+  breadcrumb marked just the crumb directly above the page as the way back,
+  and for a backlog item that crumb is its epic or story. The fork is gone.
+  BugDesk uses FlexDesk's breadcrumb, which reads an item's parent chain from
+  the taxonomy, and every crumb climbs through FlexDesk's `navigateUp`. That
+  verb shares one rule with Backspace, in tiles and floating windows. A crumb
+  naming an epic or story still opens it in place. Needs FlexDesk 0.4.3.
+
+- **Settings shows your name and your agent's name.** The two rows are stored
+  in the browser, and nothing copied the profile's names into them at startup,
+  so a fresh browser or a new port showed both empty while the profile named
+  you. The confirmed names are copied in on every start.
+
 - **A table keeps its sort, column filters and column widths when you leave it
   and come back.** A tile builds only its active tab, so opening a bug in a new
   tab destroyed the queue and returning built a fresh, unsorted one. Moving to

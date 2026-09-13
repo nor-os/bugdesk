@@ -35,6 +35,7 @@ import { installRecordDragSource, isModifiedOpen, markDragCell, openModified } f
 import { confirmDelete } from './delete_item.js';
 import { openFilterEditor } from './filter_editor.js';
 import { openNewItem } from './new_item.js';
+import { paintRecordCount, publishRecordCount } from './record_count.js';
 import { onFiltersChanged } from './filter_store.js';
 import { shell, statusLine } from './pages.js';
 import { esc, initials, HUMAN_AUTHOR, TICKETS, assigneeChoices, loadData, rememberAssignee } from './data.js';
@@ -277,7 +278,9 @@ function mountBacklogBoard(host, props, ctx) {
         ...(ctx?.tableStore ? { stateStore: ctx.tableStore, persistKey } : {}),
         headers: BOARD_HEADERS,
         rows: [],
-        pagination: false,
+        // A board can outgrow one page; the strip appears only when it does.
+        pagination: true,
+        onRender: paintRecordCount,
         selectable: true,
         copyable: true,
         // Sorting flattens the hierarchy — a tree sorted by Updated is no longer
@@ -434,6 +437,14 @@ function mountBacklogBoard(host, props, ctx) {
     // Collapse state may not have arrived yet on the very first mount; render
     // what we have, then repaint once it does.
     table.setData({ rows: rows() });
+    // "12 of 40 open items shown" in the bottom bar while this board is in front.
+    // A row shown only as context for a match is still a record on screen.
+    publishRecordCount(host.querySelector('.td-tablehost'), () => {
+        const itemByRef = new Map(ITEMS.map((i) => [i.ref, i]));
+        const shown = table.getDisplayedRows()
+            .filter((r) => { const i = itemByRef.get(r[REF_COL]); return i && !isClosedItem(i); }).length;
+        return { shown, total: ITEMS.filter((i) => !isClosedItem(i)).length, noun: TRACKER ? 'tickets' : 'items' };
+    });
     table.render();
     loadCollapsed().then(() => { if (host.isConnected) refresh(); });
     requestAnimationFrame(() => { if (host.isConnected) table.focus(); });

@@ -993,3 +993,13 @@
     outline: 1px solid var(--accent-bright, #007acc);
     outline-offset: -1px;
 }
+
+/* "12 of 40 open bugs shown" — the focused table's figures, right of the
+   status line. See ticketdesk/record_count.js. */
+.bd-record-count {
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    white-space: nowrap;
+    padding: 0 10px;
+    border-left: 1px solid var(--border-default, #333);
+}

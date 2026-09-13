@@ -10,14 +10,14 @@
  * what they meant here — wrapped in eager validation (a typo in a
  * `topNav` pointer is a boot error now, not a chrome surface that
  * silently renders nothing) plus the extra methods (`ancestors`,
- * `labelOf`, `sourcesFor`) other embedders need and bugdesk doesn't
- * (single entity source, no id-encoded ancestry).
+ * `labelOf`, `sourcesFor`). BugDesk uses `ancestors` and `labelOf` for a
+ * backlog item's parent chain; see `registerRecordHierarchy` below.
  *
  * Every importer now receives the built `taxonomy` object and calls its
  * methods (`taxonomy.meta(kind)`, `taxonomy.topNavFor(kind)`,
  * `taxonomy.parentKindFor(kind)`, `taxonomy.topNavEntries()`) instead of
  * importing free functions from this file — see install.js,
- * tile_breadcrumb.js, tile_tab_menu.js, command_palette.js and wm.js.
+ * tile_tab_menu.js, command_palette.js and FlexDesk's breadcrumb and wm.
  */
 
 import { createTaxonomy } from '@flexdesk/wm';
@@ -37,6 +37,23 @@ import { createTaxonomy } from '@flexdesk/wm';
  */
 const TRACKER = (typeof window !== 'undefined'
     && window.__BUGDESK_CONFIG__?.mode) === 'tracker';
+
+/* ── record hierarchy, supplied by the store ────────────────────────
+ *
+ * FlexDesk's breadcrumb builds a record's path from `taxonomy.ancestors` and
+ * names it with `taxonomy.labelOf`. A backlog item's ancestors live in the
+ * backlog store, and this module must not import the ticketdesk modules (the
+ * arrow runs the other way), so the store registers the two answers when it
+ * loads. Until it has, an item's breadcrumb is simply its section and its own
+ * label.
+ */
+const _recordHooks = {};
+
+/** Called by ticketdesk/backlog_data.js: `ancestors(props)` returns
+ *  `[{ kind, id, label }]` root-most first; `labelOf(props)` names one record. */
+export function registerRecordHierarchy(kind, { ancestors, labelOf } = {}) {
+    _recordHooks[kind] = { ancestors, labelOf };
+}
 
 export const taxonomy = createTaxonomy({
     root: 'home',
@@ -133,7 +150,11 @@ export const taxonomy = createTaxonomy({
         // The cost is one breadcrumb level in tracker mode — `Tracker ›
         // STORY-0007` rather than `Tracker › Tickets › STORY-0007` — which is
         // a fair price for the two kinds agreeing about where they live.
-        item: { label: 'Item', icon: 'article', topNav: TRACKER ? 'tracker' : 'backlog' },
+        item: {
+            label: 'Item', icon: 'article', topNav: TRACKER ? 'tracker' : 'backlog',
+            ancestors: (props) => _recordHooks.item?.ancestors?.(props) || [],
+            labelOf: (props) => _recordHooks.item?.labelOf?.(props) || props.label || props.id,
+        },
 
         // The create mask. Its breadcrumb sits under whichever section this
         // deployment files INTO by default — Bugs normally, Tracker in tracker

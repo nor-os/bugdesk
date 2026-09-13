@@ -38,8 +38,8 @@
  * the open queue without a reload.
  */
 
-import { mountTileBreadcrumb } from '../tiling/tile_breadcrumb.js';
-import { activeTopNavKind } from '../tiling/kind_taxonomy.js';
+import { mountTileBreadcrumb } from '@flexdesk/wm';
+import { activeTopNavKind, taxonomy } from '../tiling/kind_taxonomy.js';
 import { installRecordDragSource, isModifiedOpen, markDragCell, openModified } from './record_dnd.js';
 import { DataTable } from '../ui/components/data_table.js';
 import { showContextMenu } from '@flexdesk/widgets';
@@ -61,6 +61,7 @@ import { openRecordPicker } from './item_picker.js';
 import { attachTagInput } from './tag_input.js';
 import { ITEMS, isClosedItem, loadBacklog } from './backlog_data.js';
 import { watchRecord } from './live.js';
+import { paintRecordCount, publishRecordCount } from './record_count.js';
 import {
     esc, STAGES, TICKETS, TEAM, HUMAN_AUTHOR, AGENT_AUTHOR, assigneeOptions,
     fetchBug, patchBug, postComment, createBug, duplicateBug, loadData, initials, teamNames,
@@ -113,7 +114,7 @@ export function shell(kind, mountFn) {
         host.appendChild(contentSlot);
         let crumb = null;
         try {
-            crumb = mountTileBreadcrumb(kind, props, { ...ctx, eventBus: _eventBus });
+            crumb = mountTileBreadcrumb(kind, props, { taxonomy, ...ctx, eventBus: _eventBus });
             breadcrumbSlot.appendChild(crumb.el);
         } catch (err) { console.warn('[bugdesk] breadcrumb failed', err); }
         const ret = mountFn(contentSlot, props, { ...ctx, pageActions: actionsSlot }) || {};
@@ -423,7 +424,9 @@ function mountQueues(host, props, ctx) {
         ...(ctx?.tableStore ? { stateStore: ctx.tableStore, persistKey } : {}),
         headers: QUEUE_HEADERS,
         rows: TICKETS.filter(resolved.match).map(queueRow),
-        pagination: false,
+        // A queue can outgrow one page; the strip appears only when it does.
+        pagination: true,
+        onRender: paintRecordCount,
         selectable: true,
         copyable: true,
         sortable: true,
@@ -483,6 +486,13 @@ function mountQueues(host, props, ctx) {
     if (!ctx?.tableStore?.get(persistKey)?.colWidths) {
         table._restorePersisted?.({ colWidths: { 0: 48 } });
     }
+    // "12 of 40 open bugs shown" in the bottom bar while this queue is in front.
+    publishRecordCount(host.querySelector('.td-tablehost'), () => {
+        const byId = new Map(TICKETS.map((t) => [String(t.id), t]));
+        const shown = table.getDisplayedRows()
+            .filter((r) => { const t = byId.get(String(r[QUEUE_ID_COL])); return t && t.rawStatus !== 'closed'; }).length;
+        return { shown, total: TICKETS.filter((t) => t.rawStatus !== 'closed').length, noun: 'bugs' };
+    });
     table.render();
     requestAnimationFrame(() => { if (host.isConnected) table.focus(); });
 
@@ -924,7 +934,7 @@ function mountTicket(host, props, ctx) {
                 if (status && status !== '(any)' && tk.status !== status) return false;
                 if (type && type !== '(any)' && typeLabelOf(tk.type) !== type) return false;
                 return true;
-            }).map((tk) => ({ ...tk, store: 'bugs', ref: tk.id }));
+            }).map((tk) => ({ ...tk, store: 'bugs', ref: tk.id, closed: tk.rawStatus === 'closed' }));
 
             // BOTH stores. A search that only knows about bugs is a search that
             // cannot find the story you filed ten minutes ago, and there is no
@@ -941,7 +951,7 @@ function mountTicket(host, props, ctx) {
             }).map((i) => ({
                 store: 'backlog', ref: i.ref, id: i.ref, bugId: i.id,
                 summary: i.title, type: i.typeLabel, status: i.statusLabel,
-                sla: i.updated, assignee: i.assignee,
+                sla: i.updated, assignee: i.assignee, closed: isClosedItem(i),
             }));
 
             const matches = [...bugs, ...items];
@@ -974,7 +984,8 @@ function mountTicket(host, props, ctx) {
                 headers: ['Ref', 'Store', 'Type', 'Summary', 'Status', 'Updated', 'Assignee'],
                 rows: matches.map((m) => [m.ref, m.store === 'backlog' ? 'Backlog' : 'Bugs',
                                           m.type, m.summary, m.status, m.sla, m.assignee]),
-                pagination: false, selectable: true, copyable: true, sortable: true, mode: 'compact',
+                pagination: true, selectable: true, copyable: true, sortable: true, mode: 'compact',
+                onRender: paintRecordCount,
                 emptyMessage: 'Nothing matches the criteria',
                 contextMenuItems: (cm) => {
                     const n = resultIds(cm).length;
@@ -1006,6 +1017,12 @@ function mountTicket(host, props, ctx) {
                     openResult(row[0], { dest: 'origin', newTab: true });
                 },
             });
+            const table = resultsTable;
+            publishRecordCount(resultsEl.querySelector('.td-tablehost'), () => ({
+                shown: table.getDisplayedRows().filter((r) => byRef.get(r[0]) && !byRef.get(r[0]).closed).length,
+                total: TICKETS.filter((t) => t.rawStatus !== 'closed').length + ITEMS.filter((i) => !isClosedItem(i)).length,
+                noun: 'records',
+            }));
             resultsTable.render();
             resultsTable.focus();
             statusLine(`Search: ${matches.length} match${matches.length === 1 ? '' : 'es'} across both stores.`);
@@ -1441,7 +1458,7 @@ function mountTicketNav(host, props, ctx) {
     const openFilter = (f) => open('queues', { filter: f.key || f.id, label: f.label });
 
     // ctx.wm is threaded in by the renderer; the global is the escape hatch for
-    // a mount that runs before that happens (same fallback tile_breadcrumb uses).
+    // a mount that runs before that happens (the same fallback FlexDesk's breadcrumb uses).
     const getWm = () => ctx?.wm || window.__twm?.wm || null;
 
     let shown = null;            // 'bugs' | 'backlog'

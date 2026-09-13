@@ -22,7 +22,8 @@
  * uses, with the same paste-a-screenshot support.
  */
 
-import { mountTileBreadcrumb } from '../tiling/tile_breadcrumb.js';
+import { mountTileBreadcrumb } from '@flexdesk/wm';
+import { taxonomy } from '../tiling/kind_taxonomy.js';
 import { attachMarkdownEditor } from './md_editor.js';
 import { attachTagInput } from './tag_input.js';
 import { attachSelect, setRowVisible } from './select_field.js';
@@ -378,7 +379,7 @@ export function createNewItemContent({ eventBus } = {}) {
             hostEl.append(crumbSlot, actionsSlot, contentSlot);
             let crumb = null;
             try {
-                crumb = mountTileBreadcrumb('new-item', props, { ...ctx, eventBus });
+                crumb = mountTileBreadcrumb('new-item', props, { taxonomy, ...ctx, eventBus });
                 crumbSlot.appendChild(crumb.el);
             } catch (err) { console.warn('[bugdesk] breadcrumb failed', err); }
             const ret = mountNewItem(contentSlot, props, { ...ctx, eventBus, pageActions: actionsSlot });

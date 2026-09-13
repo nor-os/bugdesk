@@ -35,7 +35,8 @@ for (const name of ['core', 'wm', 'widgets']) {
     writeFileSync(join(dir, 'package.json'),
         JSON.stringify({ name: `@flexdesk/${name}`, version: '0.0.0-local-alias', type: 'module', main: 'index.js' }, null, 2));
     writeFileSync(join(dir, 'index.js'),
-        `export * from '${join(ROOT, 'ui', 'vendor', 'flexdesk', `${name}.js`)}';\n`);
+        // Relative, so the alias works for Linux and Windows node alike.
+        `export * from '../../../ui/vendor/flexdesk/${name}.js';\n`);
 }
 
 // The modules touch `localStorage` and `window` at import time.

@@ -24,6 +24,7 @@
  */
 
 import { AGENT_AUTHOR, HUMAN_AUTHOR } from './data.js';
+import { registerRecordHierarchy } from '../tiling/kind_taxonomy.js';
 
 /* ── mode ────────────────────────────────────────────────────────────
  *
@@ -657,3 +658,27 @@ export const collapsibleIds = () => {
     const parents = new Set(ITEMS.map((i) => Number(i.parent)).filter((p) => p > 0));
     return ITEMS.filter((i) => parents.has(Number(i.id))).map((i) => Number(i.id));
 };
+
+/* A backlog item's breadcrumb IS its hierarchy: "Backlog › EPIC-0002 › STORY-0007
+ * › TASK-0031", read from the live store so a re-parent shows without reopening
+ * the tab. FlexDesk's breadcrumb asks the taxonomy; this is the answer. */
+registerRecordHierarchy('item', {
+    ancestors: (props) => {
+        const byId = new Map(ITEMS.map((i) => [Number(i.id), i]));
+        let cur = byId.get(Number(String(props?.id ?? '').replace(/^#/, '')));
+        const chain = [];
+        const seen = new Set(cur ? [cur.id] : []);
+        while (cur && Number(cur.parent) > 0) {
+            const next = byId.get(Number(cur.parent));
+            if (!next || seen.has(next.id)) break;   // a cycle from a hand edit
+            seen.add(next.id);
+            chain.unshift({ kind: 'item', id: String(next.id), label: itemRef(next) });
+            cur = next;
+        }
+        return chain;
+    },
+    labelOf: (props) => {
+        const self = ITEMS.find((i) => Number(i.id) === Number(String(props?.id ?? '').replace(/^#/, '')));
+        return self ? itemRef(self) : null;
+    },
+});

@@ -26,6 +26,7 @@ import { taxonomy, activeTopNavKind } from './kind_taxonomy.js';
 import { createSettingsContent } from '../ticketdesk/settings_content.js';
 
 import { HelpModal } from '../help/help_modal.js';
+import { installRecordCount, paintRecordCount } from '../ticketdesk/record_count.js';
 
 import {
     WindowManager, createContentRegistry, installKeymap, mountZoomControl, openTileTabMenu,
@@ -185,7 +186,11 @@ export async function installTilingShell({ eventBus, logger } = {}) {
         ctx: { api: window.pywebview?.api, eventBus, host, taxonomy, tableStore,
                onTileContextMenu: (leafId, x, y) => _tileContextMenu(wm, leafId, x, y),
                onTileTabMenu:     (leafId, x, y) => _tileTabMenu(wm, leafId, x, y) },
-        onChange: () => { _syncPanelToggleButtons(wm); _syncDesktopBar(wm); _syncPageShortcuts(wm); },
+        onChange: () => {
+            _syncPanelToggleButtons(wm); _syncDesktopBar(wm); _syncPageShortcuts(wm);
+            // After the renderer has swapped the tile's content in.
+            requestAnimationFrame(paintRecordCount);
+        },
     });
 
     // Subscribe to the bus too (belt-and-braces): any other module that
@@ -195,6 +200,7 @@ export async function installTilingShell({ eventBus, logger } = {}) {
         _syncDesktopBar(wm);
         _syncPageShortcuts(wm);
     });
+    installRecordCount(wm);
     const palette = createCommandPalette({ wm, api: window.pywebview?.api });
     // FlexDesk's keymap driving BugDesk's palette — the palette exposes the same
     // open/close/toggle/isOpen the keymap calls, so nothing is adapted. The
@@ -276,10 +282,16 @@ export async function installTilingShell({ eventBus, logger } = {}) {
     // so the name the UI signs comments with and the name GET /api/config
     // reports to the skills can never disagree. See first_run.js.
     try {
-        const [{ installAuthorshipWriteThrough }, { getSetting }] = await Promise.all([
+        const [{ installAuthorshipWriteThrough, mirrorIdentityIntoSettings }, { getSetting }] = await Promise.all([
             import('../ticketdesk/first_run.js'),
             import('../core/settings.js'),
         ]);
+        // The names the bridge confirmed at boot, into the Settings rows, BEFORE
+        // the write-through listens: mirroring after it would post the same
+        // names straight back. Only a real answer is mirrored; the generic
+        // defaults of an unreachable bridge must not overwrite a stored name.
+        const live = window.__BUGDESK_CONFIG__ || {};
+        if (live.fromBridge) await mirrorIdentityIntoSettings(live);
         installAuthorshipWriteThrough({ eventBus, getSetting });
     } catch (err) {
         log.warn?.('authorship write-through failed to install', { err });

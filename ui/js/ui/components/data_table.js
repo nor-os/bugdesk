@@ -80,7 +80,8 @@ export function redistributeToFill(widths, draggedIdx, avail) {
  * @property {string[]} headers - Column headers
  * @property {Array<Array>} rows - Row data (array of arrays)
  * @property {number} [pageSize=100] - Rows per page
- * @property {boolean} [pagination=true] - Enable pagination controls
+ * @property {boolean} [pagination=true] - Enable pagination controls. When false, every row renders on one page.
+ * @property {Function} [onRender] - Called after each render with no arguments; read `getDisplayedRows()` from it.
  * @property {boolean} [selectable=true] - Enable row selection
  * @property {boolean} [copyable=true] - Enable copy shortcuts and context menu
  * @property {boolean} [sortable=false] - Enable column sorting
@@ -252,6 +253,12 @@ export class DataTable {
             this._state.filters = new Map(blob.filters);
             applied = true;
         }
+        // The page you were on. Clamped at render, because the rows may have
+        // shrunk since it was saved.
+        if (Number.isInteger(blob.offset) && blob.offset >= 0) {
+            this._state.offset = blob.offset;
+            applied = true;
+        }
         if (blob.colWidths && typeof blob.colWidths === 'object') {
             // Stored under string keys (JSON) → coerce back to ints.
             this._colWidths = {};
@@ -282,7 +289,18 @@ export class DataTable {
             sortAscending: this._state.sortAscending,
             filters: [...this._state.filters.entries()],
             colWidths: { ...this._colWidths },
+            offset: this._state.offset,
         });
+    }
+
+    /** The rows on screen right now, as row arrays: filtered, sorted and cut to
+     *  the current page. With `pagination: false` that is every filtered row. */
+    getDisplayedRows() {
+        if (typeof this.config.onPageChange === 'function') return this.config.rows;
+        const rows = this._getProcessedRows();
+        if (!this.config.pagination) return rows;
+        const offset = this._state.offset;
+        return rows.slice(offset, offset + this.config.pageSize);
     }
 
     /**
@@ -470,6 +488,14 @@ export class DataTable {
 
         const { rows, pagination, emptyMessage } = this.config;
 
+        // A remembered or stale page past the end of the rows lands on the last
+        // page rather than on an empty one.
+        if (typeof this.config.onPageChange !== 'function' && this._state.offset > 0) {
+            const count = this._getProcessedRows().length;
+            const size = this.config.pageSize;
+            if (this._state.offset >= count) this._state.offset = Math.max(0, Math.floor((count - 1) / size) * size);
+        }
+
         // Drop stale column-resize overrides when the columns change —
         // widths are keyed by position, so a different schema must start
         // from natural widths rather than inherit the old ones. (Restore
@@ -634,6 +660,7 @@ export class DataTable {
         if (activeFilterColIdx !== null) {
             this._restoreFilterFocus(activeFilterColIdx);
         }
+        try { this.config.onRender?.(); } catch (err) { console.warn('[DataTable] onRender threw', err); }
     }
 
     /**
@@ -1398,6 +1425,7 @@ export class DataTable {
                 this._awaitWithSpinner(onPageChange(newOffset, pageSize));
             } else {
                 this._state.offset = newOffset;
+                this._savePersisted();
                 this.render();
             }
         };
@@ -1508,7 +1536,11 @@ export class DataTable {
         const isServerSide = typeof onPageChange === 'function';
         const processedRows = isServerSide ? rows : this._getProcessedRows();
         const offset = isServerSide ? (configOffset || 0) : this._state.offset;
-        const pageRows = isServerSide ? processedRows : processedRows.slice(offset, offset + pageSize);
+        // NO PAGINATION MEANS NO PAGES. This used to slice to `pageSize` either
+        // way, so a table built with `pagination: false` silently showed its
+        // first hundred rows and offered no control to reach the rest.
+        const pageRows = isServerSide || !this.config.pagination
+            ? processedRows : processedRows.slice(offset, offset + pageSize);
 
         const table = document.createElement('table');
         table.className = readonly ? 'preview-table preview-table--readonly' : 'preview-table';

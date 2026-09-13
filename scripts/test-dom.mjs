@@ -31,7 +31,8 @@ for (const name of ['core', 'wm', 'widgets']) {
     writeFileSync(join(dir, 'package.json'), JSON.stringify(
         { name: `@flexdesk/${name}`, version: '0.0.0-local-alias', type: 'module', main: 'index.js' }, null, 2));
     writeFileSync(join(dir, 'index.js'),
-        `export * from '${join(ROOT, 'ui', 'vendor', 'flexdesk', `${name}.js`)}';\n`);
+        // Relative, so the alias works for Linux and Windows node alike.
+        `export * from '../../../ui/vendor/flexdesk/${name}.js';\n`);
 }
 
 // A real URL, not the default "about:blank": jsdom refuses localStorage on an
@@ -446,6 +447,14 @@ await t('applying an identity re-points the config every module reads', async ()
 await t('...and mirrors it into Settings, so no stale value can be left behind', () => {
     assert.equal(settings.getSetting('bugdesk.humanName'), 'carol');
     assert.equal(settings.getSetting('bugdesk.agentName'), 'carol_agent');
+});
+
+await t('at boot the confirmed names reach Settings, which used to show them empty', async () => {
+    settings.setSetting('bugdesk.humanName', '');
+    settings.setSetting('bugdesk.agentName', '');
+    await identity.mirrorIdentityIntoSettings({ humanAuthor: 'erin', agentAuthor: 'erin_agent' });
+    assert.equal(settings.getSetting('bugdesk.humanName'), 'erin');
+    assert.equal(settings.getSetting('bugdesk.agentName'), 'erin_agent');
 });
 
 await t('...and announces it, so the chip in the corner can repaint', async () => {
@@ -1437,6 +1446,31 @@ await t('the tree is still a tree when it is not a person\'s list', async () => 
     host.remove();
 });
 
+/* "Collapsing works for bugs but not for the backlog." BugDesk kept its own
+ * breadcrumb, which marked only the crumb directly above the page as the way
+ * back, and for an item that crumb is the story or epic, not "Backlog". The
+ * fork is gone: FlexDesk's breadcrumb reads the item's chain from the taxonomy
+ * and EVERY crumb climbs through `wm.navigateUp`, where the WM applies the same
+ * rule Backspace does. */
+await t('an item\'s breadcrumb is its hierarchy, and every crumb climbs through the WM', async () => {
+    const { mountTileBreadcrumb } = await import('@flexdesk/wm');
+    const { taxonomy: tax } = await import(join(UI, 'tiling', 'kind_taxonomy.js'));
+    const climbed = [];
+    const navigated = [];
+    const wm = {
+        navigateUp: (kind, props) => climbed.push([kind, props?.id ?? null]),
+        navigate: (kind, props) => navigated.push([kind, props?.id ?? null]),
+    };
+    const crumb = mountTileBreadcrumb('item', { id: '3', label: 'TASK-0003 — whatever' }, { taxonomy: tax, wm });
+    const labels = [...crumb.el.querySelectorAll('li')].map((li) => li.textContent.replace(/\s+/g, ' ').replace('›', '').trim());
+    assert.deepEqual(labels.map((l) => l.replace(/^\S+ /, '')), ['Backlog', 'PROJ-0001', 'STORY-0002', 'TASK-0003'],
+        `the chain is not the hierarchy: ${JSON.stringify(labels)}`);
+    for (const btn of crumb.el.querySelectorAll('button')) btn.click();
+    assert.deepEqual(climbed, [['backlog', null], ['item', '1'], ['item', '2']]);
+    assert.deepEqual(navigated, [], 'a crumb went around navigateUp');
+    crumb.destroy();
+});
+
 /* A tile mounts only its ACTIVE tab, so opening an item in a new tab destroys
  * the board and going back builds a fresh one. Its sort used to die with it.
  * The table's state lives in the shell's table store, keyed by the view. */
@@ -1472,6 +1506,70 @@ await t('a board\'s sort survives being unmounted and mounted again', async () =
     second.page.destroy?.();
     second.host.remove();
 });
+
+/* "Too many bugs and I cannot see them all": the table cut every view to its
+ * first hundred rows even with the page controls switched off, so the rest of
+ * the store was unreachable and nothing said so. */
+const { DataTable: PagedTable } = await import(join(UI, 'ui', 'components', 'data_table.js'));
+const manyRows = Array.from({ length: 250 }, (_, i) => [`#${i + 1}`, `row ${i + 1}`]);
+
+await t('a table with pagination off shows every row, not the first hundred', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const table = new PagedTable(host, { headers: ['Id', 'Summary'], rows: manyRows, pagination: false });
+    table.render();
+    assert.equal(host.querySelectorAll('tbody tr').length, 250);
+    assert.equal(table.getDisplayedRows().length, 250);
+    table.dispose();
+    host.remove();
+});
+
+await t('a table with more rows than a page offers the page controls, and they move', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    let renders = 0;
+    const table = new PagedTable(host, { headers: ['Id', 'Summary'], rows: manyRows, pagination: true,
+                                         onRender: () => { renders++; } });
+    table.render();
+    const strip = host.querySelector('.pagination-controls');
+    assert.ok(strip, 'no pagination strip for 250 rows');
+    assert.match(strip.textContent, /1–100 of 250/);
+    assert.equal(host.querySelectorAll('tbody tr').length, 100);
+    const next = [...strip.querySelectorAll('button')].find((b) => /Next page/.test(b.getAttribute('aria-label') || b.title || b.dataset.tooltip || ''));
+    assert.ok(next, 'no Next page button');
+    next.click();
+    assert.match(host.querySelector('.pagination-controls').textContent, /101–200 of 250/);
+    assert.equal(table.getDisplayedRows()[0][0], '#101');
+    assert.ok(renders >= 2, 'onRender was not called on each render');
+    table.dispose();
+    host.remove();
+});
+
+await t('the page you were on survives a remount, and a page past the end lands on the last', () => {
+    const saved = new Map();
+    const stateStore = { ready: async () => {}, get: (k) => saved.get(k), set: (k, v) => saved.set(k, v) };
+    const mount = (rows) => {
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        const table = new PagedTable(host, { headers: ['Id', 'Summary'], rows, pagination: true,
+                                             stateStore, persistKey: 'paged' });
+        table.render();
+        return { host, table };
+    };
+    const a = mount(manyRows);
+    a.table.goToPage(2);
+    a.table._savePersisted();
+    a.table.dispose(); a.host.remove();
+
+    const b = mount(manyRows);
+    assert.equal(b.table.getDisplayedRows()[0][0], '#201', 'came back on page 1');
+    b.table.dispose(); b.host.remove();
+
+    const c = mount(manyRows.slice(0, 150));
+    assert.equal(c.table.getDisplayedRows()[0][0], '#101', 'a stale page past the end showed nothing');
+    c.table.dispose(); c.host.remove();
+});
+
 
 console.log('\nInspector, end to end');
 

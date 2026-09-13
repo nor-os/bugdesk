@@ -197,6 +197,28 @@ export async function resolveIdentity() {
  * @param {object} cfg  a `/api/config`-shaped payload
  * @returns {{humanChanged: boolean, agentChanged: boolean}}
  */
+/**
+ * Put the confirmed names into Settings › Your name / Agent name.
+ *
+ * Called by `applyIdentity` on every change, and once at boot by install.js.
+ * The boot call is what was missing: the rows are browser-local, so a fresh
+ * browser, a new port or cleared site data showed them EMPTY while the profile
+ * on disk named you, and Settings read as if nobody was configured.
+ */
+export async function mirrorIdentityIntoSettings(cfg) {
+    try {
+        const { setSetting, getSetting } = await import('../core/settings.js');
+        if (getSetting('bugdesk.humanName') !== (cfg.humanAuthor || '')) {
+            setSetting('bugdesk.humanName', cfg.humanAuthor || '');
+        }
+        if (getSetting('bugdesk.agentName') !== (cfg.agentAuthor || '')) {
+            setSetting('bugdesk.agentName', cfg.agentAuthor || '');
+        }
+    } catch (err) {
+        console.warn('BugDesk: could not mirror the identity into settings', err);
+    }
+}
+
 export async function applyIdentity(cfg, { eventBus } = {}) {
     const before = (typeof window !== 'undefined' && window.__BUGDESK_CONFIG__) || {};
     const humanChanged = (cfg.humanAuthor || '') !== (before.humanAuthor || '');
@@ -215,17 +237,7 @@ export async function applyIdentity(cfg, { eventBus } = {}) {
     // Keep the Settings rows honest. They are an EDITOR for the profile, not a
     // second copy of it, so they must never be left holding a name the profile
     // has moved on from — that stale value is the whole bug this fixes.
-    try {
-        const { setSetting, getSetting } = await import('../core/settings.js');
-        if (getSetting('bugdesk.humanName') !== (cfg.humanAuthor || '')) {
-            setSetting('bugdesk.humanName', cfg.humanAuthor || '');
-        }
-        if (getSetting('bugdesk.agentName') !== (cfg.agentAuthor || '')) {
-            setSetting('bugdesk.agentName', cfg.agentAuthor || '');
-        }
-    } catch (err) {
-        console.warn('BugDesk: could not mirror the identity into settings', err);
-    }
+    await mirrorIdentityIntoSettings(cfg);
 
     eventBus?.emit?.('bugdesk:identity-changed', {
         humanAuthor: cfg.humanAuthor, agentAuthor: cfg.agentAuthor, user: cfg.user,
