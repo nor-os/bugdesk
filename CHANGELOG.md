@@ -215,41 +215,73 @@ none, because you try it first.
 
 ### Changed
 
-- **The bug pages read at the same size as the backlog, and the whole UI has a
-  zoom.** The two halves of the app were on two different type scales: backlog
-  reads the shared `--font-size-*` tokens (12px body), while the bug pages read
-  `--ea-font-body` (11px) plus a drift of bare 9 / 9.5 / 10 / 10.5px literals.
-  Nobody chose that; it is just where the two came from. The bug side now uses
-  the same scale — one step up throughout, with glyph sizes left alone, since an
-  icon's size next to 12px text is a separate decision from the text's.
+- **BugDesk runs on FlexDesk's window manager, so floating windows snap and dock.**
+  They did neither, and the reason was not a missing flag. BugDesk ran its own
+  `tiling/wm.js` and `ui/components/managed_window.js` — copies of FlexDesk's
+  taken long ago, 1631 and 804 lines against upstream's 3630 and 1696 — and never
+  received anything upstream did after. An earlier attempt passed `snap: true` to
+  that copy of `ManagedWindow`, which had no snapping at all, so it did nothing;
+  and it was "verified" against a window built from the vendored FlexDesk instead
+  of the windows BugDesk actually opens, which is how that went unnoticed.
 
-  On top of that, a zoom control in the bottom bar: − / track / + / a readout
-  that resets, 50–200%, double-click the track to go back to 100%. It scales
-  every page in the tiled host and the content of floating windows, so the same
-  page reads the same size wherever it is. It deliberately does not scale the
-  top and bottom bars (chrome, and a zoom that moved them would push the control
-  off its own bar at 200%) or the floating window FRAME — `zoom` establishes a
-  scaled coordinate space, and a zoomed frame would put every drag, resize and
-  snap edge probe in units that no longer match the pointer. The scale lives in
-  your profile, like the backlog's fold state, so it survives moving machines.
+  The shell now constructs FlexDesk's `WindowManager` with `snapPromotion` and
+  `promoteInPlace` on, the way Tables does. Float a tile (its float button, Alt+F,
+  or "Promote to window") and drag the window: onto the edge of another tile it
+  docks as a split, onto the top of its own pane it goes back into the tile, and
+  a preview shows where it will land before you let go. Snapping arms on the
+  dragged window's *borders*, not the pointer, per FlexDesk's own ruling. The
+  keymap and the tile tab menu are FlexDesk's too. The command palette stays
+  BugDesk's on purpose: `createShell` would have installed FlexDesk's title-
+  matching entity picker over Ctrl+K and quietly undone full-text search.
 
-  **This one is not a FlexDesk feature.** Tables built its own (`web/js/grid/
-  zoom.js` plus a strip in its status bar) and FlexDesk ships no UI-scale API at
-  all, so this is BugDesk's, written to feel like the same control.
+  **Two BugDesk fixes went upstream rather than being lost.** Running BugDesk's
+  own tests against FlexDesk's tile tree failed twice: a background tab took the
+  screen, and a list request carrying a filter restored the last open record
+  instead. Both had been fixed only in BugDesk's copy (`73bdaaa`, `561d2fe`), so
+  moving to FlexDesk would have silently brought both bugs back. They are in
+  FlexDesk 0.4.0 now, with a test there that fails without them.
 
-- **Floating windows snap to the screen edges.** Drag one to the left or right
-  edge and it takes that half; drag it off the top and it maximises; drag it
-  back off and it returns to its pre-snap size. This IS a FlexDesk feature —
-  `ManagedWindow` has implemented the edge probe, the preview rectangle and the
-  restore since 0.3.0, behind a `snap` option that defaults off so upgrading
-  never changes a consumer's behaviour on its own. BugDesk simply switches it
-  on, on both paths that float a window.
+- **The zoom is FlexDesk's, and the bug pages read at the backlog's size.** The
+  bottom bar's − / track / + / readout control (50–200%, double-click to reset)
+  is now FlexDesk's standard content zoom — `chrome.zoom` / `mountZoomControl`,
+  new in FlexDesk 0.4.0 — rather than a BugDesk-only copy. It scales tile bodies
+  and window content and nothing a window is dragged across: CSS `zoom` makes a
+  scaled coordinate space, and a zoomed frame or pane would drift every drag and
+  snap by the zoom factor. Verified with real drags at 150%, where the frame
+  follows the pointer exactly and docking still lands. The value persists through
+  the same host port as your tile layout.
 
-  No `snapController` is passed, which is the other half of the decision. A
-  controller is for a consumer that wants a drop on an edge to mean something
-  other than "move here" — under a tiling WM that usually means "stop being a
-  window and become a leaf in the tree". That is a different feature; without
-  one this is plain aero snap.
+  Separately, the two halves of the app were on two type scales: backlog reads
+  the shared `--font-size-*` tokens (12px body), the bug pages read
+  `--ea-font-body` (11px) and a drift of bare 9 / 9.5 / 10 / 10.5px literals. The
+  bug side is now on the same scale, one step up throughout, glyph sizes left
+  alone.
+
+- **The simulator BugDesk was built out of is gone.** BugDesk still booted it.
+  Every page load ran a 1602-line EcoSim bootstrap — a data manager, expression
+  services, a user-module loader, a DSL symbol registry, a data hub, an undo/redo
+  file journal, a workspace state machine, a project model, an AI project applier
+  — and passed an "open a project" gate only because the call fell through to a
+  server catch-all that answered `{ok:true}`. A 126-line boot replaces it, and it
+  builds the settings, the bus, the logger and the two bars, which is all BugDesk
+  ever used.
+
+  What followed from that: 164 unreachable modules deleted (the reachable graph
+  went from 210 to 53), including every EcoAgent tab, landing page and widget
+  copy; 30 stylesheets deleted, proven to change nothing by diffing the computed
+  style of 2463 elements across every page, dialog and menu before and after —
+  the single rule that did matter, a tab icon's colour, now lives in BugDesk's
+  own tile theme; and about 20 MB of vendored libraries nothing imported (KaTeX,
+  Plotly, Monaco, CodeMirror, Lezer). The Settings page, the one kind BugDesk
+  used from the simulator's page map, moved to `ticketdesk/settings_content.js`.
+
+  **And a fault the catch-all was hiding.** The browser shim for the desktop
+  bridge was a Proxy that claimed every method name existed, and the server
+  answered every unknown call with `{ok:true}`. Together they made CSV export find
+  `save_file_dialog`, call it, get success back and announce "Saved N rows" for a
+  file that was never written — while the browser download that would have worked
+  sat unreached below it. The shim now exposes only the two methods the server
+  implements, the catch-all is gone, and an unknown `/api` route is a 404.
 
 - **Both stores are settable on the command line: `--bugs-dir` and
   `--backlog-dir`.** Pointing BugDesk at another repo's records needed an
@@ -517,6 +549,33 @@ least interesting half of what it knows. It opens the same set the count is of,
 in whichever store the panel is currently reporting on.
 
 ### Fixed
+
+- **A table keeps its sort, column filters and column widths when you leave it
+  and come back.** A tile builds only its active tab, so opening a bug in a new
+  tab destroyed the queue and returning built a fresh, unsorted one. Moving to
+  FlexDesk's window manager did not change that. The queue, the backlog board
+  and search results now keep their table state in FlexDesk's table state
+  store, one entry per view, saved through the host's `state` capability. It
+  survives a tab switch and a reload, and sorting one view does not sort
+  another. The narrow default width of the Pri column applies only until you
+  drag it yourself.
+
+- **Backspace in a bug opened from a queue closes the bug instead of opening a
+  second queue.** The bug tab had no history of its own, so Back rewrote it into
+  its parent kind beside the queue it came from. BugDesk now turns on
+  FlexDesk's `backToOpenList` (new in FlexDesk 0.4.1): Back closes the record
+  tab and lands on the open list of the same section. A bug with no list open
+  beside it still walks up in place, so the tile is never left empty. The same
+  holds for backlog items.
+
+- **Floating a tile takes the bug you are reading, not the whole tile.** Since
+  the move to FlexDesk's window manager, the float button carried every tab of
+  the tile into the window, drawn with a top tab strip that was too short for
+  its labels. BugDesk now turns on FlexDesk's `floatActiveTab` (new in FlexDesk
+  0.4.2): the window holds one record and no strip, and the queue stays in its
+  tile. Backspace pressed inside a floating window also used to act on the tile
+  behind it. It now acts on the window, and a floating bug closes onto the open
+  queue.
 
 - **A comment from an author with an underscore in their name stopped
   disappearing.** `Md.CommentHdr`'s author class excluded `_`, so

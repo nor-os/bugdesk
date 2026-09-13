@@ -32,7 +32,7 @@
  * one.
  */
 
-import { showContextMenu } from '../ecoagent/ui/context_menu.js';
+import { showContextMenu } from '@flexdesk/widgets';
 import { shell, statusLine } from './pages.js';
 import { esc, HUMAN_AUTHOR } from './data.js';
 import { openNewItem } from './new_item.js';

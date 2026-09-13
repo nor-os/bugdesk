@@ -24,7 +24,7 @@
  */
 
 import { DataTable } from '../ui/components/data_table.js';
-import { showContextMenu } from '../ecoagent/ui/context_menu.js';
+import { showContextMenu } from '@flexdesk/widgets';
 import { renderMarkdown } from './markdown.js';
 import { attachMarkdownEditor } from './md_editor.js';
 import { attachTagInput } from './tag_input.js';
@@ -269,7 +269,12 @@ function mountBacklogBoard(host, props, ctx) {
     const menuRefs = (cm) => (cm.selectedRows?.length ? cm.selectedRows : (cm.row ? [cm.row] : []))
         .map((r) => r?.[REF_COL]).filter(Boolean);
 
+    // Remembered per view, as on the bug queue — and per LAYOUT: the flat list
+    // and the tree are the same columns laid out for different reading, and a
+    // sort chosen for one should not rearrange the other.
+    const persistKey = `backlog:board:${view.key || 'adhoc'}${flat ? ':flat' : ''}`;
     const table = new DataTable(host.querySelector('.td-tablehost'), {
+        ...(ctx?.tableStore ? { stateStore: ctx.tableStore, persistKey } : {}),
         headers: BOARD_HEADERS,
         rows: [],
         pagination: false,

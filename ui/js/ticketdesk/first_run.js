@@ -339,7 +339,7 @@ export async function openIdentityDialog({ eventBus } = {}) {
     // In tracker mode nobody in the store has an assistant, so there is no agent
     // to name — asking would be asking for a value nothing ever reads.
     const agents = (window.__BUGDESK_CONFIG__ || {}).agentsAssignable !== false;
-    const { openForm } = await import('../ecoagent/ui/modal.js');
+    const { openForm } = await import('../ui/components/modal.js');
     const result = await openForm({
         title: 'Who is working here?',
         submitLabel: 'Use this name',

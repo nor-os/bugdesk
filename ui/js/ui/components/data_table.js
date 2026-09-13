@@ -16,9 +16,6 @@
  * Used by: DataPage, PlotPopoutWindow, StatisticsTable, Import Wizard
  */
 
-import {
-    tableStoreReady, getTableState, setTableState,
-} from './table_state_store.js';
 import { createRafResizeObserver } from '../utils/raf_resize_observer.js';
 
 const DEFAULT_PAGE_SIZE = 100;
@@ -163,11 +160,18 @@ export class DataTable {
             contextMenuItems: null,
             onContextMenuAction: null,
             showExportButton: false,
-            // Opt-in persistence: when set, this table's sort, filters,
-            // and column widths survive teardown/reload, stored per
-            // project under `.ecoagent/datatable_state.json` keyed by
-            // this string. Omit it and the table stays ephemeral.
+            // Opt-in persistence: when set, this table's sort, filters and
+            // column widths survive teardown and reload, stored under this key
+            // in `stateStore`. Omit it and the table stays ephemeral.
+            //
+            // `stateStore` is `{ ready(), get(key), set(key, state) }` — the
+            // object FlexDesk's `createTableStateStore()` builds, which persists
+            // through the host port. It is the same interface FlexDesk's own
+            // DataTable takes, so this table and that one are wired the same way.
+            // It replaced a module-level singleton that wrote an EcoAgent path
+            // straight through the bridge.
             persistKey: null,
+            stateStore: null,
             ...config,
         };
 
@@ -215,10 +219,17 @@ export class DataTable {
         // Persistence: seed from whatever's already cached, then — once
         // the on-disk blob has loaded — re-apply and re-render if state
         // arrived after this table first painted.
+        // A persistKey with nowhere to persist is a wiring bug, not a quiet
+        // fallback: the table would look like it remembers and then forget on
+        // the next remount. Same rule, and same message, as FlexDesk's DataTable.
+        if (this.config.persistKey && !this.config.stateStore) {
+            throw new Error(`DataTable: persistKey "${this.config.persistKey}" requires { stateStore }`);
+        }
         if (this.config.persistKey) {
-            this._restorePersisted(getTableState(this.config.persistKey));
-            tableStoreReady().then(() => {
-                const late = getTableState(this.config.persistKey);
+            const store = this.config.stateStore;
+            this._restorePersisted(store.get(this.config.persistKey));
+            store.ready().then(() => {
+                const late = store.get(this.config.persistKey);
                 if (late && this._restorePersisted(late) && this._wrapperEl) {
                     this._invalidateProcessedCache?.();
                     this.render();
@@ -266,7 +277,7 @@ export class DataTable {
      *  No-op unless `persistKey` is set. Debounced inside the store. */
     _savePersisted() {
         if (!this.config.persistKey) return;
-        setTableState(this.config.persistKey, {
+        this.config.stateStore.set(this.config.persistKey, {
             sortColumn: this._state.sortColumn,
             sortAscending: this._state.sortAscending,
             filters: [...this._state.filters.entries()],

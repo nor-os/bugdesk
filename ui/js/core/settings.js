@@ -107,11 +107,12 @@ export {
  * app promising something it does not do, and the user has no way to tell which
  * of the rows in front of them are real.
  *
- * So this is an ALLOW-LIST, and `scripts/test-ui.mjs` keeps it honest: every
- * path here must be read somewhere in `ui/js` (or be an `action` row, which is
- * a button rather than a value), and every path read must be listed here. Add a
- * setting to the app and the test tells you to list it; delete the code that
- * reads one and the test tells you the row is now a lie.
+ * So this is an ALLOW-LIST, and `scripts/test-dom.mjs` keeps it honest: every
+ * path here must be read somewhere in `ui/js` or the vendored FlexDesk (or be
+ * an `action` row, which is a button rather than a value), and every path read
+ * in `ui/js` must be listed here. Add a setting to the app and the test tells
+ * you to list it; delete the code that reads one and the test tells you the
+ * row is now a lie.
  */
 export const VISIBLE_SETTINGS = new Set([
     // Who you are, and what a Ctrl-click does — BugDesk's own.
@@ -119,14 +120,8 @@ export const VISIBLE_SETTINGS = new Set([
     'bugdesk.agentName',
     'bugdesk.collaborators',
     'bugdesk.modifierOpen',
-    // Inherited, and genuinely wired up.
-    'workspace.save.showToast',
-    'workspace.save.showErrorToast',
-    'workspace.import.showToast',
-    'workspace.import.showErrorToast',
-    'host.showConnectedToast',
+    // Read by FlexDesk's managed windows, which BugDesk's floats are.
     'window.animateMinimize',
-    'window.macShadows',
 ]);
 
 /**

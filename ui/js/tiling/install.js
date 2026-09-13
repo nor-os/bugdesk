@@ -16,58 +16,43 @@
  * rail, template sidebar, resizer and right-hand "AI Assistant" panel, the
  * workspace top bar, the "Model OK" indicator, the File/Edit/View/Run menus —
  * all of it built during boot and removed a few hundred milliseconds later,
- * which is exactly how long it was visible for. The shell no longer builds any
- * of it; see ui/js/ui/shell/application_shell.js.
+ * which is exactly how long it was visible for. None of it is built any more;
+ * the two bars come from ui/js/bootstrap/boot.js.
  */
 
-import { installProjectSelector } from '../ecoagent/project_selector.js';
-
-import { WindowManager } from './wm.js';
 import { createCommandPalette } from './command_palette.js';
-import { installKeymap } from './keymap.js';
 import { installHistoryBack } from './history_nav.js';
-import { installUiScale } from './ui_scale.js';
-import { createPageStubsContent } from './page_stubs.js';
-import { showContextMenu } from '../ecoagent/ui/context_menu.js';
-import { openForm } from '../ecoagent/ui/modal.js';
 import { taxonomy, activeTopNavKind } from './kind_taxonomy.js';
-import { openTileTabMenu } from './tile_tab_menu.js';
+import { createSettingsContent } from '../ticketdesk/settings_content.js';
+
 import { HelpModal } from '../help/help_modal.js';
 
-import { createContentRegistry } from '@flexdesk/wm';
+import {
+    WindowManager, createContentRegistry, installKeymap, mountZoomControl, openTileTabMenu,
+} from '@flexdesk/wm';
 import { createPywebviewHost } from '@flexdesk/host';
+import { createTableStateStore, openForm, showContextMenu } from '@flexdesk/widgets';
 
-export async function installTilingShell({ eventBus, logger, runtime } = {}) {
+export async function installTilingShell({ eventBus, logger } = {}) {
     const log = logger ?? { info(){}, warn(){}, error(){}, debug(){} };
 
-    // 1. Project must be open before anything is mounted.
-    let project;
-    try { project = await installProjectSelector({ eventBus, logger }); }
-    catch (err) { console.error('[tiling-shell] project selector threw', err); return null; }
-    if (!project) { log.info?.('tiling-shell: no project active, deferring install'); return null; }
+    // The dialogs the hamburger opens are handed the bus through this rather than
+    // through a captured argument, because the menu is built before the shell
+    // exists and its callbacks run long after.
+    window.__bugdesk = { eventBus };
 
-    // 2. Dispose the GlobalSearchController — it owns a global Ctrl+K keydown
-    //    listener that hijacks the chord, and it is unreachable from here once
-    //    boot is over. (Its .bar-center input is never built any more, but the
-    //    listener is installed regardless of the DOM.)
-    try { runtime?.globalSearchController?.dispose?.(); } catch (err) {
-        console.warn('[tiling-shell] could not dispose globalSearchController', err);
-    }
+    // There is no "open a project first" gate any more. It was the simulator's:
+    // it asked the bridge for `project_current`, and BugDesk only ever passed it
+    // because that call fell through to the server's permissive catch-all and
+    // came back `{ok:true}`, which read as a project. BugDesk has one store, named
+    // by the server at launch, and nothing to choose.
 
-    // A no-op stand-in for Ecosim's scenario tab service: BugDesk has no
-    // scenarios, but the widgets that ask for one still expect the shape.
-    const scenarioTabsShim = {
-        openTab: ({ kind, entityId, label, icon, subTab }) => null,
-        registerProvider: () => {},
-        getActiveTab: () => null,
-    };
-
-    // 3. Fill the top bar: page shortcuts in the centre, and the menu
+    // 1. Fill the top bar: page shortcuts in the centre, and the menu
     //    collapsed into a single hamburger button beside the brand.
     _installPageShortcuts();
     _installHamburgerMenu();
 
-    // 4. Make body a 3-row flex column: top bar / WM host / bottom bar.
+    // 2. Make body a 3-row flex column: top bar / WM host / bottom bar.
     document.body.classList.add('twm-body');
     const top = document.querySelector('.global-top-bar');
     const bottom = document.querySelector('.global-bottom-bar');
@@ -76,16 +61,12 @@ export async function installTilingShell({ eventBus, logger, runtime } = {}) {
     if (top && bottom) document.body.insertBefore(wmHost, bottom);
     else document.body.appendChild(wmHost);
 
-    // 5. Build the content registry, then the WM + palette + keymap.
+    // 3. Build the content registry, then the WM + palette + keymap.
     //
-    // Content is built as a plain { kind: factory } map and handed to
-    // @flexdesk/wm's createContentRegistry(...) up front — content_registry.js
-    // (the old module-level Map + register() side effect) is gone; see
-    // page_stubs.js / ticketdesk/pages.js for why. BugDesk's own pages are
-    // merged AFTER the stubs so shared kinds ('home', the panel:* kinds)
-    // resolve to the BugDesk factories, exactly as `register()` order used
-    // to guarantee.
-    const pageStubsContent = createPageStubsContent({ api: window.pywebview?.api, eventBus });
+    // Content is a plain { kind: factory } map handed to @flexdesk/wm's
+    // createContentRegistry(...) up front. Every kind in it is BugDesk's own; the
+    // registry supplies the window placeholder itself.
+    const settingsContent = createSettingsContent({ eventBus, api: window.pywebview?.api });
     let ticketDeskContent = {};
     let backlogContent = {};
     let trackerContent = {};
@@ -123,7 +104,7 @@ export async function installTilingShell({ eventBus, logger, runtime } = {}) {
     // Order is the override order. Tracker last: it deliberately re-points
     // `home` at the dashboard (see createTrackerContent).
     const content = createContentRegistry({
-        ...pageStubsContent, ...ticketDeskContent, ...backlogContent, ...trackerContent,
+        ...settingsContent, ...ticketDeskContent, ...backlogContent, ...trackerContent,
     });
 
     // The host port (see @flexdesk/host's createPywebviewHost doc comment —
@@ -138,13 +119,70 @@ export async function installTilingShell({ eventBus, logger, runtime } = {}) {
         logger: log,
     });
 
+    // WHY A SORT DID NOT SURVIVE OPENING A BUG. FlexDesk keeps only a tile's
+    // ACTIVE tab mounted: open a bug in a new tab and the queue's table is
+    // destroyed; switch back and a brand-new table is built with the default
+    // sort, no column filters and auto-fit widths. Nothing was kept anywhere to
+    // put back. This is FlexDesk's standard table store, persisting through the
+    // same host port as the tile layout (so it lands in the user's own state
+    // directory and survives a reload, not just a tab switch); pages hand it to
+    // their tables with a key per view.
+    const tableStore = createTableStateStore({ host, key: 'tables', logger: log });
+
+    // FLEXDESK'S WINDOW MANAGER, not a copy of it.
+    //
+    // BugDesk used to run its own `tiling/wm.js`: a fork of FlexDesk's taken
+    // long enough ago that it was 1631 lines against upstream's 3630, and never
+    // received any of what came after — so every floating window BugDesk opened
+    // was the fork's, and passing `snap: true` to it did nothing, because the
+    // fork's ManagedWindow had no snapping at all. The windows looked like
+    // FlexDesk's windows and behaved like last year's.
+    //
+    // Constructed directly rather than through `createShell`, for one reason:
+    // `createShell` always builds FlexDesk's own command palette and binds Ctrl+K
+    // to it, and in BugDesk Ctrl+K is GLOBAL FULLTEXT SEARCH over both stores
+    // (`command_palette.js`, and the commit that made it so). Adopting
+    // `createShell` would quietly put back the title-matching entity picker that
+    // could find neither a phrase from a comment nor anything in the backlog. The
+    // window manager, the keymap, the tab menu and the zoom are FlexDesk's; the
+    // palette is BugDesk's, on purpose.
     const wm = new WindowManager({
         rootEl: wmHost,
         api: window.pywebview?.api,
         host,
         content,
         eventBus,
-        ctx: { api: window.pywebview?.api, eventBus,
+        taxonomy,
+        // C15. Drag a floating window to an edge of a tile and it snaps; drop it
+        // on a tile and it DOCKS back into the tree — as that tile's content, a
+        // split of it, or one of its tabs. FlexDesk implements all of it; this is
+        // the switch. Off by default upstream because it changes what a drag to
+        // an edge means.
+        snapPromotion: true,
+        // C21. A window floated out of a tile stays inside that tile's pane, the
+        // way Tables does it — so "float this pane" gives a window over its own
+        // pane, not one hovering over the rail and the inspector beside it. It
+        // is also what keeps every window under `wmHost`, which is the element
+        // the content zoom below scales.
+        promoteInPlace: true,
+        // C32. A bug opened from the queue arrives in a new tab; Backspace in it
+        // closes it and puts you back on the queue that is already open, instead
+        // of rewriting the bug's tab into a second copy of that queue. A bug with
+        // no list of its own section open still walks up in place, so Back never
+        // closes a tile into nothing. BugDesk's old tiling fork did the first half
+        // with tab-opener links that did not survive the move to FlexDesk; this
+        // is the same promise made upstream, by section rather than by link.
+        backToOpenList: true,
+        // C34. Floating a tile takes the bug or item you are reading, not the
+        // queue tab beside it too. A tile's tabs here are separate records, so
+        // the window gets one tab and no strip. Backspace inside a floating
+        // record then closes it onto the open list, like it does in a tile.
+        floatActiveTab: true,
+        // The Console panel starts hidden, as it always has here; FlexDesk's own
+        // default opens all three. The user can still toggle it, and a desktop
+        // keeps whatever state it was left in.
+        panelDefaults: { bottom: false },
+        ctx: { api: window.pywebview?.api, eventBus, host, taxonomy, tableStore,
                onTileContextMenu: (leafId, x, y) => _tileContextMenu(wm, leafId, x, y),
                onTileTabMenu:     (leafId, x, y) => _tileTabMenu(wm, leafId, x, y) },
         onChange: () => { _syncPanelToggleButtons(wm); _syncDesktopBar(wm); _syncPageShortcuts(wm); },
@@ -158,16 +196,14 @@ export async function installTilingShell({ eventBus, logger, runtime } = {}) {
         _syncPageShortcuts(wm);
     });
     const palette = createCommandPalette({ wm, api: window.pywebview?.api });
-    installKeymap({ wm, palette });
+    // FlexDesk's keymap driving BugDesk's palette — the palette exposes the same
+    // open/close/toggle/isOpen the keymap calls, so nothing is adapted. The
+    // selector is passed because FlexDesk's default names its own top bar's
+    // classes, and without it F1..F8 would silently match no button.
+    installKeymap({ wm, palette, navSelector: '.global-top-bar .bar-center.twm-top-nav .twm-top-nav__btn' });
     // The browser's Back gesture walks up exactly like Backspace does,
     // instead of abandoning the app and its tile layout.
     installHistoryBack({ wm });
-
-    // Late-bind the scenario widget's "open scenario tab" path through
-    // the WM. The widget was installed earlier (before `wm` existed)
-    // with a no-op openTab; patch it now that the WM is built.
-    scenarioTabsShim.openTab = ({ kind, entityId, label, icon, subTab }) =>
-        wm.openInPrimary(kind, { id: entityId, label, icon, subTab });
 
     // 6. Wire the top-bar panel toggles to the WM (nothing else drives them
     //    any more — the legacy panel state machines are gone), then add the
@@ -181,10 +217,18 @@ export async function installTilingShell({ eventBus, logger, runtime } = {}) {
     // add and switch between multiple desktops again.
     _installDesktopBar(wm);
     _installUserChip(wm, eventBus);
-    // The bottom bar's zoom. Installed alongside the other two bar widgets and
-    // before wm.load(), so the saved scale is already on the root element when
-    // the first tiles paint rather than snapping into place a moment later.
-    installUiScale({ eventBus });
+    // C31. FlexDesk's content zoom, in the bottom bar. It scales tile bodies and
+    // window content under `wmHost` and nothing a window is dragged across, which
+    // is what keeps the snapping above working at any zoom — see FlexDesk's
+    // zoom.js. The saved value comes through the same host port the desktops are
+    // persisted through, and it is AWAITED before the first mount so the tiles
+    // paint at the user's zoom rather than at 100% and then jumping.
+    const zoomHost = document.querySelector('#global-bottom-bar .bar-right')
+                  ?? document.querySelector('.global-bottom-bar .bar-right');
+    const zoom = mountZoomControl(zoomHost, { root: wmHost, host });
+    // Both read before the first mount, for the same reason: a queue that paints
+    // unsorted and then jumps to your sort a moment later looks broken.
+    await Promise.all([zoom?.ready, tableStore.ready()]);
     _wirePageShortcuts(wm);
 
     await wm.load();
@@ -241,29 +285,8 @@ export async function installTilingShell({ eventBus, logger, runtime } = {}) {
         log.warn?.('authorship write-through failed to install', { err });
     }
 
-    // Watch for external project-file edits (text editor, git pull,
-    // etc.) and surface them as a top-of-page banner with [Reload].
-    // The bridge mirror won't update on its own otherwise.
-    try {
-        const { installExternalChangesBanner } = await import(
-            '../ecoagent/ui/external_changes_banner.js');
-        installExternalChangesBanner({ api: window.pywebview?.api, eventBus });
-    } catch (err) {
-        log.warn?.('external-changes banner failed to install', { err });
-    }
-
-    // If the last run ended abnormally, `<project>/.ecoagent/current.run/`
-    // still has its manifest + log on disk. Surface a banner with
-    // Resume / Save as / Discard so the user can act on it.
-    try {
-        const { checkAndShowOrphanedRun } = await import(
-            '../ecoagent/ui/orphaned_run_banner.js');
-        checkAndShowOrphanedRun({ api: window.pywebview?.api, eventBus });
-    } catch (err) {
-        log.warn?.('orphaned-run banner check failed', { err });
-    }
-
-    log.info?.('tiling shell installed', { project: project.path || project.name });
+    log.info?.('tiling shell installed');
+    window.__bugdesk = { eventBus, wm, palette };
     return { wm, palette };
 }
 
@@ -468,7 +491,7 @@ function _installHamburgerMenu() {
             }
             if (action === 'twm-collaborators') {
                 import('../ticketdesk/collaborators.js')
-                    .then((m) => m.openCollaborators({ eventBus: window.__ecoagent?.eventBus }))
+                    .then((m) => m.openCollaborators({ eventBus: window.__bugdesk?.eventBus }))
                     .catch((err) => console.error('[bugdesk] collaborators dialog failed', err));
                 return;
             }
@@ -477,7 +500,7 @@ function _installHamburgerMenu() {
                 // from a focused side tile, the page change happened somewhere
                 // the user was not looking and read as "nothing happened".
                 import('../ticketdesk/first_run.js')
-                    .then((m) => m.openIdentityDialog({ eventBus: window.__ecoagent?.eventBus }))
+                    .then((m) => m.openIdentityDialog({ eventBus: window.__bugdesk?.eventBus }))
                     .catch((err) => console.error('[bugdesk] identity dialog failed', err));
                 return;
             }
@@ -539,7 +562,7 @@ function _tileContextMenu(wm, leafId, x, y) {
           action: 'open-tab',    disabled: isPanel || !leaf.content },
         { label: 'Open in new window', icon: 'open_in_full',
           action: 'open-window', disabled: isPanel || !leaf.content },
-        { label: 'Promote to window', icon: 'open_in_new',
+        { label: 'Float this tab as a window', icon: 'open_in_new',
           action: 'promote', disabled: isPanel || !leaf.content },
     ];
     if (wm.desktops.desktops.length > 1 && !isPanel) {
@@ -716,7 +739,7 @@ function _installUserChip(wm, eventBus) {
 
     btn.addEventListener('click', () => {
         import('../ticketdesk/first_run.js')
-            .then((m) => m.openIdentityDialog({ eventBus: eventBus ?? window.__ecoagent?.eventBus }))
+            .then((m) => m.openIdentityDialog({ eventBus: eventBus ?? window.__bugdesk?.eventBus }))
             .catch((err) => console.error('[bugdesk] identity dialog failed', err));
     });
     // Emitted by first_run.js's applyIdentity, whichever surface made the change

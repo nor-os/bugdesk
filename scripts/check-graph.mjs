@@ -24,23 +24,11 @@ const IMPORT_MAP = {
     '@flexdesk/core': `${UI}/vendor/flexdesk/core.js`,
     '@flexdesk/host': `${UI}/vendor/flexdesk/host.js`,
     '@flexdesk/wm': `${UI}/vendor/flexdesk/wm.js`,
-    '@codemirror/state': `${UI}/vendor/codemirror/state.js`,
-    '@codemirror/view': `${UI}/vendor/codemirror/view.js`,
-    '@codemirror/commands': `${UI}/vendor/codemirror/commands.js`,
-    '@codemirror/language': `${UI}/vendor/codemirror/language.js`,
-    '@codemirror/autocomplete': `${UI}/vendor/codemirror/autocomplete.js`,
-    '@codemirror/search': `${UI}/vendor/codemirror/search.js`,
-    '@codemirror/lint': `${UI}/vendor/codemirror/lint.js`,
-    '@lezer/common': `${UI}/vendor/lezer/common.js`,
-    '@lezer/highlight': `${UI}/vendor/lezer/highlight.js`,
-    '@lezer/lr': `${UI}/vendor/lezer/lr.js`,
-    crelt: `${UI}/vendor/crelt.js`,
-    'style-mod': `${UI}/vendor/style-mod.js`,
-    'w3c-keyname': `${UI}/vendor/w3c-keyname.js`,
+    '@flexdesk/widgets': `${UI}/vendor/flexdesk/widgets.js`,
 };
 
 const ENTRIES = [
-    `${UI}/js/bootstrap/app_bootstrap.js`,
+    `${UI}/js/bootstrap/boot.js`,
     `${UI}/js/ticketdesk/first_run.js`,
     `${UI}/js/tiling/install.js`,
 ];

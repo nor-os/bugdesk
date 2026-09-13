@@ -27,7 +27,7 @@ const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const UI = join(ROOT, 'ui', 'js', 'ticketdesk') + '/';
 const TILING = join(ROOT, 'ui', 'js', 'tiling') + '/';
 
-for (const name of ['core', 'wm']) {
+for (const name of ['core', 'wm', 'widgets']) {
     const dir = join(ROOT, 'node_modules', '@flexdesk', name);
     if (existsSync(join(dir, 'index.js'))) continue;
     mkdirSync(dir, { recursive: true });

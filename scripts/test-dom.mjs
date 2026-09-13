@@ -24,7 +24,7 @@ const UI = join(ROOT, 'ui', 'js');
 
 // Node has no import map; write the equivalent as alias packages. Same files
 // ui/index.html maps `@flexdesk/*` to.
-for (const name of ['core', 'wm']) {
+for (const name of ['core', 'wm', 'widgets']) {
     const dir = join(ROOT, 'node_modules', '@flexdesk', name);
     if (existsSync(join(dir, 'index.js'))) continue;
     mkdirSync(dir, { recursive: true });
@@ -377,8 +377,11 @@ const allSource = walkJs(join(ROOT, 'ui', 'js')).map((f) => rfSettings(f, 'utf8'
 
 await t('every offered setting is read somewhere, or is a button', () => {
     // The allow-list keeps itself honest: add a setting and this says list it;
-    // delete the code that reads one and this says the row is now a lie.
-    const source = allSource;
+    // delete the code that reads one and this says the row is now a lie. The
+    // vendored FlexDesk counts: its managed windows read `window.*` for us.
+    const vendor = join(ROOT, 'ui', 'vendor', 'flexdesk');
+    const source = allSource + '\n' + rdSettings(vendor).filter((f) => f.endsWith('.js'))
+        .map((f) => rfSettings(join(vendor, f), 'utf8')).join('\n');
     const schema = settings.getSchema();
 
     for (const path of settings.VISIBLE_SETTINGS) {
@@ -1282,9 +1285,9 @@ await t('it opens as a real managed window, not a hand-rolled overlay', async ()
     const done = openCollaborators({ eventBus: null });
     await tick(); await tick(); await tick();
 
-    const win = document.querySelector('.managed-window');
+    const win = document.querySelector('.twm-managed-window');
     assert.ok(win, 'no ManagedWindow — it is still a bare overlay');
-    assert.ok(win.classList.contains('managed-window--modal'));
+    assert.ok(win.classList.contains('twm-managed-window--modal'));
     assert.ok(!document.querySelector('.bd-picker'), 'the old overlay is still being built');
 
     const body = document.querySelector('.bd-collabs');
@@ -1434,10 +1437,47 @@ await t('the tree is still a tree when it is not a person\'s list', async () => 
     host.remove();
 });
 
+/* A tile mounts only its ACTIVE tab, so opening an item in a new tab destroys
+ * the board and going back builds a fresh one. Its sort used to die with it.
+ * The table's state lives in the shell's table store, keyed by the view. */
+await t('a board\'s sort survives being unmounted and mounted again', async () => {
+    const saved = new Map();
+    const tableStore = { ready: async () => {}, get: (k) => saved.get(k), set: (k, v) => saved.set(k, v) };
+    const sortArrows = (host) => [...host.querySelectorAll('thead th')].flatMap((th) =>
+        [...th.querySelectorAll('.material-symbols-outlined')].map((i) => i.textContent.trim())
+            .filter((x) => x === 'arrow_upward' || x === 'arrow_downward')
+            .map((x) => `${th.textContent.replace(/arrow_(up|down)ward/, '').trim()} ${x}`));
+    const mount = async () => {
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        const page = createBacklogContent({ eventBus: null })
+            .backlog(host, { filter: 'all', flat: true }, { wm: null, tableStore });
+        await tick(); await tick();
+        return { host, page };
+    };
+
+    const first = await mount();
+    const title = [...first.host.querySelectorAll('thead th')].find((th) => /^Title/.test(th.textContent.trim()));
+    assert.ok(title, 'no Title column to sort by');
+    title.click(); await tick();
+    title.click(); await tick();
+    const before = sortArrows(first.host);
+    assert.equal(before.length, 1, `expected one sorted column, got ${JSON.stringify(before)}`);
+    first.page.destroy?.();
+    first.host.remove();
+
+    assert.ok([...saved.keys()].some((k) => k.startsWith('backlog:board:')), `nothing was stored: ${[...saved.keys()]}`);
+    const second = await mount();
+    assert.deepEqual(sortArrows(second.host), before, 'the remounted board forgot its sort');
+    second.page.destroy?.();
+    second.host.remove();
+});
+
 console.log('\nInspector, end to end');
 
-const { WindowManager } = await import(join(UI, 'tiling', 'wm.js'));
+const { WindowManager } = await import('@flexdesk/wm');
 const { createContentRegistry } = await import('@flexdesk/wm');
+const { taxonomy } = await import(join(UI, 'tiling', 'kind_taxonomy.js'));
 
 await t('clicking a name puts that person\'s list in the primary tile', async () => {
     const realFetchLocal = globalThis.fetch;
@@ -1458,6 +1498,7 @@ await t('clicking a name puts that person\'s list in the primary tile', async ()
     const wm = new WindowManager({
         rootEl: root,
         content,
+        taxonomy,
         // No persisted layout, and nothing to persist to.
         host: { state: { read: async () => null, write: async () => true } },
         ctx: {},

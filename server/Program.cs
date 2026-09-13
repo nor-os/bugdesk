@@ -1196,10 +1196,11 @@ app.MapPost("/api/filters", async (HttpRequest req) =>
 
 // ---- Workspace layout -----------------------------------------------------
 // @flexdesk/host's state capability calls these two by name (see
-// createPywebviewHost in the FlexDesk package). They used to fall through to the
-// permissive catch-all below, which answered {ok:true} to a READ — so the WM
-// received the object `{ok:true}` where a saved layout should have been and
-// every tile arrangement was lost on reload. They are per-user, like the filters.
+// createPywebviewHost in the FlexDesk package). They once fell through to a
+// permissive catch-all that answered {ok:true} to a READ — so the WM received the
+// object `{ok:true}` where a saved layout should have been and every tile
+// arrangement was lost on reload. That catch-all is gone (see the end of the
+// endpoint list). They are per-user, like the filters.
 app.MapPost("/api/workspace_state_read", async (HttpRequest req) =>
 {
     var body = await JsonSerializer.DeserializeAsync<Dictionary<string, JsonElement>>(req.Body, json) ?? new();
@@ -1217,8 +1218,7 @@ app.MapPost("/api/workspace_state_write", async (HttpRequest req) =>
 });
 
 // ---- Live updates: the stream ---------------------------------------------
-// One long-lived response per open browser. Registered BEFORE the catch-all,
-// which would otherwise answer it with a JSON object and no stream at all.
+// One long-lived response per open browser.
 app.MapGet("/api/events", async (HttpContext http, CancellationToken ct) =>
 {
     http.Response.Headers.ContentType = "text/event-stream";
@@ -1255,13 +1255,13 @@ app.MapGet("/api/events", async (HttpContext http, CancellationToken ct) =>
     finally { watcher.Unsubscribe(channel); }
 });
 
-// Permissive fallback for the EcoAgent/FlexDesk shell's bridge calls (app_version,
-// app_get_platform, ...): anything not handled above returns
-// {ok:true, result:{ok:true}} so the shell boots and renders its empty states,
-// exactly as ticketdesk's Python bridge did. Specific /api routes above take
-// precedence over this catch-all.
-app.MapMethods("/api/{**rest}", new[] { "GET", "POST" },
-    () => Results.Json(new { ok = true, result = new { ok = true } }, json));
+// No catch-all. There used to be one here that answered every unhandled /api call
+// with {ok:true, result:{ok:true}}, kept so the simulator's shell could boot
+// against calls BugDesk never implemented (app_version, project_current, …). That
+// shell is gone, and what the catch-all actually did by then was hide faults: an
+// unimplemented call looked successful, so a caller that should have taken its
+// fallback reported success instead — CSV export announced files it never wrote.
+// An unknown route is now a plain 404, which is what it is.
 
 app.Run();
 

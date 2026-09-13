@@ -19,8 +19,9 @@
    decision as the text size, and the Material sizes here are already
    tuned against their rows.
 
-   None of this is the user-facing zoom. That is a CSS `zoom` on the
-   whole WM host (see ui_scale.js) and multiplies whatever is set here.
+   None of this is the user-facing zoom. That is FlexDesk's content zoom
+   (C31, zoom.js), mounted in the bottom bar; it scales tile bodies and
+   multiplies whatever is set here.
    ──────────────────────────────────────────────────────────────────── */
 
 /* ── Page scaffold ──────────────────────────────────────────────── */
@@ -992,80 +993,3 @@
     outline: 1px solid var(--accent-bright, #007acc);
     outline-offset: -1px;
 }
-
-
-/* ════════════════════════════════════════════════════════════════════
-   UI SCALE — the bottom bar's zoom, applied.
-
-   Driven by --td-ui-scale on <html>; see ui/js/tiling/ui_scale.js for
-   what it scales and, more importantly, what it must not. Everything
-   below hangs off `.td-scaled`, which that module only sets away from
-   100%, so an unzoomed BugDesk carries no `zoom` declaration at all —
-   `zoom: 1` is not a no-op, it still establishes a scaled coordinate
-   space, and the window frames' drag/resize/snap math has to stay in
-   real pixels.
-
-   The tiled host and the floating windows' CONTENT are the two targets:
-   the same page reads at the same size whether it is in a tile or
-   floated out. The window frame, the top bar and the bottom bar are
-   chrome and keep their size — a zoom that moved the bars would push
-   this very control off the bar it lives on.
-   ──────────────────────────────────────────────────────────────────── */
-.td-scaled .twm-host,
-.td-scaled .twm-window-content { zoom: var(--td-ui-scale, 1); }
-
-/* ── The control itself ─────────────────────────────────────────────
-   Sized against the 20px bottom bar rather than the page scale: it is
-   chrome, and it is the one thing that must stay reachable at 200%. */
-.twm-ui-scale {
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-    height: 100%;
-    padding: 0 8px;
-    border-left: 1px solid var(--surface-3, #3c3c3c);
-    user-select: none;
-}
-.twm-ui-scale__step {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 15px;
-    height: 15px;
-    padding: 0;
-    border: none;
-    border-radius: 2px;
-    background: none;
-    color: var(--text-muted, #888);
-    font: inherit;
-    font-size: var(--font-size-sm, 12px);
-    line-height: 1;
-    cursor: pointer;
-}
-.twm-ui-scale__step:hover { background: var(--surface-3, #3c3c3c); color: var(--text-primary, #e0e0e0); }
-
-/* A short track, deliberately: it sits between two buttons in a 20px bar
-   and the readout is what answers "where am I", not the thumb position. */
-.twm-ui-scale__slider {
-    width: 78px;
-    height: 12px;
-    margin: 0;
-    cursor: pointer;
-    accent-color: var(--accent-bright, #007acc);
-}
-
-/* Tabular numerals so the readout does not jiggle between 95% and 100%
-   while the thumb is moving. */
-.twm-ui-scale__value {
-    min-width: 34px;
-    padding: 0;
-    border: none;
-    background: none;
-    color: var(--text-muted, #888);
-    font-family: var(--font-family-mono, ui-monospace, Consolas, monospace);
-    font-size: var(--font-size-xs, 11px);
-    font-variant-numeric: tabular-nums;
-    text-align: right;
-    cursor: pointer;
-}
-.twm-ui-scale__value:hover { color: var(--text-primary, #e0e0e0); }

@@ -7,7 +7,7 @@
  * Changes apply immediately and persist to localStorage.
  */
 
-import { PageBase } from '../base/page_base.js';
+import { PageBase, installOverlayScrollbar } from '@flexdesk/widgets';
 import {
     getSetting,
     setSetting,
@@ -19,7 +19,6 @@ import {
     resetAllSettings,
 } from '../../core/settings.js';
 import { VISIBLE_SETTINGS } from '../../core/settings.js';
-import { installOverlayScrollbar } from '../utils/overlay_scrollbar.js';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 

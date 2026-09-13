@@ -457,3 +457,16 @@ body.twm-dragging * { user-select: none; }
     font-weight: 600;
     color: var(--text-primary);
 }
+
+/* The glyph on a floating window's tab strip takes the accent blue.
+ *
+ * FlexDesk's window strip reuses the `.notebook-tabs` markup and sizes this icon
+ * (flexdesk.css) but deliberately leaves its colour to the embedder. BugDesk had
+ * never chosen one: the blue came from `notebook.css`, the simulator's notebook
+ * stylesheet, which happened to colour `.notebook-tabs .tab .tab-icon` and was
+ * loaded on every page for that one side effect. The simulator's sheets are gone,
+ * so the choice is stated here, where BugDesk themes its tiles. Same specificity
+ * as the rule it replaces, so nothing else shifts. */
+.notebook-tabs .tab .tab-icon {
+    color: #75beff;
+}

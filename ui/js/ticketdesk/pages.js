@@ -42,7 +42,7 @@ import { mountTileBreadcrumb } from '../tiling/tile_breadcrumb.js';
 import { activeTopNavKind } from '../tiling/kind_taxonomy.js';
 import { installRecordDragSource, isModifiedOpen, markDragCell, openModified } from './record_dnd.js';
 import { DataTable } from '../ui/components/data_table.js';
-import { showContextMenu } from '../ecoagent/ui/context_menu.js';
+import { showContextMenu } from '@flexdesk/widgets';
 import {
     BUILTIN_FILTERS, FILTER_FIELDS, MODEL, SCOPE,
     describeFilter, deleteFilter, duplicateFilter, getFilter,
@@ -413,7 +413,14 @@ function mountQueues(host, props, ctx) {
 
     /* ── the table ──────────────────────────────────────────────── */
 
+    // One remembered sort / column filters / widths per VIEW: sorting "Active" by
+    // summary must not reorder "Open". An ad-hoc view (a rail or Inspector click
+    // with an expression and no saved filter) has no stable name, so they share
+    // one slot rather than each minting a key that is never seen again. Only set
+    // when a store was handed in — a table given a persistKey and no store throws.
+    const persistKey = `bugs:queue:${resolved.key || 'adhoc'}`;
     const table = new DataTable(host.querySelector('.td-tablehost'), {
+        ...(ctx?.tableStore ? { stateStore: ctx.tableStore, persistKey } : {}),
         headers: QUEUE_HEADERS,
         rows: TICKETS.filter(resolved.match).map(queueRow),
         pagination: false,
@@ -467,7 +474,15 @@ function mountQueues(host, props, ctx) {
     // (never grown to fill), and _restorePersisted stamps the column
     // signature so the width survives the first render. Column 0 = Pri
     // (showRowNumbers is off, so there is no leading row-number column).
-    table._restorePersisted?.({ colWidths: { 0: 48 } });
+    //
+    // ONLY WHEN NOTHING IS REMEMBERED. `_restorePersisted` replaces the width
+    // map wholesale, so pinning unconditionally threw away every width the user
+    // had dragged, on every mount — the column widths half of "my table forgot
+    // how I left it". A remembered map wins; the pin is the default for a table
+    // nobody has resized yet.
+    if (!ctx?.tableStore?.get(persistKey)?.colWidths) {
+        table._restorePersisted?.({ colWidths: { 0: 48 } });
+    }
     table.render();
     requestAnimationFrame(() => { if (host.isConnected) table.focus(); });
 
@@ -953,6 +968,9 @@ function mountTicket(host, props, ctx) {
                 else ctx.wm?.openInTabFromContext?.(ctx, kind, p);
             };
             resultsTable = new DataTable(resultsEl.querySelector('.td-tablehost'), {
+                // The results are rebuilt on every search, so this is how a sort
+                // you chose survives running the next one.
+                ...(ctx?.tableStore ? { stateStore: ctx.tableStore, persistKey: 'bugs:search' } : {}),
                 headers: ['Ref', 'Store', 'Type', 'Summary', 'Status', 'Updated', 'Assignee'],
                 rows: matches.map((m) => [m.ref, m.store === 'backlog' ? 'Backlog' : 'Bugs',
                                           m.type, m.summary, m.status, m.sla, m.assignee]),
