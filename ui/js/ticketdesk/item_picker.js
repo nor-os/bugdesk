@@ -1,13 +1,17 @@
 /**
- * ticketdesk/item_picker.js — pick a backlog item by searching for it.
+ * ticketdesk/item_picker.js — pick a record by searching for it.
  *
  * A combobox over a datalist was the wrong control for choosing a parent: it
  * matches on the literal prefix of the option text, so finding "Auth rewrite"
  * meant typing "EPIC-0001" — the id you opened the picker to look up. This is a
- * search: type any part of a reference or title, filter by type, pick.
+ * search: type any part of a reference or title, filter, pick.
+ *
+ * "RECORD" HERE MEANS A ROW IN EITHER STORE. The backlog is the default because
+ * that is what every existing caller wants; a caller that can legitimately point
+ * at a bug — linking, marking a duplicate — opts in with `stores`.
  *
  * FINISHED WORK IS HIDDEN until the Closed chip is ticked. A store accumulates
- * closed items forever — after a year they are most of it — and a picker is a
+ * closed records forever — after a year they are most of it — and a picker is a
  * place you go to find something to act on. The count says how many were held
  * back, so the chip is discoverable at the moment it would help.
  *
@@ -26,10 +30,14 @@
 import { esc } from './data.js';
 import {
     ALL_TYPES, ITEMS, TYPES, TYPE_ICON, TYPE_LABEL,
-    childTypesFor, isClosedItem, parentTypesFor, typeLabelOf,
+    childTypesFor, parentTypesFor, typeLabelOf,
 } from './backlog_data.js';
+import { allRows, findRow, storesAvailable } from './records.js';
+import { parseKey, parseRef, refKey, sameRef } from './refs.js';
 
 const icon = (name) => `<span class="material-symbols-outlined">${name}</span>`;
+
+const STORE_LABEL = { bugs: 'Bugs', backlog: 'Backlog' };
 
 /* The hierarchy rules live in ./backlog_data.js — `parentTypesFor` and
  * `childTypesFor` — beside the store they describe, and are re-exported here
@@ -43,18 +51,36 @@ export { childTypesFor, parentTypesFor };
  *
  * @param {object}   o
  * @param {string}   [o.title]      dialog title
- * @param {string[]} [o.types]      types selected in the filter on open
- * @param {number}   [o.exclude]    an id that cannot be picked (an item may not
- *                                  be its own parent)
- * @param {number[]} [o.excludeIds] ids that cannot be picked — an item's own
- *                                  descendants, which would make a cycle
- * @param {number}   [o.current]    the currently chosen id, highlighted
- * @returns {Promise<{id:number, ref:string, title:string}|null>} null on cancel.
+ * @param {string[]} [o.stores]     which stores may be searched
+ * @param {string[]} [o.types]      types selected in the filter on open —
+ *                                  backlog types, and only when one store is
+ *                                  offered
+ * @param {number|object} [o.exclude]    a record that cannot be picked (an item
+ *                                       may not be its own parent)
+ * @param {Array<number|object>} [o.excludeIds] records that cannot be picked —
+ *                                  an item's own descendants, which would make
+ *                                  a cycle
+ * @param {number|object} [o.current]    the currently chosen record, highlighted
+ * @returns {Promise<{store:string, id:number, ref:string, title:string, type:string,
+ *                    prefix:string, target:object|null}|null>} null on cancel.
  */
-export function openItemPicker({
-    title = 'Find an item', types = [], exclude = 0, excludeIds = [], current = 0,
+export function openRecordPicker({
+    title = 'Find a record', stores = ['backlog'], types = [],
+    exclude = 0, excludeIds = [], current = 0,
 } = {}) {
-    const blocked = new Set([...(excludeIds || []), exclude].map(Number).filter(Boolean));
+    // Tracker mode has no bug store at all, so a caller asking for both degrades
+    // to backlog-only rather than drawing a Bugs chip whose targets cannot exist.
+    const asked = (stores || []).filter((s) => storesAvailable().includes(s));
+    const offered = asked.length ? asked : ['backlog'];
+    const multiStore = offered.length > 1;
+
+    /** The three id inputs are bare BACKLOG ids in every existing caller, and a
+     *  Ref in every new one. `parseRef` against the backlog is the same answer
+     *  for a number as a hand-written normaliser would give, and it additionally
+     *  accepts a token, so there is one spelling of "what did the caller mean". */
+    const asRef = (v) => ((v && typeof v === 'object') ? v : parseRef(v, 'backlog'));
+    const blocked = new Set([...(excludeIds || []), exclude].map(asRef).map(refKey).filter(Boolean));
+    const currentRef = asRef(current);
 
     /**
      * Which type chips to draw. The invariant: EVERY type that could be active
@@ -76,14 +102,31 @@ export function openItemPicker({
 
     return new Promise((resolve) => {
         const active = new Set(types.length ? types : chipTypes);
+        const activeStores = new Set(offered);
         // Finished work is hidden until asked for. A picker is a place you go to
-        // find something to ACT on, and a store accumulates closed items
+        // find something to ACT on, and a store accumulates closed records
         // forever — after a year they are most of it, and they push the three
         // live ones you were looking for off the screen.
         let includeClosed = false;
         let query = '';
         let cursor = 0;                 // index into the rendered result list
         let results = [];
+
+        /* A store dimension ABOVE the type dimension, never both: the two type
+         * enums cannot be unioned — `task` is a backlog task and, via
+         * `TYPE_MACHINE` in data.js, a Chore bug — and a cross-store pick is a
+         * search, not a taxonomy walk. */
+        const chipsHTML = multiStore
+            ? offered.map((s) => `
+                        <button type="button" class="bd-picker__chip bd-picker__chip--on"
+                                data-store="${s}" aria-pressed="true">
+                            ${esc(STORE_LABEL[s] || s)}
+                        </button>`).join('')
+            : chipTypes.map((t) => `
+                        <button type="button" class="bd-picker__chip${active.has(t) ? ' bd-picker__chip--on' : ''}"
+                                data-type="${t}" aria-pressed="${active.has(t)}">
+                            ${icon(TYPE_ICON[t])}${esc(typeLabelOf(t))}
+                        </button>`).join('');
 
         const overlay = document.createElement('div');
         overlay.className = 'bd-picker';
@@ -96,12 +139,9 @@ export function openItemPicker({
                     <button type="button" class="bd-picker__close" data-a="cancel"
                             aria-label="Cancel">${icon('close')}</button>
                 </div>
-                <div class="bd-picker__filters" role="group" aria-label="Filter by type">
-                    ${chipTypes.map((t) => `
-                        <button type="button" class="bd-picker__chip${active.has(t) ? ' bd-picker__chip--on' : ''}"
-                                data-type="${t}" aria-pressed="${active.has(t)}">
-                            ${icon(TYPE_ICON[t])}${esc(typeLabelOf(t))}
-                        </button>`).join('')}
+                <div class="bd-picker__filters" role="group"
+                     aria-label="Filter by ${multiStore ? 'store' : 'type'}">
+                    ${chipsHTML}
                     <span class="td-spacer"></span>
                     <button type="button" class="bd-picker__chip bd-picker__chip--closed"
                             data-closed="1" aria-pressed="false"
@@ -134,26 +174,36 @@ export function openItemPicker({
             resolve(value);
         };
 
-        /** Rows of the right type, not blocked, matching the query. `closed`
+        /* Every candidate, filter, render and pick path reads ROWS, not a store
+         * array: `Row` is the one shape a bug and an item share, so none of them
+         * has to know which store the thing under the cursor came from. */
+        const rows = () => allRows(offered);
+
+        /** Rows of the right kind, not blocked, matching the query. `closed`
          *  is applied separately so the count can say how many it removed. */
         const candidates = () => {
             const q = query.trim().toLowerCase();
-            return ITEMS.filter((i) => {
-                if (!active.has(i.type)) return false;
-                if (blocked.has(Number(i.id))) return false;
+            return rows().filter((row) => {
+                if (multiStore) { if (!activeStores.has(row.store)) return false; }
+                else if (!active.has(row.type)) return false;
+                if (blocked.has(row.key)) return false;
                 if (!q) return true;
-                return i.ref.toLowerCase().includes(q) || String(i.title || '').toLowerCase().includes(q);
+                // Ref OR title. Searching by title is the primary way a master
+                // is found in "what is #42 a duplicate of?" — a reference match
+                // alone would never hit a word the user actually remembers.
+                return row.label.toLowerCase().includes(q)
+                    || String(row.title || '').toLowerCase().includes(q);
             });
         };
 
-        // The item ALREADY chosen is never hidden, whatever its status: a
+        // The record ALREADY chosen is never hidden, whatever its status: a
         // picker that cannot show you what the field currently holds is a
         // picker that makes the field look empty.
-        const hidden = (i) => isClosedItem(i) && Number(i.id) !== Number(current);
+        const hidden = (row) => row.closed && !sameRef(row.ref, currentRef);
 
         const matches = () => {
             const all = candidates();
-            return includeClosed ? all : all.filter((i) => !hidden(i));
+            return includeClosed ? all : all.filter((row) => !hidden(row));
         };
 
         const render = () => {
@@ -165,27 +215,39 @@ export function openItemPicker({
             countEl.textContent = `${results.length} item${results.length === 1 ? '' : 's'}`
                 + (held ? ` · ${held} closed hidden` : '');
             listEl.innerHTML = results.length
-                ? results.map((i, n) => `
+                ? results.map((row, n) => `
                     <li class="bd-picker__row${n === cursor ? ' bd-picker__row--on' : ''}${
-                        Number(i.id) === Number(current) ? ' bd-picker__row--current' : ''}"
-                        role="option" aria-selected="${n === cursor}" data-pick="${i.id}">
-                        <span class="bd-type bd-type--${i.type}">${icon(TYPE_ICON[i.type])}</span>
-                        <span class="bd-picker__ref">${esc(i.ref)}</span>
-                        <span class="bd-picker__title">${esc(i.title)}</span>
-                        <span class="bd-picker__meta">${esc(i.phaseLabel || '')}</span>
+                        sameRef(row.ref, currentRef) ? ' bd-picker__row--current' : ''}"
+                        role="option" aria-selected="${n === cursor}" data-pick="${row.key}">
+                        <span class="bd-type bd-type--${row.store === 'bugs' ? 'bug' : row.type}">${icon(row.icon)}</span>
+                        <span class="bd-picker__ref">${esc(row.label)}</span>
+                        <span class="bd-picker__title">${esc(row.title)}</span>
+                        <span class="bd-picker__meta">${esc(row.meta)}</span>
                     </li>`).join('')
                 : `<li class="bd-picker__empty">${
                     (!includeClosed && candidates().some(hidden))
                         ? 'Nothing open matches that — try Closed.'
                         : query.trim() ? 'Nothing matches that.'
+                        : multiStore ? 'Nothing in the selected stores.'
                         : 'No items of the selected types.'}</li>`;
             listEl.querySelector('.bd-picker__row--on')?.scrollIntoView({ block: 'nearest' });
         };
         render();
 
-        const pick = (id) => {
-            const item = ITEMS.find((i) => Number(i.id) === Number(id));
-            close(item ? { id: Number(item.id), ref: item.ref, title: item.title } : null);
+        // The DOM carries the row's IDENTITY, not its index: `refKey` survives a
+        // re-render, a store reload and a row that moved, and it is the same key
+        // every other cross-store reference resolves through.
+        const pick = (key) => {
+            const row = findRow(parseKey(key));
+            close(row ? {
+                store: row.store,
+                id: row.id,
+                ref: row.label,
+                title: row.title,
+                type: row.type,
+                prefix: row.ref.prefix,
+                target: row.ref,
+            } : null);
         };
 
         input.addEventListener('input', () => { query = input.value; cursor = 0; render(); });
@@ -198,6 +260,20 @@ export function openItemPicker({
                 includeClosed = !includeClosed;
                 closedChip.classList.toggle('bd-picker__chip--on', includeClosed);
                 closedChip.setAttribute('aria-pressed', String(includeClosed));
+                cursor = 0;
+                render();
+                return;
+            }
+            const storeChip = e.target.closest('[data-store]');
+            if (storeChip) {
+                const s = storeChip.dataset.store;
+                if (activeStores.has(s)) activeStores.delete(s); else activeStores.add(s);
+                // Never leave every store off, for the same reason as the types
+                // below: an empty filter shows nothing and reads as a broken
+                // dialog rather than a deliberate one.
+                if (activeStores.size === 0) activeStores.add(s);
+                storeChip.classList.toggle('bd-picker__chip--on', activeStores.has(s));
+                storeChip.setAttribute('aria-pressed', String(activeStores.has(s)));
                 cursor = 0;
                 render();
                 return;
@@ -221,7 +297,9 @@ export function openItemPicker({
             if (act === 'cancel') close(null);
             // "Leave empty" is a CHOICE, distinct from cancelling: it clears the
             // field rather than leaving whatever was there.
-            else if (act === 'clear') close({ id: 0, ref: '', title: '' });
+            else if (act === 'clear') {
+                close({ store: 'backlog', id: 0, ref: '', title: '', type: '', prefix: '', target: null });
+            }
         });
 
         const onKey = (e) => {
@@ -230,7 +308,7 @@ export function openItemPicker({
             else if (e.key === 'ArrowUp') { e.preventDefault(); cursor--; render(); }
             else if (e.key === 'Enter') {
                 e.preventDefault();
-                if (results[cursor]) pick(results[cursor].id);
+                if (results[cursor]) pick(results[cursor].key);
             }
         };
         // Capture: the New item dialog underneath has its own Escape handler,
@@ -240,6 +318,14 @@ export function openItemPicker({
         requestAnimationFrame(() => input.focus());
     });
 }
+
+/**
+ * The backlog-only picker — every caller that parents, attaches a child or
+ * navigates the item tree, none of which a bug can take part in.
+ *
+ * @param {object} [o] as `openRecordPicker`, minus `stores`
+ */
+export const openItemPicker = (o = {}) => openRecordPicker({ ...o, stores: ['backlog'] });
 
 /**
  * The PARENT CONTROL: a read-only display of the current parent plus a search
@@ -330,4 +416,3 @@ export function attachParentPicker(el, { typeOf, value = 0, excludeId = null, on
         destroy: () => { root.removeEventListener('click', onClick); root.remove(); },
     };
 }
-

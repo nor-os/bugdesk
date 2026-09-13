@@ -63,7 +63,11 @@ const bugData = await import(UI + 'data.js');
 const filters = await import(UI + 'backlog_filters.js');
 const newItem = await import(UI + 'new_item.js');
 const picker = await import(UI + 'item_picker.js');
+const records = await import(UI + 'records.js');
+const refs = await import(UI + 'refs.js');
+const links = await import(UI + 'links.js');
 const { taxonomy, activeTopNavKind } = await import(TILING + 'kind_taxonomy.js');
+const { REF_TOKENS } = await import('./record-fixtures.mjs');
 
 /** The lit chip for a page of `kind`, through the real derivation the top bar
  *  and the left rail both call — a fake WM whose focused leaf holds that kind. */
@@ -256,6 +260,94 @@ t('"Add child" defaults to the conventional level below', () => {
     assert.equal(picker.childTypesFor('epic')[0], 'story');
     assert.equal(picker.childTypesFor('story')[0], 'task');
 });
+
+/**
+ * Open the record picker against a DOM STAND-IN and hand back the overlay it
+ * built, so its chip strip can be read as markup.
+ *
+ * Why a stand-in and not jsdom, which scripts/test-dom.mjs uses for exactly this
+ * kind of assertion: tracker mode is baked in at module-evaluation time, so a
+ * tracker-mode picker cannot be mounted in that file at all, and jsdom needs a
+ * newer node than this checkout runs. The picker writes its whole dialog into
+ * one `innerHTML` string before it reads a single element back, so the stub only
+ * has to be inert — every node is a sink that remembers what was written to it.
+ */
+const stubNode = () => ({
+    className: '', innerHTML: '', textContent: '', value: '', dataset: {},
+    classList: { toggle() {}, add() {}, remove() {}, contains: () => false },
+    appendChild() {}, remove() {}, setAttribute() {}, focus() {}, scrollIntoView() {},
+    addEventListener() {}, removeEventListener() {},
+    querySelector: () => stubNode(), querySelectorAll: () => [], closest: () => null,
+});
+
+const openPickerHeadless = (opts) => {
+    const overlay = stubNode();
+    const saved = {
+        document: globalThis.document,
+        HTMLElement: globalThis.HTMLElement,
+        requestAnimationFrame: globalThis.requestAnimationFrame,
+    };
+    globalThis.document = {
+        createElement: () => overlay,
+        body: stubNode(),
+        activeElement: null,
+        addEventListener() {}, removeEventListener() {},
+    };
+    globalThis.HTMLElement = class HTMLElement {};
+    globalThis.requestAnimationFrame = () => 0;
+    // The promise stays pending — nothing here picks or cancels — which is what
+    // we want: the dialog is inspected exactly as it opens.
+    picker.openRecordPicker(opts);
+    return { overlay, close: () => Object.assign(globalThis, saved) };
+};
+
+/* ── records across a store line that is not there ───────────────────
+ *
+ * A tracker has NO bug store — `run.sh` never creates one and the bridge never
+ * serves one — so every cross-store affordance has to degrade rather than offer
+ * targets that cannot exist. The reference GRAMMAR, on the other hand, is not
+ * mode-dependent: a saved filter, a pasted ref and a link token written in one
+ * mode have to keep resolving in the other.
+ */
+
+console.log('\ntracker mode: records');
+
+t('there is one store to point at', () =>
+    assert.deepEqual(records.storesAvailable(), ['backlog']));
+
+t('a caller asking for both stores gets the backlog only', () => {
+    // The picker is what a "mark as duplicate" or "add a link" action opens, and
+    // both ask for both stores. A Bugs chip here would filter a list down to
+    // records that can never exist, which reads as a broken dialog.
+    const { overlay, close } = openPickerHeadless({ stores: ['bugs', 'backlog'] });
+    assert.ok(!overlay.innerHTML.includes('data-store="bugs"'), 'a Bugs chip was drawn');
+    assert.ok(!overlay.innerHTML.includes('data-store="backlog"'),
+        'store chips were drawn for a single store');
+    // One store offered, so it falls back to today's type chips, unchanged.
+    for (const type of data.TYPES) {
+        assert.ok(overlay.innerHTML.includes(`data-type="${type}"`), `no ${type} chip`);
+    }
+    close();
+});
+
+t('the reference grammar is not mode-dependent', () => {
+    for (const [token, selfStore, expected] of REF_TOKENS) {
+        const got = refs.parseRef(token, selfStore);
+        if (expected === null) { assert.equal(got, null, `${token} resolved`); continue; }
+        assert.equal(got.store, expected.store, `${token} in ${selfStore}`);
+        assert.equal(got.id, expected.id, `${token} in ${selfStore}`);
+    }
+});
+
+t('the prefix table is the same table here too', () =>
+    assert.deepEqual(refs.BACKLOG_PREFIXES, data.TYPE_PREFIX));
+
+t('the link vocabulary is the same list in both modes', () =>
+    // A record written in one mode is read in the other — the same store can be
+    // opened either way — so a verb that exists in only one of them is a token
+    // that renders in one and vanishes in the other.
+    assert.deepEqual(links.LINK_TYPES.map((d) => d.type),
+        ['duplicates', 'blocks', 'blocked-by', 'requires', 'caused-by', 'relates-to', 'implements']));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

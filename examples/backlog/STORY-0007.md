@@ -6,6 +6,7 @@ status: done
 parent: 6
 phase:
 assignee: agent
+reporter: norman
 points: 3
 subsystem: config
 labels: [multi-user]
@@ -26,6 +27,14 @@ store. It never asks again.
 - [x] The answer lands in a directory that ignores itself in git
 - [x] A second person on the same repo gets their own profile, not the first person's
 - [x] `BUGDESK_HUMAN` still wins, and suppresses the prompt entirely
+
+## History
+
+- 2026-09-04 · reviewer · status: draft -> refined
+- 2026-09-08 · agent · status: refined -> in-progress
+- 2026-09-08 · agent · assignee: reviewer -> agent
+- 2026-09-10 · agent · status: in-progress -> review
+- 2026-09-10 · reviewer · status: review -> done
 
 ## Comments
 

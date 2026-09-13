@@ -27,6 +27,12 @@ Priya owns the vendor relationship and is running the cutover.
 - [ ] Sign-off from the finance controller
 - [ ] Legacy feed disabled
 
+## History
+
+- 2026-09-02 · norman · status: draft -> refined
+- 2026-09-02 · norman · assignee: (unset) -> priya
+- 2026-09-08 · norman · status: refined -> in-progress
+
 ## Comments
 
 ### 2026-09-09 · norman

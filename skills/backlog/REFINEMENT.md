@@ -132,11 +132,12 @@ For each item you're refining:
 4. **Ask about the gaps you can't.** An estimate you invented and a criterion
    you guessed are worse than a `draft` that says what it's waiting on.
 5. **Split if it wants to split.** Write the new item, parent it, refine it too.
-6. **Set `status: refined`** only when all five checks pass, bump `updated`,
-   and **leave a comment** recording what you did:
+6. **Set `status: refined`** only when all five checks pass, append the matching
+   `## History` line (`- <date> · <your agent> · status: draft -> refined`), bump
+   `updated`, and **leave a comment** recording what you did:
 
    ```markdown
-   ### 2026-09-10 · agent
+   ### 2026-09-10 · norman_agent
 
    Refined: 3 acceptance criteria (added the revoke case, which the description
    didn't mention), 5 points, parented to EPIC-0001. Split out STORY-0009 for
@@ -174,6 +175,7 @@ For each item you're refining:
 - **An epic, beyond checks 1, 2 and 4.** An epic's acceptance criteria are its
   stories. Give it a description worth reading and a phase, and refine the
   stories underneath.
-- **A task, at all.** It has no `refined` state; the bridge rejects the
-  transition. Give it criteria if they are worth writing — that is not
-  refinement, it is just saying what done means. See the note at the top.
+- **A task, at all.** It has no `refined` state, and the UI rejects the
+  transition — but you are writing the file, so nothing stops you except this
+  rule. Give it criteria if they are worth writing; that is not refinement, it
+  is just saying what done means. See the note at the top.

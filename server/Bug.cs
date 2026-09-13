@@ -15,6 +15,16 @@ class Bug
     public string Type { get; set; } = "bug";
     public string Subsystem { get; set; } = "unsorted";
     public string Assignee { get; set; } = "";
+
+    /// <summary>
+    /// Who reported this — the person it goes back to when an agent hands it over.
+    /// Distinct from Assignee: assignee says whose court it is in now, reporter says
+    /// whose bug it has been all along. Set once, at file time; empty on records
+    /// written before the field existed, which every reader resolves to the
+    /// configured human rather than guessing a value into the file.
+    /// </summary>
+    public string Reporter { get; set; } = "";
+
     public List<string> Labels { get; set; } = new();
 
     /// <summary>
@@ -37,6 +47,10 @@ class Bug
     public string Description { get; set; } = "";
     public List<Comment> Comments { get; set; } = new();
 
+    /// <summary>The record's own audit trail: status, assignee and reporter
+    /// transitions, oldest first. Parsed from <c>## History</c>; append-only.</summary>
+    public List<HistoryEntry> History { get; set; } = new();
+
     // Lifecycle: open → investigation ⇄ testing → closed.
     public int Stage => Status switch
     {
@@ -50,9 +64,10 @@ class Bug
     public object ToSummary() => new
     {
         id = Id, title = Title, status = Status, severity = Severity, type = Type,
-        subsystem = Subsystem, assignee = Assignee, labels = Labels, links = Links,
+        subsystem = Subsystem, assignee = Assignee, reporter = Reporter,
+        labels = Labels, links = Links,
         created = Created, updated = Updated, stage = Stage, pri = Pri,
-        comments = Comments.Count,
+        comments = Comments.Count, history = History.Count,
         // Last comment's author/date (or null) so the UI can build a
         // "needs my reply" filter from the summary list alone.
         lastCommentAuthor = Comments.Count > 0 ? Comments[^1].Author : null,
@@ -75,6 +90,7 @@ class Bug
                 case "type": bug.Type = val; break;
                 case "subsystem": bug.Subsystem = val; break;
                 case "assignee": bug.Assignee = val; break;
+                case "reporter": bug.Reporter = val; break;
                 case "created": bug.Created = val; break;
                 case "updated": bug.Updated = val; break;
                 case "labels": bug.Labels = Md.List(val); break;
@@ -82,7 +98,12 @@ class Bug
             }
         }
 
-        bug.Description = Md.StripHeading(Md.ContentBlock(rest), "## Description").Trim();
+        // History is carved BEFORE Description is read: StripHeading returns everything
+        // after "## Description", so a section below it would otherwise land inside the
+        // description text and be rewritten over by the first SetSection edit.
+        var content = Md.CarveSection(Md.ContentBlock(rest), RecordHistory.Heading, out var history);
+        bug.History = RecordHistory.Parse(history);
+        bug.Description = Md.StripHeading(content, "## Description").Trim();
         bug.Comments = Md.Comments(rest);
         return bug;
     }

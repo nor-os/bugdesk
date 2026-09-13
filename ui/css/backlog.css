@@ -284,6 +284,10 @@
 .bd-type--epic  .material-symbols-outlined { color: #c586c0; }
 .bd-type--story .material-symbols-outlined { color: #4ec9b0; }
 .bd-type--task  .material-symbols-outlined { color: var(--text-muted, #888); }
+/* A bug row in the cross-store picker. Danger red, because a bug in a list of
+   backlog items has to be distinguishable at a glance from the work items
+   around it. */
+.bd-type--bug .material-symbols-outlined { color: var(--color-danger, #c74e4e); }
 
 /* ── Status pills ───────────────────────────────────────────────── */
 

@@ -14,9 +14,15 @@
  */
 
 import assert from 'node:assert/strict';
-import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import {
+    BARE_KEY_RECORD, BARE_KEY_VALUES,
+    COMMENT_HEADERS, HISTORY_APPEND_CHANGES, HISTORY_APPEND_EXPECTED, HISTORY_LINES,
+    REF_TOKENS, REF_TOKENS_REJECTED_AFTER_MATCH,
+} from './record-fixtures.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const UI = join(ROOT, 'ui', 'js', 'ticketdesk') + '/';
@@ -504,6 +510,527 @@ t('the default mode has no Tracker chip', () =>
     // runs in its own process — the mode is read once, at module load.
     assert.deepEqual(taxonomyDefault.topNavEntries().map((e) => e.kind), ['queues', 'backlog']));
 
+/* ── the comment-header regex ────────────────────────────────────────
+ *
+ * The pattern lives in C# and nothing in this harness can execute C#, so it is
+ * read OUT of `server/Markdown.cs` and run here as a JS `RegExp`. Node supports
+ * `(?<name>…)` verbatim and only `RegexOptions.Multiline` has to be mapped, so
+ * the two engines agree on everything these fixtures exercise.
+ *
+ * THE BUG THIS PINS. `_` was in the author's negated character class, so
+ * `hans_agent` — exactly the shape `ProjectConfig.AgentNameFor` generates —
+ * matched as far as `hans` and then the header matched NOTHING at all. The
+ * comment did not render as a bad comment; it vanished, its text absorbed into
+ * the previous comment's body, the count wrong, and the record silently dropped
+ * out of "Needs my reply". It shipped because a stated rule had no runner.
+ */
+
+console.log('\nthe comment-header regex');
+
+const cs = (file) => readFileSync(join(ROOT, 'server', file), 'utf8');
+/** Lift one `Name = new(@"…")` pattern out of a C# source file. §3.1 of the spec
+ *  binds that declaration layout — and bans `"` inside the pattern — for exactly
+ *  this reason. */
+const lift = (src, name, flags = '') =>
+    new RegExp(new RegExp(`(?:^|\\s)${name}\\s*=\\s*\\n?\\s*new\\(@"([^"]+)"`).exec(src)[1], flags);
+// `Fields` is a string[], not a Regex, so it needs the SECOND extractor. Without
+// it the history section below would have to hardcode the field names and would
+// stop being a drift test at all.
+const liftFields = (src) =>
+    /Fields\s*=\s*\{([^}]*)\}/.exec(src)[1]
+        .split(',').map((x) => x.trim().replace(/^"|"$/g, '')).filter(Boolean);
+
+const HDR = lift(cs('Markdown.cs'), 'CommentHdr', 'm');
+
+for (const [input, expected] of COMMENT_HEADERS) {
+    t(`header: ${JSON.stringify(input)}`, () => {
+        const m = HDR.exec(input);
+        if (expected === null) {
+            assert.equal(m, null, `matched, and should not have: ${JSON.stringify(m?.groups)}`);
+            return;
+        }
+        assert.ok(m, 'did not match at all — the comment would VANISH into the one above it');
+        assert.equal(m.groups.author, expected);
+    });
+}
+
+/* ── the history line grammar ────────────────────────────────────────
+ *
+ * `RecordHistory.Parse`'s decision, re-implemented over patterns lifted from
+ * `server/RecordHistory.cs` — same inputs on both sides of the language line.
+ *
+ * The rule worth stating out loud: a line that does not fit the grammar becomes
+ * a NOTE, never nothing. Dropping a line a person can read is the same failure
+ * class as the comment-header bug above.
+ */
+
+console.log('\nthe history line grammar');
+
+const HIST_SRC = cs('RecordHistory.cs');
+const ENTRY = lift(HIST_SRC, 'EntryLine');
+const CHANGE = lift(HIST_SRC, 'Change');
+const PLACEHOLDER = lift(HIST_SRC, 'Placeholder');
+const BULLET = lift(HIST_SRC, 'Bullet');
+const FIELDS = liftFields(HIST_SRC);
+
+const hide = (v) => { const s = String(v ?? '').trim(); return s === '(unset)' ? '' : s; };
+const row = (o) => ({ date: '', actor: '', field: '', from: '', to: '', note: '', ...o });
+
+/** One line of a `## History` section, as `RecordHistory.Parse` reads it.
+ *  `null` where Parse emits no row at all. */
+const parseHistoryLine = (raw) => {
+    const line = String(raw).trim();
+    if (line.length === 0) return null;
+    if (line.startsWith('#')) return null;                  // a heading
+    if (PLACEHOLDER.test(line)) return null;                // "_(nothing yet)_"
+    const m = ENTRY.exec(line);
+    if (!m) return row({ note: line.replace(BULLET, '').trim() });
+    const { date, actor, rest } = m.groups;
+    const c = CHANGE.exec(rest.trim());
+    const field = c ? c.groups.field.toLowerCase() : '';
+    return c && FIELDS.includes(field)
+        ? row({ date, actor: actor.trim(), field, from: hide(c.groups.from), to: hide(c.groups.to) })
+        : row({ date, actor: actor.trim(), note: rest.trim() });
+};
+
+t('`Fields` is the only definition of what a history records', () =>
+    // Invariant 6, and also the guard that the lift worked at all: a silently
+    // empty lift would make every assertion below vacuous.
+    assert.deepEqual(FIELDS, ['status', 'assignee', 'reporter']));
+
+console.log('\nreading one frontmatter value');
+
+/* `Md.GetFrontmatter` builds its pattern by interpolating the key, so it cannot
+ * be lifted by name like the standalone regexes above. Lift the FORMAT STRING and
+ * substitute the key, which exercises the real pattern rather than a copy of it. */
+const gfTemplate = /GetFrontmatter[\s\S]*?new Regex\(\$@"([^"]+)"\)/.exec(cs('Markdown.cs'))[1];
+const getFrontmatter = (text, key) => {
+    const src = gfTemplate.replace('{Regex.Escape(key)}', key).replace(/^\(\?m\)/, '');
+    const m = new RegExp(src, 'm').exec(text);
+    return m ? m[1].trim().replace(/^"|"$/g, '') : null;
+};
+
+for (const [key, expected] of BARE_KEY_VALUES) {
+    t(`frontmatter: ${key} on a hand-written record`, () =>
+        // An empty key must read as "", never as the NEXT line. When it read the
+        // next line, `## History` recorded "assignee: reporter: -> hans_agent" and
+        // a duplicate-of merge wrote "created: 2026-09-01" into the record's links.
+        assert.equal(getFrontmatter(BARE_KEY_RECORD, key), expected));
+}
+
+t('the frontmatter gap never crosses a line', () =>
+    // The rule behind every assertion above, stated where a future edit will see it.
+    assert.ok(!/:\\s\*/.test(gfTemplate),
+        `GetFrontmatter uses \\s* after the colon, which matches a newline: ${gfTemplate}`));
+
+t('every lifted pattern is free of double-quote characters', () => {
+    // §3.1's declaration rule. A `"` inside any of these patterns truncates the
+    // lift above, and the drift tests then run a DIFFERENT regex than the server.
+    for (const [name, re] of [['EntryLine', ENTRY], ['Change', CHANGE],
+                              ['CommentHdr', HDR], ['Token', lift(cs('RecordRef.cs'), 'Token')]]) {
+        assert.ok(!re.source.includes('"'), `${name} carries a quote character`);
+    }
+});
+
+t('a flush-left `status:` line is NOT an entry — that is what the bullet prevents', () => {
+    // `Md.GetFrontmatter` and `Md.SetFrontmatter` both match `(?m)^key:` over the
+    // WHOLE document, so a history line written without its `- ` would be read as
+    // the record's real status and then overwritten by the next patch.
+    assert.equal(ENTRY.test('status: open -> investigation'), false);
+    assert.equal(/^status:.*$/m.test('status: open -> investigation'), true);
+});
+
+for (const [input, expected] of HISTORY_LINES) {
+    t(`history line: ${JSON.stringify(input)}`, () =>
+        assert.deepEqual(parseHistoryLine(input), expected === null ? null : row(expected)));
+}
+
+/* ── appending history is idempotent in layout ───────────────────────
+ *
+ * Invariant 8, which nothing else in this change set asserts.
+ *
+ * This is a PORT of `RecordHistory.Append`'s control flow, not a lift of a
+ * pattern: the layout rule is branching, not a regex, and nothing here can
+ * execute C#. That makes the port drifting from `RecordHistory.cs` this test's
+ * one real weakness, which is why both are kept short enough to read side by
+ * side. The regression it pins — an extra blank line accumulating per append —
+ * is invisible until the write AFTER the one that introduced it.
+ */
+
+console.log('\nappending history');
+
+const HEADING = '## History';
+const show = (v) => (String(v ?? '').trim() === '' ? '(unset)' : String(v).trim());
+const historyLine = (date, actor, c) =>
+    `- ${date} · ${actor.trim()} · ${c.field}: ${show(c.from)} -> ${show(c.to)}`;
+const fieldOrder = (f) => Math.max(0, FIELDS.indexOf(f));
+
+/** `Md.NextH2Index`. The sticky `g` with `m` is what makes `^` anchor against the
+ *  WHOLE string from an offset, the way .NET's `Regex.Match(text, from)` does;
+ *  slicing first would let `^` match mid-line. */
+const nextH2Index = (text, from) => {
+    const re = /^##\s/gm;
+    re.lastIndex = from;
+    const m = re.exec(text);
+    return m ? m.index : -1;
+};
+
+const appendHistory = (text, date, actor, changes) => {
+    const rows = changes.filter((c) => String(c.from ?? '').trim() !== String(c.to ?? '').trim())
+        .slice().sort((a, b) => fieldOrder(a.field) - fieldOrder(b.field));
+    if (rows.length === 0) return text;
+    const added = rows.map((c) => historyLine(date, actor, c) + '\n').join('');
+
+    const ci = text.indexOf('## Comments');
+    const head = ci < 0 ? text : text.slice(0, ci);
+    const at = head.toLowerCase().indexOf(HEADING.toLowerCase());
+
+    if (at < 0) {
+        const block = HEADING + '\n\n' + added;
+        return ci >= 0 ? text.slice(0, ci) + block + '\n' + text.slice(ci)
+                       : text.replace(/\s+$/, '') + '\n\n' + block;
+    }
+
+    const bodyStart = at + HEADING.length;
+    const next = nextH2Index(text, bodyStart);
+    const bodyEnd = next < 0 ? text.length : next;
+    let body = text.slice(bodyStart, bodyEnd).trim();
+    if (PLACEHOLDER.test(body)) body = '';
+    const kept = body.length === 0 ? '' : body + '\n';
+    return text.slice(0, bodyStart) + '\n\n' + kept + added + (next < 0 ? '' : '\n') + text.slice(bodyEnd);
+};
+
+const RECORD_HEAD = '---\nid: 42\nstatus: open\n---\n\n## Description\n\nSomething broke.\n\n';
+const RECORD_TAIL = '## Comments\n\n### 2026-09-12 · a\n\nTaking this on.\n';
+const RECORD = RECORD_HEAD + RECORD_TAIL;
+const DATE = '2026-09-12';
+
+const oneAtATime = HISTORY_APPEND_CHANGES.reduce(
+    (text, c) => appendHistory(text, DATE, 'a', [c]), RECORD);
+const allAtOnce = appendHistory(RECORD, DATE, 'a', HISTORY_APPEND_CHANGES);
+
+t('four appends, one change each, land exactly the expected section', () =>
+    assert.equal(oneAtATime, RECORD_HEAD + HISTORY_APPEND_EXPECTED + '\n\n' + RECORD_TAIL));
+t('one append of all four changes is byte-identical', () =>
+    assert.equal(allAtOnce, oneAtATime));
+t('a fifth entry lands the same on both', () => {
+    // The accumulating blank line only shows up on the write AFTER the one that
+    // introduced it, so comparing the two documents once is not enough.
+    const fifth = [{ field: 'status', from: 'testing', to: 'closed' }];
+    assert.equal(appendHistory(oneAtATime, DATE, 'a', fifth),
+        appendHistory(allAtOnce, DATE, 'a', fifth));
+});
+t('a change that changes nothing writes no line', () =>
+    // A history of no-ops hides the real changes in the noise.
+    assert.equal(appendHistory(RECORD, DATE, 'a', [{ field: 'status', from: 'open', to: 'open' }]),
+        RECORD));
+
+/* ── references ──────────────────────────────────────────────────────
+ *
+ * One reference grammar, written twice — `Refs.Token` in C# and `REF_RE` in
+ * refs.js — because the server resolves a link target and the browser renders
+ * one. Both halves run over the same fixture list.
+ */
+
+console.log('\nreferences');
+
+const refs = await import(UI + 'refs.js');
+const records = await import(UI + 'records.js');
+const links = await import(UI + 'links.js');
+const history = await import(UI + 'history.js');
+
+const TOKEN = lift(cs('RecordRef.cs'), 'Token');
+
+for (const [token, selfStore, expected] of REF_TOKENS) {
+    t(`ref: ${JSON.stringify(token)} in ${selfStore}`, () => {
+        const got = refs.parseRef(token, selfStore);
+        if (expected === null) {
+            assert.equal(got, null, `resolved to ${JSON.stringify(got)}`);
+            return;
+        }
+        assert.ok(got, 'did not parse');
+        assert.equal(got.store, expected.store);
+        assert.equal(got.id, expected.id);
+    });
+}
+
+t('the C# token pattern agrees with the JS twin on every fixture', () => {
+    for (const [token, , expected] of REF_TOKENS) {
+        const m = TOKEN.exec(token);
+        if (expected === null) {
+            // Three of the rejected tokens MATCH the pattern and are rejected
+            // afterwards, by a lookup the pattern cannot express — see below.
+            if (REF_TOKENS_REJECTED_AFTER_MATCH.includes(token)) continue;
+            assert.equal(m, null, `${JSON.stringify(token)} matched and should not have`);
+            continue;
+        }
+        assert.ok(m, `${JSON.stringify(token)} did not match`);
+        assert.equal(Number(m.groups.n ?? m.groups.pn), expected.id);
+    }
+});
+
+t('an unknown prefix and a zero id are rejected by the LOOKUP, not the pattern', () => {
+    // Stated explicitly so nobody "fixes" the regex: `WIDGET-1` is well-formed and
+    // names no store, which is a 400 the caller can be told about, while `STORY-9`
+    // parses and 404s. `BacklogItem.Prefixes` stays the single definition of what a
+    // prefix means.
+    for (const token of REF_TOKENS_REJECTED_AFTER_MATCH) {
+        assert.ok(TOKEN.test(token), `${token} no longer matches the pattern`);
+        assert.equal(refs.parseRef(token, 'bugs'), null, `${token} resolved to something`);
+    }
+});
+
+t('the stored form is bare in its own store and prefixed when it crosses', () => {
+    assert.equal(refs.formatRef(refs.bugRef(47), 'bugs'), '47');
+    assert.equal(refs.formatRef({ store: 'backlog', id: 7, type: 'story' }, 'bugs'), 'STORY-0007');
+    assert.equal(refs.formatRef({ store: 'bugs', id: 7 }, 'backlog'), 'BUG-0007');
+});
+t('the displayed form is how each store names itself', () => {
+    assert.equal(refs.displayRef(refs.bugRef(42)), '#42');
+    assert.equal(refs.displayRef({ store: 'backlog', id: 7, type: 'epic' }), 'EPIC-0007');
+});
+t('identity is store AND id', () => {
+    // Ids collide across the two stores by design — BUG-0007 and STORY-0007 both
+    // exist — so matching on the number alone points at the wrong record.
+    assert.equal(refs.sameRef({ store: 'bugs', id: 7 }, { store: 'backlog', id: 7 }), false);
+    assert.equal(refs.sameRef({ store: 'bugs', id: 7 }, { store: 'bugs', id: 7 }), true);
+});
+t('a ref round-trips through its key', () => {
+    assert.equal(refs.refKey(refs.bugRef(7)), 'bugs:7');
+    const back = refs.parseKey('backlog:7');
+    assert.equal(back.store, 'backlog');
+    assert.equal(back.id, 7);
+    assert.equal(refs.parseKey('nonsense'), null);
+});
+
+/* ── links ───────────────────────────────────────────────────────────
+ *
+ * A link target is a REF, not a number. The four legacy tokens in the shipped
+ * sample store — `blocked-by 3`, `blocked-by 7`, `related 5`, `related 10` —
+ * parsed as nothing and rendered as nothing before this vocabulary existed, with
+ * nothing anywhere reporting a problem.
+ */
+
+console.log('\nlinks');
+
+const targetOf = (l) => (l ? { store: l.target.store, id: l.target.id } : null);
+
+t('a bare target is store-relative', () => {
+    assert.deepEqual(targetOf(links.parseLink('blocks 47')), { store: 'bugs', id: 47 });
+    assert.deepEqual(targetOf(links.parseLink('blocks 12', 'backlog')), { store: 'backlog', id: 12 });
+});
+t('padded and unpadded cross-store targets are the same record', () => {
+    assert.deepEqual(targetOf(links.parseLink('implements STORY-7')), { store: 'backlog', id: 7 });
+    assert.deepEqual(targetOf(links.parseLink('implements STORY-0007')), { store: 'backlog', id: 7 });
+    assert.deepEqual(targetOf(links.parseLink('relates-to BUG-0042', 'backlog')), { store: 'bugs', id: 42 });
+});
+t('the four legacy tokens on disk parse', () => {
+    // This is the drift check that would have caught them being dropped on read.
+    assert.deepEqual(links.parseLink('related 10'),
+        { type: 'relates-to', target: refs.parseRef('10', 'bugs') });
+    assert.deepEqual(links.parseLink('related 5').type, 'relates-to');
+    assert.equal(links.parseLink('blocked-by 3').type, 'blocked-by');
+    assert.equal(links.parseLink('blocked-by 7').type, 'blocked-by');
+});
+t('an unparseable token is skipped, never guessed at', () => {
+    assert.equal(links.parseLink('blocks WIDGET-3'), null);
+    assert.equal(links.parseLink('frobnicates 3'), null);
+    assert.equal(links.parseLink('STORY-7'), null);          // no verb
+});
+t('formatting writes the canonical token', () => {
+    assert.equal(links.formatLink('blocks', refs.bugRef(47), 'bugs'), 'blocks 47');
+    assert.equal(links.formatLink('implements', { store: 'backlog', id: 7, type: 'story' }, 'bugs'),
+        'implements STORY-0007');
+    // The legacy two-argument numeric call still works.
+    assert.equal(links.formatLink('blocks', 47), 'blocks 47');
+});
+t('outgoing links carry the token EXACTLY as stored', () => {
+    // `[data-unlink]` addresses a link by its raw token: `related 5` does not
+    // round-trip through formatLink, so a re-formatted token would make Remove a
+    // silent no-op on precisely the legacy records this vocabulary rescues.
+    const out = links.outgoingLinks({ links: ['related 5', 'blocks #47'] }, 'bugs');
+    assert.deepEqual(out.map((l) => l.raw), ['related 5', 'blocks #47']);
+    assert.deepEqual(out.map((l) => l.type), ['relates-to', 'blocks']);
+});
+
+const rowFor = (store, id, linkTokens) => (store === 'bugs'
+    ? records.bugRow({ bugId: id, summary: `bug ${id}`, status: 'Open', rawStatus: 'open', links: linkTokens })
+    : records.itemRow({ id, type: 'story', title: `story ${id}`, status: 'draft', links: linkTokens }));
+
+t('an inbound link does not cross the store line by accident', () => {
+    // The collision test, mirroring live.eventTouches: a backlog item saying
+    // `blocks 3` means backlog item 3, never bug #3.
+    const rows = [rowFor('backlog', 9, ['blocks 3']), rowFor('bugs', 3, [])];
+    assert.deepEqual(links.incomingLinks(refs.bugRef(3), rows), []);
+    assert.equal(links.incomingLinks({ store: 'backlog', id: 3 }, rows).length, 1);
+});
+t('a pair this record already asserts is not drawn twice', () => {
+    // BUG-0003 says `blocks 6` and BUG-0006 says `blocked-by 3`: both directions
+    // are on disk, so the derived row has to yield to the authored one.
+    const rows = [rowFor('bugs', 3, ['blocks 6']), rowFor('bugs', 6, ['blocked-by 3'])];
+    const { outgoing, incoming } = links.linkRows(
+        { links: ['blocked-by 3'] }, refs.bugRef(6), 'bugs', rows);
+    assert.equal(outgoing.length, 1);
+    assert.deepEqual(incoming, []);
+});
+t('a DIFFERENT relationship with the same record is still drawn', () => {
+    // The mirror check keys on the STATEMENT, not just the target. Keying on the
+    // target alone meant one authored link to a record hid every derived row from
+    // that record — so adding `implements STORY-0008` to a bug silently erased the
+    // "is blocked by STORY-0008" row, and since only the authored direction is ever
+    // stored, the blocking relationship then showed nowhere on the blocked record.
+    const rows = [rowFor('backlog', 8, ['blocks BUG-0006'])];
+    const { incoming } = links.linkRows(
+        { links: ['implements STORY-0008'] }, refs.bugRef(6), 'bugs', rows);
+    assert.deepEqual(incoming.map((l) => l.type), ['is-blocked-by']);
+});
+t('removing a link removes every spelling of it', () => {
+    // Two tokens naming one relationship collapse into ONE row, so removing only
+    // the exact string the row was labelled with left the other behind and the
+    // click read as a no-op.
+    assert.deepEqual(links.withoutLink(['related 5', 'relates-to 5', 'blocks 9'], 'related 5', 'bugs'),
+        ['blocks 9']);
+    // A token nothing can parse is compared as text, so it stays removable.
+    assert.deepEqual(links.withoutLink(['nonsense here', 'blocks 9'], 'nonsense here', 'bugs'),
+        ['blocks 9']);
+});
+t('a new link is validated before it is written', () => {
+    const record = { links: ['blocks 47'] };
+    const self = refs.bugRef(42);
+    assert.match(links.validateNewLink(record, self, 'frobnicates', refs.bugRef(9), 'bugs'),
+        /Unknown relationship/);
+    assert.equal(links.validateNewLink(record, self, 'blocks', null, 'bugs'),
+        'Pick a ticket to link to.');
+    assert.match(links.validateNewLink(record, self, 'blocks', refs.bugRef(42), 'bugs'),
+        /cannot be linked to itself/);
+    assert.match(links.validateNewLink(record, self, 'blocks', refs.bugRef(47), 'bugs'),
+        /already exists/);
+    // The same id in the OTHER store names a different record and is accepted.
+    assert.equal(links.validateNewLink(record, self,
+        'blocks', { store: 'backlog', id: 42, type: 'story' }, 'bugs'), null);
+});
+
+/* ── the history pane ────────────────────────────────────────────────
+ *
+ * Newest first, the same direction the Comments pane it shares a section with
+ * reads. The "filed" row is DERIVED from `created` and `reporter` and never
+ * stored: the file already says both, and a second copy can disagree with the
+ * first.
+ */
+
+console.log('\nthe history pane');
+
+const entry = (date, field, from, to) => ({ date, actor: 'a', field, from, to, note: '' });
+
+t('the stored rows read newest first, with the derived "filed" row last', () => {
+    const rows = history.historyRows({
+        created: '2026-09-01',
+        reporter: 'norman',
+        history: [entry('2026-09-02', 'status', 'open', 'investigation'),
+                  entry('2026-09-03', 'assignee', '', 'priya'),
+                  entry('2026-09-04', 'status', 'investigation', 'testing')],
+    });
+    assert.equal(rows.length, 4);
+    assert.deepEqual(rows.map((r) => r.date),
+        ['2026-09-04', '2026-09-03', '2026-09-02', '2026-09-01']);
+    assert.equal(rows.at(-1).synthetic, true);
+    assert.equal(rows.slice(0, 3).every((r) => r.synthetic === false), true);
+});
+t('a record with nothing recorded says so, rather than drawing an empty box', () => {
+    assert.deepEqual(history.historyRows({ history: [], created: '' }), []);
+    assert.match(history.historyHTML([]), /td-empty/);
+});
+t('a note renders as prose, with no arrow pair', () => {
+    const html = history.historyHTML(history.historyRows({
+        history: [{ date: '2026-09-02', actor: 'a', field: '', from: '', to: '', note: 'reopened by hand' }],
+    }));
+    assert.match(html, /reopened by hand/);
+    assert.ok(!/<b>/.test(html), `a note rendered as a transition: ${html}`);
+});
+t('an unrecorded reporter is said, not guessed', () =>
+    assert.match(history.historyHTML(history.historyRows({ created: '2026-09-01', history: [] })),
+        /reporter unrecorded/));
+t('every interpolated value is escaped', () => {
+    // A history line is text somebody typed into a .md file by hand.
+    const html = history.historyHTML(history.historyRows({
+        history: [{ date: 'x', actor: '<img src=x>', field: '', from: '', to: '', note: 'n' }],
+    }));
+    assert.ok(!html.includes('<img'), `unescaped markup: ${html}`);
+    assert.match(html, /&lt;img/);
+});
+
+/* ── prefix vocabulary ───────────────────────────────────────────────
+ *
+ * One table, three copies: `BacklogItem.Prefixes` writes the filenames,
+ * `backlog_data.TYPE_PREFIX` labels the UI, and `refs.BACKLOG_PREFIXES` resolves
+ * a typed reference with no store imports at all. This is what stops
+ * `project → PROJECT` being reintroduced, and what justifies refs.js keeping its
+ * own copy.
+ */
+
+console.log('\nprefix vocabulary');
+
+t('the three prefix tables are the same table', () => {
+    const block = /Prefixes\s*=\s*new\(\)\s*\{([^}]*)\}/.exec(cs('BacklogItem.cs'))[1];
+    const fromCs = {};
+    for (const m of block.matchAll(/\["(\w+)"\]\s*=\s*"(\w+)"/g)) fromCs[m[1]] = m[2];
+    assert.deepEqual(fromCs, { project: 'PROJ', epic: 'EPIC', story: 'STORY', task: 'TASK' });
+    assert.deepEqual(data.TYPE_PREFIX, fromCs);
+    assert.deepEqual(refs.BACKLOG_PREFIXES, fromCs);
+});
+
+/* ── the sample corpus parses ────────────────────────────────────────
+ *
+ * The seeded store is what a new deployment starts from, so a token nobody can
+ * read there is a demonstration of the feature failing. Four of the six link
+ * tokens in the shipped corpus were being dropped on read before this release,
+ * and nothing said so.
+ */
+
+console.log('\nthe sample corpus');
+
+/** Every example record, with the store its bare link targets are relative to. */
+const CORPUS = ['bugs', 'backlog', 'tracker'].flatMap((dir) => {
+    const at = join(ROOT, 'examples', dir);
+    // A tracker IS a backlog store — same records, same parser, no bug store
+    // beside it — so a bare number in one names an item.
+    const store = dir === 'bugs' ? 'bugs' : 'backlog';
+    return readdirSync(at).filter((f) => f.endsWith('.md'))
+        .map((f) => ({ name: `examples/${dir}/${f}`, store, text: readFileSync(join(at, f), 'utf8') }));
+});
+
+t('every example record carries link tokens that resolve', () => {
+    assert.ok(CORPUS.length >= 20, `only ${CORPUS.length} example records found`);
+    for (const { name, store, text } of CORPUS) {
+        const line = /^links:\s*\[(.*)\]\s*$/m.exec(text);
+        if (!line) continue;
+        for (const token of line[1].split(',').map((s) => s.trim()).filter(Boolean)) {
+            assert.ok(links.parseLink(token, store),
+                `${name}: '${token}' resolves to nothing and would be dropped on read`);
+        }
+    }
+});
+t('a record that has moved carries a history, and one that has not does not', () => {
+    for (const { name, text } of CORPUS) {
+        const status = /^status:\s*(\S+)\s*$/m.exec(text)?.[1] || '';
+        const has = /^## History\s*$/m.test(text);
+        const moved = status !== 'open' && status !== 'draft';
+        assert.equal(has, moved,
+            `${name} is '${status}' and ${has ? 'has' : 'has no'} ## History section`);
+    }
+});
+t('no example record puts ## History below ## Comments', () => {
+    // Below the thread, `Md.ContentBlock` cuts the section off entirely and
+    // `Md.Comments` folds the whole block into the last comment's body — the
+    // section silently becomes comment text.
+    for (const { name, text } of CORPUS) {
+        const h = text.indexOf('\n## History');
+        const c = text.indexOf('\n## Comments');
+        if (h < 0 || c < 0) continue;
+        assert.ok(h < c, `${name}: ## History sits below ## Comments`);
+    }
+});
+
 /* ── the docs against the code ───────────────────────────────────────
  *
  * The skills are what an agent reads INSTEAD of this code — they exist so the
@@ -518,7 +1045,6 @@ t('the default mode has no Tracker chip', () =>
 
 console.log('\ndocs match the lifecycles');
 
-const { readFileSync } = await import('node:fs');
 const skillText = (...parts) => readFileSync(join(ROOT, 'skills', ...parts), 'utf8');
 
 /** Parse "STORY  draft ──▶ refined ──▶ ..." into ['draft','refined',...]. */
@@ -589,6 +1115,65 @@ t('both working skills carry the claim-first sequence', () => {
 t('the backlog skill gates work on refinement', () => {
     assert.match(backlogSkill, /REFINE FIRST/);
     assert.match(backlogSkill, /does not get worked on/);
+});
+
+const bugsSkill = skillText('bugs', 'SKILL.md');
+
+t('the history line the skill prints is the one the server writes', () => {
+    // Built with the implementation's own spacing rules rather than typed out
+    // here: a skill teaching a grammar the writer does not produce is an agent
+    // hand-editing files the parser then reads as notes.
+    assert.ok(bugsSkill.includes(
+        historyLine('2026-09-12', 'norman_agent',
+            { field: 'status', from: 'investigation', to: 'testing' })),
+    'skills/bugs/SKILL.md does not print the canonical history line');
+    for (const field of FIELDS) {
+        assert.match(bugsSkill, new RegExp(`\`${field}\``),
+            `skills/bugs/SKILL.md never names the tracked field ${field}`);
+    }
+});
+
+t('the skill teaches the whole link vocabulary, and no more', () => {
+    for (const { type } of links.LINK_TYPES) {
+        assert.match(bugsSkill, new RegExp(`\`${type}\``),
+            `skills/bugs/SKILL.md never names the verb ${type}`);
+    }
+    for (const alias of Object.keys(links.LINK_ALIASES)) {
+        // `[\s\S]{0,40}` rather than a line-local match: the sentence wraps.
+        assert.match(bugsSkill, new RegExp(`\`${alias}\`[\\s\\S]{0,40}old spelling`),
+            `skills/bugs/SKILL.md does not describe ${alias} as an old spelling`);
+    }
+});
+
+t('the handback goes to the reporter, and the store is swept before a claim', () => {
+    assert.match(bugsSkill, /reporter/);
+    assert.match(bugsSkill, /assignee: <the reporter>/);
+    assert.match(bugsSkill, /committed and pushed/);
+    assert.match(bugsSkill, /git status/);
+    // The roster is open-ended the moment a reporter exists, and the sentence
+    // was already contradicted by the collaborator-roster section beside it.
+    assert.ok(!/exactly two configured roles/.test(bugsSkill),
+        'skills/bugs/SKILL.md still claims exactly two configured roles');
+});
+
+t('a refinement pass records the transition it makes', () => {
+    const refinement = skillText('backlog', 'REFINEMENT.md');
+    assert.match(refinement, /## History/);
+    assert.ok(!/### 2026-09-10 · agent$/m.test(refinement),
+        'REFINEMENT.md still signs its example as the bare `agent`');
+});
+
+t('a tracker is excluded from the commit-and-push rule', () =>
+    // A tracker store is deliberately not in a repo, so the rule has to be
+    // excluded explicitly or it leaks in through the /backlog delegation.
+    assert.match(skillText('tracker', 'SKILL.md'), /nothing here is committed or pushed/));
+
+t('no skill still writes the non-verb `relates`', () => {
+    for (const parts of [['bugs', 'SKILL.md'], ['backlog', 'SKILL.md'],
+                         ['backlog', 'REFINEMENT.md'], ['tracker', 'SKILL.md']]) {
+        assert.ok(!/relates (STORY|BUG)-/.test(skillText(...parts)),
+            `skills/${parts.join('/')} writes \`relates\`, which is not a verb in any vocabulary`);
+    }
 });
 
 /* ── URLs in prose ───────────────────────────────────────────────────

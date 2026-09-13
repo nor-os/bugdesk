@@ -26,15 +26,39 @@ static class Md
     /// not "agent", so the record silently vanished from the "Needs my reply" filter with nothing
     /// anywhere reporting a problem. Authors are free-form strings (see BUGDESK_HUMAN/BUGDESK_AGENT
     /// in the README); anything after the name is a note, not part of the identity.
+    /// <para>
+    /// The class also used to exclude <c>_</c>. The cost was that an author with an underscore in
+    /// their name — <c>hans_agent</c>, which is exactly the shape <c>ProjectConfig.AgentNameFor</c>
+    /// generates — made the whole header fail to match, so the comment was folded into the previous
+    /// one's body, the record's comment count was wrong, and it dropped out of "Needs my reply" with
+    /// nothing reporting a problem. The lazy quantifier, not the character class, is what stops the
+    /// author eating the <c>_(imported)_</c> marker; backtracking covers every documented case.
+    /// Keep this pattern free of double-quote characters — <c>scripts/test-ui.mjs</c> lifts it out
+    /// of this source file and runs it, because nothing else executes it.
+    /// </para>
     /// </summary>
     public static readonly Regex CommentHdr =
-        new(@"^###\s+(?<date>\S+)\s+·\s+(?<author>[^\r\n_(]+?)\s*(?:\([^)\r\n]*\))?\s*(?:_\(imported\)_)?\s*$",
+        new(@"^###\s+(?<date>\S+)\s+·\s+(?<author>[^\r\n(]+?)\s*(?:\([^)\r\n]*\))?\s*(?:_\(imported\)_)?\s*$",
             RegexOptions.Multiline);
 
-    /// <summary>Read one frontmatter value, or null when the key is absent.</summary>
+    /// <summary>
+    /// Read one frontmatter value, or null when the key is absent.
+    /// <para>
+    /// The gap after the colon is <c>[ \t]*</c> and NOT <c>\s*</c>, because
+    /// <c>\s</c> matches a newline: on a key written with an empty value —
+    /// <c>assignee:</c>, which <see cref="Line"/> deliberately emits and which
+    /// hand-written records carry — a <c>\s*</c> would step over the line break
+    /// and return the FOLLOWING line's text as the value. That is not a cosmetic
+    /// misread: the value is used as the "from" side of a <c>## History</c> entry
+    /// and as the existing-links list a duplicate-of merge appends to, so an
+    /// empty <c>assignee:</c> produced history lines reading
+    /// "assignee: reporter: -&gt; hans" and wrote a fabricated
+    /// "created: 2026-09-01" into a record's links.
+    /// </para>
+    /// </summary>
     public static string? GetFrontmatter(string text, string key)
     {
-        var m = new Regex($@"(?m)^{Regex.Escape(key)}:\s*(.*)$").Match(text);
+        var m = new Regex($@"(?m)^{Regex.Escape(key)}:[ \t]*(.*)$").Match(text);
         return m.Success ? m.Groups[1].Value.Trim().Trim('"') : null;
     }
 
@@ -54,6 +78,24 @@ static class Md
         if (rx.IsMatch(text)) return rx.Replace(text, _ => line, 1);
         var idx = text.IndexOf("\n---", text.IndexOf("---") + 3, StringComparison.Ordinal);
         return idx < 0 ? text : text.Insert(idx, "\n" + line);
+    }
+
+    /// <summary>
+    /// Insert a frontmatter key immediately AFTER another one, so a value the server
+    /// adds lands where a person would have typed it. Falls back to
+    /// <see cref="SetFrontmatter"/> when the key already exists or the anchor does not
+    /// — without this, an inserted <c>reporter:</c> would land just before the closing
+    /// <c>---</c> and the same field would live in two different places depending on
+    /// who added it.
+    /// </summary>
+    public static string SetFrontmatterAfter(string text, string key, string value, string afterKey)
+    {
+        var rx = new Regex($@"(?m)^{Regex.Escape(key)}:.*$");
+        if (rx.IsMatch(text)) return SetFrontmatter(text, key, value);
+        var anchor = new Regex($@"(?m)^{Regex.Escape(afterKey)}:.*$").Match(text);
+        return anchor.Success
+            ? text.Insert(anchor.Index + anchor.Length, "\n" + Line(key, value))
+            : SetFrontmatter(text, key, value);
     }
 
     /// <summary>
@@ -145,15 +187,48 @@ static class Md
 
     static readonly Regex NextH2 = new(@"(?m)^##\s", RegexOptions.None);
 
+    /// <summary>Index of the next <c>"## "</c> heading at or after <paramref name="from"/>,
+    /// or -1. <c>"###"</c> does not count: the third '#' is not the whitespace the pattern
+    /// needs, which is what lets a comment thread sit inside a section.</summary>
+    public static int NextH2Index(string text, int from)
+    {
+        var m = NextH2.Match(text, from);
+        return m.Success ? m.Index : -1;
+    }
+
+    /// <summary>
+    /// Cut one <c>## Heading</c> section OUT of a content block: the block comes back
+    /// without it, the section's body in <paramref name="section"/>.
+    /// <para>Carved BEFORE the looser parses run, because both stores read their
+    /// last section as "everything to the end of the content" — Bug.Description via
+    /// StripHeading, BacklogItem.Acceptance by index. A section left in place is
+    /// swallowed by whichever runs, and then written back over the top of itself by
+    /// the next SetSection. The result is a PARSE input only; it is never written
+    /// back to disk.</para>
+    /// </summary>
+    public static string CarveSection(string content, string heading, out string section)
+    {
+        section = "";
+        var at = content.IndexOf(heading, StringComparison.OrdinalIgnoreCase);
+        if (at < 0) return content;
+        var start = at + heading.Length;
+        var next = NextH2Index(content, start);
+        var stop = next < 0 ? content.Length : next;
+        section = content[start..stop].Trim();
+        return content[..at] + content[stop..];
+    }
+
     /// <summary>
     /// Replace the body of one <c>## Heading</c> section, leaving every other
     /// section — and the frontmatter — untouched.
     /// <para>
-    /// An absent section is INSERTED rather than dropped, just above
-    /// <c>## Comments</c> so the thread stays at the bottom of the file where
-    /// both the parser and a human reader expect it. A record written by hand
-    /// without an "Acceptance criteria" section is the normal case for anything
-    /// not yet refined, so this path is the common one, not the exception.
+    /// An absent section is INSERTED rather than dropped: above <c>## History</c>
+    /// when the record has one, above <c>## Comments</c> otherwise. Both anchors
+    /// keep the thread at the bottom of the file where both the parser and a human
+    /// reader expect it, and History has to stay directly above the thread because
+    /// both stores parse only the block before it. A record written by hand without
+    /// an "Acceptance criteria" section is the normal case for anything not yet
+    /// refined, so this path is the common one, not the exception.
     /// </para>
     /// </summary>
     public static string SetSection(string text, string heading, string value)
@@ -165,14 +240,17 @@ static class Md
         if (at >= 0)
         {
             var after = at + heading.Length;
-            var next = NextH2.Match(text, after);
-            var stop = next.Success ? next.Index : text.Length;
+            var next = NextH2Index(text, after);
+            var stop = next < 0 ? text.Length : next;
             return text[..at] + block + "\n" + text[stop..];
         }
 
-        var comments = text.IndexOf("## Comments", StringComparison.Ordinal);
-        return comments >= 0
-            ? text[..comments] + block + "\n" + text[comments..]
+        // A section the server creates has to land where a hand edit would have put
+        // it, or every record touched both ways carries a diff nobody authored.
+        var stopAt = text.IndexOf(RecordHistory.Heading, StringComparison.OrdinalIgnoreCase);
+        if (stopAt < 0) stopAt = text.IndexOf("## Comments", StringComparison.Ordinal);
+        return stopAt >= 0
+            ? text[..stopAt] + block + "\n" + text[stopAt..]
             : text.TrimEnd() + "\n\n" + block;
     }
 
@@ -198,8 +276,8 @@ static class Md
         var at = text.IndexOf(heading, StringComparison.OrdinalIgnoreCase);
         if (at < 0) return null;
         var bodyStart = at + heading.Length;
-        var next = NextH2.Match(text, bodyStart);
-        var bodyEnd = next.Success ? next.Index : text.Length;
+        var next = NextH2Index(text, bodyStart);
+        var bodyEnd = next < 0 ? text.Length : next;
 
         var body = text[bodyStart..bodyEnd];
         var lines = body.Split('\n').ToList();

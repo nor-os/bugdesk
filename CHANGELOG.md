@@ -7,6 +7,84 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **A record remembers who it belongs to, and how it got there.** Two additions
+  to the on-disk format and nothing else moves: a `reporter:` field beside
+  `assignee:`, and a `## History` section above `## Comments`.
+
+  `assignee` says whose court a record is in right now; `reporter` says whose
+  *list* it is on, and it is the person an agent hands the work back to. "Back
+  to the human" was always the wrong instruction on a store several people
+  share — it resolves to whoever the *agent's own* profile happens to name, so a
+  bug filed by priya came back to norman, and a record handed to the wrong
+  person is worse than one handed to nobody, because it stops looking like a
+  gap. Bugs gain the field; backlog items have had one since tracker mode.
+
+  **`## History`** is one append-only line per transition, oldest first —
+  `- 2026-09-12 · norman_agent · status: investigation -> testing`. Three fields
+  are recorded and no others (`status`, `assignee`, `reporter`), because a title
+  or severity edit is a diff and an audit trail is for decisions. Every server
+  write that changes one of the three appends a line naming the actor it was
+  told to attribute it to, a line that does not fit the grammar is shown as free
+  text rather than dropped, and both detail pages show the section in a
+  **History** tab beside Comments. The "filed" row at the bottom of that tab is
+  derived from `created` and `reporter` rather than stored, so nobody can write
+  a second one by hand.
+
+  **Nothing is backfilled.** An absent `reporter:` reads as the configured human
+  at read time and the file is left alone. A backfilled reporter is a guess
+  written as a fact — it would answer "who asked for this" with a name nobody
+  chose, and stop the gap looking like a gap — and the read-time fallback costs
+  nothing.
+
+  The boundary none of this crosses: **a record you edit in the UI is left in
+  the working tree, and BugDesk never commits it.** The server does not shell
+  out to git and has no route that does — a tracker store is deliberately not in
+  a repo at all, and a web page running `git push` on somebody's behalf is not a
+  seam anyone wants to find later. The commit-and-push discipline is the
+  agent's, and `/bugs` and `/backlog` now state it with no exceptions: a
+  comment, an assignment, a status change and a new record are each committed
+  and pushed the moment they are made, and the store is swept with `git status`
+  before anything is claimed, so your stray UI edits go in as their own commit
+  rather than riding along inside the agent's claim.
+
+- **Links point at backlog items, and a duplicate closes in one act.** A link
+  token's target may name a record in the other store — `implements STORY-0007`
+  in a bug, `blocks BUG-0042` in a story — and both detail pages resolve,
+  display and navigate it.
+
+  The format was documented and the server always round-tripped it; the
+  **client** never implemented it. `links.js` matched `<verb> #?<digits>` over a
+  five-verb list, so a prefixed target parsed as nothing at all — and so did a
+  verb outside the five. The sample store BugDesk seeds a first run from carries
+  four tokens of that second kind, dropped on read with nothing reporting a
+  problem, in the one place a new user meets the feature at all. `implements`
+  and `blocked-by` join the vocabulary, and the older `related` parses as a
+  read-only alias for `relates-to` rather than being skipped.
+
+  A bare number stays store-relative — it means "in this file's own store" — and
+  a crossing target is written `PREFIX-NNNN`, zero-padded, with the prefix
+  re-derived from the record that was actually resolved rather than from what
+  somebody typed. Identity is `{store, id}`: backlog ids are one sequence shared
+  by all four prefixes, so `STORY-7` and `EPIC-7` are the same item and a stale
+  prefix left over from a retype must not conjure a second one.
+
+  **The item page gains a Links section.** It had none at all, so a link written
+  into a story was authorable only from the bug at the other end and invisible
+  from the story itself. Same add control, same verb list — one definition, so
+  the two pages cannot drift into two vocabularies — and a picker that searches
+  both stores. Both pages load the other store before drawing a link pane, so an
+  inbound cross-store row no longer depends on whether you happened to open the
+  other store earlier in the session.
+
+  **Mark as duplicate and close** is one action and one request.
+  `POST /api/bugs/{id}/duplicate-of` and `POST /api/backlog/{id}/duplicate-of`
+  add the `duplicates` link, close the record (`closed` for a bug, `dropped` for
+  an item — `done` would claim work was finished), append the status history
+  line, comment on the duplicate saying what it was folded into, and comment on
+  the master saying what arrived. By hand that was five edits across two files,
+  and the one people skipped was the note on the master — the only thing that
+  tells its reader the two reports were merged.
+
 **Tracker mode** (`./run.sh --tracker`, or `BUGDESK_MODE=tracker`). A second
 job for the same files: a follow-up list for work handed to other people, most
 of whom never open the checkout. Nobody else updates it, which is the fact the
@@ -136,6 +214,55 @@ none, because you try it first.
   fast answer to `importer`.
 
 ### Changed
+
+- **`run.sh --help` and `run.ps1 --help`, and neither script moves you any
+  more.** The usage used to live in a comment at the top of each script, where
+  you could only read it by opening the file — so the question it exists to
+  answer, *how do I point this at another repo's records*, was answered by
+  reading source. `--help` (also `-h`, and `-?` on PowerShell) now prints the
+  flags, both store variables with the note that `BUGDESK_BUGS` alone moves the
+  backlog with it, the rest of the environment, and where the records actually
+  land. The script header points at it instead of duplicating it.
+
+  Both scripts also stopped `cd`-ing into `server/` before starting the bridge;
+  they pass that path to `dotnet run --project` instead. On PowerShell a
+  location change made inside a script outlives the script, so stopping the
+  server with Ctrl+C left you sitting in `server\` — every time. Bash never
+  leaked it, but the two now behave identically, and the directory you ran from
+  stays put, which matters in tracker mode because that directory is what names
+  the tracker.
+
+  That rearrangement fixes a third thing on its own. App arguments now go after
+  a literal `--`, and without it `dotnet run` was claiming `--project` as its
+  own option for a project file: `./run.sh --tracker --project acme` — an
+  example printed in this README — answered "The provided file path does not
+  exist" and the tracker silently named itself after the current directory.
+
+- **The skills read the files, and only the files.** `/bugs`, `/backlog` and
+  `/tracker` write markdown directly — that was always the design — but their
+  Step 0 told an agent that `GET /api/config` was "the reliable source" for the
+  human and agent names, with the on-disk profile as the fallback. So the first
+  thing a skill did was reach for a server that is not running most of the time,
+  and discover it by failing.
+
+  It was also the wrong instruction even when it worked: a BugDesk listening on
+  this machine may be serving a **different project**, and an answer from it is
+  how an agent ends up signing comments as somebody else. The name resolution is
+  now stated as the files, in the server's own order — `BUGDESK_USER` or
+  `.bugdesk/active.json` for the slug, `.bugdesk/user-<slug>.json` for the pair,
+  then the environment, then the defaults — including the case a
+  `BUGDESK_HUMAN=... ./run.sh` deployment leaves on disk (a profile and no
+  `active.json`, which is normal, not broken). The roster is resolved the same
+  way (`BUGDESK_PROJECT`, then a root `bugdesk.json`, then
+  `.bugdesk/project.json`) and a new collaborator is appended to that file
+  rather than POSTed. Tracker mode, which is a launch flag and appears nowhere
+  on disk, is now recognised from the store instead: it lives outside any
+  checkout, its roster entries carry empty `agent` fields, and `PROJ-` records
+  only exist there.
+
+  Every "the bridge enforces this" aside now says what it means for something
+  writing the file directly: the UI rejects it too, but nothing stands between
+  your editor and the file, so it is yours to get right.
 
 - **The boot no longer shows another application's UI first.** BugDesk starts on
   Ecosim's shell, and that shell used to build Ecosim's whole workspace — a left
@@ -333,6 +460,28 @@ least interesting half of what it knows. It opens the same set the count is of,
 in whichever store the panel is currently reporting on.
 
 ### Fixed
+
+- **A comment from an author with an underscore in their name stopped
+  disappearing.** `Md.CommentHdr`'s author class excluded `_`, so
+  `### 2026-07-27 · hans_agent` did not match the header pattern at all — and
+  `hans_agent` is exactly the shape `ProjectConfig.AgentNameFor` generates
+  (`<slug>_agent`, one rule everywhere), so this was the *derived* agent name in
+  every project where anybody had set a human name at all. The bare `agent` that
+  did parse is the fallback for a project where nobody has.
+
+  A header that does not match is not an error anywhere. The comment was folded
+  into the previous comment's body, so the thread showed one long entry signed
+  by the wrong person; the record's comment count was short by one; and
+  `lastCommentAuthor` still named the earlier author, which quietly dropped the
+  record out of **"Needs my reply"** — the one filter whose job is to notice
+  that somebody is waiting on you. It shipped because there is no C# test
+  project and nothing executed the pattern; `scripts/test-ui.mjs` now lifts it
+  out of the C# source and runs it over a shared fixture list, beside its JS
+  twin, so the two cannot drift apart in silence either.
+
+  **A bug's comment count can jump after the upgrade**, and a long comment can
+  split into two. That is the fix working: those comments were in the file all
+  along.
 
 - **"Open in a background tab" was not in the background.** It used the WM's
   `transient` flag, which in this codebase means "not archived" — not "not

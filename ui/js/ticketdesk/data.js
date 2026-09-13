@@ -4,9 +4,10 @@
  * The data is fetched live from the BugDesk bridge (same-origin JSON API):
  *
  *   GET  /api/bugs            -> summary list (incl. lastCommentAuthor/Date)
- *   GET  /api/bugs/{id}       -> full bug (description + comments)
- *   POST /api/bugs/{id}       -> patch frontmatter (assignee derived server-side)
+ *   GET  /api/bugs/{id}       -> full bug (description + comments + history)
+ *   POST /api/bugs/{id}       -> patch frontmatter
  *   POST /api/bugs/{id}/comments -> append a comment
+ *   POST /api/bugs/{id}/duplicate-of -> link + close + comment on both, one act
  *   GET  /api/meta            -> aggregate counts
  *
  * TICKETS / TEAM are exported with `let` and REASSIGNED by loadData();
@@ -96,9 +97,22 @@ export const ASSIGNEES = (() => {
     return list;
 })();
 
-/** Assignee options for a <select>, with "unassigned" first. */
-export const assigneeOptions = (includeBlank = true) =>
-    (includeBlank ? [''] : []).concat(ASSIGNEES);
+/** Assignee options for a <select>, with "unassigned" first.
+ *
+ *  `include` names are appended when the roster does not already hold them. That
+ *  is not a nicety: a native <select> whose value is not among its options falls
+ *  back to the FIRST option, so saving a bug assigned to somebody off the roster
+ *  — `agent`, `reviewer`, a collaborator who has left — silently reassigned it,
+ *  and now would also stamp that reassignment into ## History as a decision
+ *  nobody made. */
+export const assigneeOptions = (includeBlank = true, ...include) => {
+    const out = (includeBlank ? [''] : []).concat(ASSIGNEES);
+    for (const n of include) {
+        const clean = String(n || '').trim();
+        if (clean && !out.some((x) => x.toLowerCase() === clean.toLowerCase())) out.push(clean);
+    }
+    return out;
+};
 
 /** The same list dressed for the choice control: a glyph per entry, so a
  *  person and their assistant are distinguishable at a glance. */
@@ -255,12 +269,22 @@ export async function fetchBug(id) {
     if (!j.ok) throw new Error(j.error || 'not found');
     return j.bug;
 }
-/** Patch frontmatter (status/severity/subsystem/type/title/labels).
- *  assignee is derived from status by the bridge — don't send it. */
-export async function patchBug(id, patch) {
-    const j = await apiPost(`/bugs/${id}`, patch);
+/** Patch frontmatter (status/severity/subsystem/type/title/assignee/reporter/labels/links).
+ *  `actor` is who is making the change — the bridge writes it into ## History,
+ *  never into frontmatter. */
+export async function patchBug(id, patch, actor = HUMAN_AUTHOR) {
+    const j = await apiPost(`/bugs/${id}`, { ...patch, actor });
     if (!j.ok) throw new Error(j.error || 'update failed');
     return j.bug;
+}
+/** Close this bug as a duplicate of another record: links it, closes it, records
+ *  the transition and comments on both — one request, because it is one act.
+ *  `target` is a stored ref ("52" or "STORY-0007").
+ *  @returns {Promise<{bug, target:{store,id,ref,title}, targetNoted:boolean}>} */
+export async function duplicateBug(id, { target, actor = HUMAN_AUTHOR, comment = '' } = {}) {
+    const j = await apiPost(`/bugs/${id}/duplicate-of`, { target, actor, comment });
+    if (!j.ok) throw new Error(j.error || 'could not close as duplicate');
+    return j;
 }
 /** Create a new bug. The ID is assigned automatically by the bridge — never sent. */
 export async function createBug(fields) {
@@ -292,6 +316,8 @@ function mapBug(b) {
         status: humanizeStatus(b.status),
         rawStatus: b.status,
         assignee: b.assignee || HUMAN_AUTHOR,
+        reporter: b.reporter || '',   // '' = unrecorded; read it as HUMAN_AUTHOR, never as nobody
+        history: b.history || 0,      // a COUNT in the summary; the full record carries the array
         stage: b.stage,          // 0..3 → STAGES chevrons
         subsystem: b.subsystem || 'unsorted',
         severity: b.severity,

@@ -1489,5 +1489,446 @@ await t('clicking a name puts that person\'s list in the primary tile', async ()
     put('fetch', realFetchLocal);
 });
 
+/* ── the ticket History tab ──────────────────────────────────────────
+ *
+ * The History pane shares a section with Comments, and `renderComments` wipes
+ * its own slot on five separate paths — initial load, a post, a save, a cancel
+ * and a live reload. That is why the active tab is remembered OUTSIDE the slot,
+ * and why "post a comment and the tab you were on is still the tab you are on"
+ * is asserted here rather than assumed.
+ *
+ * The tab strip is `.td-tab`, deliberately NOT `.twm-bp__tab`:
+ * `ui/js/tiling/keymap.js` binds Shift+Left/Right to every `.twm-bp__tabs
+ * .twm-bp__tab` in the document and finds "current" by the single `--on`, so
+ * borrowing the bottom panel's class makes a documented shortcut start clicking
+ * a ticket's tabs. Asserted rather than described.
+ */
+
+console.log('\nThe ticket History tab');
+
+/** A full bug, as `GET /api/bugs/42` returns it. */
+const bug42 = (over = {}) => ({
+    id: 42, title: 'Save button does nothing on the settings page',
+    status: 'testing', severity: 'medium', type: 'bug', subsystem: 'settings',
+    assignee: 'alice', reporter: 'norman', labels: [], links: [],
+    created: '2026-07-14', updated: '2026-09-12', stage: 2, pri: 3,
+    description: 'Steps to reproduce, expected vs. actual.', comments: [],
+    history: [
+        { date: '2026-09-11', actor: 'alice_agent', field: 'status', from: 'open', to: 'investigation', note: '' },
+        { date: '2026-09-11', actor: 'alice_agent', field: 'assignee', from: 'alice', to: 'alice_agent', note: '' },
+        { date: '2026-09-12', actor: 'alice_agent', field: 'status', from: 'investigation', to: 'testing', note: '' },
+    ],
+    ...over,
+});
+
+const STORY_7 = {
+    id: 7, type: 'story', title: 'Log in with the company SSO provider',
+    status: 'refined', parent: 0, assignee: '', reporter: 'alice',
+    due: '', points: 5, subsystem: 'auth', labels: [], links: [], criteria: [],
+};
+
+/**
+ * Mount the ticket detail page over a stubbed bridge, collecting every POST.
+ *
+ * `mountTicket` finds its record by `props.id` in the LIVE store, exactly as a
+ * real navigation does, so `loadData()` has to run behind the stub first — the
+ * same shape the backlog sections above use with `loadBacklog()`.
+ */
+const mountTicketPage = async (bug, {
+    items = [], others = [], postBug = null, target = null, targetNoted = true, wm = null,
+} = {}) => {
+    const posts = [];
+    const realFetchLocal = globalThis.fetch;
+    put('fetch', async (url, opts) => {
+        const path = String(url);
+        if (opts?.method === 'POST') {
+            posts.push({ path, body: JSON.parse(opts.body) });
+            return { ok: true, json: async () => ({ ok: true, bug: postBug || bug, target, targetNoted }) };
+        }
+        if (/\/api\/bugs\/\d+$/.test(path)) return { ok: true, json: async () => ({ ok: true, bug }) };
+        if (path.endsWith('/api/bugs')) return { ok: true, json: async () => ({ ok: true, bugs: [bug, ...others] }) };
+        if (path.endsWith('/api/meta')) return { ok: true, json: async () => ({ ok: true, byAssignee: {} }) };
+        if (path.endsWith('/api/backlog')) return { ok: true, json: async () => ({ ok: true, items }) };
+        if (path.endsWith('/api/backlog/meta')) return { ok: true, json: async () => ({ ok: true, phases: [] }) };
+        return { ok: true, json: async () => ({ ok: true, settings: {}, filters: [] }) };
+    });
+    const bugsData = await import(join(UI, 'ticketdesk', 'data.js'));
+    await bugsData.loadData();
+    // ITEMS is emptied deliberately: the page is supposed to load the other
+    // store ITSELF, so leaving a previous section's fixture in place would hide
+    // exactly the failure invariant 15 is about.
+    await backlogData.loadBacklog();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const page = createTicketDeskContent({ eventBus: null }).ticket(host, { id: `#${bug.id}` }, { wm });
+    await tick(); await tick(); await tick();
+    return {
+        host, posts,
+        done: () => { page.destroy?.(); host.remove(); put('fetch', realFetchLocal); },
+    };
+};
+
+await t('the History pane exists, starts hidden, and Comments does not', async () => {
+    const m = await mountTicketPage(bug42());
+    const h = m.host.querySelector('[data-slot="history"]');
+    const c = m.host.querySelector('[data-slot="comments"]');
+    assert.ok(h, 'no history pane');
+    assert.equal(h.hidden, true, 'the history pane opened instead of Comments');
+    assert.equal(c.hidden, false, 'the comments pane is hidden on arrival');
+    m.done();
+});
+
+await t('three stored rows and one derived "filed" row, newest first', async () => {
+    const m = await mountTicketPage(bug42());
+    const rows = [...m.host.querySelectorAll('.td-audit--inline > div')];
+    assert.equal(rows.length, 4, `${rows.length} rows, expected 3 stored + 1 derived`);
+    assert.ok(rows.at(-1).classList.contains('td-audit__synthetic'),
+        'the derived "filed" row is not last');
+    assert.ok(!rows.slice(0, 3).some((r) => r.classList.contains('td-audit__synthetic')),
+        'a stored row is marked as derived');
+    const dates = rows.map((r) => r.querySelector('.td-dim.td-mono')?.textContent.trim());
+    assert.deepEqual(dates, ['2026-09-12', '2026-09-11', '2026-09-11', '2026-07-14']);
+    for (const r of rows) {
+        assert.ok(r.querySelector('.td-dim.td-mono'), 'a row has no date');
+        assert.ok(r.querySelector('.td-link'), 'a row has no actor');
+    }
+    m.done();
+});
+
+await t('clicking History moves the tab, both panes and the note', async () => {
+    const m = await mountTicketPage(bug42());
+    const note = () => m.host.querySelector('[data-slot="tabnote"]').textContent;
+    const before = note();
+    m.host.querySelector('[data-tab="history"]')
+        .dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    assert.ok(m.host.querySelector('[data-tab="history"]').classList.contains('td-tab--on'));
+    assert.ok(!m.host.querySelector('[data-tab="comments"]').classList.contains('td-tab--on'));
+    assert.equal(m.host.querySelector('[data-slot="history"]').hidden, false);
+    assert.equal(m.host.querySelector('[data-slot="comments"]').hidden, true);
+    assert.notEqual(note(), before, 'the note beside the tabs did not change');
+    m.done();
+});
+
+await t('posting a comment leaves the History tab active', async () => {
+    // renderComments replaces the whole comments slot, which is why `recordTab`
+    // lives outside it. Without that, every post silently snapped the reader
+    // back to Comments.
+    const m = await mountTicketPage(bug42());
+    m.host.querySelector('[data-tab="history"]')
+        .dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    const ta = m.host.querySelector('[data-slot="comments"] textarea');
+    ta.value = 'still looking at the audit trail';
+    m.host.querySelector('[data-slot="comments"] .td-mde__submit')
+        .dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    await tick(); await tick();
+    assert.equal(m.posts.at(-1).path.endsWith('/api/bugs/42/comments'), true);
+    assert.equal(m.host.querySelector('[data-slot="history"]').hidden, false,
+        'the post snapped the pane back to Comments');
+    m.done();
+});
+
+await t('a record with nothing recorded says so', async () => {
+    const m = await mountTicketPage(bug42({ history: [], created: '' }));
+    assert.ok(m.host.querySelector('[data-slot="history"] .td-dim.td-empty'),
+        'an empty history rendered as an empty box, not as a sentence');
+    m.done();
+});
+
+await t('the tab strip is not the bottom panel\'s', async () => {
+    // Shift+Left/Right is bound to `.twm-bp__tabs .twm-bp__tab` across the whole
+    // document; a ticket borrowing the class makes that shortcut click here.
+    const m = await mountTicketPage(bug42());
+    assert.equal(m.host.querySelectorAll('.td-tab').length, 2);
+    assert.equal(m.host.querySelectorAll('.twm-bp__tab').length, 0,
+        'the record tabs use the bottom panel\'s class');
+    m.done();
+});
+
+/* ── cross-store link rows ───────────────────────────────────────────
+ *
+ * The link pane is the one place a bug and a backlog item meet, and the two page
+ * kinds disagree about ids: the ticket page routes on `'#42'` and the item page
+ * on `'7'`. `records.openRow` is the only new code that knows that, so what is
+ * asserted here is the navigation it produces, not the markup around it.
+ */
+
+console.log('\nCross-store link rows');
+
+const navSpy = () => {
+    const calls = [];
+    return { calls, navigate: (kind, props, opts) => calls.push({ kind, props, opts }) };
+};
+
+await t('an outgoing cross-store link resolves, shows and navigates', async () => {
+    const wm = navSpy();
+    const m = await mountTicketPage(bug42({ links: ['implements STORY-0007'] }),
+        { items: [STORY_7], wm });
+    const row = m.host.querySelector('[data-slot="links"] .td-linkrow');
+    assert.ok(row, 'no link row at all');
+    assert.match(row.textContent, /STORY-0007/);
+    assert.match(row.textContent, /company SSO/, 'the item resolved to (no such item)');
+    const btn = row.querySelector('[data-open]');
+    assert.equal(btn.dataset.open, 'backlog:7');
+    btn.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    await tick();
+    assert.equal(wm.calls.at(-1).kind, 'item');
+    assert.equal(wm.calls.at(-1).props.id, '7', 'the item page was routed with a #-prefixed id');
+    m.done();
+});
+
+await t('a same-store link still routes as a ticket, on the #-prefixed id', async () => {
+    // The asymmetry `openRow` exists to hold: a bare number in a bug's links is a
+    // BUG, and the ticket page routes on `'#47'` while the item page routes on `'7'`.
+    const wm = navSpy();
+    const m = await mountTicketPage(bug42({ links: ['blocks 47'] }),
+        { others: [{ ...bug42(), id: 47, title: 'The other one' }], wm });
+    const btn = m.host.querySelector('[data-slot="links"] [data-open]');
+    assert.equal(btn.dataset.open, 'bugs:47');
+    assert.equal(btn.textContent.trim(), '#47');
+    btn.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    await tick();
+    assert.equal(wm.calls.at(-1).kind, 'ticket');
+    assert.equal(wm.calls.at(-1).props.id, '#47');
+    m.done();
+});
+
+await t('an inbound cross-store row appears with ITEMS empty at mount', async () => {
+    // The page loads the other store itself, so a story carrying `blocks BUG-0042`
+    // produces an "is blocked by STORY-0008" row without the user ever having
+    // opened a backlog page. Nothing is written on the bug's own file.
+    const story8 = { ...STORY_7, id: 8, title: 'Export a queue to CSV and JSON',
+        links: ['blocks BUG-0042'] };
+    const m = await mountTicketPage(bug42({ links: [] }), { items: [story8] });
+    const row = m.host.querySelector('[data-slot="links"] .td-linkrow');
+    assert.ok(row, 'the derived row never appeared');
+    assert.match(row.textContent, /is blocked by/);
+    assert.match(row.textContent, /STORY-0008/);
+    // Derived, so it is not removable from here.
+    assert.equal(row.querySelector('[data-unlink]'), null, 'a derived row offers Remove');
+    assert.match(row.textContent, /from STORY-0008/);
+    m.done();
+});
+
+await t('a Ctrl-click does not navigate the tile you are reading', async () => {
+    const wm = navSpy();
+    const m = await mountTicketPage(bug42({ links: ['implements STORY-0007'] }),
+        { items: [STORY_7], wm });
+    m.host.querySelector('[data-slot="links"] [data-open]')
+        .dispatchEvent(new dom.window.MouseEvent('click', { ctrlKey: true, bubbles: true }));
+    await tick();
+    assert.ok(!wm.calls.some((c) => c.opts?.dest === 'origin'),
+        'a modified click navigated in place instead of going through openModified');
+    m.done();
+});
+
+/* ── duplicate and close ─────────────────────────────────────────────
+ *
+ * One request for one act: link, close, record the transition, comment on both
+ * records. Two requests would be a half-applied duplicate whenever the second
+ * one failed, and the record would then be closed with nothing saying why.
+ */
+
+console.log('\nDuplicate and close');
+
+await t('the picker offers both stores and finds a master by TITLE', async () => {
+    const m = await mountTicketPage(bug42(), { items: [STORY_7] });
+    m.host.querySelector('[data-wfa="duplicate"]')
+        .dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    await tick();
+    const picker = document.querySelector('.bd-picker');
+    assert.ok(picker, 'no picker overlay opened');
+    assert.ok(picker.querySelector('[data-store="bugs"]'), 'the Bugs store is not offered');
+    assert.ok(picker.querySelector('[data-store="backlog"]'), 'the Backlog store is not offered');
+    // Searching by title is the primary way a master is found: "what is #42 a
+    // duplicate of?" is answered with a word somebody remembers, not with an id.
+    const input = picker.querySelector('.bd-picker__input');
+    input.value = 'SSO';
+    input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    await tick();
+    assert.ok(picker.querySelector('[data-pick="backlog:7"]'), 'a title search lost the row');
+    picker.querySelector('[data-a="cancel"]')
+        .dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    await tick();
+    m.done();
+});
+
+await t('picking a master issues exactly ONE post, and repaints from it', async () => {
+    const closed = bug42({ status: 'closed', stage: 3, links: ['duplicates STORY-0007'] });
+    const m = await mountTicketPage(bug42(), {
+        items: [STORY_7],
+        postBug: closed,
+        target: { store: 'backlog', id: 7, ref: 'STORY-0007', title: STORY_7.title },
+    });
+    m.host.querySelector('[data-wfa="duplicate"]')
+        .dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    await tick();
+    document.querySelector('.bd-picker [data-pick="backlog:7"]')
+        .dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    await tick(); await tick();
+
+    assert.equal(m.posts.length, 1,
+        `${m.posts.length} writes for one act: ${JSON.stringify(m.posts)}`);
+    assert.ok(m.posts[0].path.endsWith('/api/bugs/42/duplicate-of'), m.posts[0].path);
+    assert.equal(m.posts[0].body.target, 'STORY-0007');
+    // Repainted from the response, with no follow-up GET.
+    assert.ok(m.host.querySelector('.td-stage--active')?.textContent.includes('Closed'));
+    assert.match(m.host.querySelector('[data-slot="links"]').textContent, /duplicates/);
+    assert.match(m.host.querySelector('[data-slot="links"]').textContent, /STORY-0007/);
+    m.done();
+});
+
+await t('escaping the picker writes nothing at all', async () => {
+    const m = await mountTicketPage(bug42(), { items: [STORY_7] });
+    m.host.querySelector('[data-wfa="duplicate"]')
+        .dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    await tick();
+    document.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await tick(); await tick();
+    assert.deepEqual(m.posts, [], `a cancelled duplicate wrote ${JSON.stringify(m.posts)}`);
+    m.done();
+});
+
+await t('a closed bug is not offered the action', async () => {
+    const m = await mountTicketPage(bug42({ status: 'closed', stage: 3 }));
+    assert.equal(m.host.querySelector('[data-wfa="duplicate"]'), null,
+        'a closed bug can be closed again as a duplicate');
+    m.done();
+});
+
+/* ── reporter is shown, never guessed ────────────────────────────────
+ *
+ * `reporter == ""` means "the configured human" and is never backfilled: a guess
+ * written as a fact stops looking like a gap. So the control has to be able to
+ * hold a name that is off the roster, and an ordinary save of a legacy record
+ * must not insert a `reporter:` line nobody typed.
+ */
+
+console.log('\nReporter');
+
+await t('Reporter is a real select, over a list containing its own value', async () => {
+    const m = await mountTicketPage(bug42({ reporter: 'norman' }));   // off the stubbed roster
+    const sel = m.host.querySelector('[data-f="reporter"]');
+    assert.ok(sel, 'no reporter control');
+    assert.equal(sel.tagName, 'SELECT');
+    assert.ok([...sel.options].some((o) => o.value === 'norman'),
+        'the record\'s own reporter is not on the list, so a save would rewrite it');
+    assert.equal(sel.value, 'norman');
+    m.done();
+});
+
+await t('an unchanged reporter is not sent', async () => {
+    const m = await mountTicketPage(bug42({ reporter: '' }));
+    const title = m.host.querySelector('[data-f="summary"]');
+    title.value = 'renamed';
+    title.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    m.host.querySelector('[data-a="save"]').click();
+    await tick(); await tick();
+    assert.ok(!('reporter' in m.posts.at(-1).body),
+        'saving a legacy record would insert a reporter: line nobody typed');
+    m.done();
+});
+
+await t('a changed reporter IS sent', async () => {
+    const m = await mountTicketPage(bug42({ reporter: '' }));
+    const sel = m.host.querySelector('[data-f="reporter"]');
+    sel.value = 'bob';
+    sel.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    m.host.querySelector('[data-a="save"]').click();
+    await tick(); await tick();
+    assert.equal(m.posts.at(-1).body.reporter, 'bob');
+    m.done();
+});
+
+await t('the reassign button focuses the field it names', async () => {
+    const m = await mountTicketPage(bug42());
+    const btn = m.host.querySelector('[data-a="setreporter"]');
+    assert.ok(btn, 'no set-reporter button');
+    btn.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    assert.equal(document.activeElement, m.host.querySelector('[data-f="reporter"]'));
+    m.done();
+});
+
+await t('the assignee select cannot fabricate a value', async () => {
+    // `agent` is not in the stubbed roster. Without the option list being widened
+    // with the record's own value, the browser falls back to the first option and
+    // merely opening and saving a record REASSIGNS it — and with ## History it
+    // stamps that as a recorded decision.
+    const m = await mountTicketPage(bug42({ assignee: 'agent' }));
+    const sel = m.host.querySelector('[data-f="assignee"]');
+    assert.equal(sel.value, 'agent', 'the select could not hold an off-roster assignee');
+    m.host.querySelector('[data-f="summary"]').dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    m.host.querySelector('[data-a="save"]').click();
+    await tick(); await tick();
+    assert.equal(m.posts.at(-1).body.assignee, 'agent');
+    m.done();
+});
+
+/* ── the item page reaches parity ────────────────────────────────────
+ *
+ * The item page had no Links section at all, so a link written into an item was
+ * invisible from the item — readable only from whichever bug happened to point
+ * back. Same vocabulary, same hooks, same tabs as the ticket page.
+ */
+
+console.log('\nItem page parity');
+
+const itemRecord = (over = {}) => ({
+    id: 4, type: 'story', title: 'Operations feed cutover', status: 'draft',
+    ladder: ['draft', 'refined', 'in-progress', 'review', 'done'],
+    parent: 1, phase: '', effectivePhase: '', assignee: 'bob', reporter: 'alice',
+    due: '', effectiveDue: '', points: '', subsystem: 'unsorted',
+    labels: [], links: [], created: '2026-09-02', updated: '2026-09-12',
+    description: 'x', acceptance: '', criteria: [], comments: [], history: [],
+    children: 0, ancestors: [], childItems: [],
+    ...over,
+});
+
+await t('an item link row points at a bug, by ref', async () => {
+    const m = await mountItemPage(itemRecord({ links: ['blocks BUG-0042'] }));
+    const slot = m.host.querySelector('[data-slot="links"]');
+    assert.ok(slot, 'the item page still has no Links section');
+    const btn = slot.querySelector('[data-open]');
+    assert.ok(btn, 'no link row');
+    assert.equal(btn.dataset.open, 'bugs:42');
+    m.done();
+});
+
+await t('the item page has the same History tab', async () => {
+    const m = await mountItemPage(itemRecord({
+        history: [{ date: '2026-09-11', actor: 'alice_agent', field: 'status', from: 'draft', to: 'refined', note: '' }],
+    }));
+    const h = m.host.querySelector('[data-slot="history"]');
+    assert.ok(h, 'no history pane on the item page');
+    assert.equal(h.hidden, true);
+    m.host.querySelector('[data-tab="history"]')
+        .dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    assert.equal(h.hidden, false);
+    assert.equal(m.host.querySelector('[data-slot="comments"]').hidden, true);
+    m.done();
+});
+
+await t('an open item is offered the duplicate action and a dropped one is not', async () => {
+    const open = await mountItemPage(itemRecord());
+    assert.ok(open.host.querySelector('[data-wfa="duplicate"]'), 'a draft item cannot be duplicated');
+    open.done();
+    const dropped = await mountItemPage(itemRecord({ status: 'dropped' }));
+    assert.equal(dropped.host.querySelector('[data-wfa="duplicate"]'), null,
+        'a dropped item can be dropped again as a duplicate');
+    dropped.done();
+});
+
+await t('typing a link target is not an unsaved edit to the record', async () => {
+    // The two link controls are `[data-f]` because that is how the mount finds
+    // its fields — but arming Save from them would make the picker's own write
+    // into the field look like a pending change to the item.
+    const m = await mountItemPage(itemRecord());
+    const field = m.host.querySelector('[data-f="linktarget"]');
+    field.value = 'BUG-0042';
+    field.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    assert.equal(m.host.querySelector('[data-a="save"]').disabled, true,
+        'typing a link target armed Save');
+    m.done();
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

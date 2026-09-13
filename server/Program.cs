@@ -237,24 +237,174 @@ app.MapGet("/api/bugs/{id:int}", (int id) =>
         : Results.Json(new { ok = true, bug }, json);
 });
 
+// An unset field acquiring its own default is not a decision somebody made, so
+// it is not an audit entry. `assignee:` empty on a legacy record becoming the
+// configured human on the first ordinary save is exactly that, and a line
+// recording it would be a reassignment nobody performed.
+bool IsDefaultFill(string key, string was, string now) =>
+    (key is "assignee" or "reporter") && was.Length == 0 && now == users.HumanAuthor;
+
+// An actor name goes into a history line as `- <date> · <actor> · …`, so the two
+// characters it must not contain are a newline and the separator itself. A
+// newline is the damaging one: it emits a second, flush-left line inside
+// `## History`, and SetFrontmatter's document-wide `^key:` match will then latch
+// onto that line instead of inserting into the frontmatter — the next honest
+// write reports success and changes nothing. The leading bullet is what protects
+// the format, and an embedded newline is precisely what gets past it.
+static string CleanActor(string? raw) =>
+    System.Text.RegularExpressions.Regex.Replace(raw ?? "", @"[\r\n·]+", " ").Trim();
+
 app.MapPost("/api/bugs/{id:int}", async (int id, HttpRequest req) =>
 {
     var path = BugPath(bugsDir, id);
     if (!File.Exists(path)) return Results.Json(new { ok = false, error = "not found" }, json, statusCode: 404);
     var patch = await JsonSerializer.DeserializeAsync<Dictionary<string, JsonElement>>(req.Body, json) ?? new();
     var text = await File.ReadAllTextAsync(path);
+
+    // Who is making the change. NEVER written to frontmatter — it is only ever the
+    // actor column of a history line — and it defaults to the human because this API
+    // is the human's UI; an agent says so explicitly. An old client sending no
+    // `actor` still works. Same trust model as the comment endpoints' `author`: a
+    // local tool over files a person can edit anyway.
+    var actor = patch.TryGetValue("actor", out var av) && av.ValueKind == JsonValueKind.String
+        ? CleanActor(av.GetString()) : "";
+    if (actor.Length == 0) actor = users.HumanAuthor;
+
+    var changes = new List<FieldChange>();
     foreach (var (k, v) in patch)
     {
         var key = k.ToLowerInvariant();
-        // assignee is EXPLICIT — set by the user (the reassign control), never derived.
-        if (key is "status" or "severity" or "subsystem" or "type" or "title" or "assignee")
-            text = Md.SetFrontmatter(text, key, v.ValueKind == JsonValueKind.String ? v.GetString()! : v.ToString());
+        // assignee and reporter are EXPLICIT — set by the user, never derived.
+        if (key is "status" or "severity" or "subsystem" or "type" or "title" or "assignee" or "reporter")
+        {
+            var val = (v.ValueKind == JsonValueKind.String ? v.GetString()! : v.ToString()).Trim();
+            // Read the OLD value off the text we are about to change. Every key is
+            // written once, so this is always what the file had on disk — and a
+            // history entry records a TRANSITION, so a save that re-sends the value
+            // it already had writes nothing: the mask posts most fields on every
+            // save, and a line per save is not a history.
+            var was = (Md.GetFrontmatter(text, key) ?? "").Trim();
+            if (RecordHistory.Tracked(key) && was != val && !IsDefaultFill(key, was, val))
+                changes.Add(new FieldChange(key, was, val));
+            text = key == "reporter"
+                ? Md.SetFrontmatterAfter(text, "reporter", val, "assignee")
+                : Md.SetFrontmatter(text, key, val);
+        }
         else if (key is "labels" or "links" && v.ValueKind == JsonValueKind.Array)
             text = Md.SetFrontmatter(text, key, Md.ListValue(v.EnumerateArray().Select(e => e.GetString() ?? "")));
     }
+
+    text = RecordHistory.Append(text, actor, changes);
     text = Md.SetFrontmatter(text, "updated", Md.Today());
     await WriteRecord(path, text);
     return Results.Json(new { ok = true, bug = LoadOne(bugsDir, id) }, json);
+});
+
+// Marking a duplicate is ONE act, not four requests a client can get half-way
+// through: the link, the close, the history line, a comment saying what this was
+// folded into, and a comment on the master saying what arrived. Named for the
+// assertion it makes, not for copying anything.
+//
+// Two records are in play and the master may be of either kind, so every local
+// below is named for its ROLE: `self` is the record being closed (the one this
+// route is addressed to), `targetBug` / `targetItem` the resolved master. A bare
+// `item` reads correctly whichever of the two the writer meant, which is exactly
+// why it is not used.
+app.MapPost("/api/bugs/{id:int}/duplicate-of", async (int id, HttpRequest req) =>
+{
+    var path = BugPath(bugsDir, id);        // `self`'s file — the only one the pipeline below writes
+    if (!File.Exists(path)) return Results.Json(new { ok = false, error = "not found" }, json, statusCode: 404);
+
+    var body = await JsonSerializer.DeserializeAsync<Dictionary<string, JsonElement>>(req.Body, json) ?? new();
+    var raw = (body.TryGetValue("target", out var tv) ? tv.ValueKind switch
+    {
+        JsonValueKind.String => tv.GetString() ?? "",
+        JsonValueKind.Number => tv.TryGetInt32(out var tn) ? tn.ToString() : "",
+        _ => "",
+    } : "").Trim();
+    // Accepted and never persisted: `actor` is only ever the actor column of a
+    // history line. Same trust model the comment endpoints' `author` already has.
+    var actor = body.TryGetValue("actor", out var av) && av.ValueKind == JsonValueKind.String
+        ? CleanActor(av.GetString()) : "";
+    if (actor.Length == 0) actor = users.HumanAuthor;
+    var note = body.TryGetValue("comment", out var cv) && cv.ValueKind == JsonValueKind.String
+        ? (cv.GetString() ?? "").Trim() : "";
+
+    if (raw.Length == 0) return Results.Json(new { ok = false, error = "target required" }, json, statusCode: 400);
+    var r = Refs.Parse(raw, "bugs");        // the MASTER's ref, never self's
+    if (!r.Ok) return Results.Json(new { ok = false, error = $"'{raw}' is not a record reference" }, json, statusCode: 400);
+    if (r.Store == "bugs" && r.Id == id)
+        return Results.Json(new { ok = false, error = "a bug cannot be a duplicate of itself" }, json, statusCode: 400);
+
+    // Resolve the master before writing anything: the response owes the client a
+    // title, and the FOUND record's type is what supplies the prefix, so a stale
+    // `STORY-7` aimed at an epic is recorded as EPIC-0007 rather than preserved
+    // as whatever somebody typed.
+    string targetTitle, targetType, targetPath;
+    if (r.Store == "bugs")
+    {
+        var targetBug = LoadOne(bugsDir, r.Id);
+        if (targetBug is null) return Results.Json(new { ok = false, error = $"no bug #{r.Id} to point at" }, json, statusCode: 404);
+        targetTitle = targetBug.Title;
+        targetType = "";
+        targetPath = BugPath(bugsDir, r.Id);
+    }
+    else
+    {
+        var targetItem = LoadBacklog(backlogDir).FirstOrDefault(i => i.Id == r.Id);
+        if (targetItem is null) return Results.Json(new { ok = false, error = $"no backlog item #{r.Id} to point at" }, json, statusCode: 404);
+        targetTitle = targetItem.Title;
+        targetType = targetItem.Type;
+        targetPath = Path.Combine(backlogDir, targetItem.FileName);
+    }
+    var token = $"duplicates {Refs.Format(r, "bugs", targetType)}";
+    var targetDisplay = Refs.Display(r, targetType);
+    var selfDisplay = Refs.Display(new RecordRef("bugs", id));
+
+    var text = await File.ReadAllTextAsync(path);
+    // Merge rather than replace: the patch endpoint's array semantics are
+    // full-replace, so the merge has to happen here or an existing link is lost.
+    var links = Md.List(Md.GetFrontmatter(text, "links"));
+    if (!links.Any(l => string.Equals(l.Trim(), token, StringComparison.OrdinalIgnoreCase))) links.Add(token);
+    text = Md.SetFrontmatter(text, "links", Md.ListValue(links));
+
+    // `assignee` is deliberately untouched: closing a duplicate is not a handback.
+    var was = (Md.GetFrontmatter(text, "status") ?? "open").Trim();
+    if (was != "closed")
+    {
+        text = Md.SetFrontmatter(text, "status", "closed");
+        text = RecordHistory.Append(text, actor, new[] { new FieldChange("status", was, "closed") });
+    }
+    // AppendComment is LAST in any multi-step write: it appends at end of file and
+    // bumps `updated`, and History must already be above the thread.
+    text = Md.AppendComment(text, actor,
+        note.Length > 0 ? note : $"Closed as a duplicate of {targetDisplay} — {targetTitle}.");
+    await WriteRecord(path, text);
+
+    // A courtesy comment on the master, never a reverse link — only the authored
+    // direction of a relationship is ever stored. The duplicate is written FIRST
+    // on purpose: an interruption between the two leaves a correctly closed,
+    // correctly linked duplicate and a master merely uninformed, rather than a
+    // master announcing a merge that never happened.
+    var targetNoted = false;
+    try
+    {
+        await WriteRecord(targetPath, Md.AppendComment(await File.ReadAllTextAsync(targetPath), actor,
+            $"{selfDisplay} was closed as a duplicate of this."));
+        targetNoted = true;
+    }
+    catch (Exception ex) { app.Logger.LogWarning(ex, "could not note the duplicate on {Ref}", targetDisplay); }
+
+    // The master comes back as store + id + ref + title rather than as a record:
+    // it may be a Bug or a BacklogItem, and a polymorphic field is a shape the
+    // client would have to sniff.
+    return Results.Json(new
+    {
+        ok = true,
+        bug = LoadOne(bugsDir, id),                 // `self`, re-read after the write
+        target = new { store = r.Store, id = r.Id, @ref = targetDisplay, title = targetTitle },
+        targetNoted,
+    }, json);
 });
 
 app.MapPost("/api/bugs/{id:int}/comments", async (int id, HttpRequest req) =>
@@ -302,6 +452,10 @@ app.MapPost("/api/bugs", async (HttpRequest req) =>
     sb.Append($"type: {Get("type", "bug")}\n");
     sb.Append($"subsystem: {Get("subsystem", "unsorted")}\n");
     sb.Append($"assignee: {Get("assignee", users.HumanAuthor)}\n");
+    // Who it goes BACK to. Set once here and never derived: "the human" is not a
+    // stable answer in a project with a roster, and a handback that guesses hands
+    // somebody else's bug to the wrong person.
+    sb.Append($"reporter: {Get("reporter", users.HumanAuthor)}\n");
     sb.Append($"labels: [{labels}]\n");
     sb.Append($"links: [{links}]\n");
     sb.Append($"created: {Md.Today()}\n");
@@ -444,7 +598,22 @@ app.MapPost("/api/backlog/{id:int}", async (int id, HttpRequest req) =>
     if (item is null) return Results.Json(new { ok = false, error = "not found" }, json, statusCode: 404);
     var path = Path.Combine(backlogDir, item.FileName);
 
+    // The status the record had BEFORE this request. The retype clamp below can
+    // move the status with no `status` key in the patch at all, and this is the
+    // only value that makes such a move visible.
+    var statusBefore = item.Status.Trim();
+    var changes = new List<FieldChange>();
+
     var patch = await JsonSerializer.DeserializeAsync<Dictionary<string, JsonElement>>(req.Body, json) ?? new();
+
+    // Who is making the change. NEVER written to frontmatter — it is only ever the
+    // actor column of a history line — and it defaults to the human because this API
+    // is the human's UI; an agent says so explicitly. An old client sending no
+    // `actor` still works. Same trust model as the comment endpoints' `author`.
+    var actor = patch.TryGetValue("actor", out var av) && av.ValueKind == JsonValueKind.String
+        ? CleanActor(av.GetString()) : "";
+    if (actor.Length == 0) actor = users.HumanAuthor;
+
     var text = await File.ReadAllTextAsync(path);
     string? retype = null;      // set when the patch changes the item's type
     string? newStatus = null;   // set when the patch changes the status
@@ -463,13 +632,30 @@ app.MapPost("/api/backlog/{id:int}", async (int id, HttpRequest req) =>
                 var forType = retype ?? item.Type;
                 if (!BacklogItem.StatusAllowed(forType, str))
                     return Results.Json(new { ok = false, error = $"{Article(forType)} {forType} cannot be '{str}' — its lifecycle is {string.Join(" → ", BacklogItem.LadderFor(forType))}" }, json, statusCode: 400);
+                // Read off the text we are about to change: a save that re-sends the
+                // status it already had is not a transition and writes no line.
+                var wasStatus = (Md.GetFrontmatter(text, "status") ?? "").Trim();
+                if (wasStatus != str.Trim()) changes.Add(new FieldChange("status", wasStatus, str.Trim()));
                 text = Md.SetFrontmatter(text, "status", str);
                 newStatus = str;
                 break;
             }
             case "phase" or "assignee" or "reporter" or "points" or "subsystem" or "title":
-                text = Md.SetFrontmatter(text, key, key == "title" ? $"\"{Md.Quote(str)}\"" : str);
+            {
+                var was = (Md.GetFrontmatter(text, key) ?? "").Trim();
+                if (RecordHistory.Tracked(key) && was != str.Trim() && !IsDefaultFill(key, was, str.Trim()))
+                    changes.Add(new FieldChange(key, was, str.Trim()));
+                // `reporter` is anchored after `assignee` the same way the bug
+                // handler anchors it, because that is where Render() puts it. A
+                // plain SetFrontmatter would insert an absent key just before the
+                // closing `---`, so the same field would sit in two different
+                // places depending on whether the record was created by the API
+                // or backfilled by a patch.
+                text = key == "reporter"
+                    ? Md.SetFrontmatterAfter(text, "reporter", str.Trim(), "assignee")
+                    : Md.SetFrontmatter(text, key, key == "title" ? $"\"{Md.Quote(str)}\"" : str);
                 break;
+            }
             case "due":
             {
                 // Rejected rather than silently dropped: a target date the user
@@ -535,6 +721,24 @@ app.MapPost("/api/backlog/{id:int}", async (int id, HttpRequest req) =>
         if (clamped != effective) text = Md.SetFrontmatter(text, "status", clamped);
     }
 
+    // The clamp can move the status on its own: a patch of {type:'task'} alone on a
+    // story in `review` demotes it to `in-progress` with no `status` key anywhere in
+    // the request. Comparing against the record AS LOADED is the only way to see
+    // that — the one status change a reader cannot explain from the frontmatter is
+    // exactly the one an audit trail must not omit. Reconcile by comparison, never
+    // by patching an entry that may not exist.
+    var finalStatus = (Md.GetFrontmatter(text, "status") ?? "").Trim();
+    var si = changes.FindIndex(c => c.Field == "status");
+    if (finalStatus != statusBefore)
+    {
+        if (si >= 0) changes[si] = changes[si] with { To = finalStatus };
+        else changes.Add(new FieldChange("status", statusBefore, finalStatus));
+    }
+    else if (si >= 0) changes.RemoveAt(si);      // clamped straight back: nothing happened
+
+    // Before the retype branch below, so the same `text` is what gets written to
+    // whichever path the record ends up at.
+    text = RecordHistory.Append(text, actor, changes);
     text = Md.SetFrontmatter(text, "updated", Md.Today());
 
     if (retype is not null && retype != item.Type)
@@ -692,6 +896,106 @@ app.MapPost("/api/backlog/{id:int}/comments", async (int id, HttpRequest req) =>
 
     var reloaded = LoadBacklog(backlogDir);
     return Results.Json(new { ok = true, item = FullItem(reloaded, reloaded.First(i => i.Id == id)) }, json);
+});
+
+// The backlog half of the duplicate-of act. Same shape as the bug endpoint, with
+// two differences that matter: the terminal status is `dropped` — the only one
+// every backlog type's ladder admits, and the only one that does not claim the
+// work was finished — and BOTH records here may be BacklogItems, which is why
+// `self` (the record being dropped) and `targetItem` (the resolved master) never
+// share a name.
+app.MapPost("/api/backlog/{id:int}/duplicate-of", async (int id, HttpRequest req) =>
+{
+    var self = LoadBacklog(backlogDir).FirstOrDefault(i => i.Id == id);
+    if (self is null) return Results.Json(new { ok = false, error = "not found" }, json, statusCode: 404);
+    var path = Path.Combine(backlogDir, self.FileName);
+
+    var body = await JsonSerializer.DeserializeAsync<Dictionary<string, JsonElement>>(req.Body, json) ?? new();
+    var raw = (body.TryGetValue("target", out var tv) ? tv.ValueKind switch
+    {
+        JsonValueKind.String => tv.GetString() ?? "",
+        JsonValueKind.Number => tv.TryGetInt32(out var tn) ? tn.ToString() : "",
+        _ => "",
+    } : "").Trim();
+    // Accepted and never persisted: `actor` is only ever the actor column of a
+    // history line. Same trust model the comment endpoints' `author` already has.
+    var actor = body.TryGetValue("actor", out var av) && av.ValueKind == JsonValueKind.String
+        ? CleanActor(av.GetString()) : "";
+    if (actor.Length == 0) actor = users.HumanAuthor;
+    var note = body.TryGetValue("comment", out var cv) && cv.ValueKind == JsonValueKind.String
+        ? (cv.GetString() ?? "").Trim() : "";
+
+    if (raw.Length == 0) return Results.Json(new { ok = false, error = "target required" }, json, statusCode: 400);
+    var r = Refs.Parse(raw, "backlog");     // the MASTER's ref, never self's
+    if (!r.Ok) return Results.Json(new { ok = false, error = $"'{raw}' is not a record reference" }, json, statusCode: 400);
+    if (r.Store == "backlog" && r.Id == id)
+        return Results.Json(new { ok = false, error = "an item cannot be a duplicate of itself" }, json, statusCode: 400);
+
+    // An item may be a duplicate of a bug, so the master is resolved out of either
+    // store, and the FOUND record's type is what supplies the prefix.
+    string targetTitle, targetType, targetPath;
+    if (r.Store == "bugs")
+    {
+        var targetBug = LoadOne(bugsDir, r.Id);
+        if (targetBug is null) return Results.Json(new { ok = false, error = $"no bug #{r.Id} to point at" }, json, statusCode: 404);
+        targetTitle = targetBug.Title;
+        targetType = "";
+        targetPath = BugPath(bugsDir, r.Id);
+    }
+    else
+    {
+        var targetItem = LoadBacklog(backlogDir).FirstOrDefault(i => i.Id == r.Id);
+        if (targetItem is null) return Results.Json(new { ok = false, error = $"no backlog item #{r.Id} to point at" }, json, statusCode: 404);
+        targetTitle = targetItem.Title;
+        targetType = targetItem.Type;
+        targetPath = Path.Combine(backlogDir, targetItem.FileName);
+    }
+    var token = $"duplicates {Refs.Format(r, "backlog", targetType)}";
+    var targetDisplay = Refs.Display(r, targetType);
+    // self.Type, because this string names `self` in the MASTER's comment.
+    var selfDisplay = Refs.Display(new RecordRef("backlog", id), self.Type);
+
+    var text = await File.ReadAllTextAsync(path);
+    // Merge rather than replace: the patch endpoint's array semantics are
+    // full-replace, so the merge has to happen here or an existing link is lost.
+    var links = Md.List(Md.GetFrontmatter(text, "links"));
+    if (!links.Any(l => string.Equals(l.Trim(), token, StringComparison.OrdinalIgnoreCase))) links.Add(token);
+    text = Md.SetFrontmatter(text, "links", Md.ListValue(links));
+
+    // `assignee` is deliberately untouched: dropping a duplicate is not a handback.
+    var was = (Md.GetFrontmatter(text, "status") ?? "").Trim();
+    if (was != "dropped")
+    {
+        text = Md.SetFrontmatter(text, "status", "dropped");
+        text = RecordHistory.Append(text, actor, new[] { new FieldChange("status", was, "dropped") });
+    }
+    // AppendComment is LAST in any multi-step write: it appends at end of file and
+    // bumps `updated`, and History must already be above the thread.
+    text = Md.AppendComment(text, actor,
+        note.Length > 0 ? note : $"Dropped as a duplicate of {targetDisplay} — {targetTitle}.");
+    await WriteRecord(path, text);
+
+    // A courtesy comment on the master, never a reverse link. The duplicate is
+    // written FIRST on purpose: an interruption between the two leaves a correctly
+    // dropped, correctly linked duplicate and a master merely uninformed, rather
+    // than a master announcing a merge that never happened.
+    var targetNoted = false;
+    try
+    {
+        await WriteRecord(targetPath, Md.AppendComment(await File.ReadAllTextAsync(targetPath), actor,
+            $"{selfDisplay} was dropped as a duplicate of this."));
+        targetNoted = true;
+    }
+    catch (Exception ex) { app.Logger.LogWarning(ex, "could not note the duplicate on {Ref}", targetDisplay); }
+
+    var reloaded = LoadBacklog(backlogDir);
+    return Results.Json(new
+    {
+        ok = true,
+        item = FullItem(reloaded, reloaded.First(i => i.Id == id)),   // `self`, re-read after the write
+        target = new { store = r.Store, id = r.Id, @ref = targetDisplay, title = targetTitle },
+        targetNoted,
+    }, json);
 });
 
 // ---- Search ----------------------------------------------------------------
@@ -1448,7 +1752,7 @@ static object FullItem(List<BacklogItem> all, BacklogItem item)
         points = item.Points, subsystem = item.Subsystem,
         labels = item.Labels, links = item.Links, created = item.Created, updated = item.Updated,
         description = item.Description, acceptance = item.Acceptance, criteria = item.Criteria(),
-        comments = item.Comments, children = childCount,
+        comments = item.Comments, history = item.History, children = childCount,
         ancestors = Ancestors(all, item.Id)
             .Select(id => all.First(i => i.Id == id))
             .Select(a => new { id = a.Id, type = a.Type, title = a.Title })

@@ -37,7 +37,7 @@ bugdesk/
 | skill | [`/bugs`](skills/bugs/SKILL.md) | [`/backlog`](skills/backlog/SKILL.md), [`/tracker`](skills/tracker/SKILL.md) |
 
 Both are directories of markdown files — a YAML-frontmatter block plus
-`## Description` and `## Comments` sections (the backlog adds
+`## Description`, `## History` and `## Comments` sections (the backlog adds
 `## Acceptance criteria`). That is the source of truth; the server only reads
 and writes those files. Point `BUGDESK_BUGS` at a `bugs/` directory tracked
 inside your own project's repo and the backlog follows automatically as its
@@ -59,7 +59,7 @@ EPIC-0001  Auth rewrite            phase: foundation
 
 IDs are **one sequence shared by all four prefixes**, which is what makes
 `parent: 7` unambiguous without also naming a type — and what lets a bug point
-at backlog work with `links: [relates STORY-7]`.
+at backlog work with `links: [relates-to STORY-7]`.
 
 `PROJ` is the fourth level, above epics. It is offered in the Type select only
 in [tracker mode](#tracker-mode), but it is a legal record everywhere: a store
@@ -102,6 +102,7 @@ that the checklist never parsed survives the first time anyone ticks a box.
 ## Run
 
 ```bash
+./run.sh --help                       # every option and environment variable
 ./run.sh                              # http://127.0.0.1:8766, ./bugs + ./backlog
 ./run.sh --seed                       # + pre-seed empty stores with the examples
 ./run.sh --tracker                    # TRACKER mode — its own store, auto port
@@ -115,12 +116,20 @@ BUGDESK_HUMAN=alice BUGDESK_AGENT=claude ./run.sh   # seed a profile, skip the p
 On Windows, `run.ps1` is the same wrapper for PowerShell (5.1 or 7):
 
 ```powershell
+.\run.ps1 --help              # every option and environment variable
 .\run.ps1                     # http://127.0.0.1:8766, .\bugs + .\backlog
 .\run.ps1 --seed              # + pre-seed empty stores with the examples
 .\run.ps1 --tracker           # TRACKER mode
 $env:BUGDESK_BUGS='C:\path\to\bugs'; .\run.ps1
 $env:BUGDESK_HUMAN='alice'; $env:BUGDESK_AGENT='claude'; .\run.ps1
 ```
+
+Neither script changes your working directory. They hand the server's path to
+`dotnet run --project` rather than `cd`-ing into `server/` first, so the shell
+you started from is the shell you come back to when you stop the server. That
+matters most in PowerShell, where a location change made inside a script
+outlives it — `.\run.ps1` used to leave you sitting in `server\`. It also keeps
+`--tracker` honest, since the directory you ran from is what names the tracker.
 
 `--seed` copies the samples from `examples/` into the stores the first time. It
 seeds each store **independently** and never touches one that already has
@@ -242,7 +251,8 @@ the people they find in the git history. Edit it directly — add, rename, chang
 an agent name, remove — from **Settings › General › Authorship › Manage
 collaborators**, the hamburger menu's **Collaborators…**, or the change-your-name
 dialog. Override the path with `BUGDESK_PROJECT`. `GET /api/project` reports the
-resolved `path`, which is the quickest way to see which file is in force.
+resolved `path`, which is the quickest way to see which file the running UI has
+in force; an agent works it out from the same three rules, in the same order.
 
 Each person's agent name is **derived** as `<name>_agent`. It is not a decision
 worth making per project, and two people whose assistants both sign as `agent`
@@ -291,10 +301,33 @@ comment is a `### YYYY-MM-DD · <author>` block — that is the whole point of t
 format: you always know who said what, without depending on GitHub's issue
 authorship or a `gh` token.
 
+**`assignee` says whose court a record is in; `reporter` says whose *list* it is
+on.** One field can only answer one of those questions, and `assignee` moves
+every time the work does — so by the time a bug is back in `testing`, nothing in
+the file remembers who asked for it. An agent hands work back to the record's
+**`reporter`**, never to "the human": on a store several people share, "the
+human" resolves to whoever the *agent's own* profile names, and a record handed
+to the wrong person is worse than one handed to nobody, because it stops looking
+like a gap.
+
+`reporter` is written once, when the record is filed, and defaults to the
+configured human; the detail page offers it beside Assignee for the case where
+you are filing on somebody else's behalf. An **absent** `reporter:` reads as the
+configured human and the file is left alone — nothing backfills it, in either
+store. A backfilled reporter is a guess written as a fact, and the read-time
+fallback costs nothing.
+
 Because the name comes from a profile rather than the environment, **an agent
-should read `/api/config` rather than assume `BUGDESK_HUMAN` tells it anything**
-— it may be unset, or set to somebody the user has since changed away from. All
-three skills say so.
+must not assume `BUGDESK_HUMAN` tells it anything** — it may be unset, or set to
+somebody the user has since changed away from. The skills read the profile off
+disk instead, in the server's own order: `BUGDESK_USER` or `.bugdesk/active.json`
+for the slug, then `.bugdesk/user-<slug>.json` for the pair, then the
+environment, then the defaults.
+
+**The skills never call this server**, and none of them needs it running. Every
+answer it could give is in the files they already have — and a server listening
+on this machine may be serving a *different* project, so asking it is not a
+harmless shortcut: it is how an agent ends up signing as somebody else.
 
 ## API
 
@@ -303,17 +336,19 @@ Same-origin JSON, backed by the markdown files:
 | method | path | purpose |
 |---|---|---|
 | GET  | `/api/bugs` | list (summaries, sorted by priority) |
-| GET  | `/api/bugs/{id}` | one bug: frontmatter + description + parsed comments |
+| GET  | `/api/bugs/{id}` | one bug: frontmatter + description + parsed comments + history |
 | POST | `/api/bugs` | create; the id is assigned server-side |
-| POST | `/api/bugs/{id}` | update frontmatter (status/severity/assignee/subsystem/labels/…) |
+| POST | `/api/bugs/{id}` | update frontmatter (status/severity/assignee/reporter/subsystem/labels/…) |
 | POST | `/api/bugs/{id}/comments` | append a `### date · author` comment |
+| POST | `/api/bugs/{id}/duplicate-of` | close this bug as a duplicate of another record — link, status, history and both comments in one request |
 | GET  | `/api/meta` | aggregate counts by status/subsystem/assignee/severity |
 | GET  | `/api/backlog` | list, already in **tree order** (epic, its stories, their tasks) |
-| GET  | `/api/backlog/{id}` | one item + ancestors + children + criteria + comments |
+| GET  | `/api/backlog/{id}` | one item + ancestors + children + criteria + comments + history |
 | POST | `/api/backlog` | create; id assigned server-side, parent validated |
 | POST | `/api/backlog/{id}` | update frontmatter, `## Description` or `## Acceptance criteria` |
 | POST | `/api/backlog/{id}/comments` | append a comment |
 | POST | `/api/backlog/{id}/criteria` | tick / add / edit / remove one acceptance criterion |
+| POST | `/api/backlog/{id}/duplicate-of` | the same act for an item — it **drops** rather than closes |
 | GET  | `/api/backlog/meta` | counts by status/type/assignee, the phase vocabulary, the file prefixes, how many items carry a target date, and the per-type lifecycle ladders |
 | GET  | `/api/config` | the **mode** (`bugs`/`tracker`), resolved names, whether a profile exists, the profiles there are |
 | POST | `/api/config/user` | adopt a profile by name (what the first-run screen posts) |
@@ -326,6 +361,33 @@ Same-origin JSON, backed by the markdown files:
 | GET  | `/api/search` | fulltext across both stores — titles, descriptions, criteria and comments — ranked, with a snippet |
 | DELETE | `/api/backlog/{id}` | delete a record to `trash/`; `?children=cascade\|promote` decides what happens to what was under it |
 | GET  | `/api/events` | Server-Sent Events: records changed on disk by anything but BugDesk |
+
+**`reporter` and `history` ride on the record**, not on endpoints of their own.
+A summary from `GET /api/bugs` carries `reporter` and a `history` **count**; the
+full record from `GET /api/bugs/{id}` carries `reporter` and a `history` array
+of `{date, actor, field, from, to, note}` — exactly the shape `comments` already
+has, so a record and its trail arrive together and cannot disagree about what
+happened. `field` is `status`, `assignee`, `reporter`, or `""` for a line that
+is free text; `from` and `to` are `""` for an unset value, because the `(unset)`
+spelling exists to keep a diff readable and has no business in JSON. Backlog
+items carry `history` the same way, and have carried `reporter` since tracker
+mode. A write may name an `actor`, which is who the history line is attributed
+to; it is never stored as a field.
+
+**The `duplicate-of` routes** take
+`{"target": "STORY-7" | 52 | "#52", "actor": "", "comment": ""}`. `target` is
+required and accepts anything a `links:` token accepts, prefix matching is
+case-insensitive, `actor` defaults to the configured human, and `comment`
+replaces the generated sentence on the record being closed — never the one left
+on the master, which has to say what arrived. A success answers with the whole
+updated record plus `target:{store, id, ref, title}`, so the page repaints every
+pane with no follow-up GET. `WIDGET-1` is a 400 (not a reference at all);
+`STORY-9` parses and comes back 404 if there is no item 9.
+
+**BugDesk never runs git.** There is no `/api/git`, nothing in the server shells
+out, and no history anywhere is derived from `git log` — the `## History`
+section is the record's own. A record you edit in the UI is therefore sitting
+uncommitted in the working tree, for you or for an agent to commit.
 
 Every other `/api/<method>` returns `{ok:true,result:{ok:true}}` so the shell
 boots and renders its empty states.
@@ -355,6 +417,69 @@ open ──▶ investigation ⇄ testing ──▶ closed
 The queue's left rail filters on the fields the summary API exposes — notably
 **"Needs my reply"** = bugs whose last comment was the agent's
 (`lastCommentAuthor == <agentAuthor>`), so the human hasn't responded yet.
+
+**Every move is recorded in the file.** A `## History` section, above
+`## Comments`, carries one append-only line per transition —
+`- 2026-09-12 · norman_agent · status: investigation -> testing` — and the
+detail page shows it in a **History** tab beside Comments. Both stores have one.
+
+Three fields are tracked and no others: `status`, `assignee` and `reporter`. A
+retitle or a severity bump is a diff, and an audit trail that records everything
+is one nobody reads; these three are the ones somebody *decided*. There is no
+stored "filed" line either — the row at the bottom of the tab is derived from
+`created` and `reporter`, so writing one by hand only produces a duplicate. The
+line grammar (the leading `- `, the two `·` separators, the ASCII `->`,
+`(unset)` for an empty side) is spelled out in
+[`skills/bugs/SKILL.md`](skills/bugs/SKILL.md), which is what an agent writing
+the file directly reads; a line that does not fit it is shown as free text
+rather than dropped.
+
+## Relationships
+
+A record's `links:` list holds `<verb> <target>` tokens, and a target may name a
+record in **either** store:
+
+```yaml
+links: [duplicates 12, implements STORY-0007, blocked-by BUG-0052]
+```
+
+| verb | shown on the other record as |
+|---|---|
+| `duplicates` | is duplicated by |
+| `blocks` | is blocked by |
+| `blocked-by` | blocks |
+| `requires` | is required by |
+| `caused-by` | causes |
+| `relates-to` | relates to |
+| `implements` | is implemented by |
+
+`related` is accepted on read as an older spelling of `relates-to` and is never
+written back.
+
+**A bare number means this file's own store.** `blocks 47` in a bug is bug #47;
+the same token in a story is item 47. A crossing target carries the target's
+prefix, zero-padded to four — `STORY-0007` — and an unpadded `STORY-7` parses
+fine and is never rewritten where it sits. The prefix is display sugar plus a
+store discriminator: backlog ids are one sequence shared by all four prefixes,
+so `STORY-7` and `EPIC-7` are the same item. Identity is `{store, id}`, and
+every write re-derives the prefix from the record it resolved rather than from
+what was typed, because retyping a story to a task would otherwise leave
+`STORY-` printed in every file that mentioned it.
+
+**Only the direction you wrote is stored.** The inverse row on the other record
+is computed when the page is drawn, so there is no second file to keep in step
+and no way for the two halves of a relationship to disagree. Any page that shows
+links loads the other store first, once, so an inbound cross-store row does not
+depend on which store you happened to open earlier.
+
+**Mark as duplicate and close** is on both detail pages. Pick the master in the
+cross-store picker and one request does the whole act: add the `duplicates`
+link, close this record (`closed` for a bug, `dropped` for an item), append the
+status line to `## History`, comment here saying what it was folded into, and
+comment on the master saying what arrived. The master gets a comment rather than
+a reverse link, for the reason above — and that comment is the half people
+skipped when they did this by hand, which is the half that tells its reader the
+two reports were merged.
 
 ## Finished work gets out of the way
 
@@ -798,8 +923,10 @@ there to correct it, is the most dangerous thing in this repo:
 ## Claude Code integration
 
 BugDesk ships three skills that teach Claude the file formats, the lifecycles,
-and how to read/write the stores directly — no server or API calls required,
-just the markdown files:
+and how to read/write the stores directly. They use **the files and nothing
+else** — not "no server required", but no HTTP call at all, including for the
+names and the roster, which they resolve from the same profile and config files
+the server reads:
 
 - [`skills/bugs/SKILL.md`](skills/bugs/SKILL.md) — `/bugs`
 - [`skills/backlog/SKILL.md`](skills/backlog/SKILL.md) — `/backlog`, including
@@ -833,6 +960,16 @@ Refinement gets its own commit ahead of the claim, because an agent that writes
 its own acceptance criteria and then satisfies them has marked its own homework.
 Pushing them first, on their own, is the human's moment to correct them.
 
+**BugDesk itself never commits anything**, in either mode: the server does not
+shell out to git, so every record edit — yours in the UI, the agent's in the
+file — is left in the working tree. That is why `/bugs` and `/backlog` open with
+`git status` on the store and commit whatever they find there **as its own
+commit** before claiming anything: without that sweep, your afternoon of triage
+rides along inside the agent's claim commit, and neither of you can see who
+changed what afterwards. Everything the skills do after that — a comment, an
+assignment, a status change, a new record — is committed and pushed the moment
+it is made.
+
 Install them into whichever project Claude will be working in (not necessarily
 this repo — BugDesk is usually a sibling tool pointed at your project's own
 stores via `BUGDESK_BUGS`):
@@ -850,8 +987,11 @@ ln -s "$(pwd)/skills/backlog" /path/to/your-project/.claude/skills/backlog
 ln -s "$(pwd)/skills/tracker" /path/to/your-project/.claude/skills/tracker
 ```
 
-Then make sure `BUGDESK_AGENT` matches however you start the BugDesk server, so
-the skills and the UI agree on who the agent is.
+The skills work on the files alone — BugDesk does not have to be running, and
+they will not call it if it is. They read the same per-user profile the UI
+writes (`.bugdesk/user-<slug>.json`), so the two agree on who the agent is
+without any configuration; `BUGDESK_AGENT` only matters in a checkout where
+nobody has ever set a name.
 
 ## FlexDesk
 

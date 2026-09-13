@@ -183,6 +183,10 @@ class BacklogItem
 
     public List<Comment> Comments { get; set; } = new();
 
+    /// <summary>The record's own audit trail: status, assignee and reporter
+    /// transitions, oldest first. Parsed from <c>## History</c>; append-only.</summary>
+    public List<HistoryEntry> History { get; set; } = new();
+
     /// <summary>Index within this item's OWN ladder; -1 for <c>dropped</c> or
     /// anything the type does not use.</summary>
     public int Stage => Array.IndexOf(LadderFor(Type), Status);
@@ -224,7 +228,7 @@ class BacklogItem
         points = Points, subsystem = Subsystem,
         labels = Labels, links = Links, created = Created, updated = Updated,
         typeOrder = TypeOrder, children = childCount,
-        criteria = Criteria(), comments = Comments.Count,
+        criteria = Criteria(), comments = Comments.Count, history = History.Count,
         lastCommentAuthor = Comments.Count > 0 ? Comments[^1].Author : null,
         lastCommentDate = Comments.Count > 0 ? Comments[^1].Date : null,
     };
@@ -262,7 +266,11 @@ class BacklogItem
         foreach (var (type, prefix) in Prefixes)
             if (name.StartsWith(prefix + "-", StringComparison.OrdinalIgnoreCase)) item.Type = type;
 
-        var content = Md.ContentBlock(rest);
+        // History is carved out of the content block BEFORE Acceptance is read:
+        // Acceptance runs to the end of the content, so a section below it would
+        // otherwise be swallowed into the criteria and written back over itself.
+        var content = Md.CarveSection(Md.ContentBlock(rest), RecordHistory.Heading, out var history);
+        item.History = RecordHistory.Parse(history);
         var ai = content.IndexOf("## Acceptance criteria", StringComparison.OrdinalIgnoreCase);
         if (ai >= 0)
         {

@@ -30,14 +30,20 @@ import { attachMarkdownEditor } from './md_editor.js';
 import { attachTagInput } from './tag_input.js';
 import { attachSelect } from './select_field.js';
 import { watchRecord } from './live.js';
-import { attachParentPicker, childTypesFor, openItemPicker } from './item_picker.js';
+import { attachParentPicker, childTypesFor, openItemPicker, openRecordPicker } from './item_picker.js';
 import { installRecordDragSource, isModifiedOpen, markDragCell, openModified } from './record_dnd.js';
 import { confirmDelete } from './delete_item.js';
 import { openFilterEditor } from './filter_editor.js';
 import { openNewItem } from './new_item.js';
 import { onFiltersChanged } from './filter_store.js';
 import { shell, statusLine } from './pages.js';
-import { esc, initials, HUMAN_AUTHOR, assigneeChoices, rememberAssignee } from './data.js';
+import { esc, initials, HUMAN_AUTHOR, TICKETS, assigneeChoices, loadData, rememberAssignee } from './data.js';
+import {
+    linkTypeDef, linkTypeOptions, formatLink, linkRows, validateNewLink, withoutLink,
+} from './links.js';
+import { displayRef, formatRef, itemRefOf, parseKey, parseRef, refKey } from './refs.js';
+import { allRows, canonRef, findRow, openRow, storesAvailable } from './records.js';
+import { renderHistory } from './history.js';
 import {
     BUILTIN_FILTERS, DEFAULT_FILTER, MODEL, SCOPE,
     adhocFilter, deleteFilter, describeFilter, duplicateFilter, epicExpr,
@@ -46,7 +52,7 @@ import {
 import {
     ALL_TYPES, ITEMS, PHASES, TRACKER, TYPES, TYPE_ICON,
     DUE_LABEL, collapsibleIds, dueState, duePhrase, fetchItem, humanizeItemStatus,
-    dueOf, dueOverrun, isClosedItem, isGated, itemLabel, itemRef, ladderFor,
+    dueOf, dueOverrun, duplicateItem, isClosedItem, isGated, itemLabel, itemRef, ladderFor,
     loadBacklog, parentTypesFor,
     patchItem, postItemComment,
     REFINEMENT_RULES, refinementGaps, flatRows, stageActions, stageOf, treeRows,
@@ -74,6 +80,16 @@ const duePill = (item) => {
 
 const typeGlyph = (type) =>
     `<span class="bd-type bd-type--${esc(type)}" title="${esc(typeLabelOf(type))}">${icon(TYPE_ICON[type] || 'task')}</span>`;
+
+/** Actions that are NOT a step along the ladder. They sit after the stage
+ *  buttons and are offered wherever `when` says they make sense. A
+ *  duplicate-and-drop is not a rung on any type's lifecycle, so it does not get
+ *  a fake entry in `stageActions`, whose values are target statuses. */
+const WORKFLOW_ACTIONS = [
+    { id: 'duplicate', label: 'Mark as duplicate and drop', icon: 'content_copy',
+      title: 'Pick the record this duplicates, link it, and drop this one',
+      when: (closed) => !closed },
+];
 
 /** "2/3" with a bar, or an italic "none" — an unrefined item having no
  *  criteria is the normal state, not a gap in the data. */
@@ -529,14 +545,39 @@ function mountItem(host, props, ctx) {
                 <div class="td-group__body bd-children" data-slot="children"></div>
             </section>
             <section class="td-group">
+                <div class="td-group__title">Links</div>
+                <div class="td-group__body">
+                    <div data-slot="links"><span class="td-dim">Loading…</span></div>
+                    <div class="td-linkadd">
+                        <select class="ea-tin td-linkadd__type" data-f="linktype">${linkTypeOptions()}</select>
+                        <!-- Store-relative, and the placeholder has to say so: a bare number here
+                             is read as a BACKLOG id, not a bug. Copying the ticket page's "#42"
+                             invited a user to type a bug number and silently get item 42. -->
+                        <input class="ea-tin td-mono td-linkadd__target" data-f="linktarget"
+                               placeholder="7, STORY-7, BUG-42, or search…">
+                        <button class="ea-btn" data-a="picklink" title="Find a record">${icon('search')}</button>
+                        <button class="ea-btn" data-a="addlink">${icon('add_link')} Link</button>
+                    </div>
+                </div>
+            </section>
+            <section class="td-group">
                 <div class="td-group__title">Description
                     <span class="td-group__actions" data-slot="descactions"></span>
                 </div>
                 <div class="td-group__body" data-slot="desc"><span class="td-dim">Loading…</span></div>
             </section>
             <section class="td-group">
-                <div class="td-group__title">Comments <span class="td-dim">— posted as ${esc(HUMAN_AUTHOR)}</span></div>
-                <div class="td-group__body" data-slot="comments"></div>
+                <div class="td-group__title td-group__title--tabs">
+                    <span class="td-tabs" role="tablist">
+                        <button type="button" class="td-tab td-tab--on" role="tab" aria-selected="true"
+                                data-tab="comments">Comments</button>
+                        <button type="button" class="td-tab" role="tab" aria-selected="false"
+                                data-tab="history">History</button>
+                    </span>
+                    <span class="td-dim" data-slot="tabnote">— posted as ${esc(HUMAN_AUTHOR)}</span>
+                </div>
+                <div class="td-group__body" data-slot="comments" role="tabpanel"></div>
+                <div class="td-group__body td-group__body--flush" data-slot="history" role="tabpanel" hidden></div>
             </section>
         </div>
     </div>`;
@@ -764,12 +805,21 @@ function mountItem(host, props, ctx) {
             + (dropped ? `<li class="td-stage td-stage--active bd-stage--dropped">${esc(humanizeItemStatus('dropped'))}</li>` : '');
 
         const gaps = refinementGaps(item);
+        // `isClosedItem` (done OR dropped), not a stage index: `stageOf` reports -1 for a
+        // dropped record, so a stage test would offer the action on something terminal.
+        // The workflow buttons go into this SAME innerHTML — the strip is repainted on
+        // every transition, so anything appended afterwards survives until the first time
+        // the user moves the item and then silently disappears.
+        const closed = isClosedItem(item);
         $('[data-slot="stageactions"]').innerHTML = stageActions(item).map(([label, target], i) => {
             const blocked = isGated(target) && gaps.length > 0;
             return `<button class="ea-btn td-stageaction ${i === 0 && !blocked ? 'ea-btn--primary td-stageaction--primary' : ''}"
                         data-wf="${esc(target)}" ${blocked ? 'disabled' : ''}
                         title="${blocked ? esc(`${gaps.length} thing${gaps.length === 1 ? '' : 's'} still missing — see Refinement`) : ''}">${esc(label)}</button>`;
-        }).join('');
+        }).join('')
+            + WORKFLOW_ACTIONS.filter((a) => a.when(closed)).map((a) =>
+                `<button class="ea-btn td-stageaction td-stageaction--alt" data-wfa="${esc(a.id)}"
+                         title="${esc(a.title)}">${icon(a.icon)} ${esc(a.label)}</button>`).join('');
     };
 
     /* ── refinement checklist ───────────────────────────────────── */
@@ -937,6 +987,90 @@ function mountItem(host, props, ctx) {
             : '<div class="td-dim">No children yet.</div>';
     };
 
+    /* ── links ─────────────────────────────────────────────────────────────
+       Outgoing links are this item's own and removable here; incoming ones are
+       stored on the OTHER record (see links.js: only the authored direction is
+       ever written) so they show read-only with a note saying where they live.
+
+       A target may be in EITHER store, so everything here is addressed by Ref
+       rather than by a bare id — a bare number is store-relative, and bug 7 and
+       STORY-0007 are two different records. This is the same code the bug mask
+       runs, with 'backlog' as the origin store: a link written from one end and
+       read from the other has to mean the same thing on both pages. */
+
+    const linkRow = (rel, ref, ownToken) => {
+        const row = findRow(ref);
+        const shown = row?.label || displayRef(ref);
+        return `<div class="td-linkrow">
+            <span class="td-linkrow__rel">${esc(rel)}</span>
+            <button type="button" class="td-mono td-link" data-open="${esc(refKey(ref))}">${esc(shown)}</button>
+            <span class="td-linkrow__title ${row?.closed ? 'td-dim' : ''}">${esc(row?.title
+                || (ref.store === 'backlog' ? '(no such item)' : '(no such bug)'))}</span>
+            ${ownToken
+                ? `<button type="button" class="ea-btn ea-btn--small" data-unlink="${esc(ownToken)}"
+                       title="Remove this link">${icon('link_off')}</button>`
+                : `<span class="td-dim" title="Stored on ${esc(shown)} — remove it there">from ${esc(shown)}</span>`}
+        </div>`;
+    };
+
+    const renderLinks = () => {
+        const el = $('[data-slot="links"]');
+        if (!el) return;
+        const { outgoing, incoming } = linkRows(item, itemRefOf(item), 'backlog', allRows());
+        el.innerHTML = (outgoing.length || incoming.length)
+            // `l.raw` is the token EXACTLY as stored, which is what [data-unlink] has to
+            // match: a legacy token does not round-trip through formatLink (`related 5`
+            // normalises to `relates-to 5`), so re-formatting it here would make Remove
+            // a silent no-op on precisely the records worth rescuing.
+            ? outgoing.map((l) => linkRow(linkTypeDef(l.type)?.label || l.type, l.target, l.raw)).join('')
+                + incoming.map((l) => linkRow(l.label, l.target, null)).join('')
+            : '<div class="td-dim">No links.</div>';
+    };
+
+    const commitLinks = async (next) => {
+        try {
+            const fresh = await patchItem(item.id, { links: next });
+            // Repaint the links pane ONLY, the way the ticket page does. A full
+            // apply() would rebuild the record form from the server copy, close an
+            // open description or acceptance editor and clear the dirty flag — so
+            // adding a link while a title edit or a half-written paragraph was
+            // unsaved threw that work away with nothing but "Links updated." to
+            // show for it. The patch carried only `links`, so only `links` moved.
+            item.links = Array.isArray(fresh.links) ? fresh.links : next;
+            renderLinks();
+            await broadcast();
+            statusLine('Links updated.');
+        } catch (err) {
+            statusLine('Link update failed: ' + (err?.message || err));
+        }
+    };
+
+    /** The cross-store picker as a way INTO the target field — the field stays typable,
+     *  so there are two ways in and still only one parser reading what comes out. */
+    const pickLink = async () => {
+        const picked = await openRecordPicker({
+            title: 'Link to…',
+            stores: storesAvailable(),
+            exclude: itemRefOf(item),
+        });
+        if (!picked?.target || !host.isConnected) return;
+        const f = $('[data-f="linktarget"]');
+        if (f) f.value = formatRef(picked.target, 'backlog');
+    };
+
+    const addLink = async () => {
+        const type = $('[data-f="linktype"]')?.value;
+        const target = parseRef(($('[data-f="linktarget"]')?.value || '').trim(), 'backlog');
+        const problem = validateNewLink(item, itemRefOf(item), type, target, 'backlog');
+        if (problem) { statusLine(problem); return; }
+        if (!findRow(target)) { statusLine(`${displayRef(target)} is not in the store.`); return; }
+        // canonRef re-derives the prefix from the record actually found, so typing
+        // STORY-7 at an epic stores EPIC-0007 rather than a prefix already stale.
+        await commitLinks([...(item.links || []), formatLink(type, canonRef(target), 'backlog')]);
+        const field = $('[data-f="linktarget"]');
+        if (field) field.value = '';
+    };
+
     /* ── description + comments ─────────────────────────────────── */
 
     /* ── description ─────────────────────────────────────────────────
@@ -1004,6 +1138,35 @@ function mountItem(host, props, ctx) {
                 <div class="td-wentry__text td-md">${md(c.body)}</div>
             </div>
         </div>`;
+
+    // The active tab lives OUT here, not inside the slot renderComments wipes on every
+    // post, save, cancel, live reload and initial load. The lookup is host-scoped, so
+    // two open item tiles cannot cross-toggle each other's tabs.
+    let recordTab = 'comments';
+    const showTab = (name) => {
+        recordTab = name === 'history' ? 'history' : 'comments';
+        host.querySelectorAll('.td-tab').forEach((b) => {
+            const on = b.dataset.tab === recordTab;
+            b.classList.toggle('td-tab--on', on);
+            b.setAttribute('aria-selected', String(on));
+        });
+        const c = $('[data-slot="comments"]'), h = $('[data-slot="history"]'), n = $('[data-slot="tabnote"]');
+        if (c) c.hidden = recordTab !== 'comments';
+        if (h) h.hidden = recordTab !== 'history';
+        if (n) n.textContent = recordTab === 'comments' ? `— posted as ${HUMAN_AUTHOR}` : '— newest first';
+    };
+    // A delegated listener on `host` needs no removal — `host` is the shell's content
+    // slot, discarded wholesale on the next mount.
+    host.addEventListener('click', (e) => {
+        const b = e.target.closest('[data-tab]');
+        if (b) showTab(b.dataset.tab);
+    });
+    // History rides on the item object from fetchItem / patchItem / postItemComment /
+    // duplicateItem, so painting this pane costs no request.
+    const renderHistoryPane = (record) => {
+        const el = $('[data-slot="history"]');
+        if (el) renderHistory(el, record);
+    };
 
     const renderComments = () => {
         const el = $('[data-slot="comments"]');
@@ -1076,7 +1239,7 @@ function mountItem(host, props, ctx) {
     /* ── the write path ─────────────────────────────────────────── */
 
     /** One place where a fresh record becomes the rendered page, so no caller
-     *  has to remember which six sections a write invalidates. */
+     *  has to remember which sections a write invalidates. */
     const apply = (fresh) => {
         item = fresh;
         dueTouched = false;
@@ -1089,8 +1252,12 @@ function mountItem(host, props, ctx) {
         renderRefinement();
         renderAcceptance();
         renderChildren();
+        renderLinks();
         renderDesc();
         renderComments();
+        renderHistoryPane(item);
+        // Last, so the History tab stays open across a comment post or a save.
+        showTab(recordTab);
         setDirty(false);
     };
 
@@ -1107,13 +1274,16 @@ function mountItem(host, props, ctx) {
                 title: fval('title'),
                 type: fval('type'),
                 assignee: fval('assignee'),
-                reporter: fval('reporter'),
                 // Untouched means "leave it as it was" — which for an inherited
                 // date means keep inheriting, not adopt the value on screen.
                 due: dueTouched ? fval('due') : (item.due || ''),
                 subsystem: fval('subsystem') || 'unsorted',
                 labels: fval('labels') ? fval('labels').split(',').map((s) => s.trim()).filter(Boolean) : [],
             };
+            // Sent only when it CHANGED, as on the ticket page. An ordinary save of a
+            // record written before the field existed must not insert a `reporter:`
+            // line nobody typed.
+            if (fval('reporter') !== (item.reporter || '')) patch.reporter = fval('reporter');
             // Only send what the rendered form actually had: a row that was not
             // drawn must not reach the record, or retyping a story to a project
             // would post the parent the form never showed.
@@ -1161,10 +1331,42 @@ function mountItem(host, props, ctx) {
         } catch (err) { statusLine(`Transition failed: ${err?.message || err}`); }
     };
 
+    /* Marking a duplicate is ONE act with four consequences — a link, a dropped status,
+     * a history line, and a comment on each side — so it is one request. Four calls from
+     * here would leave an item linked but open, or dropped with nothing saying why, every
+     * time one of them failed. An item DROPS rather than closes: `done` would claim the
+     * work was finished, and the backlog ladder has no `closed`. No confirmation dialog:
+     * the picker IS the confirmation, and a status is one click back. */
+    const markDuplicate = async () => {
+        const picked = await openRecordPicker({
+            title: `What is ${itemRef(item)} a duplicate of?`,
+            stores: storesAvailable(),
+            exclude: itemRefOf(item),
+        });
+        if (!picked?.target) return;     // cancelled: say nothing, change nothing
+        if (!host.isConnected) return;   // the tile closed while the picker was open
+        try {
+            const res = await duplicateItem(item.id, {
+                target: formatRef(picked.target, 'backlog'), actor: HUMAN_AUTHOR });
+            apply(res.item);
+            await broadcast();
+            live.clear();
+            statusLine(res.targetNoted
+                ? `${itemRef(item)} dropped as a duplicate of ${res.target.ref}.`
+                : `${itemRef(item)} dropped as a duplicate of ${res.target.ref} — could not comment on ${res.target.ref}.`);
+        } catch (err) { statusLine(`Could not drop as a duplicate: ${err?.message || err}`); }
+    };
+
     /* ── wiring ─────────────────────────────────────────────────── */
+
+    // The link adder's two controls are [data-f] because that is how this mount finds
+    // its fields, but typing a link target is not an unsaved edit to the record — and
+    // the picker writing into the field must not arm Save either.
+    const DIRTY_SKIP = 'linktype,linktarget'.split(',');
 
     const onFieldEdit = (e) => {
         if (!e.target.matches('[data-f]:not([readonly])')) return;
+        if (DIRTY_SKIP.includes(e.target.dataset.f)) return;
         setDirty(true);
         if (e.target.matches('[data-f="due"]')) {
             dueTouched = true;
@@ -1228,6 +1430,22 @@ function mountItem(host, props, ctx) {
         const critRm = e.target.closest('[data-crit-remove]');
         if (critRm) { await criteriaOp('remove', Number(critRm.dataset.critRemove), ''); return; }
 
+        // [data-open] carries a refKey ('bugs:42'), [data-goto] a bare backlog id, and
+        // they are two attributes on purpose: a bare number is store-relative, so one
+        // name meaning both is a silent wrong-store navigation waiting to happen.
+        const open = e.target.closest('[data-open]');
+        if (open) {
+            const ref = parseKey(open.dataset.open);
+            if (!ref || !openRow(ctx.wm, ctx, ref, { ev: e }))
+                statusLine(`${ref ? displayRef(ref) : open.dataset.open} is not in the store.`);
+            return;
+        }
+        const rm = e.target.closest('[data-unlink]');
+        if (rm) {
+            await commitLinks(withoutLink(item.links, rm.dataset.unlink, 'backlog'));
+            return;
+        }
+
         const goto = e.target.closest('[data-goto]');
         if (goto) {
             const target = ITEMS.find((x) => Number(x.id) === Number(goto.dataset.goto));
@@ -1255,9 +1473,19 @@ function mountItem(host, props, ctx) {
             });
         }
         else if (act === 'attachchild') await attachChild();
+        else if (act === 'picklink') await pickLink();
+        else if (act === 'addlink') await addLink();
     };
     host.addEventListener('click', onClick);
     actionsEl?.addEventListener('click', onClick);
+
+    // [data-wfa], not [data-wf]: a `data-wf` value is a target STATUS, and these are not
+    // statuses, so they get their own attribute rather than a lookalike one.
+    const WF_ACTIONS = { duplicate: markDuplicate };
+    host.addEventListener('click', (e) => {
+        const a = e.target.closest('[data-wfa]');
+        if (a) { WF_ACTIONS[a.dataset.wfa]?.(); }
+    });
 
     // Same contract as the bug page: silent when clean, a choice when dirty.
     const live = watchRecord({
@@ -1280,6 +1508,10 @@ function mountItem(host, props, ctx) {
 
     (async () => {
         try {
+            // Inbound cross-store rows cannot be predicted from the record in hand — that
+            // is the whole point of deriving them — so the bug store is loaded once, up
+            // front, never "only if my own links happen to mention it".
+            /* MUTATION removed */
             apply(await fetchItem(id));
         } catch (err) {
             host.querySelector('.td-mask').innerHTML =

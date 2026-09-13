@@ -52,14 +52,18 @@ import { openFilterEditor } from './filter_editor.js';
 import { renderMarkdown } from './markdown.js';
 import { attachMarkdownEditor } from './md_editor.js';
 import {
-    LINK_TYPES, linkTypeDef, formatLink, outgoingLinks, incomingLinks, validateNewLink,
+    linkTypeDef, linkTypeOptions, formatLink, linkRows, validateNewLink, withoutLink,
 } from './links.js';
+import { bugRef, displayRef, formatRef, parseKey, parseRef, refKey } from './refs.js';
+import { allRows, canonRef, findRow, openRow, storesAvailable } from './records.js';
+import { renderHistory } from './history.js';
+import { openRecordPicker } from './item_picker.js';
 import { attachTagInput } from './tag_input.js';
-import { ITEMS, isClosedItem } from './backlog_data.js';
+import { ITEMS, isClosedItem, loadBacklog } from './backlog_data.js';
 import { watchRecord } from './live.js';
 import {
     esc, STAGES, TICKETS, TEAM, HUMAN_AUTHOR, AGENT_AUTHOR, assigneeOptions,
-    fetchBug, patchBug, postComment, createBug, loadData, initials, teamNames,
+    fetchBug, patchBug, postComment, createBug, duplicateBug, loadData, initials, teamNames,
     machineStatus, machineType, typeCode, typeLabelOf, humanizeStatus,
 } from './data.js';
 
@@ -523,6 +527,15 @@ const STAGE_ACTIONS = [
     [['Back to investigation', 'investigation'], ['Close', 'closed']],           // testing
     [['Reopen', 'investigation']],                                               // closed
 ];
+/** Actions that are NOT a step along the ladder. They sit after the stage
+ *  buttons and are offered wherever `when` says they make sense. A
+ *  duplicate-and-close is not a rung on the lifecycle, so it does not get a
+ *  fake entry in STAGE_ACTIONS, whose values are target statuses. */
+const WORKFLOW_ACTIONS = [
+    { id: 'duplicate', label: 'Mark as duplicate and close', icon: 'content_copy',
+      title: 'Pick the record this duplicates, link it, and close this one',
+      when: (closed) => !closed },
+];
 const STAGE_STATUS = ['Open', 'Investigation', 'Testing', 'Closed'];
 const SEV_PRI = { crash: 1, high: 2, medium: 3, low: 4 };
 
@@ -535,11 +548,22 @@ function maskSections(t, mode) {
         ${opts.map((o) => `<option ${!search && o === cur ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
     const tin = (id, val, cls = '') =>
         `<input class="ea-tin ${cls}" data-f="${id}" value="${esc(search ? '' : (val ?? ''))}">`;
-    // Status: a filter in search mode; read-only in edit/new (the lifecycle
-    // stage buttons drive it, and assignee is derived from it server-side).
+    // Status: a filter in search mode; read-only in edit/new — the lifecycle
+    // stage buttons drive it.
     const statusCtrl = search
         ? sel('status', STAGE_STATUS, t.status)
         : `<input class="ea-tin td-mono" data-f="status" value="${esc(t.status)}" readonly>`;
+    // Assignee and Reporter are both widened with the record's OWN value, because a
+    // <select> whose value is off the roster silently falls back to its first option —
+    // and under ## History that fallback is not just a wrong save, it is a permanent
+    // audit line for a decision nobody made. For the same reason neither one is
+    // preselected to HUMAN_AUTHOR: an unassigned bug stays visibly unassigned until
+    // somebody assigns it.
+    // The link target is typed OR picked, and both go in through one parser. The
+    // `<datalist id="td-linktargets">` that used to back the field is gone: its id was
+    // a hard-coded global, so two open ticket masks produced duplicate ids and `list=`
+    // resolved to whichever came first in the document; it was a snapshot of TICKETS
+    // taken at mount time; and it could not express a backlog target at all.
     return `
     <section class="td-group">
         <div class="td-group__title">Bug Record</div>
@@ -554,7 +578,8 @@ function maskSections(t, mode) {
             ${field('Type', sel('type', ['Bug', 'Regression', 'Chore'], typeLabelOf(t.type)), true)}
             ${field('Severity', sel('severity', ['crash', 'high', 'medium', 'low'], t.severity || 'medium'), true)}
             ${field('Subsystem', tin('subsystem', t.subsystem))}
-            ${mode === 'search' ? '' : field('Assignee', `<div class="td-assignee">${sel('assignee', assigneeOptions(), t.assignee || HUMAN_AUTHOR)}<button type="button" class="ea-btn td-reassign" data-a="reassign" title="Reassign this bug">${icon('person_search')}</button></div>`)}
+            ${mode === 'search' ? '' : field('Assignee', `<div class="td-assignee">${sel('assignee', assigneeOptions(true, t.assignee), t.assignee || '')}<button type="button" class="ea-btn td-reassign" data-a="reassign" title="Reassign this bug">${icon('person_search')}</button></div>`)}
+            ${mode === 'edit' ? field('Reporter', `<div class="td-assignee">${sel('reporter', assigneeOptions(true, t.reporter), t.reporter || '')}<button type="button" class="ea-btn td-reassign" data-a="setreporter" title="Change who this bug goes back to">${icon('person_edit')}</button></div>`) : ''}
             <div class="td-field td-span2"><label>Labels</label>${tin('labels', (t.labels || []).join(', '))}</div>
             ${mode === 'edit' ? field('Created', `<input class="ea-tin td-mono" value="${esc(t.created || '—')}" readonly>`) : ''}
             ${mode === 'edit' ? field('Updated', `<input class="ea-tin td-mono" data-f="updated" value="${esc(t.sla || '—')}" readonly>`) : ''}
@@ -566,15 +591,10 @@ function maskSections(t, mode) {
         <div class="td-group__body">
             <div data-slot="links"><span class="td-dim">Loading…</span></div>
             <div class="td-linkadd">
-                <select class="ea-tin td-linkadd__type" data-f="linktype">
-                    ${LINK_TYPES.map((d) => `<option value="${esc(d.type)}">${esc(d.label)}</option>`).join('')}
-                </select>
+                <select class="ea-tin td-linkadd__type" data-f="linktype">${linkTypeOptions()}</select>
                 <input class="ea-tin td-mono td-linkadd__target" data-f="linktarget"
-                       list="td-linktargets" placeholder="#id or title…">
-                <datalist id="td-linktargets">
-                    ${TICKETS.filter((x) => x.bugId && x.bugId !== t.bugId)
-                        .map((x) => `<option value="#${x.bugId}">${esc(x.summary || '')}</option>`).join('')}
-                </datalist>
+                       placeholder="#42, STORY-7, or search…">
+                <button class="ea-btn" data-a="picklink" title="Find a record">${icon('search')}</button>
                 <button class="ea-btn" data-a="addlink">${icon('add_link')} Link</button>
             </div>
         </div>
@@ -625,8 +645,17 @@ function mountTicket(host, props, ctx) {
         <div class="td-mask">${maskSections(t, mode)}
             ${mode === 'edit' ? `
             <section class="td-group">
-                <div class="td-group__title">Comments <span class="td-dim">— posted as ${esc(HUMAN_AUTHOR)}</span></div>
-                <div class="td-group__body" data-slot="comments"></div>
+                <div class="td-group__title td-group__title--tabs">
+                    <span class="td-tabs" role="tablist">
+                        <button type="button" class="td-tab td-tab--on" role="tab" aria-selected="true"
+                                data-tab="comments">Comments</button>
+                        <button type="button" class="td-tab" role="tab" aria-selected="false"
+                                data-tab="history">History</button>
+                    </span>
+                    <span class="td-dim" data-slot="tabnote">— posted as ${esc(HUMAN_AUTHOR)}</span>
+                </div>
+                <div class="td-group__body" data-slot="comments" role="tabpanel"></div>
+                <div class="td-group__body td-group__body--flush" data-slot="history" role="tabpanel" hidden></div>
             </section>` : ''}
             <div data-slot="results"></div>
         </div>
@@ -667,6 +696,19 @@ function mountTicket(host, props, ctx) {
         const el = host.querySelector(`[data-f="${id}"]`);
         if (!el) return;
         el.value = val;
+        // A <select> silently becomes "" when handed a value it has no option for,
+        // and the option lists were built once, at mount. So a record that changes
+        // hands under the page — the agent handing a bug back to its reporter, which
+        // is the whole point of the reporter field — reloads with an assignee the
+        // list has never seen, the control reads "Unassigned", and the next ordinary
+        // save writes that blank back as a real reassignment plus a history line
+        // nobody asked for. Widening the list here covers every select at once.
+        if (el.tagName === 'SELECT' && val && el.value !== val) {
+            const opt = document.createElement('option');
+            opt.value = opt.textContent = val;
+            el.appendChild(opt);
+            el.value = val;
+        }
         // Labels render as pills over a hidden carrier input, so writing the
         // carrier is only half the update — repaint the pills too.
         if (id === 'labels') tagInput?.setTags(String(val || '').split(','));
@@ -678,47 +720,65 @@ function mountTicket(host, props, ctx) {
         if (a) a.disabled = !on;
         if (c) c.disabled = !on;
     };
-    host.addEventListener('input', (e) => { if (e.target.matches('[data-f]')) setDirty(true); });
-    // Selects (status/type/severity/assignee) mark dirty on change too.
-    host.addEventListener('change', (e) => { if (e.target.matches('[data-f]')) setDirty(true); });
-    // The reassign affordance opens the assignee picker.
+    // The link adder's two controls are [data-f] because that is how this mount finds
+    // its fields, but typing a link target is not an unsaved edit to the record — and
+    // the picker writing into the field must not arm Save either.
+    const DIRTY_SKIP = 'linktype,linktarget'.split(',');
+    const dirtyish = (el) => el.matches('[data-f]') && !DIRTY_SKIP.includes(el.dataset.f);
+    host.addEventListener('input', (e) => { if (dirtyish(e.target)) setDirty(true); });
+    // Selects (status/type/severity/assignee/reporter) mark dirty on change too.
+    host.addEventListener('change', (e) => { if (dirtyish(e.target)) setDirty(true); });
+    // Reassign and set-reporter are the same gesture over two fields: focus the
+    // <select> and drop its list open. A second, modal control for the same job is a
+    // second thing to teach.
     host.addEventListener('click', (e) => {
-        if (!e.target.closest('[data-a="reassign"]')) return;
-        const s = $('[data-f="assignee"]');
+        const btn = e.target.closest('[data-a="reassign"], [data-a="setreporter"]');
+        if (!btn) return;
+        const s = $(`[data-f="${btn.dataset.a === 'setreporter' ? 'reporter' : 'assignee'}"]`);
         if (s) { s.focus(); try { s.showPicker?.(); } catch { /* not supported */ } }
     });
 
     /* ── links ─────────────────────────────────────────────────────────────
        Shared by NEW and EDIT. Outgoing links are this bug's own and removable
-       here; incoming ones are stored on the OTHER bug (see links.js: only the
+       here; incoming ones are stored on the OTHER record (see links.js: only the
        authored direction is ever written) so they show read-only with a note
        saying where they live.
+
+       A target may be in EITHER store, so everything here is addressed by Ref
+       rather than by a bare bug number — a bare number is store-relative, and
+       bug 7 and STORY-0007 are two different records.
 
        In `new` mode there is no bug to patch yet, so links are staged on the
        draft and written by Create — you should be able to say "this duplicates
        #52" while filing, not only afterwards. */
-    const linkRow = (rel, id, ownToken) => {
-        const target = TICKETS.find((x) => x.bugId === id);
+    const linkRow = (rel, ref, ownToken) => {
+        const row = findRow(ref);
+        const shown = row?.label || displayRef(ref);
         return `<div class="td-linkrow">
             <span class="td-linkrow__rel">${esc(rel)}</span>
-            <button type="button" class="td-mono td-link" data-goto="${id}">#${id}</button>
-            <span class="td-linkrow__title">${esc(target?.summary || '(no such bug)')}</span>
+            <button type="button" class="td-mono td-link" data-open="${esc(refKey(ref))}">${esc(shown)}</button>
+            <span class="td-linkrow__title ${row?.closed ? 'td-dim' : ''}">${esc(row?.title
+                || (ref.store === 'backlog' ? '(no such item)' : '(no such bug)'))}</span>
             ${ownToken
                 ? `<button type="button" class="ea-btn ea-btn--small" data-unlink="${esc(ownToken)}"
                        title="Remove this link">${icon('link_off')}</button>`
-                : `<span class="td-dim" title="Stored on #${id} — remove it there">from #${id}</span>`}
+                : `<span class="td-dim" title="Stored on ${esc(shown)} — remove it there">from ${esc(shown)}</span>`}
         </div>`;
     };
 
     const renderLinks = () => {
         const el = $('[data-slot="links"]');
         if (!el) return;
-        const own = outgoingLinks(t);
         // A draft has no id, so nothing can point at it yet.
-        const inbound = mode === 'new' ? [] : incomingLinks(t, TICKETS);
-        el.innerHTML = (own.length || inbound.length)
-            ? own.map((l) => linkRow(linkTypeDef(l.type)?.label || l.type, l.id, formatLink(l.type, l.id))).join('')
-                + inbound.map((l) => linkRow(l.label, l.id, null)).join('')
+        const selfRef = t.bugId ? bugRef(t.bugId) : null;
+        const { outgoing, incoming } = linkRows(t, mode === 'new' ? null : selfRef, 'bugs', allRows());
+        el.innerHTML = (outgoing.length || incoming.length)
+            // `l.raw` is the token EXACTLY as stored, which is what [data-unlink] has to
+            // match: a legacy token does not round-trip through formatLink (`related 5`
+            // normalises to `relates-to 5`), so re-formatting it here would make Remove
+            // a silent no-op on precisely the records worth rescuing.
+            ? outgoing.map((l) => linkRow(linkTypeDef(l.type)?.label || l.type, l.target, l.raw)).join('')
+                + incoming.map((l) => linkRow(l.label, l.target, null)).join('')
             : `<div class="td-dim">${mode === 'new' ? 'No links yet — they are saved with the bug.' : 'No links.'}</div>`;
     };
 
@@ -743,30 +803,46 @@ function mountTicket(host, props, ctx) {
         }
     };
 
+    /** The cross-store picker as a way INTO the target field — the field stays typable,
+     *  so there are two ways in and still only one parser reading what comes out. */
+    const pickLink = async () => {
+        const picked = await openRecordPicker({
+            title: 'Link to…',
+            stores: storesAvailable(),
+            exclude: t.bugId ? bugRef(t.bugId) : 0,
+        });
+        if (!picked?.target || !host.isConnected) return;
+        const f = $('[data-f="linktarget"]');
+        if (f) f.value = formatRef(picked.target, 'bugs');
+    };
+
     host.addEventListener('click', async (e) => {
-        const goto = e.target.closest('[data-goto]');
-        if (goto) {
-            const id = Number(goto.dataset.goto);
-            const target = TICKETS.find((x) => x.bugId === id);
-            if (target) {
-                ctx.wm?.openInTabFromContext?.(ctx, 'ticket',
-                    { id: `#${id}`, label: ticketLabel(target) || `#${id}` });
-            }
+        // [data-open] carries a refKey, not a bare id: backlog_pages.js keeps [data-goto]
+        // for bare backlog ids, and one attribute name meaning two different things
+        // across two mounts is a silent wrong-store navigation waiting to happen.
+        const open = e.target.closest('[data-open]');
+        if (open) {
+            const ref = parseKey(open.dataset.open);
+            if (!ref || !openRow(ctx.wm, ctx, ref, { ev: e }))
+                statusLine(`${ref ? displayRef(ref) : open.dataset.open} is not in the store.`);
             return;
         }
         const rm = e.target.closest('[data-unlink]');
         if (rm) {
-            await commitLinks((t.links || []).filter((x) => String(x).trim() !== rm.dataset.unlink));
+            await commitLinks(withoutLink(t.links, rm.dataset.unlink, 'bugs'));
             return;
         }
+        if (e.target.closest('[data-a="picklink"]')) { await pickLink(); return; }
         if (e.target.closest('[data-a="addlink"]')) {
             const type = $('[data-f="linktype"]')?.value;
-            const raw = ($('[data-f="linktarget"]')?.value || '').trim();
-            const id = Number(raw.replace(/^#/, ''));
-            const problem = validateNewLink(t, type, id);
+            const target = parseRef(($('[data-f="linktarget"]')?.value || '').trim(), 'bugs');
+            const selfRef = t.bugId ? bugRef(t.bugId) : null;
+            const problem = validateNewLink(t, selfRef, type, target, 'bugs');
             if (problem) { statusLine(problem); return; }
-            if (!TICKETS.some((x) => x.bugId === id)) { statusLine(`No bug #${id}.`); return; }
-            await commitLinks([...(t.links || []), formatLink(type, id)]);
+            if (!findRow(target)) { statusLine(`${displayRef(target)} is not in the store.`); return; }
+            // canonRef re-derives the prefix from the record actually found, so typing
+            // STORY-7 at an epic stores EPIC-0007 rather than a prefix already stale.
+            await commitLinks([...(t.links || []), formatLink(type, canonRef(target), 'bugs')]);
             const field = $('[data-f="linktarget"]');
             if (field) field.value = '';
         }
@@ -971,8 +1047,17 @@ function mountTicket(host, props, ctx) {
             el.classList.toggle('td-stage--done', i < state.stage);
             el.classList.toggle('td-stage--active', i === state.stage);
         });
-        $('[data-slot="stageactions"]').innerHTML = STAGE_ACTIONS[state.stage]
-            .map(([label, target], i) => `<button class="ea-btn td-stageaction ${i === 0 ? 'ea-btn--primary td-stageaction--primary' : ''}" data-wf="${esc(target)}">${esc(label)}</button>`).join('');
+        const strip = $('[data-slot="stageactions"]');
+        if (!strip) return;
+        const closed = state.stage >= 3;
+        // The workflow buttons are written in this SAME innerHTML: the strip is
+        // repainted on every stage change, so anything appended afterwards survives
+        // until the first time the user moves the bug and then silently disappears.
+        strip.innerHTML = STAGE_ACTIONS[state.stage]
+            .map(([label, target], i) => `<button class="ea-btn td-stageaction ${i === 0 ? 'ea-btn--primary td-stageaction--primary' : ''}" data-wf="${esc(target)}">${esc(label)}</button>`).join('')
+            + WORKFLOW_ACTIONS.filter((a) => a.when(closed)).map((a) =>
+                `<button class="ea-btn td-stageaction td-stageaction--alt" data-wfa="${esc(a.id)}"
+                         title="${esc(a.title)}">${icon(a.icon)} ${esc(a.label)}</button>`).join('');
     };
 
     // Move to a stage: reflect it in the read-only Status + chevrons, mark dirty.
@@ -984,15 +1069,27 @@ function mountTicket(host, props, ctx) {
     };
 
     // assignee is EXPLICIT — sent to the bridge like any other field (the reassign picker sets it).
-    const collectPatch = () => ({
-        title: fval('summary'),
-        status: machineStatus(fval('status')),
-        type: machineType(fval('type')),
-        severity: fval('severity'),
-        subsystem: fval('subsystem') || 'unsorted',
-        assignee: fval('assignee') || HUMAN_AUTHOR,
-        labels: fval('labels') ? fval('labels').split(',').map((s) => s.trim()).filter(Boolean) : [],
-    });
+    const collectPatch = () => {
+        const patch = {
+            title: fval('summary'),
+            status: machineStatus(fval('status')),
+            type: machineType(fval('type')),
+            severity: fval('severity'),
+            subsystem: fval('subsystem') || 'unsorted',
+            // No `|| HUMAN_AUTHOR` fallback. That is only safe because the control is
+            // rendered over assigneeOptions(true, t.assignee) with no HUMAN_AUTHOR
+            // preselect: the option list always contains the record's own value, so an
+            // off-roster assignee round-trips and an unassigned bug stays unassigned.
+            // Drop the fallback without that widening and this line saves whatever
+            // option the browser happened to pick first.
+            assignee: fval('assignee'),
+            labels: fval('labels') ? fval('labels').split(',').map((s) => s.trim()).filter(Boolean) : [],
+        };
+        // Sent only when it CHANGED. An ordinary save of a record written before the
+        // field existed must not insert a `reporter:` line nobody typed.
+        if (fval('reporter') !== (t.reporter || '')) patch.reporter = fval('reporter');
+        return patch;
+    };
 
     const applyBug = (bug) => {
         setV('summary', bug.title);
@@ -1001,12 +1098,15 @@ function mountTicket(host, props, ctx) {
         setV('subsystem', bug.subsystem || '');
         setV('labels', (bug.labels || []).join(', '));
         setV('type', typeLabelOf(typeCode(bug.type)));
+        setV('assignee', bug.assignee || '');
+        setV('reporter', bug.reporter || '');
         setV('updated', bug.updated || '—');
         state.stage = bug.stage ?? 0;
         renderStages();
         Object.assign(t, {
             summary: bug.title, status: humanizeStatus(bug.status), rawStatus: bug.status,
-            assignee: bug.assignee || HUMAN_AUTHOR, severity: bug.severity, subsystem: bug.subsystem || 'unsorted',
+            assignee: bug.assignee || HUMAN_AUTHOR, reporter: bug.reporter || '',
+            severity: bug.severity, subsystem: bug.subsystem || 'unsorted',
             stage: bug.stage, sla: bug.updated || '', type: typeCode(bug.type), pri: SEV_PRI[bug.severity] || 3,
             labels: Array.isArray(bug.labels) ? bug.labels : [],
             links: Array.isArray(bug.links) ? bug.links : [],
@@ -1034,6 +1134,42 @@ function mountTicket(host, props, ctx) {
                 <div class="td-wentry__text td-md">${md(c.body)}</div>
             </div>
         </div>`;
+    // The active tab lives OUT here, not inside the slot renderComments wipes on every
+    // post, save, cancel, live reload and initial load. `$$` is host-scoped, so two open
+    // ticket tiles cannot cross-toggle each other's tabs.
+    let recordTab = 'comments';
+    const showTab = (name) => {
+        recordTab = name === 'history' ? 'history' : 'comments';
+        $$('.td-tab').forEach((b) => {
+            const on = b.dataset.tab === recordTab;
+            b.classList.toggle('td-tab--on', on);
+            b.setAttribute('aria-selected', String(on));
+        });
+        const c = $('[data-slot="comments"]'), h = $('[data-slot="history"]'), n = $('[data-slot="tabnote"]');
+        if (c) c.hidden = recordTab !== 'comments';
+        if (h) h.hidden = recordTab !== 'history';
+        if (n) n.textContent = recordTab === 'comments' ? `— posted as ${HUMAN_AUTHOR}` : '— newest first';
+    };
+    // A delegated listener on `host` needs no removal — `host` is the shell's content
+    // slot, discarded wholesale on the next mount.
+    host.addEventListener('click', (e) => {
+        const b = e.target.closest('[data-tab]');
+        if (b) showTab(b.dataset.tab);
+    });
+    // History rides on the bug object from fetchBug / patchBug / postComment /
+    // duplicateBug, so painting this pane costs no request.
+    const renderHistoryPane = (bug) => {
+        const el = $('[data-slot="history"]');
+        if (el) renderHistory(el, bug);
+    };
+
+    /** One place where a fresh record becomes the rendered page, so no caller has to
+     *  remember which panes a write invalidates. */
+    const applyRecord = (bug) => {
+        applyBug(bug); renderDesc(bug); renderComments(bug); renderHistoryPane(bug); renderLinks();
+        showTab(recordTab);
+    };
+
     let composer = null;   // the live markdown editor, torn down on re-render
     const renderComments = (bug) => {
         const el = cmtHost();
@@ -1060,7 +1196,7 @@ function mountTicket(host, props, ctx) {
             if (!t.bugId) { statusLine('Local bug — cannot comment.'); return; }
             try {
                 const updated = await postComment(t.bugId, text, HUMAN_AUTHOR);
-                applyBug(updated); renderDesc(updated); renderComments(updated); renderLinks();
+                applyRecord(updated);
                 statusLine('Comment added.');
             } catch (err) { statusLine(`Comment failed: ${err.message}`); }
         };
@@ -1075,7 +1211,7 @@ function mountTicket(host, props, ctx) {
         if (!t.bugId) { statusLine('Local bug — nothing to persist.'); return; }
         try {
             const updated = await patchBug(t.bugId, collectPatch());
-            applyBug(updated); renderDesc(updated); renderComments(updated); renderLinks();
+            applyRecord(updated);
             live.clear();
             statusLine(`Bug #${t.bugId} saved.`);
         } catch (err) { statusLine(`Save failed: ${err.message}`); }
@@ -1100,13 +1236,13 @@ function mountTicket(host, props, ctx) {
         }
         try {
             const bug = await fetchBug(t.bugId);
-            applyBug(bug); renderDesc(bug); renderComments(bug); renderLinks();
+            applyRecord(bug);
             statusLine('Reverted unsaved changes.');
         } catch (err) { statusLine(`Revert failed: ${err.message}`); }
     };
 
-    // Change stage AND persist it (the transition POSTs to the bridge,
-    // which derives the assignee from the new status).
+    // Change stage AND persist it — one POST, which the bridge also records as a
+    // `status` line in the record's ## History.
     const applyStage = async (i) => { gotoStage(i); await save(); };
 
     // Chevrons are display-only — the lifecycle is driven exclusively by the
@@ -1144,26 +1280,73 @@ function mountTicket(host, props, ctx) {
             if (!t.bugId) return;
             try {
                 const bug = await fetchBug(t.bugId);
-                applyBug(bug); renderDesc(bug); renderComments(bug); renderLinks();
+                applyRecord(bug);
             } catch (err) { statusLine(`Reload failed: ${err.message}`); }
         },
     });
 
+    /* Marking a duplicate is ONE act with four consequences — a link, a closed status,
+     * a history line, and a comment on each side — so it is one request. Four calls from
+     * here would leave a bug linked but open, or closed with nothing saying why, every
+     * time one of them failed. No confirmation dialog: the picker IS the confirmation,
+     * and Reopen is one click. */
+    const markDuplicate = async () => {
+        if (!t.bugId) { statusLine('Local bug — nothing to close.'); return; }
+        const picked = await openRecordPicker({
+            title: `What is #${t.bugId} a duplicate of?`,
+            stores: storesAvailable(),
+            exclude: bugRef(t.bugId),
+        });
+        if (!picked?.target) return;     // cancelled: say nothing, change nothing
+        if (!host.isConnected) return;   // the tile closed while the picker was open
+        try {
+            const res = await duplicateBug(t.bugId, {
+                target: formatRef(picked.target, 'bugs'), actor: HUMAN_AUTHOR });
+            applyRecord(res.bug);
+            // Our own write fires no SSE frame (the watcher suppresses the echo), so keep
+            // the shared store in step by hand, the way commitLinks already does.
+            const stored = TICKETS.find((x) => x.bugId === t.bugId);
+            if (stored) Object.assign(stored, { links: res.bug.links || [], rawStatus: res.bug.status,
+                status: humanizeStatus(res.bug.status), stage: res.bug.stage });
+            live.clear();
+            statusLine(res.targetNoted
+                ? `#${t.bugId} closed as a duplicate of ${res.target.ref}.`
+                : `#${t.bugId} closed as a duplicate of ${res.target.ref} — could not comment on ${res.target.ref}.`);
+        } catch (err) { statusLine(`Could not close as a duplicate: ${err.message}`); }
+    };
+
+    // [data-wfa], not [data-wf]: a `data-wf` value is a target STATUS, and these are not
+    // statuses, so they get their own attribute rather than a lookalike one.
+    const WF_ACTIONS = { duplicate: markDuplicate };
+    host.addEventListener('click', (e) => {
+        const a = e.target.closest('[data-wfa]');
+        if (a) { WF_ACTIONS[a.dataset.wfa]?.(); }
+    });
+
     (async () => {
+        // Inbound cross-store rows cannot be predicted from the record in hand — that is
+        // the whole point of deriving them — so the other store is loaded once, up front,
+        // never "only if my own links happen to mention it".
+        if (!ITEMS.length && storesAvailable().includes('backlog')) {
+            try { await loadBacklog(); } catch { /* backlog-less store */ }
+            if (!host.isConnected) return;   // the tile closed while we were loading
+        }
         if (!t.bugId) {
             const el = $('[data-slot="desc"]');
             if (el) el.innerHTML = '<span class="td-dim">Unsaved local bug — not persisted, no description or comments.</span>';
             renderComments({ comments: [] });
+            renderHistoryPane({ comments: [], history: [], created: '' });
             renderLinks();   // never leave the Links slot stuck on "Loading…"
             return;
         }
         try {
             const bug = await fetchBug(t.bugId);
-            applyBug(bug); renderDesc(bug); renderComments(bug); renderLinks();
+            applyRecord(bug);
         } catch (err) {
             const el = $('[data-slot="desc"]');
             if (el) el.innerHTML = `<span class="td-dim">Failed to load bug ${esc(String(t.bugId))}: ${esc(err.message)}</span>`;
             renderComments({ comments: [] });
+            renderHistoryPane({ comments: [], history: [], created: '' });
             renderLinks();   // never leave the Links slot stuck on "Loading…"
         }
     })();
@@ -1173,6 +1356,9 @@ function mountTicket(host, props, ctx) {
         destroy: () => {
             live.dispose();
             destroyWidgets();
+            // `actionsEl` is the SHELL's slot, not this mount's DOM, so it outlives the
+            // tile and the handler would otherwise pile up one per ticket opened.
+            actionsEl?.removeEventListener('click', onAction);
             try { composer?.destroy(); } catch { /* already gone */ }
         },
     };

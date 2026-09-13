@@ -6,6 +6,7 @@ status: in-progress
 parent: 1
 phase:
 assignee: agent
+reporter: norman
 points: 5
 subsystem: backlog
 labels: []
@@ -26,6 +27,12 @@ collapsible outline that has to be re-expanded on every visit.
 - [x] Depth is visible at a glance without expanding anything
 - [ ] Filtering to a view keeps the ancestors of every match as context
 - [ ] Clicking a row opens that item in a tab of the tile it came from
+
+## History
+
+- 2026-09-02 · reviewer · status: draft -> refined
+- 2026-09-08 · agent · status: refined -> in-progress
+- 2026-09-08 · agent · assignee: reviewer -> agent
 
 ## Comments
 

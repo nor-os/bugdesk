@@ -67,6 +67,31 @@
 .td-group__body { padding: var(--ea-pad-loose, 10px); }
 .td-group__body--flush { padding: 0; }
 
+/* ── Section tabs (Comments / History) ──────────────────────────────
+   Its OWN block, deliberately not .twm-bp__tabs. The global Shift+Left/Right
+   shortcut in tiling/keymap.js walks every .twm-bp__tab in the document and
+   clicks the next one; borrowing that class here would make a documented
+   bottom-panel shortcut start cycling a ticket's tabs the moment a ticket page
+   was open. Same flat look, different owner. */
+.td-group__title--tabs { display: flex; align-items: center; gap: 8px; }
+.td-tabs { display: inline-flex; }
+.td-tab {
+    background: none;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    color: var(--text-muted, #888);
+    font: inherit;
+    font-size: var(--font-size-xs, 10.5px);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 5px 0 3px;
+    margin-right: 14px;
+    cursor: pointer;
+}
+.td-tab:hover { color: var(--text-primary, #e0e0e0); }
+.td-tab--on { color: var(--text-bright, #fff); border-bottom-color: var(--text-bright, #fff); }
+
 /* ── Field grid ─────────────────────────────────────────────────── */
 .td-grid2 {
     display: grid;
@@ -453,6 +478,17 @@
     box-sizing: border-box;
 }
 
+/* ── History pane ───────────────────────────────────────────────────
+   The audit console inside a SECTION rather than a panel: .td-audit is
+   height:100% because it fills a bottom tab, and a section has no height to
+   fill — it would collapse to nothing. */
+.td-audit--inline { height: auto; max-height: 320px; padding: 8px 10px; }
+.td-audit--inline b { color: var(--text-bright, #eee); font-weight: 600; }
+.td-audit--inline .td-link { color: var(--ea-accent, #1177b3); }
+/* The "filed" row is derived from `created`/`reporter`, not stored — dimmer, so
+   a reader can tell what the file actually records. */
+.td-audit__synthetic { opacity: 0.7; }
+
 /* ════════════════════════════════════════════════════════════════════
    Round 2 — flat inputs, navigator, inspector tabs, workflow controls,
    top-bar actions, DataTable host sizing.
@@ -541,6 +577,9 @@
     font-weight: 600;
 }
 .td-stageaction--primary { box-shadow: 0 0 0 1px var(--ea-accent, #1177b3) inset; }
+/* The secondary workflow action sits beside the lifecycle buttons without
+   competing with the primary one. */
+.td-stageaction--alt { margin-left: auto; }
 
 /* Bottom action bar — pinned to the page bottom */
 .td-actionbar {

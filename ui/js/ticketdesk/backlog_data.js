@@ -8,6 +8,7 @@
  *   POST /api/backlog             -> create (id assigned server-side)
  *   POST /api/backlog/{id}        -> patch frontmatter / description / acceptance
  *   POST /api/backlog/{id}/comments
+ *   POST /api/backlog/{id}/duplicate-of -> link + drop + comment on both, one act
  *   GET  /api/backlog/meta        -> counts, and the phase vocabulary
  *
  * ITEMS is exported with `let` and REASSIGNED by loadBacklog(); ES-module live
@@ -341,8 +342,17 @@ export async function fetchItem(id) {
     if (!j.ok) throw new Error(j.error || 'not found');
     return j.item;
 }
-export async function patchItem(id, patch) {
-    return (await apiPost(`/backlog/${id}`, patch)).item;
+/** `actor` is who is making the change — the bridge writes it into ## History,
+ *  never into frontmatter. */
+export async function patchItem(id, patch, actor = HUMAN_AUTHOR) {
+    return (await apiPost(`/backlog/${id}`, { ...patch, actor })).item;
+}
+/** Drop this item as a duplicate of another record: links it, drops it, records
+ *  the transition and comments on both — one request, because it is one act.
+ *  `target` is a stored ref ("52" or "BUG-0042").
+ *  @returns {Promise<{item, target:{store,id,ref,title}, targetNoted:boolean}>} */
+export async function duplicateItem(id, { target, actor = HUMAN_AUTHOR, comment = '' } = {}) {
+    return await apiPost(`/backlog/${id}/duplicate-of`, { target, actor, comment });
 }
 export async function createItem(fields) {
     return (await apiPost('/backlog', fields)).item;

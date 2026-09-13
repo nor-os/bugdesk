@@ -7,8 +7,10 @@ description: "Use when the user asks to track, chase, or update work they have a
 
 BugDesk in **tracker mode** is a follow-up tracker: a record of work the user
 has handed to other people. It is the same markdown store the `/backlog` skill
-drives — one file per item, no database, no required API call — read and
-written directly.
+drives — one file per item, no database, no server — read and written directly.
+**Do not call the BugDesk HTTP API**: everything it would tell you comes from
+the files, and a server listening on this machine may be serving a different
+project entirely, which in a tracker means writing about the wrong people.
 
 **What makes it different is who is not in the room.** The people this work is
 assigned to mostly have no access to this checkout and often do not know it
@@ -47,9 +49,9 @@ message. That single fact drives every rule below.
    where the root is `BUGDESK_TRACKER_HOME` or the default above, and
    `<project>` is `BUGDESK_TRACKER_PROJECT` or the name of the directory the
    tracker was started from; otherwise **ask** — do not guess which project the
-   user means when several exist. If a server is reachable, don't derive any of
-   this: `GET /api/project` reports the resolved config path, and the records
-   sit beside it.
+   user means when several exist. Listing `<root>` shows you the candidates;
+   asking costs one question and writing into the wrong person's tracker costs
+   considerably more.
 
    **Why it is not in the repo**: a tracker is a record of work handed to other
    people. It is not about the code in any checkout, most of the people in it
@@ -58,26 +60,42 @@ message. That single fact drives every rule below.
 
    The files themselves are the same format as a backlog store, so `/backlog`
    can read them — but the *location* differs, and so does the workflow.
-2. **Names.** `GET /api/config` if a server is reachable — it returns
-   `humanAuthor`, `agentAuthor`, the collaborator roster, and `mode`. Otherwise
-   `BUGDESK_AGENT` (default `agent`) and `BUGDESK_HUMAN` (default `reviewer`).
+2. **The two names**, resolved the way the server does — from the files, in
+   `<config>`, which for a tracker is `BUGDESK_CONFIG` if set and otherwise
+   `<root>/<project>/config` (beside the tickets, not in any repo):
 
-   **The profile beats the environment.** `BUGDESK_HUMAN`/`BUGDESK_AGENT` only
-   seed a name when no profile exists yet; once the human has set one — through the
-   first-run screen or "change your name" — the file is the answer and the
-   variables are ignored. So `GET /api/config` is the reliable source, and a
-   `BUGDESK_HUMAN` you can see in the environment may name somebody the user has
-   since changed away from. If no server is reachable, read
-   `.bugdesk/active.json` for the current profile's slug and then
-   `.bugdesk/user-<slug>.json` for the names, before falling back to the variables.
-   Never write into `.bugdesk/` yourself — the profiles are the human's, and they
-   are git-ignored precisely so they stay that way.
-3. **Confirm the mode.** If `/api/config` reports `mode: "bugs"`, the user is
-   not running a tracker — they have a repo's bug store and backlog open. The
-   record format is the same (`project`, `due` and `reporter` are legal in every
-   mode) but the dashboard and the Project type are not in that UI, and the
-   store you are about to write to may not be the one they are looking at. Say
-   so once rather than writing records they cannot see.
+   1. **Which profile.** `BUGDESK_USER` if set, slugified (lower-cased; each run
+      of non-alphanumeric characters becomes one `-`; trimmed of `-`). Otherwise
+      the `user` field of `<config>/active.json`. No `active.json` and exactly
+      one `user-*.json`? That one — a `BUGDESK_HUMAN=...` start writes the
+      profile and deliberately leaves `active.json` alone. Several profiles and
+      no pointer: fall through to the environment, then **ask**.
+   2. **The names.** `<config>/user-<slug>.json` — `name` is the human,
+      `agentName` is the agent.
+   3. **Fallbacks, in order.** `BUGDESK_HUMAN` / `BUGDESK_AGENT`, then
+      `reviewer` / `agent`.
+
+   **The profile beats the environment**, which is why it is read first. The
+   variables only seed a name when no profile exists yet; once the human has set
+   one — through the first-run screen or "change your name" — the file is the
+   answer, and a `BUGDESK_HUMAN` you can see in your environment may name
+   somebody the user has since changed away from.
+
+   Never write into the config directory yourself — the profiles are the
+   human's. (`project.json` is the exception; see below.)
+3. **Confirm you are in a tracker, not a repo's backlog.** Nothing on disk
+   records the mode — it is a launch flag (`--tracker`, `BUGDESK_MODE`) — so
+   read the store instead. A tracker store sits **outside any checkout**, under
+   the BugDesk directory above; its roster entries have **empty `agent` fields**
+   (tracker mode derives no `<name>_agent`, because the people in it have no
+   assistant here); and `PROJ-` records only exist where somebody has been
+   offered the Project type.
+
+   A `backlog/` directory inside a git repo is the other mode, whatever the
+   records look like: the format is shared (`project`, `due` and `reporter` are
+   legal everywhere), but the dashboard and the Project type are not in that UI.
+   If that is what you are pointed at, say so once rather than writing records
+   the user cannot see.
 
 ### The collaborator roster
 
@@ -87,16 +105,16 @@ message. That single fact drives every rule below.
 { "collaborators": [ { "name": "priya", "agent": "priya_agent", "added": "2026-09-10" } ] }
 ```
 
-**Where it lives.** `<project>/config/project.json`, beside the tickets — see
-the layout above. Nothing here is committed anywhere, because a tracker is not
-in a repo; the committed/ignored split that `.bugdesk/` makes in a code project
-has nothing to divide here. `GET /api/project` reports the resolved `path`.
+**Where it lives.** `BUGDESK_PROJECT` if set, otherwise
+`<project>/config/project.json`, beside the tickets — see the layout above.
+Nothing here is committed anywhere, because a tracker is not in a repo; the
+committed/ignored split that `.bugdesk/` makes in a code project has nothing to
+divide here. A missing or malformed file is an empty roster, not an error.
 
 In a tracker this list is mostly **people, not agents** — colleagues, vendors,
-counterparts. Add anyone you assign to who is not on it: `POST
-/api/project/collaborator` with `{"name": "..."}`, or append to the file. The
-agent name is derived as `<name>_agent`; do not invent another convention.
-Matching is case-insensitive, so "Priya" and "priya" are one entry.
+counterparts, and their `agent` field stays empty. Add anyone you assign to who
+is not on it by **appending to the file**; a running UI picks it up on its next
+reload. Matching is case-insensitive, so "Priya" and "priya" are one entry.
 
 ## File format
 
@@ -142,6 +160,11 @@ updated: 2026-09-09
 
 - [ ] Sign-off from the finance controller
 
+## History
+
+- 2026-09-01 · norman_agent · assignee: (unset) -> priya
+- 2026-09-09 · norman_agent · status: draft -> in-progress
+
 ## Comments
 
 ### 2026-09-09 · norman_agent
@@ -164,18 +187,29 @@ The two fields that make this a tracker rather than a backlog:
   copy stops tracking the moment the parent moves. A sub-item dated LATER than
   its parent is allowed and is flagged — it means the parent's date is already
   wrong and nobody has moved it, which is worth a comment and usually worth
-  raising. The bridge rejects anything that is not
-  `YYYY-MM-DD` rather than storing it, because a date that cannot be parsed can
-  never be overdue — it would sit in the one blind spot the tool must not have.
+  raising. **Write nothing but `YYYY-MM-DD` or an empty value**: the UI rejects
+  anything else rather than storing it, because a date that cannot be parsed can
+  never be overdue — it would sit in the one blind spot the tool must not have,
+  and a file you wrote by hand is exactly where such a date would come from.
 - **reporter** — who is following it up, as opposed to `assignee`, who is doing
   it. Set it to the human name from step 0 for anything you file on the user's
   behalf. This is what makes "what did I assign" answerable at all; records
-  written before it existed carry none, and that is fine.
+  written before it existed carry none, and that is fine. This is the field
+  [`/bugs`](../bugs/SKILL.md) and [`/backlog`](../backlog/SKILL.md) reassign to
+  on a handback — same meaning in all three stores.
 
 Everything else behaves exactly as in `/backlog`: `type` must agree with the
 filename prefix (**the filename wins**), `parent` is a bare number, `created`
 is set once, `updated` is bumped on *any* edit, and comment headers are
 `### YYYY-MM-DD · author`.
+
+`## History` is the same too — same line grammar, the same three tracked fields
+(`status`, `assignee`, `reporter`), and the same placement strictly above
+`## Comments`; the definition lives in [`/bugs`](../bugs/SKILL.md). A tracker is
+the same record format as the other two stores, so a reader who has seen one has
+seen all three. Here it earns its keep twice over: it is the only place that
+records when a date holder changed hands, and nothing else about this store is
+under version control.
 
 ## Hierarchy
 
@@ -212,7 +246,8 @@ TASK    draft ──────────────▶ in-progress ──�
 
 **A project is never `refined` and never `review`.** It is a container: it has
 no acceptance criteria of its own to refine, and its stories are what get
-reviewed, one at a time. The bridge rejects both with the ladder in the error.
+reviewed, one at a time. The UI rejects both with the ladder in the error;
+writing the file yourself, you are the only check there is.
 
 In a tracker, `refined` matters much less than it does in a backlog — you are
 not grooming work for yourself, you are recording what somebody agreed to do.
@@ -259,9 +294,16 @@ and bump `updated`. If the assignment came with a date, set `due` too.
 
 **Intake** — see [INTAKE.md](INTAKE.md).
 
-**Comment / status / done** — as in `/backlog`: append per the header rule,
-edit the frontmatter line in place, bump `updated`. Tick acceptance criteria
-only for outcomes somebody has actually reported.
+**Comment / status / done** — as in [`/backlog`](../backlog/SKILL.md), with one
+exception: **nothing here is committed or pushed.** A tracker is not in a repo,
+and the commit-and-push discipline `/bugs` and `/backlog` describe exists to
+announce a claim to other people working the same store. There is nobody else on
+this one. Write the file and stop.
+
+Otherwise it is the same: append per the header rule, edit the frontmatter line
+in place, append a `## History` line for a `status`, `assignee` or `reporter`
+change, bump `updated`. Tick acceptance criteria only for outcomes somebody has
+actually reported.
 
 ## What NOT to do
 
@@ -280,6 +322,9 @@ only for outcomes somebody has actually reported.
   prefixes.
 - Don't put bugs in this store — a defect in the user's own code belongs in the
   bug store, with `/bugs`.
-- Don't try to put a project in `refined` or `review`. The bridge rejects both.
-- Don't restart or require the BugDesk server for any of this. It is optional
-  tooling for the human, not a dependency of the file format.
+- Don't try to put a project in `refined` or `review`. The UI rejects both.
+- **Don't call the BugDesk API, and don't ask the user to start the server.**
+  Not to read a name, not to check the roster, not to save a record. It is
+  optional tooling for the human, not a dependency of the file format — and in a
+  tracker, an answer from a server pointed at another project means writing
+  about the wrong people.
