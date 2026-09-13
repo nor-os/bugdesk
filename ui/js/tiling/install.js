@@ -297,6 +297,18 @@ export async function installTilingShell({ eventBus, logger } = {}) {
         log.warn?.('authorship write-through failed to install', { err });
     }
 
+    // Record links in descriptions and comments (`[#42](#BUG-0042)`) open the
+    // record in a tab beside the page they were clicked in. See ref_autolink.js.
+    try {
+        const [{ installRecordLinkClicks }, { statusLine }] = await Promise.all([
+            import('../ticketdesk/ref_autolink.js'),
+            import('../ticketdesk/pages.js'),
+        ]);
+        installRecordLinkClicks({ wm, onStatus: statusLine });
+    } catch (err) {
+        log.warn?.('record link clicks failed to install', { err });
+    }
+
     log.info?.('tiling shell installed');
     window.__bugdesk = { eventBus, wm, palette };
     return { wm, palette };

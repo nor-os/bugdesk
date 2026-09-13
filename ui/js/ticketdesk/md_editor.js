@@ -16,11 +16,15 @@
  *   - images by toolbar, by PASTE, and by DRAG-AND-DROP — uploaded to the
  *     bridge and inserted as `![name](/attachments/…)`
  *   - auto-growing height, so a long comment stops being a 2-line peephole
+ *   - `#42` / `#STORY-7` become record links as you type; Esc right after
+ *     undoes it (ref_autolink.js)
  *
  * Every command is undo-friendly: edits go through `document.execCommand`
  * where available, so Ctrl+Z still walks back through them rather than
  * wiping the field in one step.
  */
+
+import { attachRefAutolink } from './ref_autolink.js';
 
 const icon = (name) => `<span class="material-symbols-outlined">${name}</span>`;
 
@@ -352,7 +356,11 @@ export function attachMarkdownEditor(ta, {
         submit();
     };
 
+    const autolink = attachRefAutolink(ta);
+
     const submit = () => {
+        // A reference typed last and posted with Enter never saw a boundary.
+        autolink.flush();
         const text = ta.value.trim();
         if (!text || uploads > 0) return;
         onSubmit(text);
@@ -402,6 +410,7 @@ export function attachMarkdownEditor(ta, {
             root.removeEventListener('dragover', onDragOver);
             root.removeEventListener('dragleave', onDragLeave);
             root.removeEventListener('drop', onDrop);
+            autolink.destroy();
         },
     };
 }

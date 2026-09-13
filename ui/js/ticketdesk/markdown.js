@@ -23,6 +23,13 @@
  */
 
 import { esc } from './data.js';
+import { BUG_PREFIX, BACKLOG_PREFIXES } from './refs.js';
+
+/* `[#42](#BUG-0042)`: a link to a RECORD, written by ref_autolink.js as you
+ * type. It stays in the tile rather than opening a browser tab, and
+ * ref_autolink.js's delegated click handler opens the record. */
+const RE_RECORD_LINK = new RegExp(
+    `\\[([^\\]]+)\\]\\(#((?:${[BUG_PREFIX, ...Object.values(BACKLOG_PREFIXES)].join('|')})-\\d+)\\)`, 'gi');
 
 /* ── inline ─────────────────────────────────────────────────────── */
 
@@ -139,6 +146,9 @@ function inline(text) {
             (_m, alt, src, title) => park(
                 `<img class="td-md__img" src="${safeUrl(src)}" alt="${alt}"` +
                 `${title ? ` title="${title}"` : ''} loading="lazy">`))
+        .replace(RE_RECORD_LINK, (_m, label, target) => park(
+            `<a href="#${target.toUpperCase()}" class="td-reflink" data-ref="${target.toUpperCase()}"`
+            + ` title="Open ${target.toUpperCase()}">${label}</a>`))
         .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g,
             (_m, label, href) => park(
                 `<a href="${safeUrl(href)}" target="_blank" rel="noopener noreferrer">${label}</a>`))

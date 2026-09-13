@@ -1024,27 +1024,44 @@ app.MapGet("/api/search", (string? q, int? limit) =>
     var take = Math.Clamp(limit ?? 40, 1, 200);
     var hits = new List<SearchHit>();
 
+    // "#42" is bug 42 and "#STORY-0007" is that item: ONE record, not every
+    // record whose text happens to contain the digits. A bare number means a
+    // bug here whichever page you search from, because that is how a bug is
+    // named everywhere in the UI. Anything after "#" that is not a reference
+    // ("#todo") is searched as ordinary text.
+    var trimmed = (q ?? "").Trim();
+    var exact = trimmed.StartsWith('#') ? Refs.Parse(trimmed[1..], "bugs") : default;
+
+    void Consider(SearchDoc doc)
+    {
+        if (exact.Ok)
+        {
+            if (doc.Store == exact.Store && doc.Id == exact.Id)
+                hits.Add(new SearchHit(doc, 0, "reference", Snippet(doc.Title, doc.Ref)));
+            return;
+        }
+        if (Match(doc, terms) is { } hit) hits.Add(hit);
+    }
+
     foreach (var bug in LoadAll(bugsDir))
     {
-        var doc = new SearchDoc(
+        Consider(new SearchDoc(
             Store: "bugs", Id: bug.Id, Ref: $"BUG-{bug.Id:D4}", Type: bug.Type,
             Title: bug.Title, Status: bug.Status, Assignee: bug.Assignee, Updated: bug.Updated,
             Description: bug.Description,
             Extra: string.Join(' ', bug.Labels.Concat(new[] { bug.Subsystem, bug.Severity })),
-            Comments: bug.Comments);
-        if (Match(doc, terms) is { } hit) hits.Add(hit);
+            Comments: bug.Comments));
     }
 
     var all = LoadBacklog(backlogDir);
     foreach (var item in all)
     {
-        var doc = new SearchDoc(
+        Consider(new SearchDoc(
             Store: "backlog", Id: item.Id, Ref: $"{BacklogItem.Prefixes.GetValueOrDefault(item.Type, "TASK")}-{item.Id:D4}",
             Type: item.Type, Title: item.Title, Status: item.Status, Assignee: item.Assignee,
             Updated: item.Updated, Description: item.Description,
             Extra: string.Join(' ', item.Labels.Concat(new[] { item.Subsystem, item.Phase, item.Points, item.Acceptance })),
-            Comments: item.Comments);
-        if (Match(doc, terms) is { } hit) hits.Add(hit);
+            Comments: item.Comments));
     }
 
     // Best field first, then most recently touched — what you were working on

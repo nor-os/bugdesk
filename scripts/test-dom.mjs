@@ -2069,5 +2069,126 @@ await t('typing a link target is not an unsaved edit to the record', async () =>
     m.done();
 });
 
+/* ── #references become record links while typing ──────────────────── */
+
+console.log('\nRecord references while typing');
+
+{
+    const realFetchRefs = globalThis.fetch;
+    put('fetch', async (url) => {
+        const path = String(url);
+        if (path.endsWith('/api/bugs')) return { ok: true, json: async () => ({ ok: true, bugs: [bug42()] }) };
+        if (path.endsWith('/api/meta')) return { ok: true, json: async () => ({ ok: true, byAssignee: {} }) };
+        if (path.endsWith('/api/backlog')) return { ok: true, json: async () => ({ ok: true, items: FIXTURE }) };
+        if (path.endsWith('/api/backlog/meta')) return { ok: true, json: async () => ({ ok: true, phases: [] }) };
+        return { ok: true, json: async () => ({ ok: true, settings: {}, filters: [] }) };
+    });
+    const refBugs = await import(join(UI, 'ticketdesk', 'data.js'));
+    await refBugs.loadData();
+    await backlogData.loadBacklog();
+    const auto = await import(join(UI, 'ticketdesk', 'ref_autolink.js'));
+    const { renderMarkdown: md } = await import(join(UI, 'ticketdesk', 'markdown.js'));
+
+    /** A textarea with the autolink on, and a way to type into it. */
+    const editor = () => {
+        const ta = document.createElement('textarea');
+        document.body.appendChild(ta);
+        const handle = auto.attachRefAutolink(ta);
+        ta.focus();
+        const type = (text) => {
+            for (const ch of text) {
+                const at = ta.selectionStart;
+                ta.value = ta.value.slice(0, at) + ch + ta.value.slice(ta.selectionEnd);
+                ta.setSelectionRange(at + 1, at + 1);
+                ta.dispatchEvent(new dom.window.InputEvent('input',
+                    { bubbles: true, inputType: ch === '\n' ? 'insertLineBreak' : 'insertText', data: ch }));
+            }
+        };
+        const key = (k) => window.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
+        return { ta, type, key, done: () => { handle.destroy(); ta.remove(); } };
+    };
+
+    await t('a # reference is found only where a person would mean one', () => {
+        const at = (text) => auto.refCandidate(text, text.length)?.token ?? null;
+        assert.equal(at('see #42'), '42');
+        assert.equal(at('#STORY-7'), 'STORY-7');
+        assert.equal(at('(see #42'), '42');
+        assert.equal(at('abc#42'), null, 'inside a word');
+        assert.equal(at('&#39'), null, 'an HTML entity');
+        assert.equal(at('page/#42'), null, 'a URL fragment');
+        assert.equal(at('[#42](#BUG-0042'), null, 'an existing link target');
+        assert.equal(at('`code #42'), null, 'inline code');
+        assert.equal(at('```\nfenced #42'), null, 'a fenced block');
+        assert.equal(at('#todo'), null, 'not a reference at all');
+    });
+
+    await t('#42 then a space becomes a link to bug 42', () => {
+        const e = editor();
+        e.type('see #42 ');
+        assert.equal(e.ta.value, 'see [#42](#BUG-0042) ');
+        assert.equal(e.ta.selectionStart, e.ta.value.length, 'the caret did not follow the rewrite');
+        e.done();
+    });
+
+    await t('#TASK-2 links item 2 under the prefix its record really has', () => {
+        const e = editor();
+        e.type('blocked by #TASK-2.');
+        assert.equal(e.ta.value, 'blocked by [STORY-0002](#STORY-0002).');
+        e.done();
+    });
+
+    await t('a reference to nothing is left as typed', () => {
+        const e = editor();
+        e.type('see #999 and #STORY-404 ');
+        assert.equal(e.ta.value, 'see #999 and #STORY-404 ');
+        e.done();
+    });
+
+    await t('Esc right after the conversion puts back what was typed', () => {
+        const e = editor();
+        e.type('see #42 ');
+        e.key('Escape');
+        assert.equal(e.ta.value, 'see #42 ');
+        assert.equal(e.ta.selectionStart, 'see #42 '.length);
+        e.done();
+    });
+
+    await t('Esc after typing on is an ordinary Esc, and undoes nothing', () => {
+        const e = editor();
+        e.type('see #42 now');
+        e.key('Escape');
+        assert.equal(e.ta.value, 'see [#42](#BUG-0042) now');
+        e.done();
+    });
+
+    await t('a rendered record link opens in the app, not in a browser tab', () => {
+        const html = md('see [#42](#BUG-0042) and [STORY-0002](#story-0002) and [docs](https://example.com)');
+        const box = document.createElement('div');
+        box.innerHTML = html;
+        const [bug, story, web] = box.querySelectorAll('a');
+        assert.equal(bug.className, 'td-reflink');
+        assert.equal(bug.dataset.ref, 'BUG-0042');
+        assert.equal(bug.getAttribute('target'), null);
+        assert.equal(story.dataset.ref, 'STORY-0002');
+        assert.equal(web.getAttribute('target'), '_blank', 'an ordinary link changed');
+    });
+
+    await t('clicking a record link opens that record beside the page', async () => {
+        const opened = [];
+        const wm = { navigate: (kind, props, opts) => opened.push({ kind, id: props.id, newTab: !!opts?.newTab }) };
+        const clicks = auto.installRecordLinkClicks({ wm });
+        const box = document.createElement('div');
+        box.innerHTML = md('[#42](#BUG-0042) [STORY-0002](#STORY-0002)');
+        document.body.appendChild(box);
+        for (const a of box.querySelectorAll('a')) a.click();
+        await tick();
+        assert.deepEqual(opened, [{ kind: 'ticket', id: '#42', newTab: true }, { kind: 'item', id: '2', newTab: true }]);
+        clicks.dispose();
+        box.remove();
+    });
+
+    put('fetch', realFetchRefs);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

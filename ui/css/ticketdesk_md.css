@@ -302,3 +302,14 @@
     word-break: break-word;
     overflow-wrap: anywhere;
 }
+
+/* A link to another record (`[#42](#BUG-0042)`), written as you type — see
+   ticketdesk/ref_autolink.js. Monospace like every other reference in the UI,
+   and it opens in the app rather than in a browser tab. */
+.td-md a.td-reflink {
+    font-family: var(--font-mono, ui-monospace, monospace);
+    text-decoration: none;
+    border-bottom: 1px dotted currentColor;
+    cursor: pointer;
+}
+.td-md a.td-reflink:hover { border-bottom-style: solid; }

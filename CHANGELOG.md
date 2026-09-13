@@ -7,6 +7,23 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`#` finds one record, and links it while you type.** In the Search box
+  (Ctrl+K) and on the Search page, a query starting with `#` names a single
+  record instead of searching text. `#42` is bug 42 and `#STORY-7` is that
+  story, whatever its status. Anything after `#` that is not a reference, like
+  `#todo`, is searched as text.
+
+  In descriptions and comments, a `#` reference followed by a space, a newline
+  or punctuation becomes a link if that record exists: `#42` turns into
+  `[#42](#BUG-0042)`, and `#STORY-7` into `[STORY-0007](#STORY-0007)`, with the
+  prefix taken from the record rather than from what was typed. Press Esc
+  straight after, before typing anything else, to put the text back. A
+  reference posted with Enter is linked too. The link is plain markdown, so
+  the file on disk still reads as meant. Rendered, it opens the record in a
+  tab beside the page instead of a browser tab. A bare number always means a
+  bug here; link tokens in a record's Links section keep their
+  store-relative meaning.
+
 - **A record remembers who it belongs to, and how it got there.** Two additions
   to the on-disk format and nothing else moves: a `reporter:` field beside
   `assignee:`, and a `## History` section above `## Comments`.

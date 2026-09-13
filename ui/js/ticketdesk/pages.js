@@ -925,9 +925,13 @@ function mountTicket(host, props, ctx) {
             // bare search returns — burying the handful of live ones the search
             // was for. Asking for a status explicitly still wins: somebody who
             // typed "closed" into the Status field means it.
-            const closedWanted = host.querySelector('[data-f="includeClosed"]')?.checked
+            // "#42" is bug 42 and "#STORY-0007" is that item: one record, found
+            // whatever its status, the same rule the Search box (Ctrl+K) applies.
+            const exact = text.startsWith('#') ? parseRef(text.slice(1), 'bugs') : null;
+            const closedWanted = !!exact || host.querySelector('[data-f="includeClosed"]')?.checked
                 || (status && status !== '(any)' && status === 'closed');
             const bugs = TICKETS.filter((tk) => {
+                if (exact) return exact.store === 'bugs' && Number(tk.bugId) === exact.id;
                 if (!closedWanted && tk.rawStatus === 'closed') return false;
                 if (text && !tk.summary.toLowerCase().includes(text)) return false;
                 if (subsystem && !String(tk.subsystem || '').toLowerCase().includes(subsystem)) return false;
@@ -943,7 +947,8 @@ function mountTicket(host, props, ctx) {
             // (status, type) are ignored for backlog rows rather than excluding
             // them: an unset field means "don't care", not "bugs only".
             const wantsBugFields = (status && status !== '(any)') || (type && type !== '(any)');
-            const items = wantsBugFields ? [] : ITEMS.filter((i) => {
+            const items = wantsBugFields && !exact ? [] : ITEMS.filter((i) => {
+                if (exact) return exact.store === 'backlog' && Number(i.id) === exact.id;
                 if (!closedWanted && isClosedItem(i)) return false;
                 if (text && !String(i.title || '').toLowerCase().includes(text)) return false;
                 if (subsystem && !String(i.subsystem || '').toLowerCase().includes(subsystem)) return false;

@@ -135,7 +135,7 @@ export function createCommandPalette({ wm } = {}) {
         if (!rows.length) {
             list.innerHTML = query
                 ? `<div class="twm-cmdpal__empty">Nothing matches "${_esc(query)}".</div>`
-                : '<div class="twm-cmdpal__empty">Type to search titles, descriptions and comments.</div>';
+                : '<div class="twm-cmdpal__empty">Type to search titles, descriptions and comments. Start with # for one record: #42 is bug 42, #STORY-7 that story.</div>';
             setStatus('');
             return;
         }
@@ -199,7 +199,7 @@ function _markup() {
             <div class="twm-cmdpal__inputrow">
                 <span class="material-symbols-outlined twm-cmdpal__glyph">search</span>
                 <input type="text" class="twm-cmdpal__input" autocomplete="off"
-                       placeholder="Search everything - titles, descriptions, comments" />
+                       placeholder="Search everything - or #42, #STORY-7 for one record" />
             </div>
             <div class="twm-cmdpal__list" data-role="list" role="listbox"></div>
             <div class="twm-cmdpal__footer">
