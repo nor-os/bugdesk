@@ -296,7 +296,7 @@ app.MapPost("/api/bugs/{id:int}", async (int id, HttpRequest req) =>
     }
 
     text = RecordHistory.Append(text, actor, changes);
-    text = Md.SetFrontmatter(text, "updated", Md.Today());
+    text = Md.SetFrontmatter(text, "updated", Md.Now());
     await WriteRecord(path, text);
     return Results.Json(new { ok = true, bug = LoadOne(bugsDir, id) }, json);
 });
@@ -460,7 +460,7 @@ app.MapPost("/api/bugs", async (HttpRequest req) =>
     sb.Append($"labels: [{labels}]\n");
     sb.Append($"links: [{links}]\n");
     sb.Append($"created: {Md.Today()}\n");
-    sb.Append($"updated: {Md.Today()}\n");
+    sb.Append($"updated: {Md.Now()}\n");
     sb.Append("---\n\n## Description\n\n");
     sb.Append(string.IsNullOrWhiteSpace(description) ? "_(no description provided)_" : description);
     sb.Append('\n');
@@ -582,7 +582,7 @@ app.MapPost("/api/backlog", async (HttpRequest req) =>
         Labels = GetList("labels"),
         Links = GetList("links"),
         Created = Md.Today(),
-        Updated = Md.Today(),
+        Updated = Md.Now(),
         Description = Get("description"),
         Acceptance = Get("acceptance"),
     };
@@ -740,7 +740,7 @@ app.MapPost("/api/backlog/{id:int}", async (int id, HttpRequest req) =>
     // Before the retype branch below, so the same `text` is what gets written to
     // whichever path the record ends up at.
     text = RecordHistory.Append(text, actor, changes);
-    text = Md.SetFrontmatter(text, "updated", Md.Today());
+    text = Md.SetFrontmatter(text, "updated", Md.Now());
 
     if (retype is not null && retype != item.Type)
     {
@@ -794,7 +794,7 @@ app.MapPost("/api/backlog/{id:int}/criteria", async (int id, HttpRequest req) =>
     if (next is null)
         return Results.Json(new { ok = false, error = $"no criterion at position {index}" }, json, statusCode: 400);
 
-    await WriteRecord(path, Md.SetFrontmatter(next, "updated", Md.Today()));
+    await WriteRecord(path, Md.SetFrontmatter(next, "updated", Md.Now()));
 
     var reloaded = LoadBacklog(backlogDir);
     return Results.Json(new { ok = true, item = FullItem(reloaded, reloaded.First(i => i.Id == id)) }, json);
@@ -858,7 +858,7 @@ app.MapDelete("/api/backlog/{id:int}", async (int id, HttpRequest req) =>
             var path = Path.Combine(backlogDir, child.FileName);
             var text = Md.SetFrontmatter(await File.ReadAllTextAsync(path), "parent",
                 item.Parent > 0 ? item.Parent.ToString() : "");
-            await WriteRecord(path, Md.SetFrontmatter(text, "updated", Md.Today()));
+            await WriteRecord(path, Md.SetFrontmatter(text, "updated", Md.Now()));
             promoted.Add(child.Id);
         }
     }

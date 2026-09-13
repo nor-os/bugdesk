@@ -177,7 +177,7 @@ subsystem: auth
 labels: [security]
 links: [blocked-by STORY-9, relates-to BUG-0042]
 created: 2026-09-02
-updated: 2026-09-10
+updated: 2026-09-10T16:42Z
 ---
 
 ## Description
@@ -251,8 +251,11 @@ Field notes:
   `STORY-9` still reads; write the padded form, and nothing will rewrite one you
   left.
 - **created**: set once, on file, never touched again.
-- **updated**: bump to today (`YYYY-MM-DD`) on *any* edit — frontmatter,
-  criteria, or a new comment.
+- **updated**: set to the current time in UTC to the minute (`YYYY-MM-DDTHH:MMZ`,
+  e.g. `2026-09-13T14:05Z`; `date -u +%Y-%m-%dT%H:%MZ`) on *any* edit —
+  frontmatter, criteria, or a new comment. Older records may carry a bare date;
+  that still reads, but always write the full stamp. `created`, comment headers
+  and history lines stay plain dates.
 
 ### Sections
 
@@ -423,7 +426,7 @@ sequence can continue.
 
 ### 1–2. Claim, commit, push
 
-Set `status: in-progress`, `assignee: <your agent>`, `updated:` today, and
+Set `status: in-progress`, `assignee: <your agent>`, `updated:` to now, and
 append the two `## History` lines that record those two moves. Nothing else —
 `reporter:` is not yours to touch. Commit the record on its own and push it:
 
@@ -505,7 +508,7 @@ Report `<REF> <title> — <status>, <points>, <assignee>`.
 criteria (with the met/total count), comments.
 
 **New** — scan every prefix for the current max `id`, use `max + 1`. Write the
-file per the format above with `status: draft`, `created`/`updated` today, and
+file per the format above with `status: draft`, `created` today, `updated` now, and
 a `parent` if you know it. A brand-new item is `draft` even if you happen to
 write good criteria for it immediately — promote it with the refine step, so
 the refinement checks actually run.

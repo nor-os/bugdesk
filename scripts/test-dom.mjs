@@ -1894,6 +1894,25 @@ const mountTicketPage = async (bug, {
     };
 };
 
+await t('a bug can go back to open from every later stage, and the move is saved', async () => {
+    for (const status of ['investigation', 'testing', 'closed']) {
+        const m = await mountTicketPage(bug42({ status, stage: { investigation: 1, testing: 2, closed: 3 }[status] }));
+        const back = [...m.host.querySelectorAll('[data-wf]')].find((b) => b.dataset.wf === 'open');
+        assert.ok(back, `no way back to open from ${status}`);
+        assert.equal(back.textContent.trim(), 'Back to open');
+        assert.ok(!back.classList.contains('td-stageaction--primary'), `Back to open is the primary action on ${status}`);
+        back.click();
+        await tick(); await tick(); await tick();
+        const saved = m.posts.find((p) => /\/api\/bugs\/42$/.test(p.path));
+        assert.equal(saved?.body.status, 'open', `the move from ${status} did not save status: open`);
+        m.done();
+    }
+    const fresh = await mountTicketPage(bug42({ status: 'open', stage: 0 }));
+    assert.ok(![...fresh.host.querySelectorAll('[data-wf]')].some((b) => b.dataset.wf === 'open'),
+        'an open bug offers to go back to open');
+    fresh.done();
+});
+
 await t('the History pane exists, starts hidden, and Comments does not', async () => {
     const m = await mountTicketPage(bug42());
     const h = m.host.querySelector('[data-slot="history"]');
@@ -2375,6 +2394,47 @@ console.log('\nRecord references while typing');
     });
 
     put('fetch', realFetchRefs);
+}
+
+/* ── `updated` to the minute ─────────────────────────────────────────── */
+
+console.log('\nUpdated, to the minute');
+
+{
+    const stampData = await import(join(UI, 'ticketdesk', 'data.js'));
+    const engine = await import(join(UI, 'ticketdesk', 'filter_engine.js'));
+    const { formatStamp } = stampData;
+    const local = (iso) => {
+        const d = new Date(iso);
+        const pad = (n) => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    };
+
+    await t('a UTC stamp reads as the reader\'s local time to the minute', () => {
+        assert.equal(formatStamp('2026-09-13T14:05Z'), local('2026-09-13T14:05:00Z'));
+        assert.match(formatStamp('2026-09-13T14:05Z'), /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+    });
+
+    await t('a stamp with no zone is UTC; an explicit offset is honoured', () => {
+        assert.equal(formatStamp('2026-09-13 14:05'), local('2026-09-13T14:05:00Z'));
+        assert.equal(formatStamp('2026-09-13T14:05+02:00'), local('2026-09-13T12:05:00Z'));
+        assert.equal(formatStamp('2026-09-13T14:05:59Z'), local('2026-09-13T14:05:00Z'));
+    });
+
+    await t('a date from before timestamps, or nothing, is shown as written', () => {
+        assert.equal(formatStamp('2026-07-14'), '2026-07-14');
+        assert.equal(formatStamp(''), '');
+        assert.equal(formatStamp(undefined), '');
+        assert.equal(formatStamp('soon'), 'soon');
+    });
+
+    await t('the date filters still read a timestamped Updated by its date', () => {
+        const { createFilterModel } = engine;
+        const model = createFilterModel({ fields: [{ key: 'updated', label: 'Updated', type: 'date', get: (r) => r.updated }] });
+        const rows = [{ updated: '2026-09-13 16:05' }, { updated: '2026-09-12' }, { updated: '2026-09-12 23:59' }];
+        const on12 = rows.filter(model.matcherFor({ kind: 'group', op: 'AND', children: [{ kind: 'clause', field: 'updated', op: 'is', value: '2026-09-12' }] }));
+        assert.deepEqual(on12.map((r) => r.updated), ['2026-09-12', '2026-09-12 23:59']);
+    });
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

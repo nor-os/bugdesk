@@ -416,11 +416,12 @@ Four states. `assignee` is **explicit** — set by whoever last touched the bug
 ```
 open ──▶ investigation ⇄ testing ──▶ closed
         (closed may reopen to investigation on regression)
+        (any status may go back to open)
 ```
 
 | status | stage | typical owner | meaning |
 |---|---|---|---|
-| `open` | 0 | human | first entry — **one-way out**, nothing returns here |
+| `open` | 0 | human | first entry; every later stage can go back to it |
 | `investigation` | 1 | agent | on the agent to investigate and fix |
 | `testing` | 2 | human | on the human to verify the fix |
 | `closed` | 3 | human | verified and done |

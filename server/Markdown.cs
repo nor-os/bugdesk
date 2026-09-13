@@ -20,6 +20,16 @@ static class Md
     public static string Today() => DateTime.UtcNow.ToString("yyyy-MM-dd");
 
     /// <summary>
+    /// The moment a record was last touched, to the minute, in UTC: <c>2026-09-13T14:05Z</c>.
+    /// Written to <c>updated</c> only; <c>created</c>, comment headers and history lines stay
+    /// dates. UTC so that two people in different time zones cannot make "most recently
+    /// updated" disagree with the clock, and ISO 8601 so a plain string sort is still a time
+    /// sort, including against the date-only values older records carry.
+    /// </summary>
+    public static string Now() =>
+        DateTime.UtcNow.ToString("yyyy-MM-dd'T'HH:mm'Z'", System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>
     /// "### 2026-07-27 · agent", optionally followed by a parenthetical note and/or the
     /// <c>_(imported)_</c> marker. The author stops at '(' deliberately: a header written as
     /// "· agent (fixed)" used to parse its author as the whole string "agent (fixed)", which is
@@ -348,7 +358,7 @@ static class Md
         var next = text.TrimEnd() + "\n\n";
         if (!next.Contains("## Comments")) next += "## Comments\n\n";
         next += $"### {Today()} · {author}\n\n{body.Trim()}\n";
-        return SetFrontmatter(next, "updated", Today());
+        return SetFrontmatter(next, "updated", Now());
     }
 
     /// <summary>

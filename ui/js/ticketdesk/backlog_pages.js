@@ -38,7 +38,7 @@ import { openNewItem } from './new_item.js';
 import { paintRecordCount, publishRecordCount } from './record_count.js';
 import { onFiltersChanged } from './filter_store.js';
 import { shell, statusLine } from './pages.js';
-import { esc, initials, HUMAN_AUTHOR, TICKETS, assigneeChoices, loadData, rememberAssignee } from './data.js';
+import { esc, formatStamp, initials, HUMAN_AUTHOR, TICKETS, assigneeChoices, loadData, rememberAssignee } from './data.js';
 import {
     linkTypeDef, linkTypeOptions, formatLink, linkRows, validateNewLink, withoutLink,
 } from './links.js';
@@ -764,7 +764,7 @@ function mountItem(host, props, ctx) {
             ${field('Reporter', '<select class="ea-tin" data-f="reporter"></select>')}
             <div class="td-field td-span2"><label>Labels</label>${tin('labels', (item.labels || []).join(', '))}</div>
             ${field('Created', `<input class="ea-tin td-mono" value="${esc(item.created || '—')}" readonly>`)}
-            ${field('Updated', `<input class="ea-tin td-mono" value="${esc(item.updated || '—')}" readonly>`)}`;
+            ${field('Updated', `<input class="ea-tin td-mono" value="${esc(formatStamp(item.updated) || '—')}" readonly>`)}`;
 
         try { tagInput?.destroy(); } catch { /* first render */ }
         const labelsEl = host.querySelector('[data-f="labels"]');

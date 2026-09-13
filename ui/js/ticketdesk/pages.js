@@ -63,7 +63,7 @@ import { ITEMS, isClosedItem, loadBacklog } from './backlog_data.js';
 import { watchRecord } from './live.js';
 import { paintRecordCount, publishRecordCount } from './record_count.js';
 import {
-    esc, STAGES, TICKETS, TEAM, HUMAN_AUTHOR, AGENT_AUTHOR, assigneeOptions,
+    esc, STAGES, TICKETS, TEAM, HUMAN_AUTHOR, AGENT_AUTHOR, assigneeOptions, formatStamp,
     fetchBug, patchBug, postComment, createBug, duplicateBug, loadData, initials, teamNames,
     machineStatus, machineType, typeCode, typeLabelOf, humanizeStatus,
 } from './data.js';
@@ -540,16 +540,20 @@ function mountQueues(host, props, ctx) {
 /* ── ticket mask (edit / new / search) ──────────────────────────── */
 
 /** Lifecycle stage actions. Index === state.stage (0..3). Each button
- *  carries the target status the action moves the bug to.
- *   0 open        → start investigation (one-way out of open)
- *   1 investigation → hand to testing
- *   2 testing     → back to investigation OR close
- *   3 closed      → reopen (to investigation) */
+ *  carries the target status the action moves the bug to; the first is the
+ *  primary (the usual next step).
+ *   0 open          → start investigation
+ *   1 investigation → hand to testing, or back to open
+ *   2 testing       → back to investigation, close, or back to open
+ *   3 closed        → reopen (to investigation), or back to open
+ *  "Back to open" returns a bug to not-yet-investigated, for one that was
+ *  mis-triaged or abandoned. It changes the status only; the assignee stays
+ *  whatever the mask's assignee field says. */
 const STAGE_ACTIONS = [
-    [['Start investigation', 'investigation']],                                  // open
-    [['Hand to testing', 'testing']],                                            // investigation
-    [['Back to investigation', 'investigation'], ['Close', 'closed']],           // testing
-    [['Reopen', 'investigation']],                                               // closed
+    [['Start investigation', 'investigation']],                                             // open
+    [['Hand to testing', 'testing'], ['Back to open', 'open']],                             // investigation
+    [['Back to investigation', 'investigation'], ['Close', 'closed'], ['Back to open', 'open']], // testing
+    [['Reopen', 'investigation'], ['Back to open', 'open']],                                // closed
 ];
 /** Actions that are NOT a step along the ladder. They sit after the stage
  *  buttons and are offered wherever `when` says they make sense. A
@@ -1144,14 +1148,14 @@ function mountTicket(host, props, ctx) {
         setV('type', typeLabelOf(typeCode(bug.type)));
         setV('assignee', bug.assignee || '');
         setV('reporter', bug.reporter || '');
-        setV('updated', bug.updated || '—');
+        setV('updated', formatStamp(bug.updated) || '—');
         state.stage = bug.stage ?? 0;
         renderStages();
         Object.assign(t, {
             summary: bug.title, status: humanizeStatus(bug.status), rawStatus: bug.status,
             assignee: bug.assignee || HUMAN_AUTHOR, reporter: bug.reporter || '',
             severity: bug.severity, subsystem: bug.subsystem || 'unsorted',
-            stage: bug.stage, sla: bug.updated || '', type: typeCode(bug.type), pri: SEV_PRI[bug.severity] || 3,
+            stage: bug.stage, sla: formatStamp(bug.updated), type: typeCode(bug.type), pri: SEV_PRI[bug.severity] || 3,
             labels: Array.isArray(bug.labels) ? bug.labels : [],
             links: Array.isArray(bug.links) ? bug.links : [],
             comments: (bug.comments || []).length,
@@ -1290,8 +1294,8 @@ function mountTicket(host, props, ctx) {
     const applyStage = async (i) => { gotoStage(i); await save(); };
 
     // Chevrons are display-only — the lifecycle is driven exclusively by the
-    // Action buttons below, so no invalid transition (e.g. back to open, or
-    // close from investigation) is reachable from the UI.
+    // Action buttons below, so no invalid transition (e.g. close from
+    // investigation) is reachable from the UI.
     host.addEventListener('click', (e) => {
         const wf = e.target.closest('[data-wf]');
         if (!wf) return;

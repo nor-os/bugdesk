@@ -23,7 +23,7 @@
  * bridge does it once; the client indents what it is handed.
  */
 
-import { AGENT_AUTHOR, HUMAN_AUTHOR } from './data.js';
+import { AGENT_AUTHOR, HUMAN_AUTHOR, formatStamp } from './data.js';
 import { registerRecordHierarchy } from '../tiling/kind_taxonomy.js';
 
 /* ── mode ────────────────────────────────────────────────────────────
@@ -447,7 +447,8 @@ function mapItem(raw, byId) {
         inheritsDue: !String(raw.due || '').trim() && !!String(raw.effectiveDue || '').trim(),
         dueState: dueState(raw),
         duePhrase: duePhrase(raw),
-        updated: raw.updated || '',
+        // Local time to the minute; see formatStamp.
+        updated: formatStamp(raw.updated),
     };
 }
 

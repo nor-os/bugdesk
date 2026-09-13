@@ -148,7 +148,7 @@ reporter: norman
 labels: [ui, regression]
 links: [blocks 47, implements STORY-0007]
 created: 2026-07-14
-updated: 2026-07-14
+updated: 2026-07-14T09:30Z
 ---
 
 ## Description
@@ -202,8 +202,11 @@ Field notes:
   `caused-by EPIC-0001`. `STORY-7` still reads; write the padded form, and
   nothing will rewrite one you left.
 - **created**: set once, on file, never touched again.
-- **updated**: bump to today (`YYYY-MM-DD`) on *any* edit to the file —
-  frontmatter change or new comment.
+- **updated**: set to the current time in UTC to the minute (`YYYY-MM-DDTHH:MMZ`,
+  e.g. `2026-09-13T14:05Z`; `date -u +%Y-%m-%dT%H:%MZ`) on *any* edit to the
+  file — frontmatter change or new comment. Older records may carry a bare
+  date; that still reads, but always write the full stamp. `created`, comment
+  headers and history lines stay plain dates.
 
 ### Who you sign as
 
@@ -285,10 +288,13 @@ search the whole file for one.
 ```
 open ──▶ investigation ⇄ testing ──▶ closed
         (closed may reopen to investigation on regression)
+        (any status may go back to open)
 ```
 
-`open` is entry-only — nothing ever moves back to it. `closed` is only reached
-from `testing`. How you move a bug through it is not a matter of taste — see
+`open` is where a bug starts, and where it goes back to when nobody should be
+on it yet: mis-triaged, abandoned, or reopened as something to look at fresh.
+A person does that from the UI; as an agent, only move a bug back to `open`
+when the user asks. `closed` is only reached from `testing`. How you move a bug through it is not a matter of taste — see
 the next section.
 
 ## Working on a bug — the sequence
@@ -364,7 +370,7 @@ testing queue with nothing in it to test.
 ### The steps in detail
 
 **1. Claim.** Set `status: investigation`, `assignee: <your agent>`, `updated:`
-today, and append the two `## History` lines that record those two moves.
+to now, and append the two `## History` lines that record those two moves.
 Nothing else — `reporter:` is not yours to touch. If the bug is *already*
 `investigation` and already assigned to you, you have claimed it — skip to step
 3 rather than writing a no-op commit and a history line that records nothing.
@@ -391,7 +397,7 @@ found and what you changed. Every bug, every time — see *Who you sign as*. The
 status is what puts the bug in somebody's testing queue; the comment is what
 lets them verify it without reading the diff.
 
-**5. Hand back.** Set `status: testing`, `updated:` today, and set `assignee:`
+**5. Hand back.** Set `status: testing`, `updated:` to now, and set `assignee:`
 to the bug's **`reporter`** — read out of the file, not assumed. Append the two
 `## History` lines. Only when the record has no `reporter:` line at all does the
 handback go to the human you resolved in step 0, and say so in the comment
@@ -425,7 +431,7 @@ default view excludes `closed`). Report id, title, status, severity, assignee.
 **New** — scan existing `BUG-*.md` filenames for the current max `id`, use
 `max + 1`. Write the file per the format above: `status: open`,
 `assignee: <human>`, `reporter: <the same human>` — or, if the user is relaying
-somebody else's report, that person — `created`/`updated` both today. No
+somebody else's report, that person — `created` today and `updated` now. No
 `## History` section: nothing has happened yet. Commit and push it.
 
 **Comment** — append per the rules above, signed as your agent; bump `updated`.

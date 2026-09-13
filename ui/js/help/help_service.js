@@ -230,16 +230,17 @@ comments are attributed.
 
 | status | typical owner | meaning |
 |---|---|---|
-| Open | human | first entry — **one-way out**, nothing returns here |
+| Open | human | first entry, and where a bug goes back to when nobody should be on it yet |
 | Investigation | agent | on the agent to investigate and fix |
 | Testing | human | on the human to verify the fix |
 | Closed | human | verified and done — may reopen to Investigation on regression |
 
 A bug's mask shows the stage as a chevron strip plus **Action**
 buttons for the only legal moves from that stage (from Testing, for
-example: "Back to investigation" or "Close"). There's no way to jump
-straight from Open to Closed, or back from Closed to Open — the
-buttons only ever offer what the lifecycle allows.
+example: "Back to investigation", "Close" or "Back to open"). Every
+stage after Open can go back to Open. There's no way to jump straight
+from Open to Closed — the buttons only ever offer what the lifecycle
+allows.
 
 \`assignee\` is **explicit** — set by whoever last touched the bug (the
 mask's reassign control, or the stage transition itself), never

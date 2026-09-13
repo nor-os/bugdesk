@@ -299,6 +299,28 @@ export async function postComment(id, body, author = HUMAN_AUTHOR) {
     return j.bug;
 }
 
+/**
+ * A record's `updated` value, as the reader's local time to the minute.
+ *
+ * The bridge writes `updated` in UTC (`2026-09-13T14:05Z`) so records written in
+ * different time zones sort by the real clock. On screen that reads as the
+ * reader's own time, `2026-09-13 16:05`, which still sorts as text and still
+ * starts with the date the date filters read. A stamp with no zone is taken as
+ * UTC, the store's convention. A date-only value from before timestamps, or
+ * anything unrecognised, is shown exactly as written.
+ */
+export function formatStamp(raw) {
+    const s = String(raw ?? '').trim();
+    const m = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?\s*(Z|[+-]\d{2}:?\d{2})?$/i.exec(s);
+    if (!m) return s;
+    const zone = !m[4] || m[4].toUpperCase() === 'Z' ? 'Z'
+        : m[4].includes(':') ? m[4] : `${m[4].slice(0, 3)}:${m[4].slice(3)}`;
+    const d = new Date(`${m[1]}T${m[2]}:${m[3]}:00${zone}`);
+    if (Number.isNaN(d.getTime())) return s;
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 /* ── live store (populated by loadData) ─────────────────────────── */
 
 export let TICKETS = [];
@@ -326,7 +348,7 @@ function mapBug(b) {
         // see links.js for why the inverse is derived rather than stored.
         links: Array.isArray(b.links) ? b.links : [],
         created: b.created || '',
-        sla: b.updated || '',    // no SLA concept — show `updated`
+        sla: formatStamp(b.updated),    // no SLA concept — show `updated`, in local time
         comments: b.comments || 0,
         // Fields that power the left filter rail's "needs my reply".
         lastCommentAuthor: b.lastCommentAuthor || null,

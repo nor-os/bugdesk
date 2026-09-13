@@ -151,7 +151,7 @@ subsystem: vendors
 labels: [external]
 links: []
 created: 2026-09-01
-updated: 2026-09-09
+updated: 2026-09-09T11:15Z
 ---
 
 ## Description
@@ -200,7 +200,8 @@ The two fields that make this a tracker rather than a backlog:
 
 Everything else behaves exactly as in `/backlog`: `type` must agree with the
 filename prefix (**the filename wins**), `parent` is a bare number, `created`
-is set once, `updated` is bumped on *any* edit, and comment headers are
+is set once, `updated` is set to the current UTC time to the minute
+(`YYYY-MM-DDTHH:MMZ`) on *any* edit, and comment headers are
 `### YYYY-MM-DD · author`.
 
 `## History` is the same too — same line grammar, the same three tracked fields
@@ -285,7 +286,7 @@ last said about it (the most recent comment). Do not draft the message unless
 asked; give them the facts it would be built from.
 
 **New** — scan every prefix for the max `id`, use `max + 1`. Write the file per
-the format above with `status: draft`, `created`/`updated` today, `reporter`
+the format above with `status: draft`, `created` today, `updated` now, `reporter`
 set to the human, and `parent` if you know it. Set `due` **only** if a date was
 actually given.
 

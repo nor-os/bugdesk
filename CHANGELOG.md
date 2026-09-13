@@ -7,6 +7,23 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **A bug can go back to open.** Investigation, Testing and Closed now offer
+  **Back to open** beside their usual actions, for a bug that was
+  mis-triaged or abandoned. It changes the status only, and the move is
+  recorded in the bug's History like any other. Open used to be one-way. The
+  Help page, the README and the `/bugs` skill describe the new move; the skill
+  tells agents to use it only when asked.
+
+- **Updated shows the time, to the minute.** The bridge writes `updated` in UTC
+  as `2026-09-13T14:05Z` on every edit, comment, criterion tick, new record and
+  re-parent. It used to write only the date. The queue, the backlog, search
+  and both detail pages show it in your local time, as `2026-09-13 16:05`.
+  Records keep their order across time zones, and a plain text sort is still a
+  time sort. Date filters on Updated still match by date. Older records with a
+  bare date read as before. `created`, comment headers and history lines stay
+  dates. The `/bugs`, `/backlog` and `/tracker` skills now tell agents to write
+  the same stamp.
+
 - **Filter the backlog by a cell, as in the bug queue.** Right-click a cell
   on the backlog board or flat list for **Filter by <field> "<value>"** and
   **Save as filter…**. It matches the item's stored value, not the cell text:
