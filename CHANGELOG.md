@@ -7,6 +7,18 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Columns are sized by what is in them.** Ids, dates, statuses, types,
+  people and points keep their full values, and the summary or title takes
+  the rest of the table. Before, spare room was spread evenly: on a real
+  1,100-record store the bug queue's `#167` and `BUG` columns sat in about
+  90px each while the summary was clipped in 91 rows of 100. It now gets
+  574px instead of 395px, and 51 rows are clipped. When a tile is too narrow,
+  short columns first give up only their rare longest values, then titles
+  shrink to 120px before anything else is cut further; a narrow board used to
+  crush them to 85px. Past the last floors the table scrolls sideways. The rule is FlexDesk's
+  `fitColumns`, measured per column from the rows on screen, and a column you
+  dragged keeps its width.
+
 - **`#` finds one record, and links it while you type.** In the Search box
   (Ctrl+K) and on the Search page, a query starting with `#` names a single
   record instead of searching text. `#42` is bug 42 and `#STORY-7` is that

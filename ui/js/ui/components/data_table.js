@@ -17,8 +17,16 @@
  */
 
 import { createRafResizeObserver } from '../utils/raf_resize_observer.js';
+import { fitColumns } from '@flexdesk/widgets';
 
 const DEFAULT_PAGE_SIZE = 100;
+
+/** The value `q` of the way up a list of numbers, or null for an empty list. */
+function _percentile(values, q) {
+    if (!values?.length) return null;
+    const sorted = [...values].sort((a, b) => a - b);
+    return sorted[Math.min(sorted.length - 1, Math.floor(q * (sorted.length - 1)))];
+}
 
 /**
  * The two built-in right-click items, as frozen module-level singletons.
@@ -1721,34 +1729,39 @@ export class DataTable {
         // eslint-disable-next-line no-unused-expressions
         bodyTable.offsetWidth;
 
-        // Natural width per column = the wider of its header label and its
-        // body content. `max-content` already spans every rendered body
-        // row, so the body cell of the first row reports the whole column.
+        // Per column, in this one max-content layout: the widest cell
+        // (`natural`, which max-content reports on the first row for the whole
+        // column), the width 95 cells in 100 fit (`typical`), and the header
+        // label. `fitColumns` (FlexDesk) turns those into widths; see there for
+        // why short columns and free text are sized differently.
         const labelRow = headerTable.querySelector('thead > tr');
         const cols = bodyCells.length;
-        const natural = new Array(cols);
+        const extents = this._cellExtents(bodyTable, cols);
+        const measures = new Array(cols);
         for (let i = 0; i < cols; i++) {
-            const body = bodyCells[i].getBoundingClientRect().width;
-            const head = labelRow && labelRow.children[i]
+            const natural = bodyCells[i].getBoundingClientRect().width;
+            const header = labelRow && labelRow.children[i]
                 ? labelRow.children[i].getBoundingClientRect().width
                 : 0;
-            natural[i] = Math.max(body, head);
+            const pinned = this._colWidths[i];
+            measures[i] = {
+                natural,
+                // No extents at all means nothing could be measured (no layout
+                // engine): claim no outliers rather than a width of zero.
+                typical: extents[i].some((w) => w > 0)
+                    ? Math.min(natural, _percentile(extents[i], 0.95)) : natural,
+                header,
+                ...(pinned != null ? { pinned } : {}),
+            };
         }
 
         headerTable.classList.remove('dt-measuring');
         bodyTable.classList.remove('dt-measuring');
 
-        // ── Fit pass: turn natural widths into final widths that respect
-        // the available space, favour the first column, and cap runaways.
-        // User-dragged columns (`_colWidths`) are honored as-is inside.
         const wrap = this._tableWrapEl;
         const headerWrap = this._headerWrapEl;
         const avail = wrap ? wrap.clientWidth : 0;
-        const firstIdx = this.config.showRowNumbers && cols > 1 ? 1 : 0;
-        const widths = this._fitColumnWidths(natural, avail, {
-            firstIdx,
-            overrides: this._colWidths,
-        });
+        const widths = fitColumns(measures, avail);
         const total = widths.reduce((a, b) => a + b, 0);
 
         // Apply measured widths to every header row at the matching
@@ -1802,110 +1815,53 @@ export class DataTable {
     }
 
     /**
-     * Convert measured natural content widths into final column widths.
+     * How wide each body cell's CONTENT is, per column, measured from the
+     * cell's left edge to the right end of its last text or icon, plus its
+     * right padding. Read during the max-content layout, where nothing is
+     * wrapped or ellipsised, so every value reports its whole width. A tree
+     * cell's indentation counts, because it is part of what has to fit.
      *
-     * Goals (the "intelligent" sizing):
-     *  - every column wants its content width (+a hair), clamped to a
-     *    sane [floor, cap]; the FIRST content column gets a more generous
-     *    cap so it shows its full value;
-     *  - user-dragged columns (`overrides`) are pinned, never grown/shrunk;
-     *  - if everything fits, grow the flexible columns evenly to fill the
-     *    width (no dead gap on the right);
-     *  - if it doesn't fit, protect the first column and water-fill-shrink
-     *    the rest (trim the widest first) until it fits; only if even the
-     *    floors overflow do we give up and let the body scroll sideways.
-     *
-     * @param {number[]} natural  measured content width per column (px)
-     * @param {number}   avail    usable width of the body wrap (px)
-     * @param {{firstIdx?:number, overrides?:Object}} [opts]
-     * @returns {number[]} final width per column (px)
+     * Text nodes and leaf elements rather than the cell's box: every cell in a
+     * column shares one box width, which is exactly the number that cannot
+     * tell a long value from a short one.
      */
-    _fitColumnWidths(natural, avail, opts = {}) {
-        const FLOOR = 40;        // matches the drag-resize minimum
-        const CAP = 360;         // general per-column ceiling
-        const FIRST_CAP = 520;   // the first column may run wider
-        const PAD = 2;           // sub-pixel safety against ellipsis
-
-        const n = natural.length;
-        const firstIdx = opts.firstIdx ?? 0;
-        const overrides = opts.overrides || {};
-
-        // Desired (pre-fit) width per column. Pinned columns take their
-        // override verbatim and sit out the grow/shrink redistribution.
-        const desired = new Array(n);
-        const pinned = new Array(n).fill(false);
-        for (let i = 0; i < n; i++) {
-            if (overrides[i] != null) {
-                desired[i] = Math.max(FLOOR, Math.round(overrides[i]));
-                pinned[i] = true;
-                continue;
-            }
-            const cap = i === firstIdx ? FIRST_CAP : CAP;
-            desired[i] = Math.min(cap, Math.max(FLOOR, Math.ceil(natural[i] + PAD)));
-        }
-
-        const widths = desired.slice();
-        const sum = widths.reduce((a, b) => a + b, 0);
-
-        // Not laid out yet (or content already exactly fits): hand back the
-        // desired widths; the caller decides fill vs horizontal scroll.
-        if (avail <= 1) return widths;
-
-        if (sum <= avail) {
-            // Grow columns to fill the remaining space so the table doesn't
-            // leave a dead gap on the right (fill invariant, behavior 5).
-            // Prefer the flexible (non-pinned) columns; if EVERY column is
-            // pinned (all user-dragged), still fill by handing the slack to
-            // the last column so a gap can never persist.
-            const flex = [];
-            for (let i = 0; i < n; i++) if (!pinned[i]) flex.push(i);
-            const slack = avail - sum;
-            if (slack > 0) {
-                const targets = flex.length ? flex : [n - 1];
-                const per = Math.floor(slack / targets.length);
-                for (const i of targets) widths[i] += per;
-                widths[targets[targets.length - 1]] += slack - per * targets.length;
-            }
-            return widths;
-        }
-
-        // Overflow: protect the first column + pinned columns, water-fill
-        // the rest down toward the floor.
-        let protectedSum = 0;
-        const shrinkable = [];
-        for (let i = 0; i < n; i++) {
-            if (pinned[i] || i === firstIdx) protectedSum += widths[i];
-            else shrinkable.push(i);
-        }
-        const budget = avail - protectedSum;
-        if (budget < shrinkable.length * FLOOR) {
-            // Even at the floor we overflow → let the body scroll sideways.
-            for (const i of shrinkable) widths[i] = FLOOR;
-            return widths;
-        }
-        // Max-min fair allocation: the narrow columns keep their content,
-        // the widest share the remaining budget equally.
-        shrinkable.sort((a, b) => desired[a] - desired[b]);
-        let remaining = budget;
-        for (let k = 0; k < shrinkable.length; k++) {
-            const colsLeft = shrinkable.length - k;
-            const fair = Math.floor(remaining / colsLeft);
-            const i = shrinkable[k];
-            if (desired[i] <= fair) {
-                widths[i] = desired[i];
-                remaining -= desired[i];
-            } else {
-                const level = Math.max(FLOOR, fair);
-                for (let j = k; j < shrinkable.length; j++) {
-                    widths[shrinkable[j]] = level;
+    _cellExtents(bodyTable, cols) {
+        const out = Array.from({ length: cols }, () => []);
+        const rows = bodyTable.querySelectorAll('tbody > tr');
+        if (!rows.length) return out;
+        const doc = bodyTable.ownerDocument;
+        const range = doc.createRange();
+        const padRight = [];
+        for (const tr of rows) {
+            const cells = tr.children;
+            if (cells.length !== cols) continue;       // an empty-state or group row
+            for (let i = 0; i < cols; i++) {
+                const td = cells[i];
+                if (padRight[i] == null) {
+                    padRight[i] = parseFloat(doc.defaultView.getComputedStyle(td).paddingRight) || 0;
                 }
-                // Dump any rounding remainder onto the widest column.
-                const leftover = remaining - colsLeft * level;
-                if (leftover > 0) widths[shrinkable[shrinkable.length - 1]] += leftover;
-                break;
+                const left = td.getBoundingClientRect().left;
+                let right = -Infinity;
+                // 0x1 | 0x4 = NodeFilter.SHOW_ELEMENT | SHOW_TEXT; 3 = Node.TEXT_NODE.
+                const walker = doc.createTreeWalker(td, 0x1 | 0x4);
+                for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+                    if (node.nodeType === 3) {
+                        if (!node.nodeValue.trim()) continue;
+                        range.selectNodeContents(node);
+                        // Absent without a layout engine (jsdom); the column then
+                        // falls back to its natural width.
+                        const rects = typeof range.getClientRects === 'function' ? range.getClientRects() : [];
+                        for (const r of rects) if (r.width) right = Math.max(right, r.right);
+                    } else if (!node.firstElementChild && !node.textContent.trim()) {
+                        const r = node.getBoundingClientRect();
+                        if (r.width) right = Math.max(right, r.right);
+                    }
+                }
+                out[i].push(right === -Infinity ? 0 : right - left + padRight[i]);
             }
         }
-        return widths;
+        range.detach?.();
+        return out;
     }
 
     /** Set an explicit width on a table cell, clearing any CSS min/max
@@ -2022,7 +1978,7 @@ export class DataTable {
             const avail = this._tableWrapEl ? this._tableWrapEl.clientWidth : 0;
             const filled = redistributeToFill(cand, domIdx, avail);
             // Pin only the column the user is dragging; recipients are
-            // painted to fill now but left unpinned so `_fitColumnWidths`
+            // painted to fill now but left unpinned so `fitColumns`
             // can re-flow them on the next render (and keep filling then).
             filled.forEach((cw, i) => {
                 if (i === domIdx) applyCol(i, cw);
