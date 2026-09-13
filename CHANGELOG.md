@@ -7,6 +7,29 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Lists remember your place, and every way of opening a row has a key.** In
+  the bug queue, the backlog, search results and the Tracker dashboard, the row
+  you move to with the arrow keys is remembered like the sort, filters and
+  column widths. Open a bug, come back, and the same row is highlighted and
+  Enter opens it again, even after a sort or a refresh, because it is
+  remembered by record and not by position. A click opens a row and moves
+  nothing to remember.
+
+  | Key | Opens the highlighted row |
+  |---|---|
+  | Enter, or a click | in a new tab |
+  | Ctrl/⌘ + Enter, or Ctrl/⌘ + click | without leaving the list: a background tab, or a floating window (Settings) |
+  | Alt + T | in a new tab, whatever that setting says |
+  | Alt + N | in a floating window |
+  | Alt + Shift + H / Alt + Shift + V | in a new tile beside / below |
+
+  These are the chords FlexDesk already uses for a tile's own content, so they
+  mean the same thing everywhere; with a list focused they act on the row.
+  Ctrl+Enter used to do nothing at all. Ctrl-click now defaults to a
+  background tab instead of a floating window. The Help page lists all of it.
+
+- **Double-click a column's edge to size it automatically again.**
+
 - **Columns are sized by what is in them.** Ids, dates, statuses, types,
   people and points keep their full values, and the summary or title takes
   the rest of the table. Before, spare room was spread evenly: on a real
@@ -617,6 +640,15 @@ in whichever store the panel is currently reporting on.
   in the browser, and nothing copied the profile's names into them at startup,
   so a fresh browser or a new port showed both empty while the profile named
   you. The confirmed names are copied in on every start.
+
+- **A click on a column's edge no longer resizes it.** The table froze and
+  pinned every column on mousedown, reading their widths in screen pixels and
+  writing them back as CSS pixels. With the content zoom above 100% every
+  column jumped wider on a plain click, and at any zoom a click switched
+  automatic sizing off for every column. A resize now starts once the pointer
+  moves, pins only the column being dragged, and works in one unit. Automatic
+  sizing measured in the same mixed units and oversized short columns when
+  zoomed; that is fixed too. The resizer fix is also in FlexDesk's table.
 
 - **A table keeps its sort, column filters and column widths when you leave it
   and come back.** A tile builds only its active tab, so opening a bug in a new

@@ -40,7 +40,7 @@
 
 import { mountTileBreadcrumb } from '@flexdesk/wm';
 import { activeTopNavKind, taxonomy } from '../tiling/kind_taxonomy.js';
-import { installRecordDragSource, isModifiedOpen, markDragCell, openModified } from './record_dnd.js';
+import { installRecordDragSource, markDragCell, openRecordAs } from './record_dnd.js';
 import { DataTable } from '../ui/components/data_table.js';
 import { showContextMenu } from '@flexdesk/widgets';
 import {
@@ -449,19 +449,18 @@ function mountQueues(host, props, ctx) {
             if (colIdx === 2) { td.innerHTML = `<span class="td-chip">${esc(value)}</span>`; return true; }
             return false;
         },
-        onRowClick: (rowIdx, row, ev) => {
-            // Ctrl/Cmd-click opens WITHOUT taking the queue off screen — a
-            // floating window, or a background tab, per the setting. Shift is
-            // left alone: it is the table's range-select and the one selection
-            // gesture with no other home.
-            if (isModifiedOpen(ev)) {
-                const id = row[QUEUE_ID_COL];
-                openModified(ctx.wm, 'ticket',
-                    { id, label: ticketLabel(TICKETS.find((x) => x.id === id)) || id });
-                return;
-            }
-            if (ev && ev.shiftKey) return;
-            openTicket(row[QUEUE_ID_COL], { dest: 'origin', newTab: true });
+        // The bug id is the row's identity: the keyboard highlight is
+        // remembered by it, so it survives a sort, a refresh and a return.
+        rowKey: (row) => String(row[QUEUE_ID_COL]),
+        // Click and Enter open a new tab; Ctrl/⌘ with either follows the
+        // setting; Alt+T / Alt+N / Alt+Shift+H / Alt+Shift+V pick the place.
+        // See openRecordAs in ./record_dnd.js.
+        onRowOpen: (rowIdx, row, how) => {
+            const id = row[QUEUE_ID_COL];
+            openRecordAs(ctx.wm, ctx, 'ticket', {
+                id, label: ticketLabel(TICKETS.find((x) => x.id === id)) || id,
+                filter: resolved.key || DEFAULT_FILTER,
+            }, how);
         },
     });
 
@@ -972,15 +971,19 @@ function mountTicket(host, props, ctx) {
                 .map((r) => r?.[0]).filter(Boolean);
             const byRef = new Map(matches.map((m) => [m.ref, m]));
             /** A result opens in the page its OWN store uses. */
-            const openResult = (ref, opts) => {
+            /** The page and props a result opens as: its OWN store's page. */
+            const resultTarget = (ref) => {
                 const m = byRef.get(ref);
-                if (!m) return;
-                const kind = m.store === 'backlog' ? 'item' : 'ticket';
-                const p = m.store === 'backlog'
-                    ? { id: String(m.bugId), label: `${m.ref} — ${m.summary}` }
-                    : { id: m.id, label: `${m.id} — ${m.summary}` };
-                if (ctx.wm?.navigate) ctx.wm.navigate(kind, p, { ctx, ...opts });
-                else ctx.wm?.openInTabFromContext?.(ctx, kind, p);
+                if (!m) return null;
+                return m.store === 'backlog'
+                    ? { kind: 'item', props: { id: String(m.bugId), label: `${m.ref} — ${m.summary}` } }
+                    : { kind: 'ticket', props: { id: m.id, label: `${m.id} — ${m.summary}` } };
+            };
+            const openResult = (ref, opts) => {
+                const target = resultTarget(ref);
+                if (!target) return;
+                if (ctx.wm?.navigate) ctx.wm.navigate(target.kind, target.props, { ctx, ...opts });
+                else ctx.wm?.openInTabFromContext?.(ctx, target.kind, target.props);
             };
             resultsTable = new DataTable(resultsEl.querySelector('.td-tablehost'), {
                 // The results are rebuilt on every search, so this is how a sort
@@ -1017,9 +1020,10 @@ function mountTicket(host, props, ctx) {
                     if (colIdx === 1) { td.innerHTML = `<span class="td-chip">${esc(value)}</span>`; return true; }
                     return false;
                 },
-                onRowClick: (i, row, ev) => {
-                    if (ev && (ev.ctrlKey || ev.metaKey || ev.shiftKey)) return;
-                    openResult(row[0], { dest: 'origin', newTab: true });
+                rowKey: (row) => String(row[0]),
+                onRowOpen: (i, row, how) => {
+                    const target = resultTarget(row[0]);
+                    if (target) openRecordAs(ctx.wm, ctx, target.kind, target.props, how);
                 },
             });
             const table = resultsTable;

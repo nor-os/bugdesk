@@ -842,6 +842,135 @@ await t('the setting is read at CALL time, not at module load', () =>
     // people stop trusting.
     assert.equal(dnd.modifierOpenMode(), 'window'));
 
+await t('Ctrl-click opens a background tab unless Settings says a window', () => {
+    assert.equal(settings.getSchema()['bugdesk.modifierOpen'].defaultValue, 'tab');
+});
+
+await t('one map from a list gesture to a place, shared by every list', () => {
+    const calls = [];
+    const wm = { navigate: (kind, props, opts) => calls.push({ how: null, dest: opts?.dest, newTab: !!opts?.newTab, background: !!opts?.background, leaf: opts?.ctx?.leafId }) };
+    const ctx = { leafId: 'L1' };
+    settings.setSetting('bugdesk.modifierOpen', 'tab');
+    for (const how of ['default', 'modified', 'tab', 'window', 'split-h', 'split-v']) dnd.openRecordAs(wm, ctx, 'ticket', { id: '#1' }, how);
+    settings.setSetting('bugdesk.modifierOpen', 'window');
+    assert.deepEqual(calls.map(({ dest, newTab, background, leaf }) => [dest, newTab, background, leaf]), [
+        ['origin', true, false, 'L1'],     // click / Enter: a new tab, in front
+        ['main', true, true, undefined],   // Ctrl: a background tab (the setting)
+        ['origin', true, false, 'L1'],     // Alt+T: a new tab, whatever the setting
+        ['window', false, false, undefined],
+        ['split-h', false, false, 'L1'],
+        ['split-v', false, false, 'L1'],
+    ]);
+});
+
+await t('the keys that open a row, for lists that are not a table', () => {
+    const k = (key, mods = {}) => dnd.openHowForKey({ key, ...mods }, ['Enter', ' ']);
+    assert.deepEqual(
+        [k('Enter'), k(' '), k('Enter', { ctrlKey: true }), k('Enter', { metaKey: true }), k('t', { altKey: true }),
+         k('n', { altKey: true }), k('H', { altKey: true, shiftKey: true }), k('V', { altKey: true, shiftKey: true }),
+         k('Enter', { shiftKey: true }), k('t'), k('h', { altKey: true })],
+        ['default', 'default', 'modified', 'modified', 'tab', 'window', 'split-h', 'split-v', null, null, null]);
+});
+
+/* ── a table remembers the keyboard highlight, and opens rows by key ── */
+
+{
+    const { DataTable: KeyTable } = await import(join(UI, 'ui', 'components', 'data_table.js'));
+    const rows = [['#1', 'b'], ['#2', 'c'], ['#3', 'a']];
+    const saved = new Map();
+    const stateStore = { ready: async () => {}, get: (key) => saved.get(key), set: (key, v) => saved.set(key, v) };
+    const mountKeys = (opts = {}) => {
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        const opened = [];
+        const table = new KeyTable(host, {
+            headers: ['Id', 'Summary'], rows: opts.rows || rows, sortable: true, stateStore, persistKey: 'keys',
+            rowKey: (row) => row[0],
+            onRowOpen: (idx, row, how) => opened.push([row[0], how]),
+        });
+        table.render();
+        const press = (key, mods = {}) => {
+            const ev = new dom.window.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...mods });
+            table._tableEl.dispatchEvent(ev);
+            return ev;
+        };
+        const highlighted = () => [...host.querySelectorAll('tbody tr.selected')].map((tr) => tr.children[0].textContent);
+        return { host, table, opened, press, highlighted, done: () => { table.dispose(); host.remove(); } };
+    };
+
+    await t('the row you moved to with the keyboard is highlighted again when you come back', () => {
+        saved.clear();
+        const a = mountKeys();
+        a.press('ArrowDown'); a.press('ArrowDown');
+        assert.deepEqual(a.highlighted(), ['#2']);
+        a.done();
+        const b = mountKeys();
+        assert.deepEqual(b.highlighted(), ['#2'], 'the highlight was forgotten');
+        b.press('Enter');
+        assert.deepEqual(b.opened, [['#2', 'default']], 'Enter did not open the remembered row');
+        b.done();
+    });
+
+    await t('it follows the RECORD, not the position, through a sort and a refresh', () => {
+        saved.clear();
+        const a = mountKeys();
+        a.press('ArrowDown');                       // #1
+        a.table.sortBy(1);                          // by summary: #3 a, #1 b, #2 c
+        a.table.setData({ rows: [['#9', 'z'], ...rows] });
+        assert.deepEqual(a.highlighted(), ['#1']);
+        a.press('Enter');
+        assert.deepEqual(a.opened, [['#1', 'default']]);
+        a.done();
+    });
+
+    await t('a click opens a row and leaves the remembered highlight alone', () => {
+        saved.clear();
+        const a = mountKeys();
+        a.press('ArrowDown');                       // #1 remembered
+        a.host.querySelectorAll('tbody tr')[2].dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+        assert.deepEqual(a.opened, [['#3', 'default']]);
+        a.done();
+        const b = mountKeys();
+        assert.deepEqual(b.highlighted(), ['#1'], 'a click moved what is remembered');
+        b.done();
+    });
+
+    await t('Ctrl+Enter is Ctrl-click, and the Alt chords open the row, not the tile', () => {
+        saved.clear();
+        const a = mountKeys();
+        a.press('ArrowDown');
+        let reachedShell = 0;
+        const shell = () => { reachedShell++; };
+        document.addEventListener('keydown', shell);
+        a.press('Enter', { ctrlKey: true });
+        a.host.querySelectorAll('tbody tr')[0].dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, ctrlKey: true }));
+        a.press('t', { altKey: true });
+        a.press('n', { altKey: true });
+        a.press('H', { altKey: true, shiftKey: true });
+        a.press('V', { altKey: true, shiftKey: true });
+        document.removeEventListener('keydown', shell);
+        assert.deepEqual(a.opened.map(([, how]) => how), ['modified', 'modified', 'tab', 'window', 'split-h', 'split-v']);
+        assert.equal(reachedShell, 0, 'an Alt chord also reached the shell, which would act on the tile');
+        a.done();
+    });
+
+    await t('a click on a column edge changes nothing; a double-click hands it back to auto', () => {
+        saved.clear();
+        const a = mountKeys();
+        a.table._syncHeaderWidths?.();
+        const grip = a.host.querySelector('.dt-col-resizer');
+        if (grip) {
+            grip.dispatchEvent(new dom.window.MouseEvent('mousedown', { bubbles: true, button: 0, clientX: 100 }));
+            document.dispatchEvent(new dom.window.MouseEvent('mouseup', { bubbles: true, clientX: 100 }));
+            assert.deepEqual(a.table._colWidths, {}, 'a click pinned widths');
+        }
+        a.table._colWidths[1] = 222;
+        a.table.autoSizeColumn(1);
+        assert.equal(a.table._colWidths[1], undefined, 'double-click did not unpin the column');
+        a.done();
+    });
+}
+
 await t('a cell is marked draggable while it is still DETACHED', () => {
     // THE BUG: DataTable calls renderCell(td, ...) BEFORE appending the td to
     // its <tr>, so `td.parentElement` is null at that moment. Marking the row

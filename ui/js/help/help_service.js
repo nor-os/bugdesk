@@ -343,7 +343,7 @@ which one was left out rather than silently dropping it.
         title: 'Keyboard shortcuts',
         category: 'basics',
         keywords: ['hotkeys', 'keys', 'shortcuts', 'f1', 'desktops', 'tabs', 'nav',
-                   'split', 'tile', 'window', 'pane', 'alt'],
+                   'split', 'tile', 'window', 'pane', 'alt', 'list', 'row', 'enter', 'open', 'column'],
         markdown: `# Keyboard shortcuts
 
 The workspace is a tiling window manager: every page (the queue, a
@@ -365,6 +365,26 @@ window, and move between virtual desktops.
 
 These same actions sit on each tile's chrome buttons and its
 right-click menu too.
+
+## Lists: the bug queue, the backlog, search results, the Tracker
+
+When a list has focus, the open keys act on the **highlighted row**
+instead of on the tile. A click opens a row; the highlight moves with
+the keyboard, and the list remembers it, like its sort, filters and
+column widths, when you leave and come back.
+
+| Action | Key |
+|--------|-----|
+| Move the highlight | **↑ / ↓**, **Home / End** |
+| Extend the selection | **Shift + ↑ / ↓** |
+| Open the row in a new tab | **Enter**, or a click |
+| Open the row without leaving the list (a background tab, or a floating window: see Settings) | **Ctrl/⌘ + Enter**, or **Ctrl/⌘ + click** |
+| Open the row in a new tab, whatever the setting says | **Alt + T** |
+| Open the row in a floating window | **Alt + N** |
+| Open the row in a new tile beside this one | **Alt + Shift + H** |
+| Open the row in a new tile below this one | **Alt + Shift + V** |
+| Clear the highlight | **Esc** |
+| Size a column to its content again | double-click its right edge |
 
 ## Focus & arrangement
 

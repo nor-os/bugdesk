@@ -7,7 +7,7 @@
  * `{kind, props}` that would open it.
  *
  *   DRAG a row onto any tile          → that tile displays the record
- *   CTRL/⌘-CLICK a row                → a floating window, or a background tab
+ *   CTRL/⌘-CLICK a row (or Ctrl/⌘+Enter) → a background tab, or a floating window
  *
  * WHY BOTH EXIST. Every list in BugDesk opens things by replacing something:
  * the row you clicked takes over the tile you were in, or arrives as a tab in
@@ -40,7 +40,7 @@ export const RECORD_MIME = 'application/x-bugdesk-record';
  * reload before it obeys a preference is a gesture people stop trusting.
  */
 export const modifierOpenMode = () =>
-    (getSetting('bugdesk.modifierOpen') === 'tab' ? 'tab' : 'window');
+    (getSetting('bugdesk.modifierOpen') === 'window' ? 'window' : 'tab');
 
 /** Did this click ask for the alternative opening? */
 export const isModifiedOpen = (ev) => !!(ev && (ev.ctrlKey || ev.metaKey) && !ev.shiftKey);
@@ -67,6 +67,58 @@ export function openModified(wm, kind, props) {
     } else {
         wm.navigate?.(kind, props, { dest: 'window' });
     }
+}
+
+/**
+ * Open a record the way a list gesture asks. The one mapping from a table's
+ * `onRowOpen` `how` to a navigation, shared by every list so a key means the
+ * same thing in the queue, the backlog and search results:
+ *
+ *   default   click, Enter           a new tab beside the list, in front
+ *   modified  Ctrl/⌘-click or +Enter  per the setting: a background tab or a window
+ *   tab       Alt+T                   a new tab in front, whatever the setting says
+ *   window    Alt+N                   a floating window
+ *   split-h   Alt+Shift+H             a new tile beside this one
+ *   split-v   Alt+Shift+V             a new tile below this one
+ *
+ * @param {object} wm
+ * @param {object} ctx   the list's own tile or window context
+ * @param {string} kind  'ticket' | 'item'
+ * @param {object} props
+ * @param {string} how
+ */
+export function openRecordAs(wm, ctx, kind, props, how) {
+    if (!wm?.navigate) return;
+    switch (how) {
+        case 'modified': openModified(wm, kind, props); return;
+        case 'window': wm.navigate(kind, props, { dest: 'window' }); return;
+        case 'split-h':
+        case 'split-v': wm.navigate(kind, props, { ctx, dest: how }); return;
+        case 'tab':
+        case 'default':
+        default: wm.navigate(kind, props, { ctx, dest: 'origin', newTab: true });
+    }
+}
+
+/**
+ * Which way a key opens the focused row, in the words `openRecordAs` takes, or
+ * null when the key opens nothing. The same map DataTable applies to its rows,
+ * for lists that are not a DataTable (the Tracker dashboard).
+ *
+ * @param {KeyboardEvent} e
+ * @param {string[]} [activate]  keys that open the row, Enter by default
+ */
+export function openHowForKey(e, activate = ['Enter']) {
+    const ctrl = e.ctrlKey || e.metaKey;
+    const k = String(e.key || '');
+    if (activate.includes(k) && !e.altKey && !e.shiftKey) return ctrl ? 'modified' : 'default';
+    if (!e.altKey || ctrl) return null;
+    const lower = k.toLowerCase();
+    if (!e.shiftKey && lower === 't') return 'tab';
+    if (!e.shiftKey && lower === 'n') return 'window';
+    if (e.shiftKey && lower === 'h') return 'split-h';
+    if (e.shiftKey && lower === 'v') return 'split-v';
+    return null;
 }
 
 /* ── dragging a row out ──────────────────────────────────────────── */

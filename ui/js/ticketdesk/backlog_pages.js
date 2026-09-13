@@ -31,7 +31,7 @@ import { attachTagInput } from './tag_input.js';
 import { attachSelect } from './select_field.js';
 import { watchRecord } from './live.js';
 import { attachParentPicker, childTypesFor, openItemPicker, openRecordPicker } from './item_picker.js';
-import { installRecordDragSource, isModifiedOpen, markDragCell, openModified } from './record_dnd.js';
+import { installRecordDragSource, markDragCell, openRecordAs } from './record_dnd.js';
 import { confirmDelete } from './delete_item.js';
 import { openFilterEditor } from './filter_editor.js';
 import { openNewItem } from './new_item.js';
@@ -399,18 +399,14 @@ function mountBacklogBoard(host, props, ctx) {
             }
             return false;
         },
-        onRowClick: (rowIdx, row, ev) => {
+        // The item reference is the row's identity; see the bug queue.
+        rowKey: (row) => String(row[REF_COL]),
+        onRowOpen: (rowIdx, row, how) => {
             const model = byRef.get(row[REF_COL]);
-            // Ctrl/Cmd-click opens WITHOUT taking the list off screen — a
-            // floating window, or a background tab, per the setting. Shift is
-            // left alone: it is the table's range-select and the one selection
-            // gesture that has no other home.
-            if (isModifiedOpen(ev)) {
-                if (model) openModified(ctx.wm, 'item', { id: String(model.id), label: itemLabel(model) });
-                return;
-            }
-            if (ev && ev.shiftKey) return;
-            if (model) openItem(model.id, { dest: 'origin', newTab: true });
+            if (!model) return;
+            openRecordAs(ctx.wm, ctx, 'item', {
+                id: String(model.id), label: itemLabel(model), filter: view.key || DEFAULT_FILTER,
+            }, how);
         },
     });
 

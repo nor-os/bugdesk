@@ -110,6 +110,13 @@ export function redistributeToFill(widths, draggedIdx, avail) {
  * @property {Function} [renderCell] - Custom cell renderer: (td, value, colIdx, rowIdx, row) => boolean (return true if handled)
  * @property {'normal'|'compact'} [mode='normal'] - Rendering density. 'compact' adds `data-table-component--compact` to the wrapper (tighter padding + smaller font for the bottom-panel use case).
  * @property {Function} [onRowClick] - Row click handler: (rowIdx, row, ev) => void. Receives the original (unfiltered) row index.
+ * @property {Function} [onRowOpen] - Open a row: (rowIdx, row, how, ev) => void, where `how` is
+ *   'default' (click, Enter), 'modified' (Ctrl/⌘-click, Ctrl/⌘+Enter), 'tab' (Alt+T),
+ *   'window' (Alt+N), 'split-h' (Alt+Shift+H) or 'split-v' (Alt+Shift+V). Takes over from
+ *   `onRowClick` when both are given.
+ * @property {Function} [rowKey] - A stable identity for a row: (row) => string. With it the
+ *   selection and the highlighted row survive a data refresh, a sort, and (with `persistKey`)
+ *   leaving the table and coming back.
  * @property {Function} [onRowContextMenu] - Row right-click handler: (rowIdx, row, ev) => void. Fires before the default context menu; call ev.preventDefault() to suppress the default.
  * @property {Function} [onCellContextMenu] - Cell right-click handler: (colIdx, rowIdx, value, td, ev) => void. Fires before onRowContextMenu; same suppression semantics.
  * @property {Function} [contextMenuItems] - Builds extra right-click menu items: (ctx) => Array<{label, icon?, action, disabled?, danger?, separator?}>.
@@ -161,6 +168,8 @@ export class DataTable {
             // Rendering density + bottom-panel hooks (P2)
             mode: 'normal',
             onRowClick: null,
+            onRowOpen: null,
+            rowKey: null,
             onRowContextMenu: null,
             onCellContextMenu: null,
             // Right-click menu extension points. `contextMenuItems` alone is
@@ -261,6 +270,13 @@ export class DataTable {
             this._state.filters = new Map(blob.filters);
             applied = true;
         }
+        // The highlighted row and the selection, by ROW KEY: an index names a
+        // different record after any sort or refresh. Applied at render, once
+        // rows exist (a board sets its rows after it mounts).
+        if (Array.isArray(blob.selected) || blob.cursor != null) {
+            this._pendingSelection = { keys: Array.isArray(blob.selected) ? blob.selected : [], cursor: blob.cursor ?? null };
+            applied = true;
+        }
         // The page you were on. Clamped at render, because the rows may have
         // shrunk since it was saved.
         if (Number.isInteger(blob.offset) && blob.offset >= 0) {
@@ -298,7 +314,63 @@ export class DataTable {
             filters: [...this._state.filters.entries()],
             colWidths: { ...this._colWidths },
             offset: this._state.offset,
+            ...this._selectionKeys(),
         });
+    }
+
+    /** The selection and the highlighted row as row keys, for saving. Empty
+     *  without a `rowKey`, or while a saved selection is still waiting for its
+     *  rows (saving then would overwrite it with nothing). */
+    _selectionKeys() {
+        const keyOf = this.config.rowKey;
+        if (typeof keyOf !== 'function') return {};
+        if (this._pendingSelection) {
+            return { selected: this._pendingSelection.keys, cursor: this._pendingSelection.cursor };
+        }
+        const rows = this.config.rows;
+        const key = (i) => (rows[i] !== undefined ? String(keyOf(rows[i])) : null);
+        const cursorIdx = this._cursorIndex ?? this._state.anchorIndex;
+        return {
+            selected: [...this._state.selected].map(key).filter((k) => k != null),
+            cursor: cursorIdx != null ? key(cursorIdx) : null,
+        };
+    }
+
+    /** Put a saved selection back once its rows are here, bring the highlighted
+     *  row's page up, and ask the next render to scroll it into view. */
+    _applyPendingSelection() {
+        const pending = this._pendingSelection;
+        const keyOf = this.config.rowKey;
+        if (!pending || typeof keyOf !== 'function' || !this.config.rows.length) return;
+        this._pendingSelection = null;
+        this._selectByKeys(pending.keys, pending.cursor);
+        this._revealCursor = true;
+    }
+
+    /** Select the rows whose keys are given; `cursor` becomes the highlighted
+     *  row and the range anchor. Keys that name no row are dropped. */
+    _selectByKeys(keys, cursor) {
+        const keyOf = this.config.rowKey;
+        const index = new Map();
+        this.config.rows.forEach((row, i) => index.set(String(keyOf(row)), i));
+        this._state.selected.clear();
+        for (const k of keys || []) if (index.has(String(k))) this._state.selected.add(index.get(String(k)));
+        const c = cursor != null && index.has(String(cursor)) ? index.get(String(cursor)) : null;
+        const fallback = c ?? [...this._state.selected][0] ?? null;
+        this._cursorIndex = fallback;
+        this._state.anchorIndex = fallback;
+        if (fallback != null && !this._state.selected.size) this._state.selected.add(fallback);
+    }
+
+    /** Move to the page holding the highlighted row. */
+    _pageToCursor() {
+        const idx = this._cursorIndex;
+        if (idx == null || !this.config.pagination || typeof this.config.onPageChange === 'function') return;
+        this._getProcessedRows();
+        const pos = (this._processedIndexMap || []).indexOf(idx);
+        if (pos < 0) return;
+        const size = this.config.pageSize;
+        this._state.offset = Math.floor(pos / size) * size;
     }
 
     /** The rows on screen right now, as row arrays: filtered, sorted and cut to
@@ -326,16 +398,23 @@ export class DataTable {
             }
         }
 
+        // Rows changed: an index now names a different record. With a row key
+        // the selection follows its records; without one it is dropped. Read
+        // the keys BEFORE the new rows replace the old ones.
+        const kept = updates.rows && typeof this.config.rowKey === 'function' && !this._pendingSelection
+            ? this._selectionKeys() : null;
+
         Object.assign(this.config, updates);
 
-        // Reset state if rows changed
         if (updates.rows) {
             this._state.selected.clear();
             this._state.anchorIndex = null;
+            this._cursorIndex = null;
             if (this._state.offset >= updates.rows.length) {
                 this._state.offset = 0;
             }
             this._columnTypes = this._detectColumnTypes();
+            if (kept && (kept.selected.length || kept.cursor != null)) this._selectByKeys(kept.selected, kept.cursor);
         }
 
         // Invalidate processed cache
@@ -404,6 +483,7 @@ export class DataTable {
     clearSelection() {
         this._state.selected.clear();
         this._state.anchorIndex = null;
+        this._cursorIndex = null;
         this._updateRowSelection();
         this._notifySelectionChange();
     }
@@ -495,6 +575,11 @@ export class DataTable {
         this.container.innerHTML = '';
 
         const { rows, pagination, emptyMessage } = this.config;
+
+        // A remembered selection whose rows have arrived: select it again and
+        // turn to the page its highlighted row is on.
+        this._applyPendingSelection();
+        if (this._revealCursor) this._pageToCursor();
 
         // A remembered or stale page past the end of the rows lands on the last
         // page rather than on an empty one.
@@ -668,7 +753,33 @@ export class DataTable {
         if (activeFilterColIdx !== null) {
             this._restoreFilterFocus(activeFilterColIdx);
         }
+        if (this._revealCursor) {
+            this._revealCursor = false;
+            const idx = this._cursorIndex;
+            const tr = idx == null ? null
+                : [...(this._tbodyEl?.children || [])].find((row) => row.__rowIndex === idx);
+            tr?.scrollIntoView?.({ block: 'nearest' });
+        }
         try { this.config.onRender?.(); } catch (err) { console.warn('[DataTable] onRender threw', err); }
+    }
+
+    /**
+     * Open a row the way `how` says, through `onRowOpen`, or `onRowClick` for a
+     * table that only knows clicks. The one path for a click, Enter and the Alt
+     * chords, so each gesture cannot drift into its own idea of "open".
+     */
+    _openRow(idx, how, event) {
+        const row = this.config.rows[idx];
+        if (row === undefined) return false;
+        if (typeof this.config.onRowOpen === 'function') {
+            this.config.onRowOpen(idx, row, how, event);
+            return true;
+        }
+        if (typeof this.config.onRowClick === 'function' && (how === 'default' || how === 'modified')) {
+            this.config.onRowClick(idx, row, event);
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -1674,9 +1785,12 @@ export class DataTable {
 
             // Row-level click + right-click hooks (P2). Bound after
             // cells so per-cell handlers run first.
-            if (this.config.onRowClick) {
+            // A click OPENS; it does not move the remembered highlight, which is
+            // the keyboard's. Shift is the range-select and opens nothing.
+            if (this.config.onRowOpen || this.config.onRowClick) {
                 tr.addEventListener('click', (ev) => {
-                    this.config.onRowClick(globalIdx, row, ev);
+                    if (ev.shiftKey) return;
+                    this._openRow(globalIdx, (ev.ctrlKey || ev.metaKey) ? 'modified' : 'default', ev);
                 });
             }
             if (this.config.onRowContextMenu) {
@@ -1736,12 +1850,15 @@ export class DataTable {
         // why short columns and free text are sized differently.
         const labelRow = headerTable.querySelector('thead > tr');
         const cols = bodyCells.length;
-        const extents = this._cellExtents(bodyTable, cols);
+        // Rects are screen pixels; widths are set, and `avail` read, in CSS
+        // pixels. Under a zoomed tile the two differ by the zoom factor.
+        const z = this._zoomFactor();
+        const extents = this._cellExtents(bodyTable, cols).map((col) => col.map((w) => w / z));
         const measures = new Array(cols);
         for (let i = 0; i < cols; i++) {
-            const natural = bodyCells[i].getBoundingClientRect().width;
+            const natural = bodyCells[i].getBoundingClientRect().width / z;
             const header = labelRow && labelRow.children[i]
-                ? labelRow.children[i].getBoundingClientRect().width
+                ? labelRow.children[i].getBoundingClientRect().width / z
                 : 0;
             const pinned = this._colWidths[i];
             measures[i] = {
@@ -1830,6 +1947,7 @@ export class DataTable {
         const rows = bodyTable.querySelectorAll('tbody > tr');
         if (!rows.length) return out;
         const doc = bodyTable.ownerDocument;
+        const zoom = this._zoomFactor();
         const range = doc.createRange();
         const padRight = [];
         for (const tr of rows) {
@@ -1857,7 +1975,8 @@ export class DataTable {
                         if (r.width) right = Math.max(right, r.right);
                     }
                 }
-                out[i].push(right === -Infinity ? 0 : right - left + padRight[i]);
+                // Padding is CSS px; the rects are screen px. Keep it all in screen px.
+                out[i].push(right === -Infinity ? 0 : right - left + padRight[i] * zoom);
             }
         }
         range.detach?.();
@@ -1926,11 +2045,46 @@ export class DataTable {
                 (ev) => this._beginColResize(ev, domIdx));
             // Keep a resize gesture from registering as a sort click.
             grip.addEventListener('click', (ev) => ev.stopPropagation());
+            // Double-click hands the column back to automatic sizing.
+            grip.addEventListener('dblclick', (ev) => {
+                ev.preventDefault();
+                ev.stopPropagation();
+                this.autoSizeColumn(domIdx);
+            });
             th.appendChild(grip);
         });
     }
 
+    /** Forget a dragged width so the column is sized by its content again. */
+    autoSizeColumn(domIdx) {
+        if (this._colWidths[domIdx] == null) return;
+        delete this._colWidths[domIdx];
+        this._syncHeaderWidths();
+        this._savePersisted();
+    }
+
+    /**
+     * CSS px per screen px. A tile's content can be zoomed, and then
+     * `getBoundingClientRect` and pointer coordinates are in screen pixels
+     * while `style.width` and `clientWidth` are CSS pixels. Mixing the two made
+     * a click on a grip widen every column by the zoom factor.
+     */
+    _zoomFactor() {
+        const el = this._tableWrapEl || this._tableEl;
+        const css = el?.offsetWidth || 0;
+        const screen = el?.getBoundingClientRect?.().width || 0;
+        return css > 0 && screen > 0 ? screen / css : 1;
+    }
+
+    /**
+     * Drag a column's right edge. NOTHING happens on mousedown: the drag starts
+     * once the pointer has moved a few pixels, so a click, or the first click
+     * of a double-click, leaves every width exactly as it was. Only the dragged
+     * column is pinned; the rest are painted for the duration and re-flow on
+     * the next fit.
+     */
     _beginColResize(ev, domIdx) {
+        if (ev.button !== 0) return;
         ev.preventDefault();
         ev.stopPropagation();
         const headerTable = this._headerTableEl;
@@ -1939,50 +2093,48 @@ export class DataTable {
         const bodyRow = bodyTable && bodyTable.querySelector('tbody > tr');
         if (!headRow) return;
 
-        // Freeze EVERY column at its current width on BOTH tables and
-        // lock fixed layout up front, so the drag moves only the grabbed
-        // column and a neighbour can never absorb it. Widths come from
-        // the header row (the column source of truth); the body's first
-        // row is pinned to match so the two tables stay in lock-step.
-        const startWidths = [...headRow.children].map(
-            (c) => c.getBoundingClientRect().width);
-        headerTable.style.tableLayout = 'fixed';
-        if (bodyTable) bodyTable.style.tableLayout = 'fixed';
-        // Paint a column's width onto both tables. `applyCol` also PINS it
-        // (records a `_colWidths` override); `paintCol` only paints, leaving
-        // the column unpinned so a later re-measure can reflow it.
+        const startX = ev.clientX;
+        const THRESHOLD = 3;
+        const MIN = 40;
+        let startWidths = null;
+
         const paintCol = (i, w) => {
             headerTable.querySelectorAll('thead > tr').forEach((tr) => {
                 if (tr.children[i]) this._setCellWidth(tr.children[i], w);
             });
-            if (bodyRow && bodyRow.children[i]) {
-                this._setCellWidth(bodyRow.children[i], w);
-            }
+            if (bodyRow && bodyRow.children[i]) this._setCellWidth(bodyRow.children[i], w);
         };
-        const applyCol = (i, w) => { this._colWidths[i] = w; paintCol(i, w); };
-        startWidths.forEach((w, i) => applyCol(i, w));
-        this._applyTableWidth();
 
-        const startX = ev.clientX;
-        const MIN = 40;
-        document.body.classList.add('dt-col-resizing');
+        /** Freeze every column at its current CSS width, once the drag is real. */
+        const begin = () => {
+            const z = this._zoomFactor();
+            startWidths = [...headRow.children].map((c) => {
+                const set = parseFloat(c.style.width);
+                return Number.isFinite(set) ? set : c.getBoundingClientRect().width / z;
+            });
+            headerTable.style.tableLayout = 'fixed';
+            if (bodyTable) bodyTable.style.tableLayout = 'fixed';
+            startWidths.forEach((w, i) => paintCol(i, w));
+            document.body.classList.add('dt-col-resizing');
+        };
+
         const onMove = (mv) => {
-            const w = Math.max(
-                MIN, Math.round(startWidths[domIdx] + (mv.clientX - startX)));
-            // Fill invariant (behavior 5): build the candidate widths from
-            // the frozen start widths with the dragged column swapped in,
-            // then grow the OTHER columns to close any gap a narrow drag
-            // would open, so the table never shrinks below its container.
+            const dx = mv.clientX - startX;
+            if (!startWidths) {
+                if (Math.abs(dx) < THRESHOLD) return;
+                begin();
+            }
+            const w = Math.max(MIN, Math.round(startWidths[domIdx] + dx / this._zoomFactor()));
+            // Fill invariant (behavior 5): the frozen start widths with the
+            // dragged column swapped in, then the OTHER columns grown to close
+            // any gap a narrow drag would open.
             const cand = startWidths.slice();
             cand[domIdx] = w;
             const avail = this._tableWrapEl ? this._tableWrapEl.clientWidth : 0;
             const filled = redistributeToFill(cand, domIdx, avail);
-            // Pin only the column the user is dragging; recipients are
-            // painted to fill now but left unpinned so `fitColumns`
-            // can re-flow them on the next render (and keep filling then).
             filled.forEach((cw, i) => {
-                if (i === domIdx) applyCol(i, cw);
-                else paintCol(i, cw);
+                if (i === domIdx) this._colWidths[i] = cw;
+                paintCol(i, cw);
             });
             this._applyTableWidth();
             this._syncHeaderScroll();
@@ -1990,6 +2142,7 @@ export class DataTable {
         const onUp = () => {
             document.removeEventListener('mousemove', onMove);
             document.removeEventListener('mouseup', onUp);
+            if (!startWidths) return;               // a click: nothing changed
             document.body.classList.remove('dt-col-resizing');
             this._updateCellTooltips();
             this._savePersisted();
@@ -2112,6 +2265,28 @@ export class DataTable {
         // range from the anchor, Enter activates the row like a click).
         const handleKeyDown = (event) => {
             const ctrlLike = event.ctrlKey || event.metaKey;
+            // Opening the highlighted row. Enter, Ctrl/⌘+Enter (what Ctrl/⌘-click
+            // does), and the Alt chords FlexDesk uses for a tile's own content,
+            // applied to the ROW while the list has focus. Stopped here so the
+            // shell's keymap does not also act on the tile.
+            const openHow = (() => {
+                const k = String(event.key || '').toLowerCase();
+                if (k === 'enter' && !event.altKey && !event.shiftKey) return ctrlLike ? 'modified' : 'default';
+                if (!event.altKey || ctrlLike) return null;
+                if (!event.shiftKey && k === 't') return 'tab';
+                if (!event.shiftKey && k === 'n') return 'window';
+                if (event.shiftKey && k === 'h') return 'split-h';
+                if (event.shiftKey && k === 'v') return 'split-v';
+                return null;
+            })();
+            if (openHow) {
+                const idx = this._cursorIndex ?? this._state.anchorIndex;
+                if (idx != null && this._openRow(idx, openHow, event)) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
+                return;
+            }
             if (ctrlLike && !event.altKey) {
                 const key = String(event.key || '').toLowerCase();
                 if (key === 'a' && selectable) {
@@ -2169,16 +2344,14 @@ export class DataTable {
                 }
                 this._updateRowSelection();
                 this._notifySelectionChange();
+                // The keyboard highlight is remembered like sort and widths are.
+                // Only here: a click opens a record and moves nothing to remember.
+                if (typeof this.config.rowKey === 'function') this._savePersisted();
                 rowsEls[pos].scrollIntoView({ block: 'nearest' });
-            } else if (event.key === 'Enter' && this.config.onRowClick) {
-                const idx = this._cursorIndex ?? this._state.anchorIndex;
-                if (idx != null && this.config.rows[idx] !== undefined) {
-                    event.preventDefault();
-                    this.config.onRowClick(idx, this.config.rows[idx], event);
-                }
             } else if (event.key === 'Escape') {
                 if (this._state.selected.size) {
                     this.clearSelection();
+                    if (typeof this.config.rowKey === 'function') this._savePersisted();
                 }
                 this._hideContextMenu();
             }

@@ -36,7 +36,9 @@ import { showContextMenu } from '@flexdesk/widgets';
 import { shell, statusLine } from './pages.js';
 import { esc, HUMAN_AUTHOR } from './data.js';
 import { openNewItem } from './new_item.js';
-import { installRecordDragSource, isModifiedOpen, openModified } from './record_dnd.js';
+import {
+    installRecordDragSource, isModifiedOpen, openHowForKey, openModified, openRecordAs,
+} from './record_dnd.js';
 import { confirmDelete } from './delete_item.js';
 import { assigneeExpr, dueStateExpr, projectExpr } from './backlog_filters.js';
 import {
@@ -301,14 +303,23 @@ function mountTracker(host, props, ctx) {
     };
 
     const onKey = (e) => {
-        if (e.key !== 'Enter' && e.key !== ' ') return;
+        const how = openHowForKey(e, ['Enter', ' ']);
+        if (!how) return;
         const row = e.target.closest('[data-open],[data-who]');
         if (!row) return;
         e.preventDefault();
-        // The rows are role="button", so Enter/Space must do what a click does.
-        // One handler rather than two: a second copy is how a keyboard path
-        // quietly stops matching the mouse one.
-        onClick({ target: row });
+        e.stopPropagation();
+        // The rows are role="button", so Enter/Space must do what a click does,
+        // and Ctrl/⌘+Enter what Ctrl/⌘-click does: the click handler gets the
+        // modifiers too. One handler rather than two: a second copy is how a
+        // keyboard path quietly stops matching the mouse one.
+        if (how === 'default' || how === 'modified' || !row.dataset.open) {
+            onClick({ target: row, ctrlKey: e.ctrlKey, metaKey: e.metaKey });
+            return;
+        }
+        // Alt+T / Alt+N / Alt+Shift+H / Alt+Shift+V: the same places as in a table.
+        const model = ITEMS.find((x) => Number(x.id) === Number(row.dataset.open));
+        if (model) openRecordAs(ctx.wm, ctx, 'item', { id: String(model.id), label: itemLabel(model) }, how);
     };
 
     const onMenu = (e) => {
