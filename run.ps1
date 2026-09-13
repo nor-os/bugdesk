@@ -41,23 +41,24 @@ OPTIONS
 
 WHERE THE RECORDS LIVE
   By default: .\bugs and .\backlog beside this script. Point them somewhere
-  else with environment variables - the same ones the server itself reads, so
-  the UI and an agent editing the files always agree:
+  else with a flag or the matching variable - the server reads both, so the UI
+  and an agent editing the files always agree.
 
-    $env:BUGDESK_BUGS='C:\path\to\bugs'; .\run.ps1
+    --bugs-dir DIR, --bugs-dir=DIR, $env:BUGDESK_BUGS='DIR'
         The bug store. The backlog defaults to a SIBLING of whatever you set
-        here, so this one variable moves both stores together - which is what
+        here, so this one setting moves both stores together - which is what
         you want when BugDesk is tracking a different repo than it lives in.
 
-    $env:BUGDESK_BACKLOG='C:\path\to\backlog'; .\run.ps1
+    --backlog-dir DIR, --backlog-dir=DIR, $env:BUGDESK_BACKLOG='DIR'
         The backlog store, when it is not beside the bug store.
 
-  Set both to place them independently. Remember that `$env:` assignments last
-  for the rest of the PowerShell session, so clear one with `$env:BUGDESK_BUGS
-  = $null` when you want the default back.
+  Set both to place them independently. The FLAG WINS over the variable, which
+  matters more here than on Unix: a `$env:` assignment lasts for the rest of the
+  PowerShell session, so one set an hour ago is still in force. Clear it with
+  `$env:BUGDESK_BUGS = $null`, or just pass the flag.
 
-  The directories are created on demand. Every path is printed at startup, so
-  check that line if you are not seeing the records you expected.
+  The directories are created on demand, and both paths are printed at startup
+  - check that line if you are not seeing the records you expected.
 
 OTHER ENVIRONMENT VARIABLES
   ASPNETCORE_URLS   Where to listen. Default http://127.0.0.1:8766.
@@ -79,7 +80,9 @@ YOUR WORKING DIRECTORY
 EXAMPLES
   .\run.ps1                                  # this repo's own stores
   .\run.ps1 --seed                           # and fill them if they are empty
-  $env:BUGDESK_BUGS='C:\work\acme\bugs'; .\run.ps1
+  .\run.ps1 --bugs-dir C:\work\acme\bugs     # track another repo, backlog follows
+  .\run.ps1 --bugs-dir C:\acme\bugs --backlog-dir C:\plans\backlog
+  $env:BUGDESK_BUGS='C:\work\acme\bugs'; .\run.ps1     # the same, as a variable
   $env:ASPNETCORE_URLS='http://127.0.0.1:9000'; .\run.ps1
   cd C:\work\acme; C:\bugdesk\run.ps1 --tracker
 '@ | Write-Host
@@ -91,17 +94,14 @@ foreach ($a in $args) {
     if ($a -in '--help', '-h', '-help', '-?', '/?') { Show-Usage; exit 0 }
 }
 
-# Same resolution order as the server's own ResolveBugsDir / ResolveBacklogDir
-# (Program.cs): the env var if set, else <repo root>\bugs and its sibling
-# backlog\ - derived from the bug dir, not from $root, so BUGDESK_BUGS alone
-# moves both stores together.
-$bugsDir = if ($env:BUGDESK_BUGS) { $env:BUGDESK_BUGS } else { Join-Path $root 'bugs' }
-$backlogDir = if ($env:BUGDESK_BACKLOG) { $env:BUGDESK_BACKLOG }
-              else { Join-Path (Split-Path -Parent $bugsDir) 'backlog' }
-
 # --tracker is consumed HERE and re-exported as BUGDESK_MODE rather than being
 # forwarded: `dotnet run` treats an unrecognised leading flag as its own and
 # would reject it before the app ever saw it.
+#
+# --bugs-dir / --backlog-dir are consumed the same way and exported as the
+# variables the server already reads, so the flag and the variable cannot
+# disagree, and so the seeding and the startup line below see the same
+# directories the server will.
 #
 # Everything in $dotnetArgs goes after a literal `--` at the bottom, which is
 # what makes forwarding safe: `--project=NAME` is BugDesk's tracker name, but it
@@ -110,14 +110,39 @@ $backlogDir = if ($env:BUGDESK_BACKLOG) { $env:BUGDESK_BACKLOG }
 # the tracker quietly fell back to naming itself after the current directory.
 $seed = $false
 $dotnetArgs = @()
+$wantValue = $null
 foreach ($a in $args) {
+    # The token after a space-form --bugs-dir / --backlog-dir is its value.
+    if ($wantValue) {
+        if ($wantValue -eq '--bugs-dir') { $env:BUGDESK_BUGS = $a }
+        else { $env:BUGDESK_BACKLOG = $a }
+        $wantValue = $null
+        continue
+    }
     if ($a -eq '--seed') { $seed = $true }
     elseif ($a -eq '--tracker') { $env:BUGDESK_MODE = 'tracker' }
     elseif ($a -like '--mode=*') { $env:BUGDESK_MODE = $a.Substring(7) }
+    elseif ($a -like '--bugs-dir=*') { $env:BUGDESK_BUGS = $a.Substring(11) }
+    elseif ($a -eq '--bugs-dir') { $wantValue = '--bugs-dir' }
+    elseif ($a -like '--backlog-dir=*') { $env:BUGDESK_BACKLOG = $a.Substring(14) }
+    elseif ($a -eq '--backlog-dir') { $wantValue = '--backlog-dir' }
     # Forwarded, not consumed: the server reads it (ResolveTrackerProject).
     else { $dotnetArgs += $a }
 }
+if ($wantValue) {
+    Write-Host "BugDesk: $wantValue needs a directory after it. See .\run.ps1 --help."
+    exit 2
+}
 if (-not $env:BUGDESK_MODE) { $env:BUGDESK_MODE = 'bugs' }
+
+# Resolved AFTER the flags above, which feed the same two variables. Same order
+# as the server's own ResolveBugsDir / ResolveBacklogDir (Program.cs): the flag,
+# then the variable, else <repo root>\bugs and its sibling backlog\ - derived
+# from the bug dir, not from $root, so --bugs-dir alone moves both stores
+# together.
+$bugsDir = if ($env:BUGDESK_BUGS) { $env:BUGDESK_BUGS } else { Join-Path $root 'bugs' }
+$backlogDir = if ($env:BUGDESK_BACKLOG) { $env:BUGDESK_BACKLOG }
+              else { Join-Path (Split-Path -Parent $bugsDir) 'backlog' }
 
 # Seed each store INDEPENDENTLY - a repo that already tracks bugs but has no
 # backlog yet is the normal way into this feature, and refusing to seed the

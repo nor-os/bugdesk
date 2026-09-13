@@ -35,22 +35,23 @@ OPTIONS
 
 WHERE THE RECORDS LIVE
   By default: ./bugs and ./backlog beside this script. Point them somewhere
-  else with environment variables — the same ones the server itself reads, so
-  the UI and an agent editing the files always agree:
+  else with a flag or the matching variable — the server reads both, so the UI
+  and an agent editing the files always agree.
 
-    BUGDESK_BUGS=/path/to/bugs ./run.sh
+    --bugs-dir DIR, --bugs-dir=DIR, BUGDESK_BUGS=DIR
         The bug store. The backlog defaults to a SIBLING of whatever you set
-        here, so this one variable moves both stores together — which is what
+        here, so this one setting moves both stores together — which is what
         you want when BugDesk is tracking a different repo than it lives in.
 
-    BUGDESK_BACKLOG=/path/to/backlog ./run.sh
+    --backlog-dir DIR, --backlog-dir=DIR, BUGDESK_BACKLOG=DIR
         The backlog store, when it is not beside the bug store.
 
-    BUGDESK_BUGS=/path/to/bugs BUGDESK_BACKLOG=/elsewhere/backlog ./run.sh
-        Both, independently.
+  Set both to place them independently. The FLAG WINS over the variable: it is
+  typed for this one run, while a variable may have been exported into your
+  shell hours ago and forgotten.
 
-  The directories are created on demand. Every path is printed at startup, so
-  check that line if you are not seeing the records you expected.
+  The directories are created on demand, and both paths are printed at startup
+  — check that line if you are not seeing the records you expected.
 
 OTHER ENVIRONMENT VARIABLES
   ASPNETCORE_URLS   Where to listen. Default http://127.0.0.1:8766.
@@ -71,7 +72,9 @@ YOUR WORKING DIRECTORY
 EXAMPLES
   ./run.sh                                   # this repo's own stores
   ./run.sh --seed                            # and fill them if they are empty
-  BUGDESK_BUGS=~/work/acme/bugs ./run.sh     # track another repo
+  ./run.sh --bugs-dir ~/work/acme/bugs       # track another repo, backlog follows
+  ./run.sh --bugs-dir ~/acme/bugs --backlog-dir ~/plans/backlog
+  BUGDESK_BUGS=~/work/acme/bugs ./run.sh     # the same, as a variable
   ASPNETCORE_URLS=http://127.0.0.1:9000 ./run.sh
   cd ~/work/acme && ~/bugdesk/run.sh --tracker
 __BUGDESK_HELP__
@@ -82,13 +85,6 @@ for a in "$@"; do
         --help|-h) usage; exit 0 ;;
     esac
 done
-
-# Same resolution order as the server's own ResolveBugsDir / ResolveBacklogDir
-# (Program.cs): the env var if set, else <repo root>/bugs and its sibling
-# backlog/ — which is why the backlog default is derived from the bug dir
-# rather than from $root, so BUGDESK_BUGS alone moves both stores together.
-bugs_dir="${BUGDESK_BUGS:-$root/bugs}"
-backlog_dir="${BUGDESK_BACKLOG:-$(dirname "$bugs_dir")/backlog}"
 
 # --tracker is consumed HERE and re-exported as BUGDESK_MODE rather than being
 # forwarded: `dotnet run` treats an unrecognised leading flag as its own and
@@ -102,17 +98,51 @@ backlog_dir="${BUGDESK_BACKLOG:-$(dirname "$bugs_dir")/backlog}"
 # tracker quietly fell back to naming itself after the current directory.
 seed=0
 args=()
+want_value=""
 for a in "$@"; do
+    # The token after a space-form `--bugs-dir` / `--backlog-dir` is its value,
+    # not a flag of its own.
+    if [ -n "$want_value" ]; then
+        case "$want_value" in
+            --bugs-dir) BUGDESK_BUGS="$a" ;;
+            --backlog-dir) BUGDESK_BACKLOG="$a" ;;
+        esac
+        want_value=""
+        continue
+    fi
     case "$a" in
         --seed) seed=1 ;;
         --tracker) BUGDESK_MODE=tracker ;;
         --mode=*) BUGDESK_MODE="${a#--mode=}" ;;
+        # Consumed, not forwarded: exported as the variable the server already
+        # reads, so the flag and the variable cannot disagree, and so the seeding
+        # and the startup line below see the same directories the server will.
+        --bugs-dir=*) BUGDESK_BUGS="${a#--bugs-dir=}" ;;
+        --bugs-dir) want_value="--bugs-dir" ;;
+        --backlog-dir=*) BUGDESK_BACKLOG="${a#--backlog-dir=}" ;;
+        --backlog-dir) want_value="--backlog-dir" ;;
         # Forwarded, not consumed: the server reads it (ResolveTrackerProject).
         --project=*) args+=("$a") ;;
         *) args+=("$a") ;;
     esac
 done
+if [ -n "$want_value" ]; then
+    echo "BugDesk: $want_value needs a directory after it. See ./run.sh --help." >&2
+    exit 2
+fi
 export BUGDESK_MODE="${BUGDESK_MODE:-bugs}"
+# Exported only when actually set, so an unset variable still means "the
+# default" to the server rather than an empty path it would have to special-case.
+if [ -n "${BUGDESK_BUGS:-}" ]; then export BUGDESK_BUGS; fi
+if [ -n "${BUGDESK_BACKLOG:-}" ]; then export BUGDESK_BACKLOG; fi
+
+# Resolved AFTER the flags above, which feed the same two variables. Same order
+# as the server's own ResolveBugsDir / ResolveBacklogDir (Program.cs): the flag,
+# then the variable, else <repo root>/bugs and its sibling backlog/ — which is
+# why the backlog default is derived from the bug dir rather than from $root, so
+# --bugs-dir alone moves both stores together.
+bugs_dir="${BUGDESK_BUGS:-$root/bugs}"
+backlog_dir="${BUGDESK_BACKLOG:-$(dirname "$bugs_dir")/backlog}"
 
 # Seed each store INDEPENDENTLY: a repo that already tracks bugs but has no
 # backlog yet is the normal way into this feature, and refusing to seed the

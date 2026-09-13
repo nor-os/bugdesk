@@ -215,6 +215,27 @@ none, because you try it first.
 
 ### Changed
 
+- **Both stores are settable on the command line: `--bugs-dir` and
+  `--backlog-dir`.** Pointing BugDesk at another repo's records needed an
+  environment variable, which is the wrong shape for a thing you decide per run
+  — and on PowerShell actively awkward, since a `$env:` assignment outlives the
+  command and the next run silently inherits it. Both spellings work
+  (`--bugs-dir DIR` and `--bugs-dir=DIR`), setting the bug store alone still
+  brings the backlog with it as its sibling, and a flag with no directory after
+  it is an error rather than a silent fall back to the default.
+
+  **The flag beats the variable**, for the same reason `--tracker` beats
+  `BUGDESK_MODE`: it is the more local statement of intent. The server
+  understands the two flags itself rather than only the wrappers translating
+  them, so `dotnet run --project server -- --bugs-dir …` resolves exactly as
+  `./run.sh --bugs-dir …` does. A wrapper-only flag would have been one more
+  thing that silently does nothing when passed one layer down.
+
+  The names are `--bugs-dir` and `--backlog-dir` rather than `--bugs` and
+  `--backlog` because `--bugs` already means the *mode* — the opposite of
+  `--tracker` — and a flag that means a mode in one position and a path in
+  another is not a flag anybody can remember.
+
 - **`run.sh --help` and `run.ps1 --help`, and neither script moves you any
   more.** The usage used to live in a comment at the top of each script, where
   you could only read it by opening the file — so the question it exists to

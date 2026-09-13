@@ -44,11 +44,12 @@ string uiDir = FindNear(Path.Combine("ui", "index.html"),
 // ---- Locate the stores ----------------------------------------------------
 string trackerBase = mode == "tracker" ? ResolveTrackerBase(args) : "";
 string bugsDir = mode == "tracker"
-    ? Env("BUGDESK_BUGS") ?? Path.Combine(trackerBase, "bugs")
-    : ResolveBugsDir(builder.Environment.ContentRootPath);
+    ? ArgValue(args, "--bugs-dir") ?? Env("BUGDESK_BUGS") ?? Path.Combine(trackerBase, "bugs")
+    : ResolveBugsDir(builder.Environment.ContentRootPath, args);
 string backlogDir = mode == "tracker"
-    ? EnsureDir(Env("BUGDESK_BACKLOG") ?? Path.Combine(trackerBase, "tickets"))
-    : ResolveBacklogDir(bugsDir);
+    ? EnsureDir(ArgValue(args, "--backlog-dir") ?? Env("BUGDESK_BACKLOG")
+                ?? Path.Combine(trackerBase, "tickets"))
+    : ResolveBacklogDir(bugsDir, args);
 // Attachments sit beside the records in tracker mode. In bugs mode they stay
 // under the bug store, where existing ones already are.
 string attachDir = mode == "tracker"
@@ -1305,11 +1306,57 @@ static string EnsureDir(string path)
     return full;
 }
 
+/// <summary>
+/// The value of one <see cref="ValueFlags"/> flag, or null when it is absent.
+/// Last occurrence wins, matching how a shell reader expects a repeated flag to
+/// behave, and both spellings are accepted because both get typed.
+/// </summary>
+static string? ArgValue(string[] argv, string flag)
+{
+    string? found = null;
+    for (var i = 0; i < argv.Length; i++)
+    {
+        if (argv[i].StartsWith(flag + "=", StringComparison.OrdinalIgnoreCase))
+            found = argv[i][(flag.Length + 1)..];
+        else if (string.Equals(argv[i], flag, StringComparison.OrdinalIgnoreCase) && i + 1 < argv.Length)
+            found = argv[i + 1];
+    }
+    return string.IsNullOrWhiteSpace(found) ? null : found.Trim();
+}
+
+/// <summary>
 /// BugDesk's own flags, removed before the generic host parses the rest.
-static string[] HostArgs(string[] argv) => argv.Where(a =>
-    a is not ("--tracker" or "--bugs")
-    && !a.StartsWith("--mode=", StringComparison.OrdinalIgnoreCase)
-    && !a.StartsWith("--project=", StringComparison.OrdinalIgnoreCase)).ToArray();
+/// <para>
+/// A loop rather than a Where, because a value flag written in its SPACE form
+/// is two tokens and both have to go. Leaving the value behind hands the host a
+/// bare path it reads as a positional argument, and leaving a bare `--tracker`
+/// behind makes the command-line configuration provider throw before a line of
+/// this file runs — it wants `--key=value` or `--key value` and nothing else.
+/// </para>
+/// </summary>
+static string[] HostArgs(string[] argv)
+{
+    // BugDesk's own flags that take a value: `--flag=value` or `--flag value`.
+    string[] valueFlags = { "--project", "--bugs-dir", "--backlog-dir" };
+    var kept = new List<string>();
+    for (var i = 0; i < argv.Length; i++)
+    {
+        var a = argv[i];
+        if (a is "--tracker" or "--bugs") continue;
+        if (a.StartsWith("--mode=", StringComparison.OrdinalIgnoreCase)) continue;
+        var value = valueFlags.FirstOrDefault(f =>
+            a.StartsWith(f + "=", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(a, f, StringComparison.OrdinalIgnoreCase));
+        if (value is not null)
+        {
+            // The space form eats the token after it as well.
+            if (string.Equals(a, value, StringComparison.OrdinalIgnoreCase) && i + 1 < argv.Length) i++;
+            continue;
+        }
+        kept.Add(a);
+    }
+    return kept.ToArray();
+}
 
 /// The first free loopback port at or after <paramref name="start"/>, or 0 if
 /// the whole window is taken.
@@ -1429,26 +1476,34 @@ static string ResolveMode(string[] argv)
 }
 
 // ---- store resolution -----------------------------------------------------
-static string ResolveBugsDir(string contentRoot)
+// `--bugs-dir` beats BUGDESK_BUGS beats the default, and the same shape for the
+// backlog. The flag wins for the same reason `--tracker` beats BUGDESK_MODE: it
+// is the more local statement of intent, typed for this one run, while the
+// variable may have been exported into the shell hours ago and forgotten.
+static string ResolveBugsDir(string contentRoot, string[] argv)
 {
+    var flag = ArgValue(argv, "--bugs-dir");
+    if (flag is not null) return Path.GetFullPath(flag);
     var env = Environment.GetEnvironmentVariable("BUGDESK_BUGS");
     if (!string.IsNullOrEmpty(env)) return Path.GetFullPath(env);
     // Self-contained default: a top-level bugs/ directory alongside server/ and
     // ui/. Created on first run (see attachDir above, whose CreateDirectory
-    // call also creates this whole parent chain). Point BUGDESK_BUGS elsewhere
-    // — e.g. a bugs/ folder tracked inside your own project's repo — to use a
-    // different store.
+    // call also creates this whole parent chain). Point --bugs-dir or
+    // BUGDESK_BUGS elsewhere — e.g. a bugs/ folder tracked inside your own
+    // project's repo — to use a different store.
     return Path.GetFullPath(Path.Combine(contentRoot, "..", "bugs"));
 }
 
 // The backlog store sits BESIDE the bug store rather than under a path of its
-// own: pointing BUGDESK_BUGS at a project brings that project's backlog with it,
-// which is almost always what you want. BUGDESK_BACKLOG overrides for the rest.
-static string ResolveBacklogDir(string bugsDir)
+// own: pointing --bugs-dir at a project brings that project's backlog with it,
+// which is almost always what you want. --backlog-dir / BUGDESK_BACKLOG
+// overrides for the rest.
+static string ResolveBacklogDir(string bugsDir, string[] argv)
 {
+    var flag = ArgValue(argv, "--backlog-dir");
     var env = Environment.GetEnvironmentVariable("BUGDESK_BACKLOG");
-    var dir = !string.IsNullOrEmpty(env)
-        ? Path.GetFullPath(env)
+    var dir = flag is not null ? Path.GetFullPath(flag)
+        : !string.IsNullOrEmpty(env) ? Path.GetFullPath(env)
         : Path.GetFullPath(Path.Combine(bugsDir, "..", "backlog"));
     Directory.CreateDirectory(dir);
     return dir;

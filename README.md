@@ -108,7 +108,9 @@ that the checklist never parsed survives the first time anyone ticks a box.
 ./run.sh --tracker                    # TRACKER mode — its own store, auto port
 ./run.sh --tracker --project acme     # ...naming the tracker explicitly
 ./run.sh --tracker --seed             # + an example project with dated work on it
-BUGDESK_BUGS=/path/to/bugs ./run.sh   # backlog follows as its sibling
+./run.sh --bugs-dir /path/to/bugs     # backlog follows as its sibling
+./run.sh --bugs-dir /a/bugs --backlog-dir /b/backlog   # or place them separately
+BUGDESK_BUGS=/path/to/bugs ./run.sh   # the same, as an environment variable
 BUGDESK_USER=alice ./run.sh           # pick a profile without the first-run prompt
 BUGDESK_HUMAN=alice BUGDESK_AGENT=claude ./run.sh   # seed a profile, skip the prompt
 ```
@@ -120,9 +122,18 @@ On Windows, `run.ps1` is the same wrapper for PowerShell (5.1 or 7):
 .\run.ps1                     # http://127.0.0.1:8766, .\bugs + .\backlog
 .\run.ps1 --seed              # + pre-seed empty stores with the examples
 .\run.ps1 --tracker           # TRACKER mode
+.\run.ps1 --bugs-dir C:\path\to\bugs     # backlog follows as its sibling
 $env:BUGDESK_BUGS='C:\path\to\bugs'; .\run.ps1
 $env:BUGDESK_HUMAN='alice'; $env:BUGDESK_AGENT='claude'; .\run.ps1
 ```
+
+Both stores can be set by flag (`--bugs-dir`, `--backlog-dir`, in either the
+space or the `=` spelling) or by variable (`BUGDESK_BUGS`, `BUGDESK_BACKLOG`).
+**The flag wins**, because it is typed for this one run while a variable may
+have been exported hours ago — and setting the bug store alone moves the backlog
+with it, since the backlog default is its sibling. The server understands the
+same two flags, so `dotnet run --project server -- --bugs-dir …` behaves
+identically to the wrappers.
 
 Neither script changes your working directory. They hand the server's path to
 `dotnet run --project` rather than `cd`-ing into `server/` first, so the shell
