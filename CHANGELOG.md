@@ -7,12 +7,19 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- **A bug can go back to open.** Investigation, Testing and Closed now offer
-  **Back to open** beside their usual actions, for a bug that was
-  mis-triaged or abandoned. It changes the status only, and the move is
-  recorded in the bug's History like any other. Open used to be one-way. The
-  Help page, the README and the `/bugs` skill describe the new move; the skill
-  tells agents to use it only when asked.
+- **A bug can go back to open, and every move says why.** Investigation and
+  Testing offer **Back to open**, and Closed has one **Reopen**, which goes to
+  open. The same moves are on a bug's right-click menu in the queue and in
+  search results. Every move except Start investigation asks for a message
+  in a dialog: a close message, a reopen message, what to test, what still
+  fails, or why the bug goes back to open. Cancelling the dialog cancels the
+  move. The message is saved as a comment in the same write as the status
+  change, with the move in its header note, and the thread shows it as a tag
+  such as "Testing → Closed". If you commented on the bug in the last five
+  minutes, that comment is the message: no dialog opens, and the bridge tags
+  it. The README records that a workflow engine should own this policy if
+  BugDesk ever runs on one. The `/bugs` skill tells agents to write the same
+  note, and to move a bug back to open only when asked.
 
 - **Updated shows the time, to the minute.** The bridge writes `updated` in UTC
   as `2026-09-13T14:05Z` on every edit, comment, criterion tick, new record and
@@ -20,8 +27,8 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and both detail pages show it in your local time, as `2026-09-13 16:05`.
   Records keep their order across time zones, and a plain text sort is still a
   time sort. Date filters on Updated still match by date. Older records with a
-  bare date read as before. `created`, comment headers and history lines stay
-  dates. The `/bugs`, `/backlog` and `/tracker` skills now tell agents to write
+  bare date read as before. Comment headers carry the minute too
+  (`### 2026-09-13T14:05Z · norman`); `created` and history lines stay dates. The `/bugs`, `/backlog` and `/tracker` skills now tell agents to write
   the same stamp.
 
 - **Filter the backlog by a cell, as in the bug queue.** Right-click a cell

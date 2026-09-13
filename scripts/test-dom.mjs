@@ -1896,13 +1896,18 @@ const mountTicketPage = async (bug, {
 
 await t('a bug can go back to open from every later stage, and the move is saved', async () => {
     for (const status of ['investigation', 'testing', 'closed']) {
-        const m = await mountTicketPage(bug42({ status, stage: { investigation: 1, testing: 2, closed: 3 }[status] }));
+        const m = await mountTicketPage(bug42({ status, stage: { investigation: 1, testing: 2, closed: 3 }[status], comments: [] }));
         const back = [...m.host.querySelectorAll('[data-wf]')].find((b) => b.dataset.wf === 'open');
         assert.ok(back, `no way back to open from ${status}`);
-        assert.equal(back.textContent.trim(), 'Back to open');
-        assert.ok(!back.classList.contains('td-stageaction--primary'), `Back to open is the primary action on ${status}`);
+        assert.equal(back.textContent.trim(), status === 'closed' ? 'Reopen' : 'Back to open');
+        if (status !== 'closed') assert.ok(!back.classList.contains('td-stageaction--primary'), `Back to open is the primary action on ${status}`);
         back.click();
-        await tick(); await tick(); await tick();
+        for (let i = 0; i < 6; i++) await tick();
+        const ta = document.querySelector('.twm-managed-window textarea, .managed-window textarea');
+        assert.ok(ta, `no message dialog for Back to open from ${status}`);
+        ta.value = 'Not ours to fix yet.';
+        ta.closest('form').querySelector('button[type="submit"]').click();
+        for (let i = 0; i < 6; i++) await tick();
         const saved = m.posts.find((p) => /\/api\/bugs\/42$/.test(p.path));
         assert.equal(saved?.body.status, 'open', `the move from ${status} did not save status: open`);
         m.done();
@@ -1911,6 +1916,97 @@ await t('a bug can go back to open from every later stage, and the move is saved
     assert.ok(![...fresh.host.querySelectorAll('[data-wf]')].some((b) => b.dataset.wf === 'open'),
         'an open bug offers to go back to open');
     fresh.done();
+});
+
+/* ── a status move and its message ────────────────────────────────── */
+
+const moves = await import(join(UI, 'ticketdesk', 'bug_transitions.js'));
+const moveBugData = await import(join(UI, 'ticketdesk', 'data.js'));
+const me = moveBugData.HUMAN_AUTHOR;
+const stampNow = (msAgo = 0) => new Date(Date.now() - msAgo).toISOString().slice(0, 16) + 'Z';
+
+await t('every move but "Start investigation" needs a message; Closed has one Reopen, to open', () => {
+    assert.equal(moves.needsMessage('open', 'investigation'), false);
+    for (const [from, list] of Object.entries(moves.BUG_TRANSITIONS)) {
+        for (const [, to] of list) if (!(from === 'open' && to === 'investigation')) assert.equal(moves.needsMessage(from, to), true, `${from} -> ${to}`);
+    }
+    assert.deepEqual(moves.BUG_TRANSITIONS.closed, [['Reopen', 'open']]);
+});
+
+await t('your own comment from the last five minutes is the message; older, someone else\'s or date-only is not', () => {
+    const c = (date, author = me, note = '') => [{ date, author, body: 'x', note }];
+    assert.ok(moves.recentMessage(c(stampNow(60 * 1000)), me));
+    assert.equal(moves.recentMessage(c(stampNow(6 * 60 * 1000)), me), null, 'six minutes ago still counted');
+    assert.equal(moves.recentMessage(c(stampNow(60 * 1000), 'someone_else'), me), null, 'somebody else\'s comment counted');
+    assert.equal(moves.recentMessage(c(new Date().toISOString().slice(0, 10)), me), null, 'a date-only header counted');
+    assert.equal(moves.recentMessage(c(stampNow(60 * 1000), me, 'status: open -> investigation'), me), null, 'a comment that is already a message counted twice');
+});
+
+/** Click a stage action on a mounted bug page; resolve once the page settled. */
+const clickMove = async (m, target) => {
+    const btn = [...m.host.querySelectorAll('[data-wf]')].find((b) => b.dataset.wf === target);
+    assert.ok(btn, `no ${target} action`);
+    btn.click();
+    for (let i = 0; i < 6; i++) await tick();
+};
+const modalTextarea = () => document.querySelector('.twm-managed-window textarea, .managed-window textarea');
+
+await t('Close asks for a close message in a modal and saves it with the move', async () => {
+    const m = await mountTicketPage(bug42({ status: 'testing', stage: 2, comments: [] }));
+    await clickMove(m, 'closed');
+    const ta = modalTextarea();
+    assert.ok(ta, 'no message dialog opened');
+    assert.match(ta.closest('form').textContent, /Close message/);
+    assert.equal(m.posts.length, 0, 'the move saved before the message was given');
+    ta.value = 'Fixed by the parser change.';
+    ta.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    ta.closest('form').querySelector('button[type="submit"]').click();
+    for (let i = 0; i < 6; i++) await tick();
+    const saved = m.posts.find((p) => /\/api\/bugs\/42$/.test(p.path));
+    assert.equal(saved?.body.status, 'closed');
+    assert.equal(saved?.body.comment, 'Fixed by the parser change.');
+    m.done();
+});
+
+await t('cancelling the message dialog cancels the move', async () => {
+    const m = await mountTicketPage(bug42({ status: 'testing', stage: 2, comments: [] }));
+    await clickMove(m, 'open');
+    const form = modalTextarea()?.closest('form');
+    assert.ok(form, 'no dialog for Back to open');
+    form.querySelector('[data-action="cancel"]').click();
+    for (let i = 0; i < 6; i++) await tick();
+    assert.equal(m.posts.length, 0, 'the move was saved anyway');
+    m.done();
+});
+
+await t('a comment you posted moments ago is the message: no dialog, and the bridge tags it', async () => {
+    const m = await mountTicketPage(bug42({ status: 'investigation', stage: 1,
+        comments: [{ date: stampNow(90 * 1000), author: me, body: 'Found it: the regex.', note: '' }] }));
+    await clickMove(m, 'testing');
+    assert.equal(modalTextarea(), null, 'a dialog asked for a message that already exists');
+    const saved = m.posts.find((p) => /\/api\/bugs\/42$/.test(p.path));
+    assert.equal(saved?.body.status, 'testing');
+    assert.equal(saved?.body.tagRecentComment, true);
+    assert.equal(saved?.body.comment, undefined);
+    m.done();
+});
+
+await t('Start investigation needs no message', async () => {
+    const m = await mountTicketPage(bug42({ status: 'open', stage: 0, comments: [] }));
+    await clickMove(m, 'investigation');
+    assert.equal(modalTextarea(), null);
+    assert.equal(m.posts.find((p) => /\/api\/bugs\/42$/.test(p.path))?.body.status, 'investigation');
+    m.done();
+});
+
+await t('a status change\'s message shows its tag in the thread', async () => {
+    const m = await mountTicketPage(bug42({ comments: [
+        { date: '2026-09-13T14:05Z', author: me, body: 'Verified.', note: 'status: testing -> closed' },
+        { date: '2026-09-12', author: me, body: 'Plain.', note: '' },
+    ] }));
+    const tags = [...m.host.querySelectorAll('[data-slot="comments"] .td-chip--status')].map((e) => e.textContent.trim());
+    assert.deepEqual(tags, ['Testing → Closed']);
+    m.done();
 });
 
 await t('the History pane exists, starts hidden, and Comments does not', async () => {

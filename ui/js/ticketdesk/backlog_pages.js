@@ -1190,7 +1190,8 @@ function mountItem(host, props, ctx) {
                 <div class="td-wentry__head">
                     <b>${esc(c.author)}</b>
                     <span class="td-chip td-chip--${c.author === HUMAN_AUTHOR ? 'internal' : 'public'}">${esc(c.author)}</span>
-                    <span class="td-dim td-mono">${esc(c.date)}</span>
+                    <span class="td-dim td-mono">${esc(formatStamp(c.date))}</span>
+                    ${c.note ? `<span class="td-chip td-chip--status">${esc(c.note)}</span>` : ''}
                 </div>
                 <div class="td-wentry__text td-md">${md(c.body)}</div>
             </div>

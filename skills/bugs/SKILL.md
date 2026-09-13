@@ -228,9 +228,18 @@ re-investigate in order to review.
 
 ### Comment headers
 
-`### <YYYY-MM-DD> · <author>` — the parser takes everything after `· ` up to
-the first `(` as the author, so `### 2026-07-20 · agent (after re-test)` parses
-as author `agent`, note "after re-test". Don't put anything author-identifying
+`### <YYYY-MM-DDTHH:MMZ> · <author>` — the time in UTC to the minute (`date -u
++%Y-%m-%dT%H:%MZ`); older comments carry a bare date and still read. The parser
+takes everything after `· ` up to the first `(` as the author, so
+`### 2026-07-20T09:12Z · agent (after re-test)` parses as author `agent`, note
+"after re-test".
+
+**A status change's message carries the move as its note:**
+`### 2026-09-13T14:05Z · norman_agent (status: investigation -> testing)`. The
+UI shows that note as a tag on the comment. When you hand back, close, reopen,
+move back to investigation or back to open, the comment you write in that same
+edit is the move's message: give it that note. Only `open -> investigation`
+(starting work) takes no message. Don't put anything author-identifying
 after the name without a `(` — an unparenthesized trailing word becomes part
 of the author string and the comment silently stops matching that author's
 filters.
@@ -287,9 +296,11 @@ search the whole file for one.
 
 ```
 open ──▶ investigation ⇄ testing ──▶ closed
-        (closed may reopen to investigation on regression)
-        (any status may go back to open)
+        (closed reopens to open; any status may go back to open)
 ```
+
+Every move except `open -> investigation` comes with a message: a comment in the
+same edit whose header note is the move (see Comment headers).
 
 `open` is where a bug starts, and where it goes back to when nobody should be
 on it yet: mis-triaged, abandoned, or reopened as something to look at fresh.

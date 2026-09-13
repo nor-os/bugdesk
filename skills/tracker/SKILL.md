@@ -202,7 +202,7 @@ Everything else behaves exactly as in `/backlog`: `type` must agree with the
 filename prefix (**the filename wins**), `parent` is a bare number, `created`
 is set once, `updated` is set to the current UTC time to the minute
 (`YYYY-MM-DDTHH:MMZ`) on *any* edit, and comment headers are
-`### YYYY-MM-DD · author`.
+`### YYYY-MM-DDTHH:MMZ · author` (UTC to the minute).
 
 `## History` is the same too — same line grammar, the same three tracked fields
 (`status`, `assignee`, `reporter`), and the same placement strictly above

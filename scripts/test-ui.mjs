@@ -555,6 +555,12 @@ for (const [input, expected] of COMMENT_HEADERS) {
     });
 }
 
+t('a header note is captured as the comment\'s status tag, and an absent one is absent', () => {
+    assert.equal(HDR.exec('### 2026-09-13T14:05Z · norman (status: testing -> closed)').groups.note, 'status: testing -> closed');
+    assert.equal(HDR.exec('### 2026-09-13T14:05Z · norman').groups.note, undefined);
+    assert.equal(HDR.exec('### 2026-09-13T14:05Z · norman').groups.date, '2026-09-13T14:05Z');
+});
+
 /* ── the history line grammar ────────────────────────────────────────
  *
  * `RecordHistory.Parse`'s decision, re-implemented over patterns lifted from

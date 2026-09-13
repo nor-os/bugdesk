@@ -34,6 +34,10 @@ export const COMMENT_HEADERS = [
     ['### 2026-07-27 · hans_agent (fixed) _(imported)_', 'hans_agent'],
     ['### 2026-07-27 · agent_(imported)_', 'agent'],            // matched before too
     ['### 2026-07-27 · agent after re-test', 'agent after re-test'],
+    // Comments carry the minute now, and a status change's message its move.
+    ['### 2026-09-13T14:05Z · norman', 'norman'],
+    ['### 2026-09-13T14:05Z · norman (status: testing -> closed)', 'norman'],
+    ['### 2026-09-13T14:05Z · hans_agent (status: investigation -> testing) _(imported)_', 'hans_agent'],
     ['### 2026-07-27 - agent', null],                           // hyphen, not U+00B7
     ['#### not a header', null],
 ];

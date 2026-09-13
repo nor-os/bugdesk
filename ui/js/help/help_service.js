@@ -238,9 +238,15 @@ comments are attributed.
 A bug's mask shows the stage as a chevron strip plus **Action**
 buttons for the only legal moves from that stage (from Testing, for
 example: "Back to investigation", "Close" or "Back to open"). Every
-stage after Open can go back to Open. There's no way to jump straight
-from Open to Closed — the buttons only ever offer what the lifecycle
-allows.
+stage after Open can go back to Open, and Closed reopens to Open. There's
+no way to jump straight from Open to Closed — the buttons only ever offer
+what the lifecycle allows. The same moves are on a bug's right-click menu
+in the queue and in search results.
+
+Every move except **Start investigation** asks for a message in a dialog,
+and the message is posted as a comment tagged with the move (for example
+"Testing → Closed"). If you commented on the bug in the last five minutes,
+that comment becomes the message and no dialog opens.
 
 \`assignee\` is **explicit** — set by whoever last touched the bug (the
 mask's reassign control, or the stage transition itself), never

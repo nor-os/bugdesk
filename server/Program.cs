@@ -297,6 +297,26 @@ app.MapPost("/api/bugs/{id:int}", async (int id, HttpRequest req) =>
 
     text = RecordHistory.Append(text, actor, changes);
     text = Md.SetFrontmatter(text, "updated", Md.Now());
+
+    // A STATUS CHANGE AND ITS MESSAGE. Close, reopen, hand to testing, back to
+    // investigation and back to open each come with a message, shown in the
+    // comment thread with a status tag (`status: testing -> closed` in the
+    // header's note). Either the request carries the message, and it is written
+    // here in the same write, or the actor commented moments ago
+    // (`tagRecentComment`), and that comment becomes the message.
+    //
+    // FOR THE FUTURE: on a platform with a workflow engine, the engine should own
+    // this — which transitions need a message, the five-minute window, and the
+    // link between a transition and its message — and this bridge should only
+    // store what it is told. Until then it lives here, at write time, as the
+    // smallest thing that works: a note in a header the format already had.
+    var statusChange = changes.FirstOrDefault(c => c.Field == "status");
+    var statusNote = statusChange is null ? null : $"status: {statusChange.From} -> {statusChange.To}";
+    if (patch.TryGetValue("comment", out var cv) && cv.ValueKind == JsonValueKind.String
+        && !string.IsNullOrWhiteSpace(cv.GetString()))
+        text = Md.AppendComment(text, actor, cv.GetString()!, statusNote);
+    else if (statusNote is not null && patch.TryGetValue("tagRecentComment", out var tv) && tv.ValueKind == JsonValueKind.True)
+        text = Md.TagRecentComment(text, actor, statusNote, DateTime.UtcNow).Text;
     await WriteRecord(path, text);
     return Results.Json(new { ok = true, bug = LoadOne(bugsDir, id) }, json);
 });

@@ -61,6 +61,7 @@ import { openRecordPicker } from './item_picker.js';
 import { attachTagInput } from './tag_input.js';
 import { ITEMS, isClosedItem, loadBacklog } from './backlog_data.js';
 import { watchRecord } from './live.js';
+import { BUG_TRANSITIONS, moveBug, resolveMoveMessage } from './bug_transitions.js';
 import { paintRecordCount, publishRecordCount } from './record_count.js';
 import {
     esc, STAGES, TICKETS, TEAM, HUMAN_AUTHOR, AGENT_AUTHOR, assigneeOptions, formatStamp,
@@ -357,6 +358,8 @@ function mountQueues(host, props, ctx) {
         const cc = cellClause(cm);
         const fieldLabel = cc ? (fieldDef(cc.col.field)?.label || cc.col.header) : '';
         return [
+            // The right-clicked bug's status moves, the same list its page offers.
+            ...statusMenuItems(cm.row ? TICKETS.find((x) => x.id === cm.row[QUEUE_ID_COL]) : null),
             { label: n > 1 ? `Open ${n} bugs in tabs` : 'Open', icon: 'open_in_new', action: 'open', disabled: !n },
             { label: 'Open in new tab', icon: 'tab', action: 'open-tab', disabled: !n },
             { label: 'Open in new window', icon: 'web_asset', action: 'open-window', disabled: !cm.row },
@@ -380,6 +383,10 @@ function mountQueues(host, props, ctx) {
         const ids = menuIds(cm);
         const one = cm.row?.[QUEUE_ID_COL] || ids[0];
         const cc = cellClause(cm);
+        if (String(action).startsWith('move:')) {
+            runStatusMenuAction(action, cm.row ? TICKETS.find((x) => x.id === cm.row[QUEUE_ID_COL]) : null);
+            return;
+        }
         switch (action) {
             // A queue row ALWAYS opens as a tab (that is what a row click
             // does), so "Open" and "Open in new tab" are the same journey —
@@ -539,22 +546,49 @@ function mountQueues(host, props, ctx) {
 
 /* ── ticket mask (edit / new / search) ──────────────────────────── */
 
-/** Lifecycle stage actions. Index === state.stage (0..3). Each button
- *  carries the target status the action moves the bug to; the first is the
- *  primary (the usual next step).
- *   0 open          → start investigation
- *   1 investigation → hand to testing, or back to open
- *   2 testing       → back to investigation, close, or back to open
- *   3 closed        → reopen (to investigation), or back to open
- *  "Back to open" returns a bug to not-yet-investigated, for one that was
- *  mis-triaged or abandoned. It changes the status only; the assignee stays
- *  whatever the mask's assignee field says. */
-const STAGE_ACTIONS = [
-    [['Start investigation', 'investigation']],                                             // open
-    [['Hand to testing', 'testing'], ['Back to open', 'open']],                             // investigation
-    [['Back to investigation', 'investigation'], ['Close', 'closed'], ['Back to open', 'open']], // testing
-    [['Reopen', 'investigation'], ['Back to open', 'open']],                                // closed
-];
+/** Lifecycle stage actions, index === state.stage (0..3): the moves in
+ *  bug_transitions.js, which the right-click menu offers too. */
+const STAGE_ORDER = ['open', 'investigation', 'testing', 'closed'];
+const STAGE_ACTIONS = STAGE_ORDER.map((status) => BUG_TRANSITIONS[status]);
+
+/** The status moves of one bug as context-menu entries, then a separator. */
+function statusMenuItems(bug) {
+    const moves = bug ? (BUG_TRANSITIONS[bug.rawStatus] || []) : [];
+    if (!moves.length) return [];
+    return [
+        ...moves.map(([label, target]) => ({
+            label, icon: target === 'closed' ? 'task_alt' : target === 'open' ? 'undo' : 'swap_horiz',
+            action: `move:${target}:${label}`,
+        })),
+        { separator: true },
+    ];
+}
+
+/** Carry out a `move:<target>:<label>` menu entry on `bug`, with its message. */
+async function runStatusMenuAction(action, bug) {
+    if (!bug) return;
+    const [, target, ...rest] = String(action).split(':');
+    const label = rest.join(':');
+    try {
+        const saved = await moveBug({ bugId: bug.bugId, from: bug.rawStatus, to: target, label, title: bug.summary });
+        if (!saved) { statusLine('Status unchanged.'); return; }
+        statusLine(`Bug ${bug.id}: ${humanizeStatus(bug.rawStatus)} → ${humanizeStatus(target)}.`);
+        await loadData();
+        _eventBus?.emit?.('bugs:changed', { store: 'bugs', id: bug.bugId });
+    } catch (err) {
+        statusLine(`Could not move bug ${bug.id}: ${err?.message || err}`);
+    }
+}
+
+/** A comment's status tag: the header note `status: testing -> closed`, shown
+ *  as "Testing → Closed". Any other note is shown as written. */
+export function statusTag(note) {
+    const text = String(note || '').trim();
+    if (!text) return '';
+    const m = /^status:\s*(\S+)\s*->\s*(\S+)$/i.exec(text);
+    const label = m ? `${humanizeStatus(m[1])} → ${humanizeStatus(m[2])}` : text;
+    return `<span class="td-chip td-chip--status" title="${esc(text)}">${esc(label)}</span>`;
+}
 /** Actions that are NOT a step along the ladder. They sit after the stage
  *  buttons and are offered wherever `when` says they make sense. A
  *  duplicate-and-close is not a rung on the lifecycle, so it does not get a
@@ -1001,7 +1035,9 @@ function mountTicket(host, props, ctx) {
                 emptyMessage: 'Nothing matches the criteria',
                 contextMenuItems: (cm) => {
                     const n = resultIds(cm).length;
+                    const m = cm.row ? byRef.get(cm.row[0]) : null;
                     return [
+                        ...statusMenuItems(m?.store === 'bugs' ? TICKETS.find((x) => x.id === m.id) : null),
                         { label: n > 1 ? `Open ${n} in tabs` : 'Open', icon: 'open_in_new', action: 'open', disabled: !n },
                         { label: 'Open in new window', icon: 'web_asset', action: 'open-window', disabled: !cm.row },
                         { separator: true },
@@ -1010,6 +1046,12 @@ function mountTicket(host, props, ctx) {
                 },
                 onContextMenuAction: (action, cm) => {
                     const refs = resultIds(cm);
+                    if (String(action).startsWith('move:')) {
+                        const m = cm.row ? byRef.get(cm.row[0]) : null;
+                        runStatusMenuAction(action, m?.store === 'bugs' ? TICKETS.find((x) => x.id === m.id) : null)
+                            .then(() => doSearch());
+                        return;
+                    }
                     switch (action) {
                         case 'open': refs.forEach((r) => openResult(r, { dest: 'origin', newTab: true })); break;
                         case 'open-window': if (cm.row?.[0]) openResult(cm.row[0], { dest: 'window' }); break;
@@ -1136,6 +1178,8 @@ function mountTicket(host, props, ctx) {
         // Sent only when it CHANGED. An ordinary save of a record written before the
         // field existed must not insert a `reporter:` line nobody typed.
         if (fval('reporter') !== (t.reporter || '')) patch.reporter = fval('reporter');
+        // A status move's message (bug_transitions.js), saved with the move.
+        if (state.moveMessage) Object.assign(patch, state.moveMessage);
         return patch;
     };
 
@@ -1177,7 +1221,8 @@ function mountTicket(host, props, ctx) {
                 <div class="td-wentry__head">
                     <b>${esc(c.author)}</b>
                     <span class="td-chip td-chip--${c.author === HUMAN_AUTHOR ? 'internal' : 'public'}">${esc(c.author)}</span>
-                    <span class="td-dim td-mono">${esc(c.date)}</span>
+                    <span class="td-dim td-mono">${esc(formatStamp(c.date))}</span>
+                    ${statusTag(c.note)}
                 </div>
                 <div class="td-wentry__text td-md">${md(c.body)}</div>
             </div>
@@ -1258,7 +1303,9 @@ function mountTicket(host, props, ctx) {
     const save = async () => {
         if (!t.bugId) { statusLine('Local bug — nothing to persist.'); return; }
         try {
-            const updated = await patchBug(t.bugId, collectPatch());
+            const patch = collectPatch();
+            state.moveMessage = null;
+            const updated = await patchBug(t.bugId, patch);
             applyRecord(updated);
             live.clear();
             statusLine(`Bug #${t.bugId} saved.`);
@@ -1291,7 +1338,21 @@ function mountTicket(host, props, ctx) {
 
     // Change stage AND persist it — one POST, which the bridge also records as a
     // `status` line in the record's ## History.
-    const applyStage = async (i) => { gotoStage(i); await save(); };
+    // A move that needs a message asks for it first (or reuses a comment you
+    // posted in the last five minutes); cancelling the dialog cancels the move.
+    const applyStage = async (target, label) => {
+        const i = STAGE_ORDER.indexOf(target);
+        if (i < 0) return;
+        if (t.bugId) {
+            const extra = await resolveMoveMessage({
+                bugId: t.bugId, from: STAGE_ORDER[state.stage], to: target, label, title: t.summary || '',
+            });
+            if (!extra) { statusLine('Status unchanged.'); return; }
+            state.moveMessage = Object.keys(extra).length ? extra : null;
+        }
+        gotoStage(i);
+        await save();
+    };
 
     // Chevrons are display-only — the lifecycle is driven exclusively by the
     // Action buttons below, so no invalid transition (e.g. close from
@@ -1299,7 +1360,7 @@ function mountTicket(host, props, ctx) {
     host.addEventListener('click', (e) => {
         const wf = e.target.closest('[data-wf]');
         if (!wf) return;
-        applyStage(STAGE_STATUS.indexOf(humanizeStatus(wf.dataset.wf)));
+        applyStage(wf.dataset.wf, wf.textContent.trim());
     });
 
     const actions = { save, cancel };

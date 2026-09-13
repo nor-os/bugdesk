@@ -3,7 +3,12 @@ using System.Text.RegularExpressions;
 /// <summary>
 /// One comment in a record's <c>## Comments</c> section.
 /// </summary>
-record Comment(string Date, string Author, string Body);
+/// <summary>
+/// One comment. <c>Note</c> is the bracketed text after the author in the header, empty when
+/// there is none. A status change's message carries <c>status: from -> to</c> there, which is
+/// what the UI shows as the comment's status tag.
+/// </summary>
+record Comment(string Date, string Author, string Body, string Note = "");
 
 /// <summary>
 /// Shared plumbing for BugDesk's record format: YAML-ish frontmatter, a body of
@@ -21,7 +26,7 @@ static class Md
 
     /// <summary>
     /// The moment a record was last touched, to the minute, in UTC: <c>2026-09-13T14:05Z</c>.
-    /// Written to <c>updated</c> only; <c>created</c>, comment headers and history lines stay
+    /// Written to <c>updated</c> and to comment headers; <c>created</c> and history lines stay
     /// dates. UTC so that two people in different time zones cannot make "most recently
     /// updated" disagree with the clock, and ISO 8601 so a plain string sort is still a time
     /// sort, including against the date-only values older records carry.
@@ -48,7 +53,7 @@ static class Md
     /// </para>
     /// </summary>
     public static readonly Regex CommentHdr =
-        new(@"^###\s+(?<date>\S+)\s+·\s+(?<author>[^\r\n(]+?)\s*(?:\([^)\r\n]*\))?\s*(?:_\(imported\)_)?\s*$",
+        new(@"^###\s+(?<date>\S+)\s+·\s+(?<author>[^\r\n(]+?)\s*(?:\((?<note>[^)\r\n]*)\))?\s*(?:_\(imported\)_)?\s*$",
             RegexOptions.Multiline);
 
     /// <summary>
@@ -183,7 +188,8 @@ static class Md
             var m = matches[n];
             var start = m.Index + m.Length;
             var stop = n + 1 < matches.Count ? matches[n + 1].Index : block.Length;
-            list.Add(new Comment(m.Groups["date"].Value, m.Groups["author"].Value.Trim(), block[start..stop].Trim()));
+            list.Add(new Comment(m.Groups["date"].Value, m.Groups["author"].Value.Trim(), block[start..stop].Trim(),
+                m.Groups["note"].Success ? m.Groups["note"].Value.Trim() : ""));
         }
         return list;
     }
@@ -353,12 +359,55 @@ static class Md
     /// Append a <c>### date · author</c> comment and bump <c>updated</c>. Creates the
     /// <c>## Comments</c> section when the record has none yet.
     /// </summary>
-    public static string AppendComment(string text, string author, string body)
+    public static string AppendComment(string text, string author, string body, string? note = null)
     {
         var next = text.TrimEnd() + "\n\n";
         if (!next.Contains("## Comments")) next += "## Comments\n\n";
-        next += $"### {Today()} · {author}\n\n{body.Trim()}\n";
+        // The header carries the minute (UTC), not just the day: "a message posted a
+        // moment before a status change is that change's message" needs to know how
+        // long ago the message was. A date-only header from before still parses.
+        var tag = string.IsNullOrWhiteSpace(note) ? "" : $" ({CleanNote(note)})";
+        next += $"### {Now()} · {author}{tag}\n\n{body.Trim()}\n";
         return SetFrontmatter(next, "updated", Now());
+    }
+
+    /// <summary>A note has to stay inside its brackets on one header line.</summary>
+    static string CleanNote(string note) =>
+        Regex.Replace(note, @"[()\r\n]+", " ").Trim();
+
+    /// <summary>How long before a status change a comment still counts as its message.</summary>
+    public static readonly TimeSpan MessageWindow = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// Tag the thread's LAST comment with <paramref name="note"/> when <paramref name="author"/>
+    /// wrote it within <see cref="MessageWindow"/> of <paramref name="nowUtc"/> and it carries no
+    /// note yet. That comment then reads as the status change's message. A date-only header has
+    /// no time to measure, so it is never tagged.
+    /// </summary>
+    /// <returns>the text, and whether a comment was tagged</returns>
+    public static (string Text, bool Tagged) TagRecentComment(string text, string author, string note, DateTime nowUtc)
+    {
+        var i = text.IndexOf("## Comments", StringComparison.Ordinal);
+        if (i < 0) return (text, false);
+        var matches = CommentHdr.Matches(text[i..]);
+        if (matches.Count == 0) return (text, false);
+        var last = matches[^1];
+        if (last.Groups["note"].Success) return (text, false);
+        if (!string.Equals(last.Groups["author"].Value.Trim(), author.Trim(), StringComparison.OrdinalIgnoreCase)) return (text, false);
+        if (!DateTime.TryParseExact(last.Groups["date"].Value, "yyyy-MM-dd'T'HH:mm'Z'",
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal,
+                out var at)) return (text, false);
+        var age = nowUtc - at;
+        if (age < TimeSpan.FromMinutes(-1) || age > MessageWindow) return (text, false);
+        var headerStart = i + last.Index;
+        var header = text.Substring(headerStart, last.Length);
+        var lineEnd = header.IndexOf('\n');
+        var line = (lineEnd >= 0 ? header[..lineEnd] : header).TrimEnd('\r', ' ');
+        var imported = line.EndsWith("_(imported)_", StringComparison.Ordinal);
+        var core = imported ? line[..^"_(imported)_".Length].TrimEnd() : line;
+        var tagged = $"{core} ({CleanNote(note)}){(imported ? " _(imported)_" : "")}";
+        return (text[..headerStart] + tagged + text[(headerStart + line.Length)..], true);
     }
 
     /// <summary>

@@ -1003,3 +1003,12 @@
     padding: 0 10px;
     border-left: 1px solid var(--border-default, #333);
 }
+
+/* A comment that is a status change's message carries the change as a tag:
+   "Testing → Closed". See ticketdesk/bug_transitions.js. */
+.td-chip.td-chip--status {
+    background: color-mix(in srgb, var(--accent, #3b82f6) 18%, transparent);
+    color: var(--text-primary, #e5e5e5);
+    border-color: color-mix(in srgb, var(--accent, #3b82f6) 45%, transparent);
+    white-space: nowrap;
+}

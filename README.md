@@ -415,9 +415,24 @@ Four states. `assignee` is **explicit** — set by whoever last touched the bug
 
 ```
 open ──▶ investigation ⇄ testing ──▶ closed
-        (closed may reopen to investigation on regression)
-        (any status may go back to open)
+        (closed reopens to open; any status may go back to open)
 ```
+
+**A move comes with its message.** Every move except starting investigation asks
+for a message: why it is closed or reopened, what to test, what still fails, why
+it goes back to open. The bug page's Action buttons and the queue's right-click
+menu open the same dialog, and the message is saved as a comment in the same
+write as the status change, tagged with it in the comment header:
+`### 2026-09-13T14:05Z · norman (status: testing -> closed)`. If you commented on
+the bug in the last five minutes, that comment is the message and no dialog
+opens; the bridge tags it instead.
+
+> **For the future.** Which moves need a message, the five-minute window, and the
+> link between a move and its message are workflow policy. On a platform with a
+> workflow engine, the engine should orchestrate them and BugDesk should only store
+> the result. Today they live in `ui/js/ticketdesk/bug_transitions.js` and the
+> bridge's `POST /api/bugs/{id}`, as a note in a comment header the format already
+> had: the smallest thing that works.
 
 | status | stage | typical owner | meaning |
 |---|---|---|---|

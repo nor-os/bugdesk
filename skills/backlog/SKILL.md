@@ -270,7 +270,8 @@ An item that hasn't been refined yet carries the placeholder
 
 ### Comment headers
 
-`### <YYYY-MM-DD> · <author>`, and the parser takes everything after `· ` up to
+`### <YYYY-MM-DDTHH:MMZ> · <author>` (UTC to the minute; older bare dates still
+read), and the parser takes everything after `· ` up to
 the first `(` as the author — same rule, same trap, and the same identity rule
 as [`/bugs`](../bugs/SKILL.md), including the rule about signing with your own
 agent name rather than the bare word `agent`. New comments append to the bottom
