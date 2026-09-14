@@ -53,6 +53,18 @@ WHERE THE RECORDS LIVE
   The directories are created on demand, and both paths are printed at startup
   — check that line if you are not seeing the records you expected.
 
+THE .NET SDK
+  The bridge needs a .NET SDK at least as new as the TargetFramework in
+  server/BugDesk.Server.csproj. The script LOOKS for one rather than assuming a
+  location: each candidate is asked `dotnet --list-sdks`, and the first with a
+  new enough SDK runs the server. In order:
+    1. every `dotnet` on PATH
+    2. $DOTNET_ROOT, if set
+    3. ~/.dotnet (where dotnet-install.sh puts a per-user SDK)
+    4. /usr/local/share/dotnet, /usr/share/dotnet, /usr/lib/dotnet
+  The one it picked, and its SDK version, are printed at startup. When none
+  qualifies, it says where it looked and which SDKs it found.
+
 OTHER ENVIRONMENT VARIABLES
   ASPNETCORE_URLS   Where to listen. Default http://127.0.0.1:8766.
   BUGDESK_CONFIG    Where profiles and filters live. Default .bugdesk/ beside
@@ -169,6 +181,74 @@ seed_store() {
     echo "BugDesk: seeded $dir with ${#incoming[@]} example $what."
 }
 
+# ── the .NET SDK ────────────────────────────────────────────────────────────
+#
+# LOOKED FOR, not assumed. A `dotnet` on PATH can be a runtime-only install or
+# an older SDK than this project targets, and a perfectly good SDK installed per
+# user (~/.dotnet) is not on PATH at all. Each candidate is asked for its SDKs,
+# and the first with one at least as new as the project's TargetFramework wins.
+required_major="$(sed -n 's|.*<TargetFramework>net\([0-9][0-9]*\)\..*|\1|p' "$root/server/BugDesk.Server.csproj" | head -n1)"
+required_major="${required_major:-0}"
+
+# The newest SDK version `$1` reports that satisfies the project, or nothing.
+sdk_for() {
+    "$1" --list-sdks 2>/dev/null | awk -v need="$required_major" '
+        { split($1, v, "."); if (v[1] + 0 >= need + 0) best = $1 }
+        END { if (best != "") print best }'
+}
+
+find_dotnet() {
+    local -a candidates=()
+    local c
+    while IFS= read -r c; do [ -n "$c" ] && candidates+=("$c"); done < <(type -ap dotnet 2>/dev/null || true)
+    [ -n "${DOTNET_ROOT:-}" ] && candidates+=("$DOTNET_ROOT/dotnet")
+    candidates+=("$HOME/.dotnet/dotnet" /usr/local/share/dotnet/dotnet /usr/share/dotnet/dotnet /usr/lib/dotnet/dotnet)
+    tried=()
+    for c in "${candidates[@]}"; do
+        [ -x "$c" ] || continue
+        local sdk
+        sdk="$(sdk_for "$c")"
+        if [ -n "$sdk" ]; then
+            dotnet_bin="$c"
+            dotnet_sdk="$sdk"
+            return 0
+        fi
+        local found
+        found="$("$c" --list-sdks 2>/dev/null | awk '{printf "%s%s", sep, $1; sep=", "}' || true)"
+        tried+=("$c: ${found:-no SDK installed}")
+    done
+    return 1
+}
+
+tried=()
+if ! find_dotnet; then
+    echo "BugDesk: no .NET SDK ${required_major}.0 or newer found." >&2
+    if [ "${#tried[@]}" -gt 0 ]; then
+        for t in "${tried[@]}"; do echo "  $t" >&2; done
+    else
+        echo "  No dotnet on PATH, in \$DOTNET_ROOT, ~/.dotnet or the usual install directories." >&2
+    fi
+    echo "  Install one from https://dotnet.microsoft.com/download" >&2
+    exit 1
+fi
+# The server and the tools `dotnet run` starts resolve the runtime through
+# DOTNET_ROOT and PATH, so a dotnet found off PATH has to be made visible to them.
+# Through symlinks first: /usr/bin/dotnet is a link into /usr/lib/dotnet, and
+# DOTNET_ROOT has to name the real install, where the runtimes are. (A portable
+# loop rather than `readlink -f`, which older macOS lacks.)
+dotnet_real="$dotnet_bin"
+while [ -L "$dotnet_real" ]; do
+    link="$(readlink "$dotnet_real")"
+    case "$link" in
+        /*) dotnet_real="$link" ;;
+        *) dotnet_real="$(dirname "$dotnet_real")/$link" ;;
+    esac
+done
+dotnet_dir="$(cd "$(dirname "$dotnet_real")" && pwd -P)"
+export DOTNET_ROOT="$dotnet_dir"
+export PATH="$dotnet_dir:$PATH"
+echo "BugDesk: .NET SDK $dotnet_sdk ($dotnet_bin)"
+
 # A TRACKER does not live in the repo at all — its records go under the user's
 # own BugDesk directory, one folder per project (see ResolveTrackerBase in
 # Program.cs). So the paths computed above are simply not its business, and
@@ -182,7 +262,7 @@ if [ "$BUGDESK_MODE" = "tracker" ]; then
         export BUGDESK_SEED_TRACKER=1
     fi
     echo "BugDesk → tracker mode (the URL is printed below; the port is picked automatically)"
-    exec dotnet run --project "$root/server" -- "${args[@]}"
+    exec "$dotnet_bin" run --project "$root/server" -- "${args[@]}"
 fi
 
 # Seed each store INDEPENDENTLY — see seed_store above.
@@ -193,4 +273,4 @@ fi
 
 export ASPNETCORE_URLS="${ASPNETCORE_URLS:-http://127.0.0.1:8766}"
 echo "BugDesk → ${ASPNETCORE_URLS}   (mode: ${BUGDESK_MODE}, bugs: ${bugs_dir}, backlog: ${backlog_dir})"
-exec dotnet run --project "$root/server" -- "${args[@]}"
+exec "$dotnet_bin" run --project "$root/server" -- "${args[@]}"

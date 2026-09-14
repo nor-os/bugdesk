@@ -147,8 +147,14 @@ seeds each store **independently** and never touches one that already has
 records, so it's safe to leave in your usual command — and a repo that already
 tracks bugs but has no backlog yet still gets seeded backlog examples.
 
-Requires the .NET SDK (`dotnet`, tested on 10.0.100). No build step for the
-UI — it is ES modules served straight off disk through an import map.
+Requires a .NET SDK at least as new as the project's target (10.0; tested on
+10.0.100 and 10.0.112). `run.sh` and `run.ps1` look for one rather than
+assuming where it is installed. They ask each `dotnet` on PATH, then
+`DOTNET_ROOT`, then the per-user install (`%LOCALAPPDATA%\Microsoft\dotnet` and
+`%USERPROFILE%\.dotnet` on Windows, `~/.dotnet` elsewhere), then the system
+install, with `dotnet --list-sdks`. The first with a new enough SDK runs the
+server, and the startup line names it. No build step for the UI — it is ES
+modules served straight off disk through an import map.
 
 ## Who you are
 

@@ -60,6 +60,20 @@ WHERE THE RECORDS LIVE
   The directories are created on demand, and both paths are printed at startup
   - check that line if you are not seeing the records you expected.
 
+THE .NET SDK
+  The bridge needs a .NET SDK at least as new as the TargetFramework in
+  server\BugDesk.Server.csproj. The script LOOKS for one rather than assuming a
+  location: each candidate is asked `dotnet --list-sdks`, and the first with a
+  new enough SDK runs the server. In order:
+    1. every dotnet on PATH
+    2. $env:DOTNET_ROOT, if set
+    3. %LOCALAPPDATA%\Microsoft\dotnet (where dotnet-install.ps1 puts a
+       per-user SDK)
+    4. %USERPROFILE%\.dotnet
+    5. %ProgramFiles%\dotnet
+  The one it picked, and its SDK version, are printed at startup. When none
+  qualifies, it says where it looked and which SDKs it found.
+
 OTHER ENVIRONMENT VARIABLES
   ASPNETCORE_URLS   Where to listen. Default http://127.0.0.1:8766.
   BUGDESK_CONFIG    Where profiles and filters live. Default .bugdesk\ beside
@@ -164,10 +178,53 @@ function Seed-Store {
     Write-Host "BugDesk: seeded $Dir with $($incoming.Count) example $What."
 }
 
-if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
-    Write-Host "BugDesk: 'dotnet' not found on PATH. Install the .NET SDK from https://dotnet.microsoft.com/download"
+# -- the .NET SDK --------------------------------------------------------------
+#
+# LOOKED FOR, not assumed. A dotnet on PATH can be a runtime-only install or an
+# older SDK than this project targets, and a perfectly good per-user SDK
+# (%LOCALAPPDATA%\Microsoft\dotnet, %USERPROFILE%\.dotnet) is often not on PATH
+# at all. Each candidate is asked for its SDKs, and the first with one at least
+# as new as the project's TargetFramework wins.
+$csproj = Get-Content -Raw (Join-Path $root 'server\BugDesk.Server.csproj')
+$requiredMajor = if ($csproj -match '<TargetFramework>net(\d+)\.') { [int]$Matches[1] } else { 0 }
+$exe = if ($env:OS -eq 'Windows_NT') { 'dotnet.exe' } else { 'dotnet' }
+
+$candidates = @()
+$candidates += @(Get-Command dotnet -All -CommandType Application -ErrorAction SilentlyContinue |
+    ForEach-Object { $_.Source })
+if ($env:DOTNET_ROOT) { $candidates += (Join-Path $env:DOTNET_ROOT $exe) }
+if ($env:LOCALAPPDATA) { $candidates += (Join-Path $env:LOCALAPPDATA "Microsoft\dotnet\$exe") }
+$profileDir = if ($env:USERPROFILE) { $env:USERPROFILE } else { $HOME }
+if ($profileDir) { $candidates += (Join-Path $profileDir ".dotnet\$exe") }
+if ($env:ProgramFiles) { $candidates += (Join-Path $env:ProgramFiles "dotnet\$exe") }
+
+$dotnet = $null
+$dotnetSdk = $null
+$tried = @()
+foreach ($c in ($candidates | Select-Object -Unique)) {
+    if (-not (Test-Path -LiteralPath $c -PathType Leaf)) { continue }
+    $sdks = @(& $c --list-sdks 2>$null | ForEach-Object { ($_ -split '\s+')[0] } | Where-Object { $_ })
+    $good = @($sdks | Where-Object { [int](($_ -split '\.')[0]) -ge $requiredMajor })
+    if ($good.Count -gt 0) {
+        $dotnet = $c
+        $dotnetSdk = $good[-1]
+        break
+    }
+    $tried += "  ${c}: $(if ($sdks.Count) { $sdks -join ', ' } else { 'no SDK installed' })"
+}
+if (-not $dotnet) {
+    Write-Host "BugDesk: no .NET SDK $requiredMajor.0 or newer found."
+    if ($tried.Count) { $tried | ForEach-Object { Write-Host $_ } }
+    else { Write-Host '  No dotnet on PATH, in DOTNET_ROOT, %LOCALAPPDATA%\Microsoft\dotnet, %USERPROFILE%\.dotnet or %ProgramFiles%\dotnet.' }
+    Write-Host '  Install one from https://dotnet.microsoft.com/download'
     exit 1
 }
+# The server and the tools `dotnet run` starts resolve the runtime through
+# DOTNET_ROOT and PATH, so a dotnet found off PATH has to be made visible to them.
+$dotnetDir = Split-Path -Parent (Resolve-Path -LiteralPath $dotnet).Path
+$env:DOTNET_ROOT = $dotnetDir
+$env:PATH = "$dotnetDir$([IO.Path]::PathSeparator)$env:PATH"
+Write-Host "BugDesk: .NET SDK $dotnetSdk ($dotnet)"
 
 # A TRACKER does not live in the repo at all - its records go under
 # %APPDATA%\BugDesk, one folder per project (ResolveTrackerBase in Program.cs).
@@ -182,7 +239,7 @@ if ($env:BUGDESK_MODE -eq 'tracker') {
         $env:BUGDESK_SEED_TRACKER = '1'
     }
     Write-Host "BugDesk -> tracker mode (the URL is printed below; the port is picked automatically)"
-    & dotnet run --project (Join-Path $root 'server') -- @dotnetArgs
+    & $dotnet run --project (Join-Path $root 'server') -- @dotnetArgs
     exit $LASTEXITCODE
 }
 
@@ -194,5 +251,5 @@ if ($seed) {
 
 if (-not $env:ASPNETCORE_URLS) { $env:ASPNETCORE_URLS = 'http://127.0.0.1:8766' }
 Write-Host "BugDesk -> $($env:ASPNETCORE_URLS)   (mode: $($env:BUGDESK_MODE), bugs: $bugsDir, backlog: $backlogDir)"
-& dotnet run --project (Join-Path $root 'server') -- @dotnetArgs
+& $dotnet run --project (Join-Path $root 'server') -- @dotnetArgs
 exit $LASTEXITCODE

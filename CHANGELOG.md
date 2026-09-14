@@ -7,6 +7,19 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`run.sh` and `run.ps1` find a .NET SDK instead of assuming one on PATH.**
+  Each candidate is asked `dotnet --list-sdks`, and the first with an SDK at
+  least as new as the project's TargetFramework runs the server. The order is
+  every `dotnet` on PATH, `DOTNET_ROOT`, then `%LOCALAPPDATA%\Microsoft\dotnet`,
+  `%USERPROFILE%\.dotnet` and `%ProgramFiles%\dotnet` on Windows, or
+  `~/.dotnet` and the usual system directories elsewhere. A dotnet found off
+  PATH is exported as `DOTNET_ROOT` and put first on PATH for the server.
+  Symlinks are resolved first, so `/usr/bin/dotnet` names `/usr/lib/dotnet`.
+  The startup line shows which SDK was picked. When none qualifies, the error
+  lists every dotnet found and its SDKs. Before, a runtime-only or too-old
+  dotnet on PATH, or an SDK installed only per user, stopped BugDesk with
+  "dotnet not found".
+
 - **A bug can go back to open, and every move says why.** Investigation and
   Testing offer **Back to open**, and Closed has one **Reopen**, which goes to
   open. The same moves are on a bug's right-click menu in the queue and in
