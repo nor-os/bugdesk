@@ -1465,6 +1465,81 @@ await t('it opens as a real managed window, not a hand-rolled overlay', async ()
     put('fetch', realFetchLocal);
 });
 
+/* ── the left rail follows the right store ───────────────────────────
+ *
+ * Filters on the rail "sometimes" opened the other store. Two causes: the
+ * backlog rail mounts after an await, so a switch that finished late landed on
+ * top of the bug rail (or a second backlog mount leaked the first's listeners);
+ * and pressing a rail row focuses the PANEL, which resolved to the primary tile
+ * rather than the one the user was in, swapping the rail under the pointer. */
+
+const railHarness = (leaves, focused) => {
+    const handlers = new Map();
+    const bus = {
+        on: (name, fn) => {
+            if (!handlers.has(name)) handlers.set(name, []);
+            handlers.get(name).push(fn);
+            return { dispose() {} };
+        },
+        emit: (name, payload) => (handlers.get(name) || []).forEach((f) => f(payload)),
+    };
+    const opened = [];
+    const tree = {
+        focusedLeafId: focused,
+        get: (id) => (leaves[id] ? { content: { kind: leaves[id] } } : null),
+        primaryLeafId: () => 'primary',
+    };
+    const wm = {
+        desktops: { active: () => ({ tree }) },
+        openInPrimary: (kind, props) => opened.push({ kind, props }),
+    };
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const panel = createTicketDeskContent({ eventBus: bus })['panel:left'](host, {}, { wm });
+    return { bus, tree, opened, host, panel };
+};
+const settle = async () => { for (let i = 0; i < 6; i++) await tick(); };
+
+await t('a rail switch that finishes late does not land on top of the other store', async () => {
+    const r = railHarness({ primary: 'backlog', side: 'queues' }, 'primary');
+    // The backlog rail is still importing when the user moves to Bugs...
+    r.tree.focusedLeafId = 'side';
+    r.bus.emit('wm:changed', {});
+    await settle();
+    // ...and back and forth in a burst, ending on Bugs.
+    r.tree.focusedLeafId = 'primary';
+    r.bus.emit('wm:changed', {});
+    r.bus.emit('wm:changed', {});
+    r.tree.focusedLeafId = 'side';
+    r.bus.emit('wm:changed', {});
+    await settle();
+
+    const row = r.host.querySelector('[data-filter="active"]');
+    assert.ok(row, 'the bug rail is not showing');
+    assert.ok(!r.host.querySelector('[data-epic],[data-phase],[data-project]'),
+        'a backlog rail landed on top of the bug rail');
+    row.click();
+    assert.deepEqual(r.opened.map((o) => o.kind), ['queues'],
+        'a bug filter opened something other than the bug queue');
+    r.panel.destroy();
+    r.host.remove();
+});
+
+await t('pressing the rail keeps the store of the tile you were in, not the primary', async () => {
+    const r = railHarness({ primary: 'backlog', side: 'queues', rail: 'panel:left' }, 'side');
+    await settle();
+    const before = r.host.querySelector('[data-filter="active"]');
+    assert.ok(before, 'the bug rail is not showing');
+    // Mousedown on a rail row focuses the rail panel.
+    r.tree.focusedLeafId = 'rail';
+    r.bus.emit('wm:changed', {});
+    await settle();
+    assert.equal(r.host.querySelector('[data-filter="active"]'), before,
+        'focusing the rail swapped it to the primary tile\'s store');
+    r.panel.destroy();
+    r.host.remove();
+});
+
 await t('a focus change does NOT rebuild the panel under the pointer', async () => {
     // THE BUG, and the reason it survived three attempts to find it: `wm:changed`
     // fires on every focus change, and focusing happens on MOUSEDOWN. Repainting
@@ -2006,6 +2081,16 @@ await t('a status change\'s message shows its tag in the thread', async () => {
     ] }));
     const tags = [...m.host.querySelectorAll('[data-slot="comments"] .td-chip--status')].map((e) => e.textContent.trim());
     assert.deepEqual(tags, ['Testing → Closed']);
+    // The message is marked as a whole, and the tag sits last in its header.
+    const entries = [...m.host.querySelectorAll('[data-slot="comments"] .td-wentry')];
+    const moved = entries.map((e) => e.classList.contains('td-wentry--move'));
+    assert.deepEqual(moved.filter(Boolean).length, 1, `exactly one entry is a status message: ${moved}`);
+    const head = entries[moved.indexOf(true)].querySelector('.td-wentry__head');
+    assert.equal(head.lastElementChild.className, 'td-chip td-chip--status');
+    // The author is named once: the badge beside the name repeated it.
+    assert.deepEqual([...head.querySelectorAll('.td-chip')].map((c) => c.className),
+        ['td-chip td-chip--status'], 'the author is named twice in the header');
+    assert.equal(head.querySelector('b').textContent, me);
     m.done();
 });
 

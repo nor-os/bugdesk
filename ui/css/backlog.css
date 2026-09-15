@@ -481,11 +481,16 @@
 .bd-newgroup > .td-dim { margin-right: 2px; }
 
 /* Dropped is off every ladder, so it renders as an extra terminal chevron
-   rather than pretending to be a stage number. */
-.bd-stage--dropped {
-    color: var(--text-dim, #666);
-    text-decoration: line-through;
+   rather than pretending to be a stage number. It is the current state, so it
+   must read as clearly as an active stage — but in a muted red rather than the
+   accent, so it is not mistaken for progress. (This sheet loads after
+   ticketdesk.css, so these win over .td-stage--active.) */
+.td-stage.bd-stage--dropped {
+    background: #4a2c2c;
+    color: #f0c4c4;
+    cursor: default;
 }
+.td-stage.bd-stage--dropped:hover { background: #4a2c2c; color: #f0c4c4; }
 
 /* Rail: work packages. Epics sit one level in from their phase, matching the
    tree they navigate to. */

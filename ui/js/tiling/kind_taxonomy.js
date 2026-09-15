@@ -176,6 +176,10 @@ export const taxonomy = createTaxonomy({
     },
 });
 
+/** Per tile tree, the last content leaf that had focus. Weak, so a closed
+ *  desktop's tree is not kept alive by having once been asked about. */
+const lastContentLeaf = new WeakMap();
+
 /**
  * Which TOP-NAV section the user is currently in — the lit chip in the top bar,
  * and therefore which store everything else should be talking about.
@@ -201,14 +205,21 @@ export function activeTopNavKind(wm) {
     const tree = wm?.desktops?.active?.()?.tree;
     if (!tree) return null;
 
-    const focusedId = tree.focusedLeafId;
-    const focusedKind = focusedId ? tree.get(focusedId)?.content?.kind : null;
-    const usable = focusedKind
-        && !String(focusedKind).startsWith('panel:')
-        && focusedKind !== 'window-placeholder';
+    const usableKind = (id) => {
+        const kind = id ? tree.get(id)?.content?.kind : null;
+        return kind && !String(kind).startsWith('panel:') && kind !== 'window-placeholder' ? kind : null;
+    };
 
-    const primaryId = tree.primaryLeafId?.();
-    const activeKind = usable ? focusedKind : (primaryId ? tree.get(primaryId)?.content?.kind : null);
+    // A panel in focus means "the content tile I was just in", NOT the primary.
+    // Pressing a rail row focuses the rail on MOUSEDOWN; answering with the
+    // primary leaf flipped the section whenever the user worked in any other
+    // tile (Bugs in a split beside a Backlog primary), the rail swapped stores
+    // between press and release, and the click opened a filter of the OTHER
+    // store under the pointer.
+    const focusedId = tree.focusedLeafId;
+    let activeKind = usableKind(focusedId);
+    if (activeKind) lastContentLeaf.set(tree, focusedId);
+    else activeKind = usableKind(lastContentLeaf.get(tree)) || usableKind(tree.primaryLeafId?.());
     if (!activeKind) return null;
 
     // WALK UP to the nearest kind that actually has a chip. FlexDesk's own

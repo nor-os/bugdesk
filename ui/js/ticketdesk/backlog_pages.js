@@ -201,6 +201,17 @@ function treeGuides(row) {
     return parts.join('');
 }
 
+/** A comment's status tag — the header note `status: draft -> in-progress`,
+ *  shown as "Draft → In progress". Any other note is shown as written. The bug
+ *  queue has the same helper over its own status names (pages.js). */
+function statusTag(note) {
+    const text = String(note || '').trim();
+    if (!text) return '';
+    const m = /^status:\s*(\S+)\s*->\s*(\S+)$/i.exec(text);
+    const label = m ? `${humanizeItemStatus(m[1])} → ${humanizeItemStatus(m[2])}` : text;
+    return `<span class="td-chip td-chip--status" title="${esc(text)}">${esc(label)}</span>`;
+}
+
 function mountBacklogBoard(host, props, ctx) {
     // props.expr (ad-hoc, e.g. a rail epic click) beats props.filter (a stored
     // key or saved id) — same precedence as the bug queue.
@@ -858,8 +869,8 @@ function mountItem(host, props, ctx) {
 
         $('[data-slot="stages"]').innerHTML = ladder.map((s, i) =>
             `<li class="td-stage ${!dropped && i < stage ? 'td-stage--done' : ''} ${i === stage ? 'td-stage--active' : ''}"
-                 data-stage="${i}"><span class="td-stage__num">${i + 1}</span> ${esc(humanizeItemStatus(s))}</li>`).join('')
-            + (dropped ? `<li class="td-stage td-stage--active bd-stage--dropped">${esc(humanizeItemStatus('dropped'))}</li>` : '');
+                 data-stage="${i}"><span class="td-stage__num">${i + 1}</span><span class="td-stage__label">${esc(humanizeItemStatus(s))}</span></li>`).join('')
+            + (dropped ? `<li class="td-stage td-stage--active bd-stage--dropped"><span class="td-stage__label">${esc(humanizeItemStatus('dropped'))}</span></li>` : '');
 
         const gaps = refinementGaps(item);
         // `isClosedItem` (done OR dropped), not a stage index: `stageOf` reports -1 for a
@@ -1184,14 +1195,13 @@ function mountItem(host, props, ctx) {
     };
 
     const commentHTML = (c) => `
-        <div class="td-wentry td-wentry--${c.author === HUMAN_AUTHOR ? 'human' : 'agent'}">
+        <div class="td-wentry td-wentry--${c.author === HUMAN_AUTHOR ? 'human' : 'agent'}${c.note ? ' td-wentry--move' : ''}">
             <span class="td-avatar">${esc(initials(c.author))}</span>
             <div>
                 <div class="td-wentry__head">
                     <b>${esc(c.author)}</b>
-                    <span class="td-chip td-chip--${c.author === HUMAN_AUTHOR ? 'internal' : 'public'}">${esc(c.author)}</span>
                     <span class="td-dim td-mono">${esc(formatStamp(c.date))}</span>
-                    ${c.note ? `<span class="td-chip td-chip--status">${esc(c.note)}</span>` : ''}
+                    ${statusTag(c.note)}
                 </div>
                 <div class="td-wentry__text td-md">${md(c.body)}</div>
             </div>

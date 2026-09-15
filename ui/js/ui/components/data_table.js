@@ -577,6 +577,13 @@ export class DataTable {
         // navigation silently died the first time the store moved.
         const doc = this.container.ownerDocument;
         const hadTableFocus = !!this._tableEl && doc?.activeElement === this._tableEl;
+        // SCROLL POSITION SURVIVES A RE-RENDER, for the same reason: the scroll
+        // box is rebuilt too, and a new one starts at the top. Folding a tree
+        // row, or any refresh, threw a reader scrolled halfway down back to row
+        // one. Only on the SAME page — turning the page should start at its top.
+        const prevWrap = this._tableWrapEl;
+        const prevScroll = prevWrap?.isConnected && this._renderedOffset === this._state.offset
+            ? { top: prevWrap.scrollTop, left: prevWrap.scrollLeft } : null;
 
         this._cleanup();
         this.container.innerHTML = '';
@@ -724,6 +731,11 @@ export class DataTable {
 
         this._tableWrapEl = tableWrap;
         this.container.appendChild(this._wrapperEl);
+        if (prevScroll && this._state.offset === this._renderedOffset) {
+            tableWrap.scrollTop = prevScroll.top;
+            tableWrap.scrollLeft = prevScroll.left;
+        }
+        this._renderedOffset = this._state.offset;
 
         // Sync header column widths to body after layout. Two-pass: the
         // first frame lets the browser settle natural widths from the

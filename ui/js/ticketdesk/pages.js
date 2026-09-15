@@ -697,7 +697,7 @@ function mountTicket(host, props, ctx) {
         ${mode === 'edit' ? `
         <div class="td-stagebar">
             <ol class="td-stages">${STAGES.map((s, i) =>
-                `<li class="td-stage" data-stage="${i}"><span class="td-stage__num">${i + 1}</span> ${s}</li>`).join('')}
+                `<li class="td-stage" data-stage="${i}"><span class="td-stage__num">${i + 1}</span><span class="td-stage__label">${s}</span></li>`).join('')}
             </ol>
         </div>
         <div class="td-stageactions">
@@ -1214,13 +1214,17 @@ function mountTicket(host, props, ctx) {
     };
 
     const cmtHost = () => $('[data-slot="comments"]');
+    // The author is named ONCE: the badge beside the name repeated it. The
+    // human/agent distinction it carried is still there, in the avatar and the
+    // note's coloured edge. A status change's message gets the whole entry
+    // marked (`--move`) and its tag at the right of the header, so a decision
+    // does not read as another remark.
     const commentHTML = (c) => `
-        <div class="td-wentry td-wentry--${c.author === HUMAN_AUTHOR ? 'human' : 'agent'}">
+        <div class="td-wentry td-wentry--${c.author === HUMAN_AUTHOR ? 'human' : 'agent'}${c.note ? ' td-wentry--move' : ''}">
             <span class="td-avatar">${esc(initials(c.author))}</span>
             <div>
                 <div class="td-wentry__head">
                     <b>${esc(c.author)}</b>
-                    <span class="td-chip td-chip--${c.author === HUMAN_AUTHOR ? 'internal' : 'public'}">${esc(c.author)}</span>
                     <span class="td-dim td-mono">${esc(formatStamp(c.date))}</span>
                     ${statusTag(c.note)}
                 </div>
@@ -1537,22 +1541,35 @@ function mountTicketNav(host, props, ctx) {
 
     let shown = null;            // 'bugs' | 'backlog'
     let backlogRail = null;      // the Backlog body's controller, mounted lazily
+    // Bumped by every show() and by destroy. The backlog rail mounts after an
+    // await, and `wm:changed` fires in bursts: without this, a switch that
+    // finished late mounted the backlog rail over the bug rail (with `shown`
+    // still 'bugs', so BOTH click handlers answered), or a second backlog mount
+    // replaced the first without destroying it — whose leaked listeners then
+    // answered clicks on the bug rail. Either way a filter opened the store
+    // you were not in.
+    let generation = 0;
+    let mounted = 0;             // the generation whose rail is actually on screen
 
     host.classList.add('bd-rail');
     host.innerHTML = '<div class="bd-rail__body" data-slot="railbody"></div>';
     const body = host.querySelector('[data-slot="railbody"]');
 
     const show = async (next) => {
-        if (next === shown && body.childElementCount) return;
+        // Already showing it — or already on the way to it.
+        if (next === shown && (body.childElementCount || mounted !== generation)) return;
+        const mine = ++generation;
         shown = next;
         try { backlogRail?.destroy(); } catch { /* not mounted */ }
         backlogRail = null;
         body.innerHTML = '';
-        if (next === 'bugs') { renderFilters(); return; }
+        if (next === 'bugs') { renderFilters(); mounted = mine; return; }
         // Imported lazily so the bug rail — the thing on screen at boot — never
         // waits on the backlog module to parse.
         const { mountBacklogRail } = await import('./backlog_pages.js');
+        if (mine !== generation) return;     // superseded while loading
         backlogRail = mountBacklogRail(body, ctx);
+        mounted = mine;
     };
 
     /** Follow the top nav. An unresolvable section (nothing focused yet) leaves
@@ -1683,6 +1700,7 @@ function mountTicketNav(host, props, ctx) {
     return {
         title: 'Filters',
         destroy: () => {
+            generation++;                    // a backlog mount still loading must not land
             unsub();
             focusSub?.dispose?.();
             body.removeEventListener('click', onBugRailClick);

@@ -27,8 +27,11 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   in a dialog: a close message, a reopen message, what to test, what still
   fails, or why the bug goes back to open. Cancelling the dialog cancels the
   move. The message is saved as a comment in the same write as the status
-  change, with the move in its header note, and the thread shows it as a tag
-  such as "Testing → Closed". If you commented on the bug in the last five
+  change, with the move in its header note. The thread marks that comment as a
+  whole — a tinted note with an accent edge — and puts the move at the right of
+  its header as a tag such as "Testing → Closed", so a decision does not read as
+  another remark. The author's name no longer appears twice in a comment
+  header. If you commented on the bug in the last five
   minutes, that comment is the message: no dialog opens, and the bridge tags
   it. The README records that a workflow engine should own this policy if
   BugDesk ever runs on one. The `/bugs` skill tells agents to write the same
@@ -652,6 +655,24 @@ least interesting half of what it knows. It opens the same set the count is of,
 in whichever store the panel is currently reporting on.
 
 ### Fixed
+
+- **A filter on the left rail opens the store you are in.** Pressing a rail row
+  sometimes opened Bugs from the backlog, or the backlog from Bugs. Pressing
+  focuses the rail, and the rail then followed the primary tile rather than the
+  tile you were working in, so it swapped stores between press and release. It
+  now follows the last content tile you focused. A switch between the two rails
+  that finished late could also land on top of the other rail, or leave the old
+  rail's click handlers behind; a newer switch now cancels it.
+
+- **Folding a row keeps the board where it was.** Collapsing or expanding a
+  subtree, or any refresh, scrolled the table back to the top. A table now keeps
+  its scroll position when it redraws, unless you turned the page. The fix is
+  also in FlexDesk's copy of the table.
+
+- **The stage bar is readable when an item is dropped, and its numbers line up.**
+  "Dropped" was grey on the accent colour; it is now a muted red chevron with
+  light text. The numbered circles sat below their labels; they are now
+  centred on the same line.
 
 - **A view with more than 100 records shows all of them.** The table cut every
   view to its first 100 rows, even with its page controls switched off, and the

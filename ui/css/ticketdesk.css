@@ -165,8 +165,14 @@
     user-select: none;
 }
 .td-stages { display: flex; list-style: none; flex: 1; min-width: 0; margin: 0; padding: 0; }
+/* Flex, not inline flow: the numbered circle and the label centre on one axis
+   instead of the circle hanging off the text baseline. The label is its own
+   span so it can ellipsize — a bare text node in a flex row cannot. */
 .td-stage {
     position: relative;
+    display: flex;
+    align-items: center;
+    gap: 5px;
     flex: 1;
     min-width: 0;
     padding: 4px 10px 4px 18px;
@@ -177,10 +183,10 @@
     color: var(--text-muted, #888);
     white-space: nowrap;
     overflow: hidden;
-    text-overflow: ellipsis;
     cursor: pointer;
     clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 50%, calc(100% - 9px) 100%, 0 100%, 9px 50%);
 }
+.td-stage__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; line-height: 13px; }
 .td-stage:first-child {
     border-left: 1px solid var(--ea-border, #333);
     padding-left: 10px;
@@ -190,14 +196,15 @@
 .td-stage:hover { background: #2d2d2d; color: var(--ea-text, #d4d4d4); }
 .td-stage__num {
     display: inline-flex;
+    flex: 0 0 auto;
     align-items: center;
     justify-content: center;
+    box-sizing: border-box;
     width: 13px; height: 13px;
-    margin-right: 4px;
     border-radius: 50%;
     border: 1px solid currentColor;
-    font-size: 10px;
-    vertical-align: -2px;
+    font-size: 9px;
+    line-height: 1;
 }
 .td-stage--done { background: #2d2d2d; color: var(--ea-text, #d4d4d4); }
 .td-stage--done .td-stage__num { border-color: var(--color-success, #3fb950); color: var(--color-success, #3fb950); }
@@ -1011,4 +1018,15 @@
     color: var(--text-primary, #e5e5e5);
     border-color: color-mix(in srgb, var(--accent, #3b82f6) 45%, transparent);
     white-space: nowrap;
+}
+
+/* A comment that is a status change's MESSAGE, not another remark: the tag sits
+   at the right of the header, and the whole entry carries the accent — a tinted
+   note with an accent edge — so a decision is distinguishable at a glance while
+   scrolling a thread. See ticketdesk/bug_transitions.js. */
+.td-wentry__head .td-chip--status { margin-left: auto; }
+.td-wentry--move .td-wentry__text {
+    background: color-mix(in srgb, var(--ea-accent, #1177b3) 9%, var(--ea-bg-well, #0d0d0d));
+    border-color: color-mix(in srgb, var(--ea-accent, #1177b3) 35%, transparent);
+    border-left-color: var(--ea-accent, #1177b3);
 }
