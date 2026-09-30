@@ -533,7 +533,7 @@ function ancestorIds(item, byId) {
  *    hidden         descendants folded away, for the "(3 hidden)" hint
  *    context        kept as an ancestor, did not match
  */
-export function treeRows(match, collapsed = new Set()) {
+export function treeRows(match, collapsed = new Set(), compare = null) {
     const byId = new Map(ITEMS.map((i) => [Number(i.id), i]));
     const matched = ITEMS.filter(match);
 
@@ -556,6 +556,15 @@ export function treeRows(match, collapsed = new Set()) {
             // deleted. Both render at the top level; neither may vanish.
             roots.push(item);
         }
+    }
+
+    // A column sort orders SIBLINGS, never the whole list: an epic stays under
+    // its project and a task under its story, and within each parent the
+    // children follow the chosen column. Array#sort is stable, so equal keys
+    // keep the store's tree order.
+    if (compare) {
+        roots.sort(compare);
+        for (const kids of byParent.values()) kids.sort(compare);
     }
 
     const descendantCount = (id) => {

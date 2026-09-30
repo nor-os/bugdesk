@@ -181,6 +181,27 @@ t('collapsing a leaf is a no-op', () => {
     assert.deepEqual(ids(data.treeRows(() => true, new Set([3]))), [1, 2, 3, 4, 5, 6]);
 });
 
+t('a column sort orders siblings and keeps every child under its parent', () => {
+    // Title, descending: the epics swap, the stories under epic 1 swap, and so
+    // do the two tasks under story 2 — but no row leaves its parent.
+    const byTitleDesc = (x, y) => y.title.localeCompare(x.title);
+    const rs = data.treeRows(() => true, new Set(), byTitleDesc);
+    assert.deepEqual(ids(rs), [6, 1, 5, 2, 4, 3]);
+    assert.deepEqual(rs.map((r) => r.depth), [0, 0, 1, 1, 2, 2]);
+    for (const r of rs) {
+        if (Number(r.parent) > 0) {
+            const at = rs.indexOf(r);
+            const parentAt = rs.findIndex((p) => p.id === Number(r.parent));
+            assert.ok(parentAt >= 0 && parentAt < at, `${r.id} is not below its parent`);
+        }
+    }
+});
+
+t('isLast follows the sorted order, so the tree lines still join up', () => {
+    const rs = data.treeRows(() => true, new Set(), (x, y) => y.title.localeCompare(x.title));
+    assert.deepEqual(rs.map((r) => r.isLast), [false, true, false, true, false, true]);
+});
+
 t('collapsibleIds lists only parents', () =>
     assert.deepEqual(data.collapsibleIds().sort((a, b) => a - b), [1, 2]));
 

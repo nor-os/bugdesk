@@ -231,9 +231,15 @@ t('"Assigned by me" reads reporter, not assignee', () => {
 });
 t('a project filter selects a whole subtree by projectRef', () => {
     const m = filters.matcherFor(filters.projectExpr('PROJ-0003'));
-    assert.equal(m({ projectRef: 'PROJ-0003' }), true);
-    assert.equal(m({ projectRef: 'PROJ-0009' }), false);
-    assert.equal(m({ projectRef: '' }), false);
+    assert.equal(m({ projectRef: 'PROJ-0003', status: 'draft' }), true);
+    assert.equal(m({ projectRef: 'PROJ-0009', status: 'draft' }), false);
+    assert.equal(m({ projectRef: '', status: 'draft' }), false);
+});
+t('opening a project leaves its finished work out, as "Everything open" does', () => {
+    const m = filters.matcherFor(filters.projectExpr('PROJ-0003'));
+    assert.equal(m({ projectRef: 'PROJ-0003', status: 'in-progress' }), true);
+    assert.equal(m({ projectRef: 'PROJ-0003', status: 'done' }), false);
+    assert.equal(m({ projectRef: 'PROJ-0003', status: 'dropped' }), false);
 });
 t('the field catalogue is the same in both modes', () => {
     // A filter someone saved in one mode has to keep resolving in the other,

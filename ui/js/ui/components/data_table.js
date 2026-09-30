@@ -536,6 +536,14 @@ export class DataTable {
         this.render();
     }
 
+    /** The sort the user chose — `{ column, ascending }`, column null when none.
+     *  For a table whose `onSort` does the sorting itself: it needs to know the
+     *  current choice on every rebuild, including one restored from
+     *  `persistKey` before any click. */
+    getSort() {
+        return { column: this._state.sortColumn, ascending: this._state.sortAscending };
+    }
+
     /** Internal: if `maybePromise` is a Promise (or thenable),
      * toggle the loading overlay around it. No-op otherwise. */
     _awaitWithSpinner(maybePromise) {

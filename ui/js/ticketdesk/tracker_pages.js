@@ -354,7 +354,7 @@ function mountTracker(host, props, ctx) {
             } else if (action === 'who') {
                 openBoard({ expr: assigneeExpr(model.assignee), label: model.assignee ? `On ${model.assignee}` : 'Nobody on it', flat: true });
             } else if (action === 'project' && model.projectRef) {
-                openBoard({ expr: projectExpr(model.projectRef), label: model.projectRef });
+                openBoard({ expr: projectExpr(model.projectRef), label: `${model.projectRef} · open` });
             } else if (action === 'delete') {
                 confirmDelete(model, { onStatus: statusLine })
                     .then((done) => { if (done) { _eventBus?.emit?.(ev('backlog:changed'), {}); render(); } });

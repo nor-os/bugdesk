@@ -286,8 +286,11 @@ export function adhocFilter(expr, label) {
 /** The expression that selects one whole work package. */
 export const epicExpr = (ref) => and(clause('epic', 'is', ref));
 
-/** The same, one level up: everything under one project, at any depth. */
-export const projectExpr = (ref) => and(clause('project', 'is', ref));
+/** The same, one level up: everything under one project, at any depth — OPEN,
+ *  like "Everything open": a project is opened to see what is still to do, and
+ *  its finished work buried that. The status clause is an ordinary one in the
+ *  filter editor, so removing it brings the closed items back. */
+export const projectExpr = (ref) => and(OPEN, clause('project', 'is', ref));
 
 /** Everything on one person's plate, open. What a dashboard row navigates to. */
 export const assigneeExpr = (name) => and(OPEN, clause('assignee', 'is', name || 'none'));

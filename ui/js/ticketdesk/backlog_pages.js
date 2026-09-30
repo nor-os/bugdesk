@@ -263,8 +263,30 @@ function mountBacklogBoard(host, props, ctx) {
      *  index. Rebuilt on every rows() call. */
     let byRef = new Map();
 
+    /** The chosen column sort as a comparator over ITEMS, for the tree — which
+     *  sorts siblings under their parent rather than letting the table sort
+     *  the rows flat and tear projects, epics and stories apart. Values are
+     *  the cells the column shows; blanks always last, numbers as numbers,
+     *  text naturally ("TASK-9" before "TASK-10"). */
+    const siblingOrder = () => {
+        const sort = table?.getSort?.();
+        const col = sort?.column == null ? null : BOARD_COLS[sort.column];
+        if (!col) return null;
+        const dir = sort.ascending ? 1 : -1;
+        return (a, b) => {
+            const va = col.get(a), vb = col.get(b);
+            const ea = va == null || va === '', eb = vb == null || vb === '';
+            if (ea || eb) return ea === eb ? 0 : ea ? 1 : -1;
+            const na = Number(va), nb = Number(vb);
+            const cmp = Number.isFinite(na) && Number.isFinite(nb)
+                ? na - nb
+                : String(va).localeCompare(String(vb), undefined, { numeric: true, sensitivity: 'base' });
+            return cmp * dir;
+        };
+    };
+
     const rows = () => {
-        const list = flat ? flatRows(view.match) : treeRows(view.match, _collapsed);
+        const list = flat ? flatRows(view.match) : treeRows(view.match, _collapsed, siblingOrder());
         byRef = new Map(list.map((i) => [i.ref, i]));
         const matched = list.filter((i) => !i.context).length;
         const context = list.length - matched;
@@ -318,10 +340,12 @@ function mountBacklogBoard(host, props, ctx) {
         onRender: paintRecordCount,
         selectable: true,
         copyable: true,
-        // Sorting flattens the hierarchy — a tree sorted by Updated is no longer
-        // a tree — so the Item/Title columns keep their tree order and the rest
-        // stay sortable for the "just find it" case.
+        // Every column sorts. The flat list lets the table sort its rows; the
+        // TREE sorts itself (siblingOrder above) — sorted flat, a tree sorted
+        // by Updated scattered epics away from their projects and stories away
+        // from their epics. The table then only keeps the choice and the arrow.
         sortable: true,
+        ...(flat ? {} : { onSort: () => refresh() }),
         filterable: true,
         mode: 'compact',
         emptyMessage: 'Nothing in this view',
@@ -1825,7 +1849,7 @@ export function mountBacklogRail(host, ctx) {
 
     const activate = (el, target) => {
         if (el.dataset.epic) { open({ expr: epicExpr(el.dataset.epic), label: el.dataset.epic }); return; }
-        if (el.dataset.project) { open({ expr: projectExpr(el.dataset.project), label: el.dataset.project }); return; }
+        if (el.dataset.project) { open({ expr: projectExpr(el.dataset.project), label: `${el.dataset.project} · open` }); return; }
         if (el.dataset.loose) {
             open({ expr: { kind: 'group', op: 'AND', children: [{ kind: 'clause', field: 'project', op: 'is_empty' }] },
                    label: 'Not in a project' });
