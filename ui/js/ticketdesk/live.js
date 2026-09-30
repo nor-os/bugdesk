@@ -25,6 +25,8 @@
 
 import { loadData } from './data.js';
 import { loadBacklog } from './backlog_data.js';
+import { appName } from '../core/app_identity.js';
+import { apiUrl, ev } from './instance.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -43,7 +45,7 @@ export function installLiveUpdates({ eventBus, logger } = {}) {
     const log = logger ?? console;
 
     try {
-        _source = new EventSource('/api/events');
+        _source = new EventSource(apiUrl('/events'));
     } catch (err) {
         log.warn?.('[bugdesk] live updates unavailable', err);
         return { close: () => {} };
@@ -63,16 +65,16 @@ export function installLiveUpdates({ eventBus, logger } = {}) {
         await Promise.all(loads);
 
         if (stores.has('bugs')) _bus?.emit?.('bugs:changed', payload);
-        if (stores.has('backlog')) _bus?.emit?.('backlog:changed', payload);
-        if (stores.has('project')) _bus?.emit?.('project:changed', payload);
+        if (stores.has('backlog')) _bus?.emit?.(ev('backlog:changed'), payload);
+        if (stores.has('project')) _bus?.emit?.(ev('project:changed'), payload);
         // Carries the per-file detail, which is what an open record page needs
         // in order to ask "was that me?".
-        _bus?.emit?.('store:changed', payload);
+        _bus?.emit?.(ev('store:changed'), payload);
 
         const n = (payload?.changed || []).length;
         if (n) {
             const el = document.getElementById('sim-status');
-            if (el) el.textContent = `${n} record${n === 1 ? '' : 's'} changed outside BugDesk — lists refreshed.`;
+            if (el) el.textContent = `${n} record${n === 1 ? '' : 's'} changed outside ${appName()} — lists refreshed.`;
         }
     });
 
@@ -129,13 +131,13 @@ export function watchRecord({ host, store, id, isDirty, onReload, onStatus, even
         banner.innerHTML = deleted
             ? `<span class="material-symbols-outlined">delete_forever</span>
                <span class="bd-conflict__text">
-                   This record was <b>deleted</b> outside BugDesk. Your unsaved edits are still here;
+                   This record was <b>deleted</b> outside ${appName()}. Your unsaved edits are still here;
                    saving will write the file again.
                </span>
                <button type="button" class="ea-btn" data-conflict="keep">Keep my edits</button>`
             : `<span class="material-symbols-outlined">sync_problem</span>
                <span class="bd-conflict__text">
-                   This record changed outside BugDesk while you were editing it.
+                   This record changed outside ${appName()} while you were editing it.
                </span>
                <button type="button" class="ea-btn" data-conflict="reload">Discard mine, reload</button>
                <button type="button" class="ea-btn" data-conflict="keep">Keep my edits</button>`;
@@ -171,7 +173,7 @@ export function watchRecord({ host, store, id, isDirty, onReload, onStatus, even
         onStatus?.('Updated from disk.');
     };
 
-    const sub = eventBus?.on?.('store:changed', onChange);
+    const sub = eventBus?.on?.(ev('store:changed'), onChange);
     return {
         clear,
         dispose: () => { sub?.dispose?.(); clear(); },

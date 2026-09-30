@@ -29,6 +29,8 @@
  */
 
 import { ITEMS, itemRef, loadBacklog, typeLabelOf } from './backlog_data.js';
+import { appName } from '../core/app_identity.js';
+import { apiUrl } from './instance.js';
 
 /** Everything below `id`, at any depth — the same set the bridge computes. */
 export function descendantsOf(id) {
@@ -66,7 +68,7 @@ export async function confirmDelete(item, { onStatus } = {}) {
         if (!window.confirm(
             `Delete ${ref} — ${item.title}?\n\n`
             + `This ${noun} is not in a git repository, so the only copy is the one on disk. `
-            + 'BugDesk moves it to a .trash folder beside the store rather than removing it.'
+            + `${appName()} moves it to a .trash folder beside the store rather than removing it.`
         )) return null;
     } else {
         // Three-way, and window.confirm only says yes or no — so it is asked as
@@ -90,7 +92,7 @@ export async function confirmDelete(item, { onStatus } = {}) {
     }
 
     try {
-        const url = `/api/backlog/${item.id}${children ? `?children=${children}` : ''}`;
+        const url = apiUrl(`/backlog/${item.id}${children ? `?children=${children}` : ''}`);
         const res = await fetch(url, { method: 'DELETE', headers: { accept: 'application/json' } });
         const j = await res.json().catch(() => null);
         if (!res.ok || !j?.ok) throw new Error(j?.error || `HTTP ${res.status}`);

@@ -1172,3 +1172,20 @@ tr:hover .twm-row-action { opacity: 1; }
     .twm-top-nav__label { display: none; }
     .twm-top-nav__btn { padding: 0 10px; }
 }
+
+/* The global tracker, as a section of a project page (kind_taxonomy.js's
+   MERGED_TRACKER). It belongs to no project, so it is set apart from the
+   project's own sections: a divider before it, and TicketDesk's teal. */
+.twm-top-nav__btn--global {
+    border-left: 1px solid var(--border-strong, #383838);
+    color: rgba(45, 212, 191, 0.7);
+}
+.twm-top-nav__btn--global:hover {
+    color: #5eead4;
+    background: rgba(45, 212, 191, 0.07);
+}
+.twm-top-nav__btn--global.twm-top-nav__btn--on {
+    color: #99f6e4;
+    background: rgba(13, 148, 136, 0.2);
+    box-shadow: inset 0 -2px 0 #14b8a6;
+}

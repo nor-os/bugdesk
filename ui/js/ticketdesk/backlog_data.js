@@ -25,6 +25,7 @@
 
 import { AGENT_AUTHOR, HUMAN_AUTHOR, formatStamp } from './data.js';
 import { registerRecordHierarchy } from '../tiling/kind_taxonomy.js';
+import { apiUrl, CONFIG, KIND } from './instance.js';
 
 /* ── mode ────────────────────────────────────────────────────────────
  *
@@ -37,7 +38,7 @@ import { registerRecordHierarchy } from '../tiling/kind_taxonomy.js';
  * Read once, at module load, like HUMAN_AUTHOR: the mode cannot change without
  * restarting the bridge, so a getter would only invite the belief that it can.
  */
-const _cfg = (typeof window !== 'undefined' && window.__BUGDESK_CONFIG__) || {};
+const _cfg = CONFIG;
 export const MODE = _cfg.mode === 'tracker' ? 'tracker' : 'bugs';
 export const TRACKER = MODE === 'tracker';
 
@@ -318,12 +319,12 @@ export function duePhrase(item, today = todayISO()) {
 /* ── bridge client ───────────────────────────────────────────────── */
 
 async function apiGet(path) {
-    const res = await fetch(`/api${path}`, { headers: { accept: 'application/json' } });
+    const res = await fetch(apiUrl(path), { headers: { accept: 'application/json' } });
     if (!res.ok) throw new Error(`GET ${path} → ${res.status}`);
     return res.json();
 }
 async function apiPost(path, body) {
-    const res = await fetch(`/api${path}`, {
+    const res = await fetch(apiUrl(path), {
         method: 'POST',
         headers: { 'content-type': 'application/json', accept: 'application/json' },
         body: JSON.stringify(body),
@@ -663,7 +664,7 @@ export const collapsibleIds = () => {
 /* A backlog item's breadcrumb IS its hierarchy: "Backlog › EPIC-0002 › STORY-0007
  * › TASK-0031", read from the live store so a re-parent shows without reopening
  * the tab. FlexDesk's breadcrumb asks the taxonomy; this is the answer. */
-registerRecordHierarchy('item', {
+registerRecordHierarchy(KIND.item, {
     ancestors: (props) => {
         const byId = new Map(ITEMS.map((i) => [Number(i.id), i]));
         let cur = byId.get(Number(String(props?.id ?? '').replace(/^#/, '')));
@@ -673,7 +674,7 @@ registerRecordHierarchy('item', {
             const next = byId.get(Number(cur.parent));
             if (!next || seen.has(next.id)) break;   // a cycle from a hand edit
             seen.add(next.id);
-            chain.unshift({ kind: 'item', id: String(next.id), label: itemRef(next) });
+            chain.unshift({ kind: KIND.item, id: String(next.id), label: itemRef(next) });
             cur = next;
         }
         return chain;

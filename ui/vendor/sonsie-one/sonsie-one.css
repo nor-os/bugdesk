@@ -1,0 +1,9 @@
+/* Sonsie One (SIL OFL 1.1, see OFL.txt beside this file), Latin subset,
+   vendored from Google Fonts so the TicketDesk wordmark renders offline. */
+@font-face {
+    font-family: 'Sonsie One';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url(sonsie-one-latin.woff2) format('woff2');
+}

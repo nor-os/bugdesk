@@ -581,9 +581,15 @@ const FIXTURE = [
       parent: 1, assignee: '', reporter: 'alice', due: '', criteria: [] },
 ];
 
+// The UI's API calls are RELATIVE (`api/backlog`) — each page is served under
+// its project's prefix and talks to that project's store. A browser resolves
+// them against the page's address before they reach the network; the fakes
+// below match on the result, so they resolve them the same way.
+const pageUrl = (url) => new URL(String(url), 'http://bugdesk.test/p/test/').pathname;
+
 const realFetch = globalThis.fetch;
 put('fetch', async (url) => {
-    const path = String(url);
+    const path = pageUrl(url);
     if (path.endsWith('/api/backlog')) {
         return { ok: true, json: async () => ({ ok: true, items: FIXTURE }) };
     }
@@ -1158,7 +1164,7 @@ await t('the description can be edited and saved', async () => {
     const posts = [];
     const realFetchLocal = globalThis.fetch;
     put('fetch', async (url, opts) => {
-        const path = String(url);
+        const path = pageUrl(url);
         if (opts?.method === 'POST' && /\/api\/backlog\/2$/.test(path)) {
             const patch = JSON.parse(opts.body);
             posts.push(patch);
@@ -1217,11 +1223,11 @@ const mountItemPage = async (record) => {
     const posts = [];
     const realFetchLocal = globalThis.fetch;
     put('fetch', async (url, opts) => {
-        if (opts?.method === 'POST' && /\/api\/backlog\/4$/.test(String(url))) {
+        if (opts?.method === 'POST' && /\/api\/backlog\/4$/.test(pageUrl(url))) {
             posts.push(JSON.parse(opts.body));
             return { ok: true, json: async () => ({ ok: true, item: record }) };
         }
-        if (/\/api\/backlog\/4$/.test(String(url))) {
+        if (/\/api\/backlog\/4$/.test(pageUrl(url))) {
             return { ok: true, json: async () => ({ ok: true, item: record }) };
         }
         return { ok: true, json: async () => ({ ok: true, items: FIXTURE, phases: [], settings: {} }) };
@@ -1312,7 +1318,7 @@ await t('the placeholder for an empty description is never loaded as text', asyn
         comments: [], children: 0, ancestors: [], childItems: [],
     };
     const realFetchLocal = globalThis.fetch;
-    put('fetch', async (url) => (/\/api\/backlog\/9$/.test(String(url))
+    put('fetch', async (url) => (/\/api\/backlog\/9$/.test(pageUrl(url))
         ? { ok: true, json: async () => ({ ok: true, item: record }) }
         : { ok: true, json: async () => ({ ok: true, items: FIXTURE, phases: [], settings: {} }) }));
 
@@ -1842,7 +1848,7 @@ const { taxonomy } = await import(join(UI, 'tiling', 'kind_taxonomy.js'));
 await t('clicking a name puts that person\'s list in the primary tile', async () => {
     const realFetchLocal = globalThis.fetch;
     put('fetch', async (url) => {
-        const path = String(url);
+        const path = pageUrl(url);
         if (path.endsWith('/api/backlog')) return { ok: true, json: async () => ({ ok: true, items: FIXTURE }) };
         if (path.endsWith('/api/backlog/meta')) return { ok: true, json: async () => ({ ok: true, phases: [] }) };
         return { ok: true, json: async () => ({ ok: true, settings: {}, filters: [] }) };
@@ -1941,7 +1947,7 @@ const mountTicketPage = async (bug, {
     const posts = [];
     const realFetchLocal = globalThis.fetch;
     put('fetch', async (url, opts) => {
-        const path = String(url);
+        const path = pageUrl(url);
         if (opts?.method === 'POST') {
             posts.push({ path, body: JSON.parse(opts.body) });
             return { ok: true, json: async () => ({ ok: true, bug: postBug || bug, target, targetNoted }) };
@@ -2463,7 +2469,7 @@ console.log('\nRecord references while typing');
 {
     const realFetchRefs = globalThis.fetch;
     put('fetch', async (url) => {
-        const path = String(url);
+        const path = pageUrl(url);
         if (path.endsWith('/api/bugs')) return { ok: true, json: async () => ({ ok: true, bugs: [bug42()] }) };
         if (path.endsWith('/api/meta')) return { ok: true, json: async () => ({ ok: true, byAssignee: {} }) };
         if (path.endsWith('/api/backlog')) return { ok: true, json: async () => ({ ok: true, items: FIXTURE }) };

@@ -3,6 +3,46 @@
 Notable changes to BugDesk. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- **Several projects in one BugDesk.** `projects.toml` in the checkout lists
+  them — each with a bugs folder, a backlog folder or both — along with the
+  global tracker and your name. The first run writes it from the store BugDesk
+  was started on. Each project is served at `/p/<name>/`, and `/` opens the one
+  used last. A project with only one of the two stores offers only that page.
+  The file is re-read when it changes; an edit that does not parse is reported
+  by line and the last good version stays in force.
+
+- **A project chip and a switcher in the bottom bar.** The chip names the
+  project. Clicking it opens a list: type to filter, the first match is
+  selected, Enter switches. Adding (with the backlog and name filled in from
+  the bugs folder) and removing (Shift+Delete, or the bin on a row) edit
+  `projects.toml` only; no folder is touched.
+
+- **The tracker inside every project.** With `[tracker] path` set, a teal
+  **Tracker** section follows Bugs and Backlog, with the dashboard, the tickets
+  and the new-ticket mask. Its records, filters, team and live updates are the
+  tracker's own, and its links and tabs never open the project's record of the
+  same number. While it is in front, the project chip reads *n/a*. Ctrl+K
+  searches the tracker too.
+
+- **One name everywhere.** `[user] name` is who you are in every project and
+  in the tracker. An existing profile's name is adopted into the file.
+
+- **TicketDesk.** Started with `--tracker`, the app is TicketDesk: its own name
+  in the title, the top bar, dialogs and messages, and its own icon.
+
+- **Icons and wordmarks.** A BugDesk and a TicketDesk badge as favicon and in
+  the top bar, and each name in its own display face (Marck Script, Sonsie One —
+  both SIL OFL, vendored).
+
+### Changed
+
+- The UI's API calls are relative to the page, so they reach the project it
+  was opened on. An unprefixed `/api/…` call reaches the default project.
+
 ## 0.3.0 — 2026-09-10
 
 ### Added

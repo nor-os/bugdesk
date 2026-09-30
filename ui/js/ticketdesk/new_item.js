@@ -22,6 +22,7 @@
  * uses, with the same paste-a-screenshot support.
  */
 
+import { ev, has, KIND } from './instance.js';
 import { mountTileBreadcrumb } from '@flexdesk/wm';
 import { taxonomy } from '../tiling/kind_taxonomy.js';
 import { attachMarkdownEditor } from './md_editor.js';
@@ -51,6 +52,8 @@ const BACKLOG_KIND = (type) => ({
 });
 
 export const KINDS = [
+    // Only what this project has: a project listed with only a backlog files no
+    // bugs, and one with only bugs no epics — see storeHas.
     // NO BUG TYPES IN TRACKER MODE. A tracker has no bug store — it does not
     // live in a code repo at all — so these three could only ever file into a
     // directory that does not exist. `project` is the mirror image: the level a
@@ -65,7 +68,7 @@ export const KINDS = [
     BACKLOG_KIND('epic'),
     BACKLOG_KIND('story'),
     BACKLOG_KIND('task'),
-];
+].filter((k) => has(k.store === 'bugs' ? 'bugs' : 'backlog'));
 const kindById = (id) => KINDS.find((k) => k.id === id) || KINDS[0];
 
 /**
@@ -317,10 +320,10 @@ export function mountNewItem(host, props, ctx) {
                 });
                 await loadBacklog();
                 setStatus(`${itemRef(item)} created.`);
-                open = () => ctx.wm?.navigate?.('item',
+                open = () => ctx.wm?.navigate?.(KIND.item,
                     { id: String(item.id), label: `${itemRef(item)} — ${item.title}` }, { ctx, dest: 'origin' });
             }
-            ctx.eventBus?.emit?.('backlog:changed', {});
+            ctx.eventBus?.emit?.(ev('backlog:changed'), {});
             // Replace this page with what it made: the mask has done its job,
             // and leaving it open invites filing the same thing twice.
             open?.();
@@ -367,7 +370,7 @@ export function mountNewItem(host, props, ctx) {
 /** The content kind, wrapped in the standard page shell. */
 export function createNewItemContent({ eventBus } = {}) {
     return {
-        'new-item': (hostEl, props, ctx) => {
+        [KIND.newItem]: (hostEl, props, ctx) => {
             hostEl.classList.add('twm-page-shell', 'td-shell');
             hostEl.innerHTML = '';
             const crumbSlot = document.createElement('div');
@@ -379,7 +382,7 @@ export function createNewItemContent({ eventBus } = {}) {
             hostEl.append(crumbSlot, actionsSlot, contentSlot);
             let crumb = null;
             try {
-                crumb = mountTileBreadcrumb('new-item', props, { taxonomy, ...ctx, eventBus });
+                crumb = mountTileBreadcrumb(KIND.newItem, props, { taxonomy, ...ctx, eventBus });
                 crumbSlot.appendChild(crumb.el);
             } catch (err) { console.warn('[bugdesk] breadcrumb failed', err); }
             const ret = mountNewItem(contentSlot, props, { ...ctx, eventBus, pageActions: actionsSlot });
@@ -401,5 +404,5 @@ export function openNewItem(wm, { kind = '', parent = 0, phase = '', ctx = null 
     // The default has to be a kind this deployment actually offers: `bug` in
     // tracker mode would open the mask on a type that is not in its own select.
     const props = { kind: kind || KINDS[0].id, parent, phase, label: 'New item' };
-    wm?.openInTabFromContext?.(ctx || {}, 'new-item', props);
+    wm?.openInTabFromContext?.(ctx || {}, KIND.newItem, props);
 }

@@ -1567,6 +1567,43 @@
     color: #f5f5f5;
 }
 
+/* The top-bar wordmark and its icon. The display lives here, not inline: the
+   responsive top bar hides the brand by writing style.display and restores it
+   by clearing that, which would wipe an inline value. */
+.ecoagent-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 0 10px;
+    color: #ddd;
+}
+
+/* Each product's name in its own display face, at one weight only: no faux
+   bold, no tracking. BugDesk is a 1950s script, sized up because script
+   x-heights are small; TicketDesk is Sonsie One, heavy and wide, sized down. */
+.ecoagent-brand__name {
+    font-weight: 400;
+    line-height: 1;
+    letter-spacing: 0;
+    white-space: nowrap;
+}
+
+.ecoagent-brand__name--bugdesk {
+    font-family: 'Marck Script', cursive;
+    font-size: 19px;
+}
+
+.ecoagent-brand__name--ticketdesk {
+    font-family: 'Sonsie One', cursive;
+    font-size: 14px;
+}
+
+.ecoagent-brand__icon {
+    width: 20px;
+    height: 20px;
+    flex: none;
+}
+
 .app-shell__nav {
     display: inline-flex;
     align-items: center;

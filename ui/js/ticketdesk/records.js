@@ -24,6 +24,7 @@ import {
 } from './backlog_data.js';
 import { bugRef, itemRefOf, refKey, sameRef } from './refs.js';
 import { isModifiedOpen, openModified } from './record_dnd.js';
+import { KIND } from './instance.js';
 
 /**
  * @typedef {import('./refs.js').Ref} Ref
@@ -125,8 +126,8 @@ export function storesAvailable() {
 export function openRow(wm, ctx, ref, { ev = null } = {}) {
     const row = findRow(ref);
     if (!row) return false;
-    const kind = row.store === 'backlog' ? 'item' : 'ticket';
-    const props = { id: kind === 'item' ? String(row.id) : `#${row.id}`, label: row.tabLabel };
+    const kind = row.store === 'backlog' ? KIND.item : 'ticket';
+    const props = { id: kind === KIND.item ? String(row.id) : `#${row.id}`, label: row.tabLabel };
     if (ev && isModifiedOpen(ev)) { openModified(wm, kind, props); return true; }
     if (wm?.navigate) wm.navigate(kind, props, { ctx, dest: 'origin', newTab: true });
     else wm?.openInTabFromContext?.(ctx, kind, props);

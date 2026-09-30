@@ -34,6 +34,7 @@
 
 import { showContextMenu } from '@flexdesk/widgets';
 import { shell, statusLine } from './pages.js';
+import { ev, KIND } from './instance.js';
 import { esc, HUMAN_AUTHOR } from './data.js';
 import { openNewItem } from './new_item.js';
 import {
@@ -155,10 +156,10 @@ function mountTracker(host, props, ctx) {
         else ctx.wm?.openInTabFromContext?.(ctx, kind, itemProps);
     };
 
-    const openBoard = (p) => openHere('backlog', p);
+    const openBoard = (p) => openHere(KIND.list, p);
     const openItem = (id) => {
         const model = ITEMS.find((x) => Number(x.id) === Number(id));
-        openHere('item', { id: String(id), label: itemLabel(model) || `#${id}` });
+        openHere(KIND.item, { id: String(id), label: itemLabel(model) || `#${id}` });
     };
 
     /** Everything this dashboard is talking about, under the current scope. */
@@ -292,7 +293,7 @@ function mountTracker(host, props, ctx) {
             // setting — either way the dashboard stays where it is.
             const model = ITEMS.find((x) => Number(x.id) === Number(row.dataset.open));
             if (isModifiedOpen(e) && model) {
-                openModified(ctx.wm, 'item', { id: String(model.id), label: itemLabel(model) });
+                openModified(ctx.wm, KIND.item, { id: String(model.id), label: itemLabel(model) });
                 return;
             }
             openItem(row.dataset.open);
@@ -319,7 +320,7 @@ function mountTracker(host, props, ctx) {
         }
         // Alt+T / Alt+N / Alt+Shift+H / Alt+Shift+V: the same places as in a table.
         const model = ITEMS.find((x) => Number(x.id) === Number(row.dataset.open));
-        if (model) openRecordAs(ctx.wm, ctx, 'item', { id: String(model.id), label: itemLabel(model) }, how);
+        if (model) openRecordAs(ctx.wm, ctx, KIND.item, { id: String(model.id), label: itemLabel(model) }, how);
     };
 
     const onMenu = (e) => {
@@ -345,10 +346,10 @@ function mountTracker(host, props, ctx) {
             else if (action === 'split') {
                 // Still here, just no longer what a plain click does: two
                 // half-width tiles is a deliberate choice, not a default.
-                ctx.wm?.navigate?.('item', { id: String(model.id), label: itemLabel(model) },
+                ctx.wm?.navigate?.(KIND.item, { id: String(model.id), label: itemLabel(model) },
                     { ctx, dest: 'split-h' });
             } else if (action === 'window') {
-                ctx.wm?.navigate?.('item', { id: String(model.id), label: itemLabel(model) },
+                ctx.wm?.navigate?.(KIND.item, { id: String(model.id), label: itemLabel(model) },
                     { ctx, dest: 'window' });
             } else if (action === 'who') {
                 openBoard({ expr: assigneeExpr(model.assignee), label: model.assignee ? `On ${model.assignee}` : 'Nobody on it', flat: true });
@@ -356,7 +357,7 @@ function mountTracker(host, props, ctx) {
                 openBoard({ expr: projectExpr(model.projectRef), label: model.projectRef });
             } else if (action === 'delete') {
                 confirmDelete(model, { onStatus: statusLine })
-                    .then((done) => { if (done) { _eventBus?.emit?.('backlog:changed', {}); render(); } });
+                    .then((done) => { if (done) { _eventBus?.emit?.(ev('backlog:changed'), {}); render(); } });
             } else if (action === 'copy') {
                 navigator.clipboard.writeText(itemRef(model))
                     .then(() => statusLine(`Copied ${itemRef(model)}.`))
@@ -374,14 +375,14 @@ function mountTracker(host, props, ctx) {
         const id = el?.closest?.('[data-open]')?.dataset.open;
         const model = id ? ITEMS.find((x) => Number(x.id) === Number(id)) : null;
         return model
-            ? { kind: 'item', props: { id: String(model.id), label: itemLabel(model) }, label: model.ref }
+            ? { kind: KIND.item, props: { id: String(model.id), label: itemLabel(model) }, label: model.ref }
             : null;
     });
 
     // Repaint on any write, ours or somebody else's. NOTE the handle:
     // EventBus.on() returns { id, dispose } and off() takes THAT — a call
     // shaped like removeEventListener silently leaves the subscription behind.
-    const sub = _eventBus?.on?.('backlog:changed', render);
+    const sub = _eventBus?.on?.(ev('backlog:changed'), render);
 
     return {
         title: 'Tracker',
@@ -398,7 +399,7 @@ function mountTracker(host, props, ctx) {
 /** The content map. Registered by install.js only in tracker mode. */
 export function createTrackerContent({ eventBus } = {}) {
     _eventBus = eventBus || null;
-    const page = shell('tracker', mountTracker);
+    const page = shell(KIND.dashboard, mountTracker);
     return {
         tracker: page,
         // `home` is the WM's default leaf, and ticketdesk/pages.js points it at

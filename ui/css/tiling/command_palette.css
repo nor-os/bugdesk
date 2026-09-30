@@ -226,3 +226,45 @@
 }
 .twm-cmdpal__footer { display: flex; align-items: center; gap: 12px; }
 .twm-cmdpal__keys { display: flex; gap: 12px; margin-left: auto; }
+
+/* ── Project switcher (tiling/project_switcher.js) ──────────────────────────
+   The palette's look and keyboard model, with a remove button on each row and
+   the path of projects.toml in the footer. */
+/* A fourth column for the remove button; the palette's rows have three. */
+.twm-projects .twm-cmdpal__item { grid-template-columns: 18px 1fr auto auto; align-items: center; }
+.twm-projects .twm-cmdpal__keys { flex: none; }
+.twm-projects .twm-cmdpal__keys > span { white-space: nowrap; }
+.twm-projects__item--current .twm-cmdpal__title { color: var(--accent-bright, #4fc1ff); }
+.twm-projects__remove {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    color: var(--text-dim, #666);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm, 3px);
+    cursor: pointer;
+    opacity: 0;
+}
+.twm-projects__remove .material-symbols-outlined { font-size: 15px; }
+.twm-cmdpal__item:hover .twm-projects__remove,
+.twm-cmdpal__item--active .twm-projects__remove { opacity: 1; }
+.twm-projects__remove:hover {
+    color: var(--status-error, #f14c4c);
+    border-color: var(--border-strong, #383838);
+}
+.twm-projects__file {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+.twm-projects__file--error { color: var(--status-error, #f14c4c); }
+
+/* A result from the global tracker, on a project page (command_palette.js). */
+.twm-cmdpal__tracker { color: #2dd4bf; font-weight: 600; }

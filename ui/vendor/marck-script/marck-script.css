@@ -1,0 +1,9 @@
+/* Marck Script (SIL OFL 1.1, see OFL.txt beside this file), Latin subset,
+   vendored from Google Fonts so the wordmark renders offline. */
+@font-face {
+    font-family: 'Marck Script';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url(marck-script-latin.woff2) format('woff2');
+}

@@ -57,6 +57,7 @@ import {
 import { bugRef, displayRef, formatRef, parseKey, parseRef, refKey } from './refs.js';
 import { allRows, canonRef, findRow, openRow, storesAvailable } from './records.js';
 import { renderHistory } from './history.js';
+import { CONFIG, ev, KIND, trackerModule } from './instance.js';
 import { openRecordPicker } from './item_picker.js';
 import { attachTagInput } from './tag_input.js';
 import { ITEMS, isClosedItem, loadBacklog } from './backlog_data.js';
@@ -1014,7 +1015,7 @@ function mountTicket(host, props, ctx) {
                 const m = byRef.get(ref);
                 if (!m) return null;
                 return m.store === 'backlog'
-                    ? { kind: 'item', props: { id: String(m.bugId), label: `${m.ref} — ${m.summary}` } }
+                    ? { kind: KIND.item, props: { id: String(m.bugId), label: `${m.ref} — ${m.summary}` } }
                     : { kind: 'ticket', props: { id: m.id, label: `${m.id} — ${m.summary}` } };
             };
             const openResult = (ref, opts) => {
@@ -1539,7 +1540,7 @@ function mountTicketNav(host, props, ctx) {
     // a mount that runs before that happens (the same fallback FlexDesk's breadcrumb uses).
     const getWm = () => ctx?.wm || window.__twm?.wm || null;
 
-    let shown = null;            // 'bugs' | 'backlog'
+    let shown = null;            // 'bugs' | 'backlog' | 'tracker' (see panelSection)
     let backlogRail = null;      // the Backlog body's controller, mounted lazily
     // Bumped by every show() and by destroy. The backlog rail mounts after an
     // await, and `wm:changed` fires in bursts: without this, a switch that
@@ -1566,7 +1567,9 @@ function mountTicketNav(host, props, ctx) {
         if (next === 'bugs') { renderFilters(); mounted = mine; return; }
         // Imported lazily so the bug rail — the thing on screen at boot — never
         // waits on the backlog module to parse.
-        const { mountBacklogRail } = await import('./backlog_pages.js');
+        const { mountBacklogRail } = next === 'tracker'
+            ? await trackerModule('backlog_pages.js')
+            : await import('./backlog_pages.js');
         if (mine !== generation) return;     // superseded while loading
         backlogRail = mountBacklogRail(body, ctx);
         mounted = mine;
@@ -1580,7 +1583,7 @@ function mountTicketNav(host, props, ctx) {
         // The Tracker dashboard is a view over the backlog store, so it gets the
         // backlog rail: its saved filters and its project tree are exactly what
         // you want one click away from "who has what".
-        show(topNav === 'backlog' || topNav === 'tracker' ? 'backlog' : 'bugs');
+        show(panelSection(topNav));
     };
     const renderFilters = () => {
         const custom = listFilters();
@@ -1739,7 +1742,7 @@ function memberRow(m) {
  *
  *  Which names get a row is teamNames()'s decision, shared with the bug store:
  *  the roster, plus anyone carrying work that is still open. */
-function backlogTeam(items) {
+export function backlogTeam(items) {
     const open = new Map(), done = new Map(), seen = new Map();
     for (const i of items) {
         const who = String(i.assignee || '').trim();
@@ -1794,13 +1797,19 @@ function mountTicketInspector(host, props, ctx) {
      * does the same, and the row identity is asserted in the DOM tests.
      */
     const render = async ({ force = false } = {}) => {
-        const backlog = ['backlog', 'tracker'].includes(activeTopNavKind(getWm()));
-        const next = backlog ? 'backlog' : 'bugs';
+        const next = panelSection(activeTopNavKind(getWm()));
+        const backlog = next !== 'bugs';
         if (!force && next === showing && host.childElementCount) return;
         showing = next;
         let rows = [];
         let empty = '';
-        if (backlog) {
+        if (next === 'tracker') {
+            // The tracker's own team: its tickets, its roster, its "you".
+            const [{ ITEMS }, tracker] = await Promise.all([
+                trackerModule('backlog_data.js'), trackerModule('pages.js')]);
+            rows = tracker.backlogTeam(ITEMS);
+            empty = ITEMS.length ? 'No ticket has an assignee yet.' : 'No tickets yet.';
+        } else if (backlog) {
             const { ITEMS } = await import('./backlog_data.js');
             rows = backlogTeam(ITEMS);
             empty = ITEMS.length
@@ -1817,7 +1826,8 @@ function mountTicketInspector(host, props, ctx) {
         host.innerHTML = `
             <div class="td-rpanel">
                 <div class="twm-bp__tabs td-rpanel__tabs">
-                    <button class="twm-bp__tab twm-bp__tab--on">${backlog ? 'Backlog team' : 'Bug team'}</button>
+                    <button class="twm-bp__tab twm-bp__tab--on">${
+                        next === 'tracker' ? 'Tracker team' : backlog ? 'Backlog team' : 'Bug team'}</button>
                 </div>
                 <div class="td-rpanel__body">
                     <div class="td-nav__section">Assignees
@@ -1844,13 +1854,17 @@ function mountTicketInspector(host, props, ctx) {
     const showMember = async (name) => {
         const wm = getWm();
         if (!wm || !name) return;
-        if (showing === 'backlog') {
+        if (showing === 'tracker') {
+            const [{ assigneeExpr }, { KIND: TRACKER_KIND }] = await Promise.all([
+                trackerModule('backlog_filters.js'), trackerModule('instance.js')]);
+            wm.openInPrimary(TRACKER_KIND.list, { expr: assigneeExpr(name), label: `On ${name}`, flat: true });
+        } else if (showing === 'backlog') {
             const { assigneeExpr } = await import('./backlog_filters.js');
             // `flat`: a person's plate is a LIST. Drawn as a tree it would carry
             // epics and stories that are not theirs (kept for context) and drop
             // the items of theirs that sit under a folded parent — so the table
             // would disagree with the count on the row that opened it.
-            wm.openInPrimary('backlog', { expr: assigneeExpr(name), label: `On ${name}`, flat: true });
+            wm.openInPrimary(KIND.list, { expr: assigneeExpr(name), label: `On ${name}`, flat: true });
         } else {
             const { assigneeExpr } = await import('./filters.js');
             wm.openInPrimary('queues', { expr: assigneeExpr(name), label: `On ${name}` });
@@ -1874,13 +1888,16 @@ function mountTicketInspector(host, props, ctx) {
     // A focus change can only change WHICH store is shown; the numbers cannot
     // move without a write, and a write announces itself separately.
     const sub = _eventBus?.on?.('wm:changed', () => render());
-    const backlogSub = _eventBus?.on?.('backlog:changed', () => render({ force: true }));
+    const backlogSub = _eventBus?.on?.(ev('backlog:changed'), () => render({ force: true }));
+    const trackerSub = MERGED_TRACKER
+        ? _eventBus?.on?.('tracker/backlog:changed', () => render({ force: true })) : null;
     const bugSub = _eventBus?.on?.('bugs:changed', () => render({ force: true }));
     return {
         title: 'Inspector',
         destroy: () => {
             sub?.dispose?.();
             backlogSub?.dispose?.();
+            trackerSub?.dispose?.();
             bugSub?.dispose?.();
             host.removeEventListener('click', onClick);
             host.removeEventListener('keydown', onKey);
@@ -1912,6 +1929,23 @@ function mountTicketBottomPanel(host, props, ctx) {
     return { title: 'Console' };
 }
 
+/* ── the Tracker section, inside a project page ──────────────────── */
+
+/**
+ * A project page shows the global tracker as its own section. Its records live
+ * in the tracker's copy of these modules (see instance.js), so when that section
+ * is in front, the side panels — which this copy owns — show the tracker copy's
+ * rail and the tracker copy's team, and a click opens the tracker's kinds.
+ * False on a standalone TicketDesk page, whose Tracker section IS this copy.
+ */
+const MERGED_TRACKER = CONFIG.mode !== 'tracker' && !!CONFIG.tracker?.available;
+
+/** Which body a side panel shows for the section in front. */
+function panelSection(topNav) {
+    if (topNav === 'tracker' && MERGED_TRACKER) return 'tracker';
+    return topNav === 'backlog' || topNav === 'tracker' ? 'backlog' : 'bugs';
+}
+
 /* ── content map ────────────────────────────────────────────────── */
 
 /**
@@ -1924,6 +1958,13 @@ function mountTicketBottomPanel(host, props, ctx) {
  * 'panel:left', 'panel:right', 'panel:bottom') and hands the result to
  * `@flexdesk/wm`'s `createContentRegistry(...)`.
  */
+/** The bus this copy's pages talk on. createTicketDeskContent sets it for the
+ *  page's copy; the tracker's copy, which registers no bug pages, sets it here
+ *  so its breadcrumbs and status lines are wired like everyone else's. */
+export function useEventBus(eventBus) {
+    _eventBus = eventBus || null;
+}
+
 export function createTicketDeskContent({ eventBus } = {}) {
     _eventBus = eventBus || null;
     // Pull the user's custom filters. This is deliberately NOT awaited —

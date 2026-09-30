@@ -22,7 +22,7 @@
 
 import { createCommandPalette } from './command_palette.js';
 import { installHistoryBack } from './history_nav.js';
-import { taxonomy, activeTopNavKind } from './kind_taxonomy.js';
+import { taxonomy, activeTopNavKind, MERGED_TRACKER } from './kind_taxonomy.js';
 import { createSettingsContent } from '../ticketdesk/settings_content.js';
 
 import { HelpModal } from '../help/help_modal.js';
@@ -85,7 +85,14 @@ export async function installTilingShell({ eventBus, logger } = {}) {
         const { createNewItemContent } = await import('../ticketdesk/new_item.js');
         const { loadData } = await import('../ticketdesk/data.js');
         const { loadBacklog } = await import('../ticketdesk/backlog_data.js');
-        const [bugs, backlog] = await Promise.allSettled([loadData(), loadBacklog()]);
+        // Only the stores this page's project has: the other's endpoints answer
+        // 404 by design, and loading them would only log a failure.
+        const { storeHas } = await import('../core/app_identity.js');
+        const none = async () => ({ count: 0 });
+        const [bugs, backlog] = await Promise.allSettled([
+            storeHas('bugs') ? loadData() : none(),
+            storeHas('backlog') ? loadBacklog() : none(),
+        ]);
         if (bugs.status === 'fulfilled') log.info?.('bugdesk: loaded', { bugs: bugs.value.count });
         else console.error('[bugdesk] loadData failed — the queue will render empty', bugs.reason);
         if (backlog.status === 'fulfilled') log.info?.('bugdesk: loaded', { backlog: backlog.value.count });
@@ -93,6 +100,9 @@ export async function installTilingShell({ eventBus, logger } = {}) {
 
         ticketDeskContent = createTicketDeskContent({ eventBus });
         backlogContent = { ...createBacklogContent({ eventBus }), ...createNewItemContent({ eventBus }) };
+        // A project with no bug store lands on its backlog, not on a queue
+        // over a folder it does not have.
+        if (!storeHas('bugs') && !trackerMode) backlogContent.home = backlogContent.backlog;
         // Tracker mode only, and imported only then: the dashboard is dead
         // weight in a deployment whose taxonomy has no chip pointing at it.
         if (trackerMode) {
@@ -101,6 +111,18 @@ export async function installTilingShell({ eventBus, logger } = {}) {
         }
     } catch (err) {
         console.error('[bugdesk] page registration failed', err);
+    }
+    // The global tracker, as a section of this project page. Its own failure is
+    // its own: a tracker folder that cannot be read must not take the project's
+    // pages down with it.
+    let trackerCopy = null;
+    if (MERGED_TRACKER) {
+        try {
+            trackerCopy = await _loadTrackerCopy({ eventBus });
+            trackerContent = trackerCopy.content;
+        } catch (err) {
+            console.error('[bugdesk] the tracker could not be loaded — its section will be empty', err);
+        }
     }
     // Order is the override order. Tracker last: it deliberately re-points
     // `home` at the dashboard (see createTrackerContent).
@@ -207,6 +229,7 @@ export async function installTilingShell({ eventBus, logger } = {}) {
     // selector is passed because FlexDesk's default names its own top bar's
     // classes, and without it F1..F8 would silently match no button.
     installKeymap({ wm, palette, navSelector: '.global-top-bar .bar-center.twm-top-nav .twm-top-nav__btn' });
+    _installProjectSwitcherKey(eventBus);
     // The browser's Back gesture walks up exactly like Backspace does,
     // instead of abandoning the app and its tile layout.
     installHistoryBack({ wm });
@@ -223,6 +246,7 @@ export async function installTilingShell({ eventBus, logger } = {}) {
     // add and switch between multiple desktops again.
     _installDesktopBar(wm);
     _installUserChip(wm, eventBus);
+    _installProjectChip(eventBus);
     // C31. FlexDesk's content zoom, in the bottom bar. It scales tile bodies and
     // window content under `wmHost` and nothing a window is dragged across, which
     // is what keeps the snapping above working at any zoom — see FlexDesk's
@@ -274,6 +298,7 @@ export async function installTilingShell({ eventBus, logger } = {}) {
     try {
         const { installLiveUpdates } = await import('../ticketdesk/live.js');
         installLiveUpdates({ eventBus, logger: log });
+        trackerCopy?.live.installLiveUpdates({ eventBus, logger: log });
     } catch (err) {
         log.warn?.('live updates failed to install', { err });
     }
@@ -305,6 +330,7 @@ export async function installTilingShell({ eventBus, logger } = {}) {
             import('../ticketdesk/pages.js'),
         ]);
         installRecordLinkClicks({ wm, onStatus: statusLine });
+        trackerCopy?.links.installRecordLinkClicks({ wm, onStatus: statusLine });
     } catch (err) {
         log.warn?.('record link clicks failed to install', { err });
     }
@@ -341,6 +367,10 @@ function _installPageShortcuts() {
         btn.dataset.tooltip = k.label;
         btn.dataset.tooltipPlacement = 'bottom';
         btn.setAttribute('aria-label', k.label);
+        if (k.kind === 'tracker' && MERGED_TRACKER) {
+            btn.classList.add('twm-top-nav__btn--global');
+            btn.dataset.tooltip = 'Tracker — global, the same in every project';
+        }
         btn.innerHTML = `
             <span class="material-symbols-outlined twm-top-nav__icon">${k.icon}</span>
             <span class="twm-top-nav__label">${k.label}</span>
@@ -369,6 +399,68 @@ function _syncPageShortcuts(wm) {
     host.querySelectorAll('[data-kind]').forEach((b) => {
         b.classList.toggle('twm-top-nav__btn--on', b.dataset.kind === topNavKind);
     });
+    _syncProjectChip(topNavKind);
+}
+
+/** The project chip says "n/a" while the Tracker is in front: the tracker
+ *  belongs to no project, and a chip still naming one would suggest the tickets
+ *  on screen were that project's. */
+function _syncProjectChip(topNavKind) {
+    const chip = document.getElementById('twm-project-chip');
+    if (!chip) return;
+    const na = MERGED_TRACKER && topNavKind === 'tracker';
+    if (chip.classList.contains('twm-project-chip--na') === na) return;
+    const name = String((window.__BUGDESK_CONFIG__ || {}).store?.name || '');
+    chip.classList.toggle('twm-project-chip--na', na);
+    chip.querySelector('[data-role="name"]').textContent = na ? 'n/a' : name;
+    chip.dataset.tooltip = na
+        ? 'The tracker is global — it belongs to no project. Click to switch project.'
+        : `Project ${name} — click (or Ctrl+P) to switch, add or remove projects`;
+}
+
+/**
+ * Load the TRACKER'S COPY of the ticketdesk modules (see ticketdesk/instance.js)
+ * and build its pages: the dashboard, the ticket list, the ticket page and the
+ * new-ticket mask, under kinds of their own. The copy reads its config from
+ * `window.__BUGDESK_TRACKER_CONFIG__`, so that is fetched first — from the
+ * tracker's own API, which answers with the tracker's roster and the name the
+ * person uses everywhere.
+ */
+async function _loadTrackerCopy({ eventBus }) {
+    const res = await fetch('/t/api/config', { headers: { accept: 'application/json' } });
+    const cfg = await res.json().catch(() => null);
+    if (!res.ok || !cfg?.ok) throw new Error(cfg?.error || `GET /t/api/config → ${res.status}`);
+    window.__BUGDESK_TRACKER_CONFIG__ = {
+        mode: 'tracker',
+        agentsAssignable: false,
+        fromBridge: true,
+        humanAuthor: cfg.humanAuthor || 'reviewer',
+        agentAuthor: cfg.agentAuthor || 'agent',
+        collaborators: Array.isArray(cfg.collaborators) ? cfg.collaborators : [],
+        assignees: Array.isArray(cfg.assignees) ? cfg.assignees : [],
+        store: cfg.store || { kind: 'tracker', hasBugs: false, hasBacklog: true },
+        tracker: cfg.tracker || { available: true },
+    };
+    const T = '../ticketdesk@t/';
+    const [data, pages, backlogPages, newItem, trackerPages, live, links] = await Promise.all([
+        import(`${T}backlog_data.js`), import(`${T}pages.js`), import(`${T}backlog_pages.js`),
+        import(`${T}new_item.js`), import(`${T}tracker_pages.js`), import(`${T}live.js`),
+        import(`${T}ref_autolink.js`),
+    ]);
+    await data.loadBacklog();
+    pages.useEventBus(eventBus);
+    // The dashboard would re-point `home` at itself, as it does in standalone
+    // TicketDesk. Here Home is the project's.
+    const { home: _dashboardAsHome, ...dashboard } = trackerPages.createTrackerContent({ eventBus });
+    return {
+        content: {
+            ...backlogPages.createBacklogContent({ eventBus }),
+            ...newItem.createNewItemContent({ eventBus }),
+            ...dashboard,
+        },
+        live,
+        links,
+    };
 }
 
 /** Search + New Item in the top bar, left of the panel toggles.
@@ -391,10 +483,14 @@ function _installTicketActions(wm, trackerMode = false) {
     wrap.addEventListener('click', async (e) => {
         const btn = e.target.closest('[data-td]');
         if (!btn) return;
+        // In the Tracker section of a project page, both buttons act on the
+        // tracker: a new TICKET, a search over tickets.
+        const copy = MERGED_TRACKER && activeTopNavKind(wm) === 'tracker'
+            ? '../ticketdesk@t/' : '../ticketdesk/';
         if (btn.dataset.td === 'item') {
             // A tab, not a dialog: filing something means writing a description
             // and looking a parent up, which a modal makes hostile.
-            const { openNewItem } = await import('../ticketdesk/new_item.js');
+            const { openNewItem } = await import(`${copy}new_item.js`);
             openNewItem(wm);
             return;
         }
@@ -403,14 +499,15 @@ function _installTicketActions(wm, trackerMode = false) {
         // the right search there anyway: type any part of a reference or title,
         // filter by type, open it. It is transient by nature, so unlike the bug
         // search it does not need a tab of its own.
-        if (trackerMode) {
-            const [{ openItemPicker }, { itemLabel }] = await Promise.all([
-                import('../ticketdesk/item_picker.js'),
-                import('../ticketdesk/backlog_data.js'),
+        if (trackerMode || copy.includes('@t')) {
+            const [{ openItemPicker }, { itemLabel }, { KIND }] = await Promise.all([
+                import(`${copy}item_picker.js`),
+                import(`${copy}backlog_data.js`),
+                import(`${copy}instance.js`),
             ]);
             const picked = await openItemPicker({ title: 'Find a ticket' });
             if (picked?.id) {
-                wm.navigate('item',
+                wm.navigate(KIND.item,
                     { id: String(picked.id), label: itemLabel(picked) || `#${picked.id}` },
                     { dest: 'main', newTab: true });
             }
@@ -775,6 +872,60 @@ function _installUserChip(wm, eventBus) {
     // — the dialog, or the Settings row's write-through.
     eventBus?.on?.('bugdesk:identity-changed', paint);
     host.insertBefore(btn, host.firstChild);
+}
+
+/**
+ * Which project this window is on, in the bottom bar beside who you are.
+ *
+ * Bugs and backlog belong to a project — a repo, as listed in projects.toml —
+ * and with more than one of them the thing most worth checking before filing
+ * anything is WHERE it will land. Clicking the chip opens the switcher (type,
+ * Enter), which also adds and removes projects. Absent in standalone TicketDesk,
+ * whose one store belongs to no project.
+ */
+function _installProjectChip(eventBus) {
+    const cfg = window.__BUGDESK_CONFIG__ || {};
+    if (cfg.store?.kind !== 'project') return;
+    const user = document.getElementById('twm-user-chip');
+    const host = user?.parentElement ?? document.querySelector('.global-bottom-bar .bar-left');
+    if (!host || document.getElementById('twm-project-chip')) return;
+
+    const name = String(cfg.store.name || '');
+    const btn = document.createElement('button');
+    btn.id = 'twm-project-chip';
+    btn.type = 'button';
+    btn.className = 'twm-user-chip twm-project-chip has-tooltip';
+    btn.dataset.tooltipPlacement = 'top';
+    btn.dataset.tooltip = `Project ${name} — click (or Ctrl+P) to switch, add or remove projects`;
+    btn.setAttribute('aria-label', `Project ${name}. Switch project.`);
+    btn.innerHTML = `<span class="material-symbols-outlined">folder</span><span data-role="name">${
+        name.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+    }</span>`;
+    btn.addEventListener('click', () => {
+        import('./project_switcher.js')
+            .then((m) => m.openProjectSwitcher({ eventBus: eventBus ?? window.__bugdesk?.eventBus }))
+            .catch((err) => console.error('[bugdesk] project switcher failed', err));
+    });
+    host.insertBefore(btn, user ? user.nextSibling : host.firstChild);
+}
+
+/**
+ * Ctrl/⌘+P opens the project switcher — the keyboard way to the chip in the
+ * bottom bar. BugDesk's own listener, because FlexDesk's keymap has no slot for
+ * an app binding. It takes the key from the browser's Print, which is no loss
+ * in an app whose pages are tiles. Only on a project page: standalone TicketDesk
+ * has no project to switch, and there the key does what the browser does.
+ */
+function _installProjectSwitcherKey(eventBus) {
+    if ((window.__BUGDESK_CONFIG__ || {}).store?.kind !== 'project') return;
+    window.addEventListener('keydown', (e) => {
+        if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== 'p') return;
+        e.preventDefault();
+        e.stopPropagation();
+        import('./project_switcher.js')
+            .then((m) => m.toggleProjectSwitcher({ eventBus }))
+            .catch((err) => console.error('[bugdesk] project switcher failed', err));
+    }, true);
 }
 
 function _installDesktopBar(wm) {

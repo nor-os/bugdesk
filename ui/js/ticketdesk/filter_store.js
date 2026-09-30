@@ -19,7 +19,11 @@
  * is what they were — the backlog did not exist when they were written.
  */
 
-const STORAGE_KEY = 'bugdesk.filters';
+import { apiUrl, CONFIG } from './instance.js';
+
+// Per STORE: every project and the tracker are served from one origin, so one
+// key would hand one project's filters to the next when the bridge is down.
+const STORAGE_KEY = `bugdesk.filters${CONFIG.store?.base ? `:${CONFIG.store.base}` : ''}`;
 export const SCOPES = ['bugs', 'backlog'];
 const DEFAULT_SCOPE = 'bugs';
 
@@ -63,7 +67,7 @@ const writeMirror = (list) => localStorage.setItem(STORAGE_KEY, JSON.stringify(l
  *  live store. Safe to call repeatedly — it always ends with a notify(). */
 export async function loadFilters() {
     try {
-        const res = await fetch('/api/filters', { headers: { accept: 'application/json' } });
+        const res = await fetch(apiUrl('/filters'), { headers: { accept: 'application/json' } });
         if (!res.ok) throw new Error(`GET /api/filters → ${res.status}`);
         const j = await res.json();
         if (!Array.isArray(j.filters)) throw new Error('bridge returned no filters array');
@@ -94,7 +98,7 @@ const newId = () => `f${Date.now().toString(36)}${Math.random().toString(36).sli
 async function persist() {
     writeMirror(_filters);
     try {
-        const res = await fetch('/api/filters', {
+        const res = await fetch(apiUrl('/filters'), {
             method: 'POST',
             headers: { 'content-type': 'application/json', accept: 'application/json' },
             body: JSON.stringify({ filters: _filters }),

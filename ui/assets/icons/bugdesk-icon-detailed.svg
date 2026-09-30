@@ -1,0 +1,156 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>Bugdesk</title>
+  <defs>
+    <!-- Tile -->
+    <linearGradient id="tile" x1="0" y1="0" x2="0.4" y2="1">
+      <stop offset="0" stop-color="#2A2F6B"/>
+      <stop offset="0.55" stop-color="#151A3D"/>
+      <stop offset="1" stop-color="#0A0D22"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.52" r="0.42">
+      <stop offset="0" stop-color="#6366F1" stop-opacity="0.65"/>
+      <stop offset="0.6" stop-color="#4F46E5" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#4F46E5" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.14"/>
+      <stop offset="0.45" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.28"/>
+      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0.04"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0.1"/>
+    </linearGradient>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#FFFFFF" stroke-opacity="0.07" stroke-width="1.5"/>
+    </pattern>
+    <radialGradient id="gridFade" cx="0.5" cy="0.5" r="0.55">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#000000"/>
+    </radialGradient>
+    <mask id="gridMask">
+      <rect width="512" height="512" fill="url(#gridFade)"/>
+    </mask>
+    <clipPath id="tileClip">
+      <rect width="512" height="512" rx="112"/>
+    </clipPath>
+
+    <!-- Bug -->
+    <linearGradient id="shell" x1="0.15" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#A5B4FC"/>
+      <stop offset="0.45" stop-color="#6366F1"/>
+      <stop offset="1" stop-color="#312E81"/>
+    </linearGradient>
+    <linearGradient id="shellEdge" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#E0E7FF" stop-opacity="0.9"/>
+      <stop offset="0.5" stop-color="#E0E7FF" stop-opacity="0.15"/>
+      <stop offset="1" stop-color="#E0E7FF" stop-opacity="0.35"/>
+    </linearGradient>
+    <linearGradient id="limb" gradientUnits="userSpaceOnUse" x1="0" y1="90" x2="0" y2="400">
+      <stop offset="0" stop-color="#C7D2FE"/>
+      <stop offset="1" stop-color="#4F46E5"/>
+    </linearGradient>
+    <radialGradient id="spec" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.75"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="screen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#070A1C"/>
+      <stop offset="1" stop-color="#11163A"/>
+    </linearGradient>
+
+    <filter id="drop" x="-30%" y="-30%" width="160%" height="170%">
+      <feDropShadow dx="0" dy="16" stdDeviation="14" flood-color="#000000" flood-opacity="0.55"/>
+    </filter>
+    <filter id="blur" x="-50%" y="-200%" width="200%" height="500%">
+      <feGaussianBlur stdDeviation="12"/>
+    </filter>
+    <filter id="neon" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="inset" x="-10%" y="-10%" width="120%" height="120%">
+      <feOffset dy="4"/>
+      <feGaussianBlur stdDeviation="4" result="o"/>
+      <feComposite in="SourceAlpha" in2="o" operator="out" result="inner"/>
+      <feFlood flood-color="#000000" flood-opacity="0.8"/>
+      <feComposite in2="inner" operator="in" result="shade"/>
+      <feMerge><feMergeNode in="SourceGraphic"/><feMergeNode in="shade"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- ===== Tile ===== -->
+  <g clip-path="url(#tileClip)">
+    <rect width="512" height="512" fill="url(#tile)"/>
+    <rect width="512" height="512" fill="url(#grid)" mask="url(#gridMask)"/>
+    <rect width="512" height="512" fill="url(#glow)"/>
+    <rect width="512" height="512" fill="url(#sheen)"/>
+  </g>
+  <rect x="1.5" y="1.5" width="509" height="509" rx="110.5" fill="none" stroke="url(#rim)" stroke-width="3"/>
+
+  <!-- Ground shadow -->
+  <ellipse cx="256" cy="432" rx="112" ry="16" fill="#000000" opacity="0.55" filter="url(#blur)"/>
+
+  <!-- ===== Bug ===== -->
+  <g filter="url(#drop)">
+    <!-- Legs -->
+    <g fill="none" stroke="url(#limb)" stroke-width="14" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M172 250 L140 236 L118 214"/>
+      <path d="M168 300 L132 300 L108 316"/>
+      <path d="M174 352 L142 368 L126 396"/>
+      <path d="M340 250 L372 236 L394 214"/>
+      <path d="M344 300 L380 300 L404 316"/>
+      <path d="M338 352 L370 368 L386 396"/>
+    </g>
+    <!-- Leg joints -->
+    <g fill="#A5B4FC">
+      <circle cx="140" cy="236" r="5"/><circle cx="132" cy="300" r="5"/><circle cx="142" cy="368" r="5"/>
+      <circle cx="372" cy="236" r="5"/><circle cx="380" cy="300" r="5"/><circle cx="370" cy="368" r="5"/>
+    </g>
+
+    <!-- Antennae -->
+    <g fill="none" stroke="url(#limb)" stroke-width="10" stroke-linecap="round">
+      <path d="M240 136 Q228 108 202 96"/>
+      <path d="M272 136 Q284 108 310 96"/>
+    </g>
+    <g fill="#C7D2FE" filter="url(#neon)">
+      <circle cx="201" cy="96" r="9"/>
+      <circle cx="311" cy="96" r="9"/>
+    </g>
+
+    <!-- Head -->
+    <rect x="214" y="124" width="84" height="60" rx="30" fill="url(#shell)"/>
+    <rect x="215.5" y="125.5" width="81" height="57" rx="28.5" fill="none" stroke="url(#shellEdge)" stroke-width="3"/>
+    <ellipse cx="236" cy="138" rx="16" ry="7" fill="url(#spec)"/>
+    <g fill="#E0E7FF" filter="url(#neon)">
+      <circle cx="240" cy="156" r="6"/>
+      <circle cx="272" cy="156" r="6"/>
+    </g>
+
+    <!-- Body -->
+    <rect x="168" y="192" width="176" height="220" rx="70" fill="url(#shell)"/>
+    <rect x="169.5" y="193.5" width="173" height="217" rx="68.5" fill="none" stroke="url(#shellEdge)" stroke-width="3"/>
+    <!-- Thorax seam -->
+    <path d="M186 234 Q256 218 326 234" fill="none" stroke="#1E1B4B" stroke-opacity="0.45" stroke-width="4" stroke-linecap="round"/>
+    <path d="M186 238 Q256 222 326 238" fill="none" stroke="#FFFFFF" stroke-opacity="0.2" stroke-width="2" stroke-linecap="round"/>
+    <!-- Specular highlight -->
+    <ellipse cx="212" cy="214" rx="34" ry="12" fill="url(#spec)" transform="rotate(-22 212 214)"/>
+
+    <!-- Backlog screen -->
+    <rect x="194" y="252" width="124" height="130" rx="22" fill="url(#screen)" filter="url(#inset)"/>
+    <rect x="194.75" y="252.75" width="122.5" height="128.5" rx="21.25" fill="none" stroke="#FFFFFF" stroke-opacity="0.14" stroke-width="1.5"/>
+
+    <!-- Rows: status dot + title bar -->
+    <g filter="url(#neon)">
+      <circle cx="216" cy="280" r="7" fill="#FB7185"/>
+      <circle cx="216" cy="316" r="7" fill="#FBBF24"/>
+      <circle cx="216" cy="352" r="7" fill="#34D399"/>
+    </g>
+    <rect x="232" y="274" width="68" height="12" rx="6" fill="#E0E7FF" opacity="0.92"/>
+    <rect x="232" y="310" width="52" height="12" rx="6" fill="#E0E7FF" opacity="0.6"/>
+    <rect x="232" y="346" width="34" height="12" rx="6" fill="#E0E7FF" opacity="0.35"/>
+
+    <!-- Screen glare -->
+    <path d="M204 262 H262 Q228 280 204 318 Z" fill="#FFFFFF" opacity="0.05"/>
+  </g>
+</svg>

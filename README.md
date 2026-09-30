@@ -156,7 +156,62 @@ install, with `dotnet --list-sdks`. The first with a new enough SDK runs the
 server, and the startup line names it. No build step for the UI — it is ES
 modules served straight off disk through an import map.
 
+## Projects
+
+**One BugDesk serves every repo you work on.** Which ones, and where their stores
+are, is `projects.toml` in the BugDesk checkout — git-ignored, because the
+folders it names are this machine's:
+
+```toml
+[user]
+name = "alice"                        # who you are, in every project and the tracker
+
+[tracker]                             # the one global tracker; omit it for none
+path = 'C:\Users\alice\AppData\Roaming\BugDesk\tracker'
+
+[projects.bugdesk]
+bugs    = 'C:\repos\bugdesk\bugs'
+backlog = 'C:\repos\bugdesk\backlog'
+
+[projects.tables]                     # a backlog only: no Bugs page there
+backlog = 'C:\repos\tables\backlog'
+```
+
+The first run writes it for you, with the store BugDesk was started on as the
+first project, so upgrading moves nothing. Edit it by hand whenever you like:
+BugDesk re-reads it when it changes, and an edit that does not parse is named
+by line while the last version that did stays in force. Paths may be relative
+to the file; single quotes keep Windows backslashes as typed. `--bugs-dir` and
+`BUGDESK_BUGS` still work — a store named that way that the file does not list
+is served for that run, without being written in.
+
+**Each project has its own address**, `/p/<name>/`, and `/` opens the one you
+used last. Switching project is a navigation, so the back button returns and two
+tabs can sit on two projects.
+
+**The project chip in the bottom bar** says which one you are in. Click it and
+type: the first match is selected, Enter goes there. The same list adds a
+project (the last row, or Enter on a name that matches nothing — typing the bugs
+folder fills in the backlog beside it) and removes one (the bin on a row, or
+Shift+Delete). Both only edit `projects.toml`; removing a project never touches
+its folders.
+
+**The tracker is global.** With `[tracker]` set, every project page has a
+**Tracker** section after Bugs and Backlog — tinted teal and set apart, since it
+belongs to no project — with the dashboard, the tickets and the new-ticket mask,
+exactly as in [tracker mode](#tracker-mode). Its records are the tracker's own:
+its STORY-0002 is not the project's, and each opens from its own section. While
+it is in front the project chip reads *n/a*. Ctrl+K searches both, and marks the
+tracker's results.
+
 ## Who you are
+
+**Your name is set once, in `projects.toml`'s `[user]`, and used everywhere** —
+in every project and in the tracker. If the file names nobody yet, the name a
+checkout's profile already has is adopted into it; with neither, BugDesk asks.
+The per-store profiles below still exist and still hold that store's filters
+and layout, and the `/bugs` and `/backlog` skills still read the active one; they
+simply follow the file's name.
 
 **The first time you open BugDesk it asks for your name.** Everything in the
 two stores is shared and committed, which is the point; everything about the
@@ -749,7 +804,7 @@ what the tracker *cannot* tell you as prominently as with what it can.
 
 | | changes |
 |---|---|
-| where it lives | **not in your repo.** `~/.bugdesk/<project>/` (`%APPDATA%\BugDesk\<project>\` on Windows), one folder per tracked project |
+| where it lives | **not in your repo.** `[tracker] path` in [`projects.toml`](#projects); without one, `~/.bugdesk/<project>/` (`%APPDATA%\BugDesk\<project>\` on Windows), one folder per tracked project |
 | port | **picked automatically** — the next free one from 8766 |
 | top nav | **TRACKER, and only Tracker.** No Bugs, no Tickets: everything is reached from the dashboard |
 | types | adds **`project`** above epics; drops the bug types, since there is no bug store |
@@ -777,7 +832,10 @@ it have never seen that checkout, and committing it would put private notes
 about colleagues into a shared history. `bugs/` and `backlog/` inside a project
 are the wrong home for it in every respect — including the names.
 
-The project is named by the **directory you start the tracker from**, so
+With a `[tracker] path` in [`projects.toml`](#projects), `--tracker` opens that
+one — the same tracker every project page shows as its Tracker section — and
+`--project <name>` still picks another. Without one, the project is named by
+the **directory you start the tracker from**, so
 `cd ~/work/acme-migration && bugdesk --tracker` gets you that tracker and
 nothing else. Override with `--project <name>` or `BUGDESK_TRACKER_PROJECT`;
 move the root with `BUGDESK_TRACKER_HOME`.

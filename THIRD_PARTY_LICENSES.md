@@ -22,6 +22,8 @@ see its own `LICENSE` and `THIRD_PARTY_LICENSES.md`, copied alongside it in
 | [KaTeX](https://github.com/KaTeX/KaTeX) | 0.16.10 | MIT | Khan Academy and other contributors |
 | [Plotly.js](https://github.com/plotly/plotly.js) | 2.35.2 | MIT | Plotly, Inc. |
 | [Material Symbols (Outlined)](https://github.com/google/material-design-icons) | — | Apache-2.0 | Google LLC |
+| [Marck Script](https://fonts.google.com/specimen/Marck+Script) (Latin subset, `ui/vendor/marck-script/`) | v22 | OFL-1.1 | Denis Masharov & Marck Fogel |
+| [Sonsie One](https://fonts.google.com/specimen/Sonsie+One) (Latin subset, `ui/vendor/sonsie-one/`) | v22 | OFL-1.1 | Sorkin Type Co |
 | [Monaco Editor](https://github.com/microsoft/monaco-editor) | 0.52.2 | MIT | Microsoft Corporation |
 | ↳ [DOMPurify](https://github.com/cure53/DOMPurify) (bundled in Monaco's `editor.main.js`) | 3.1.7 | Apache-2.0 (dual-licensed with MPL-2.0; Apache-2.0 elected) | Cure53 and other contributors |
 | ↳ [TypeScript](https://github.com/microsoft/TypeScript) `lib.*.d.ts` (bundled in Monaco's `tsWorker.js`) | — | Apache-2.0 | Microsoft Corporation |

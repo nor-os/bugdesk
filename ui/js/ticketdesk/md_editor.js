@@ -25,6 +25,7 @@
  */
 
 import { attachRefAutolink } from './ref_autolink.js';
+import { apiUrl } from './instance.js';
 
 const icon = (name) => `<span class="material-symbols-outlined">${name}</span>`;
 
@@ -163,7 +164,7 @@ function toBase64(file) {
 /** POST an image to the bridge; resolves to its `/attachments/…` URL. */
 export async function uploadImage(file) {
     const data = await toBase64(file);
-    const res = await fetch('/api/attachments', {
+    const res = await fetch(apiUrl('/attachments'), {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ name: file.name || 'image', contentType: file.type || '', data }),

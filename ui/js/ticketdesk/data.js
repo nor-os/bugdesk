@@ -17,6 +17,7 @@
  */
 
 import { getSetting } from '../core/settings.js';
+import { apiUrl, CONFIG } from './instance.js';
 
 export const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -58,7 +59,7 @@ export const STAGES = ['Open', 'Investigation', 'Testing', 'Closed'];
  * literals built at that same load time) — so a settings change here only
  * takes effect on the next reload; settings_page.js's `reloadHint` flag on
  * both schema entries says so in the UI. */
-const _cfg = (typeof window !== 'undefined' && window.__BUGDESK_CONFIG__) || {};
+const _cfg = CONFIG;
 export const HUMAN_AUTHOR = _cfg.humanAuthor || getSetting('bugdesk.humanName') || 'reviewer';
 export const AGENT_AUTHOR = _cfg.agentAuthor || getSetting('bugdesk.agentName') || 'agent';
 
@@ -139,7 +140,7 @@ export async function rememberAssignee(name) {
     if (!clean) return null;
     if (ASSIGNEES.some((n) => n.toLowerCase() === clean.toLowerCase())) return null;
     try {
-        const res = await fetch('/api/project/collaborator', {
+        const res = await fetch(apiUrl('/project/collaborator'), {
             method: 'POST',
             headers: { 'content-type': 'application/json', accept: 'application/json' },
             body: JSON.stringify({ name: clean }),
@@ -249,12 +250,12 @@ export function initials(name) {
 /* ── bridge client (same-origin) ────────────────────────────────── */
 
 async function apiGet(path) {
-    const res = await fetch(`/api${path}`, { headers: { accept: 'application/json' } });
+    const res = await fetch(apiUrl(path), { headers: { accept: 'application/json' } });
     if (!res.ok) throw new Error(`GET ${path} → ${res.status}`);
     return res.json();
 }
 async function apiPost(path, body) {
-    const res = await fetch(`/api${path}`, {
+    const res = await fetch(apiUrl(path), {
         method: 'POST',
         headers: { 'content-type': 'application/json', accept: 'application/json' },
         body: JSON.stringify(body),

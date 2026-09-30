@@ -21,6 +21,7 @@
  */
 
 import { createTaxonomy } from '@flexdesk/wm';
+import { storeHas } from '../core/app_identity.js';
 
 /* ── mode ────────────────────────────────────────────────────────────
  *
@@ -37,6 +38,23 @@ import { createTaxonomy } from '@flexdesk/wm';
  */
 const TRACKER = (typeof window !== 'undefined'
     && window.__BUGDESK_CONFIG__?.mode) === 'tracker';
+
+/* A project need not have both stores (see storeHas). The kinds of the missing
+ * one stay DEFINED — saved layouts and links name them, and an unknown kind is a
+ * boot error — but lose their chip, and the landing page is the store that is
+ * there. */
+const HAS_BUGS = !TRACKER && storeHas('bugs');
+const HAS_BACKLOG = storeHas('backlog');
+const LANDING = TRACKER ? 'tracker' : HAS_BUGS ? 'queues' : 'backlog';
+
+/* The global TRACKER as a section of a project page, beside Bugs and Backlog.
+ * Its records come from the tracker's own copy of the ticketdesk modules (see
+ * ticketdesk/instance.js), under kinds of their own — a tracker ticket and a
+ * backlog item must never share a tab, a breadcrumb or a section. Standalone
+ * TicketDesk has the tracker as its only section and keeps the kinds it always
+ * had. */
+export const MERGED_TRACKER = !TRACKER && typeof window !== 'undefined'
+    && !!window.__BUGDESK_CONFIG__?.tracker?.available;
 
 /* ── record hierarchy, supplied by the store ────────────────────────
  *
@@ -71,7 +89,7 @@ export const taxonomy = createTaxonomy({
         // dropped the props it was given. That is the same fault as `item`
         // below, and between them they are why "show me this person's work"
         // looked like a click that did nothing.
-        home: { label: 'Home', icon: 'home', topNav: TRACKER ? 'tracker' : 'queues' },
+        home: { label: 'Home', icon: 'home', topNav: LANDING },
 
         // ── the BUG store, and its top-nav chip ──────────────────────
         //
@@ -95,10 +113,9 @@ export const taxonomy = createTaxonomy({
         // own config directory, so no saved bugs-mode tile can be restored into
         // it.
         ...(TRACKER ? {} : {
-            queues: {
-                label: 'Bugs', icon: 'bug_report',
-                isTopNav: true, order: 20,
-            },
+            queues: HAS_BUGS
+                ? { label: 'Bugs', icon: 'bug_report', isTopNav: true, order: 20 }
+                : { label: 'Bugs', icon: 'bug_report', topNav: 'home' },
             ticket: { label: 'Bug', icon: 'bug_report', topNav: 'queues' },
         }),
 
@@ -131,9 +148,27 @@ export const taxonomy = createTaxonomy({
         // changed, you have only gone deeper into it. As its own chip it read as
         // a second, competing place to be, and clicking any row on the dashboard
         // moved the user out of the section they were working in.
+        // After Backlog, and tinted in the top bar (see tiling/nav.css): it
+        // belongs to no project, and switching projects does not change it.
+        ...(MERGED_TRACKER ? {
+            tracker: {
+                label: 'Tracker', icon: 'space_dashboard',
+                isTopNav: true, order: 40,
+            },
+            'tracker-tickets': { label: 'Tickets', icon: 'workspaces', topNav: 'tracker' },
+            'tracker-item': {
+                label: 'Ticket', icon: 'article', topNav: 'tracker',
+                ancestors: (props) => _recordHooks['tracker-item']?.ancestors?.(props) || [],
+                labelOf: (props) => _recordHooks['tracker-item']?.labelOf?.(props) || props.label || props.id,
+            },
+            'tracker-new': { label: 'New ticket', icon: 'add_circle', topNav: 'tracker' },
+        } : {}),
+
         backlog: TRACKER
             ? { label: 'Tickets', icon: 'workspaces', topNav: 'tracker' }
-            : { label: 'Backlog', icon: 'workspaces', isTopNav: true, order: 30 },
+            : HAS_BACKLOG
+                ? { label: 'Backlog', icon: 'workspaces', isTopNav: true, order: 30 }
+                : { label: 'Backlog', icon: 'workspaces', topNav: 'home' },
 
         // `item` points at whatever SECTION its list is in, not at the list.
         //
@@ -163,7 +198,7 @@ export const taxonomy = createTaxonomy({
         // in, and the page is reachable from every section either way.
         'new-item': {
             label: 'New item', icon: 'add_circle',
-            topNav: TRACKER ? 'tracker' : 'queues',
+            topNav: LANDING,
         },
 
         // Settings reachable from the hamburger; no top-nav slot. App-global

@@ -24,6 +24,13 @@
 
 import { esc } from './data.js';
 import { BUG_PREFIX, BACKLOG_PREFIXES } from './refs.js';
+import { IS_TRACKER_COPY } from './instance.js';
+
+// A record link names a record in the store whose text it sits in — STORY-0002
+// in a tracker ticket is the tracker's, not the project's. Marked here, where
+// the store is known, so the one delegated click handler per copy can tell its
+// own links from the other copy's (see ref_autolink.js).
+const COPY_ATTR = IS_TRACKER_COPY ? ' data-copy="tracker"' : '';
 
 /* `[#42](#BUG-0042)`: a link to a RECORD, written by ref_autolink.js as you
  * type. It stays in the tile rather than opening a browser tab, and
@@ -147,7 +154,7 @@ function inline(text) {
                 `<img class="td-md__img" src="${safeUrl(src)}" alt="${alt}"` +
                 `${title ? ` title="${title}"` : ''} loading="lazy">`))
         .replace(RE_RECORD_LINK, (_m, label, target) => park(
-            `<a href="#${target.toUpperCase()}" class="td-reflink" data-ref="${target.toUpperCase()}"`
+            `<a href="#${target.toUpperCase()}" class="td-reflink" data-ref="${target.toUpperCase()}"${COPY_ATTR}`
             + ` title="Open ${target.toUpperCase()}">${label}</a>`))
         .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g,
             (_m, label, href) => park(

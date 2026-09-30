@@ -28,6 +28,7 @@ import { BUG_PREFIX, BACKLOG_PREFIXES, formatRef, parseRef } from './refs.js';
 import { findRow, openRow, storesAvailable } from './records.js';
 import { TICKETS, loadData } from './data.js';
 import { ITEMS, loadBacklog } from './backlog_data.js';
+import { IS_TRACKER_COPY } from './instance.js';
 
 const PREFIXES = [BUG_PREFIX, ...Object.values(BACKLOG_PREFIXES)];
 
@@ -207,6 +208,9 @@ export function installRecordLinkClicks({ wm, onStatus = null } = {}) {
     const onClick = async (e) => {
         const a = e.target?.closest?.('a.td-reflink');
         if (!a) return;
+        // Each copy of these modules installs this handler; a link belongs to
+        // the copy that rendered it (see markdown.js), and only that one opens it.
+        if ((a.dataset.copy === 'tracker') !== IS_TRACKER_COPY) return;
         e.preventDefault();
         const ref = parseRef(a.dataset.ref || '', 'bugs');
         if (!ref) return;

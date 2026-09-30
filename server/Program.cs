@@ -42,19 +42,32 @@ string uiDir = FindNear(Path.Combine("ui", "index.html"),
     : Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "ui"));
 
 // ---- Locate the stores ----------------------------------------------------
-string trackerBase = mode == "tracker" ? ResolveTrackerBase(args) : "";
-string bugsDir = mode == "tracker"
-    ? ArgValue(args, "--bugs-dir") ?? Env("BUGDESK_BUGS") ?? Path.Combine(trackerBase, "bugs")
-    : ResolveBugsDir(builder.Environment.ContentRootPath, args);
-string backlogDir = mode == "tracker"
-    ? EnsureDir(ArgValue(args, "--backlog-dir") ?? Env("BUGDESK_BACKLOG")
-                ?? Path.Combine(trackerBase, "tickets"))
-    : ResolveBacklogDir(bugsDir, args);
-// Attachments sit beside the records in tracker mode. In bugs mode they stay
-// under the bug store, where existing ones already are.
-string attachDir = mode == "tracker"
-    ? Path.Combine(trackerBase, "attachments")
-    : Path.Combine(bugsDir, "attachments");
+// Which projects there are, and where the one global tracker lives, is
+// projects.toml's business — see ProjectsFile.cs. It sits in the BugDesk
+// checkout beside ui/, git-ignored, because the folders it names are this
+// machine's. Each project is served at /p/<name>/ and the tracker at /t/, so a
+// request says which store it means in its own URL; see the routing below.
+var projectsFile = new ProjectsFile(Env("BUGDESK_PROJECTS")
+    ?? Path.Combine(Path.GetDirectoryName(uiDir)!, "projects.toml"));
+
+// The command line still names stores the way it always did (--bugs-dir,
+// BUGDESK_BUGS, and the backlog beside them). The FIRST run after upgrading
+// writes that store into a new projects.toml, so the repo BugDesk was already
+// serving becomes its first project and nothing moves. After that the file
+// decides; a store named explicitly on the command line that the file does not
+// list is served for this run too, without being written into it.
+bool explicitStores = ArgValue(args, "--bugs-dir") is not null || Env("BUGDESK_BUGS") is not null
+                   || ArgValue(args, "--backlog-dir") is not null || Env("BUGDESK_BACKLOG") is not null;
+string cliBugsDir = ResolveBugsDir(builder.Environment.ContentRootPath, args);
+string cliBacklogDir = ResolveBacklogPath(cliBugsDir, args);
+string cliProjectName = Path.GetFileName(Path.GetDirectoryName(cliBugsDir)!.TrimEnd('\\', '/')) is { Length: > 0 } dirName
+    ? dirName : "default";
+
+if (mode != "tracker" && !projectsFile.Exists)
+{
+    projectsFile.CreateIfMissing(SeedProjectsToml(cliProjectName, cliBugsDir, cliBacklogDir));
+    Console.WriteLine($"BugDesk: wrote {projectsFile.Path} — edit it to add projects and the tracker");
+}
 
 // ---- Port ------------------------------------------------------------------
 // A tracker is a personal tool you open when you want it, often alongside a
@@ -70,15 +83,38 @@ if (mode == "tracker" && string.IsNullOrEmpty(Env("ASPNETCORE_URLS")))
 
 var app = builder.Build();
 
-app.Logger.LogInformation("BugDesk: mode={mode} records={records} ui={ui}",
-    mode, mode == "tracker" ? backlogDir : $"{bugsDir} + {backlogDir}", uiDir);
+var stores = new StoreRegistry(projectsFile, app.Logger, ResolveStateDir(app.Environment.ContentRootPath));
+if (mode == "tracker")
+{
+    // Standalone TicketDesk. The tracker is the one in projects.toml, unless the
+    // command line names one (--project, BUGDESK_TRACKER_PROJECT) or the file has
+    // none — then it is found the way it always was, by name under the tracker
+    // root.
+    var named = ArgValue(args, "--project") is not null || Env("BUGDESK_TRACKER_PROJECT") is not null;
+    if (named || projectsFile.Current.TrackerPath is null) stores.TrackerOverride = ResolveTrackerBase(args);
+}
+else if (explicitStores)
+{
+    var same = stores.Definitions.FirstOrDefault(d =>
+        (d.Bugs is { } b && SamePath(projectsFile.Resolve(b), cliBugsDir))
+        || (d.Backlog is { } k && SamePath(projectsFile.Resolve(k), cliBacklogDir)));
+    if (same is null)
+        stores.Transient = new ProjectsFile.ProjectDef(cliProjectName, cliBugsDir, cliBacklogDir, Env("BUGDESK_CONFIG"), null);
+    stores.Preferred = same?.Name ?? cliProjectName;
+}
+
+app.Logger.LogInformation("BugDesk: mode={mode} projects={file} ({n} project(s)) tracker={tracker} ui={ui}",
+    mode, projectsFile.Path, stores.Definitions.Count, stores.TrackerPath ?? "(none)", uiDir);
+if (projectsFile.Error is { } projectsError)
+    app.Logger.LogWarning("BugDesk: {file}: {error}", projectsFile.Path, projectsError);
 
 // `--seed` for a tracker is applied HERE rather than in run.sh, because run.sh
 // does not know where a tracker's records live — the server owns that path, and
 // two places computing it is two places to get it wrong. Never overwrites: a
 // store with anything in it is left exactly as it is.
-if (mode == "tracker" && Env("BUGDESK_SEED_TRACKER") is not null)
+if (mode == "tracker" && Env("BUGDESK_SEED_TRACKER") is not null && stores.Tracker() is { } seedInto)
 {
+    var backlogDir = seedInto.BacklogDir;
     var samples = FindNear(Path.Combine("examples", "tracker"),
                            builder.Environment.ContentRootPath, AppContext.BaseDirectory) ?? "";
     var existing = Directory.EnumerateFiles(backlogDir, "*.md").Any();
@@ -102,54 +138,108 @@ if (mode == "tracker" && Env("BUGDESK_SEED_TRACKER") is not null)
 // BugDesk's lifecycle assumes exactly two roles: a human who files/triages/tests
 // records through this UI, and an agent who investigates them (typically an AI
 // coding assistant driven through the /bugs and /backlog skills). Neither name is
-// fixed. The name comes from the per-user PROFILE — what the first-run screen
-// and "change your name" write. BUGDESK_HUMAN/BUGDESK_AGENT SEED that profile
-// when there is none yet (a scripted deployment, CI); they no longer outrank it,
-// because a variable exported in a shell profile used to make every later name
-// change a file the server then ignored. BUGDESK_USER is what picks a different
-// profile per process, for two people sharing one checkout.
-string configDir = mode == "tracker"
-    ? Env("BUGDESK_CONFIG") ?? Path.Combine(trackerBase, "config")
-    : ResolveConfigDir(bugsDir);
-// TRACKER mode assigns work to PEOPLE, so it derives no `<name>_agent` — see
-// ProjectConfig.AgentsAssignable.
-bool agentsAssignable = mode != "tracker";
-var users = new UserStore(
-    configDir,
-    Environment.GetEnvironmentVariable("BUGDESK_USER"),
-    Environment.GetEnvironmentVariable("BUGDESK_HUMAN"),
-    Environment.GetEnvironmentVariable("BUGDESK_AGENT"),
-    agentsAssignable);
-app.Logger.LogInformation("BugDesk: config={config} user={user}",
-    users.ConfigDir, users.ActiveSlug ?? "(unconfigured — the UI will ask)");
-
-// The SHARED roster — who works on this repo. Committed, unlike the per-user
-// profile: an assignee dropdown offering only "me and my agent" is useless the
-// moment a record belongs to somebody else.
-var project = new ProjectConfig(ResolveProjectConfig(bugsDir, configDir), agentsAssignable);
-app.Logger.LogInformation("BugDesk: project={project}", project.Path);
+// fixed. The name is `[user]` in projects.toml — ONE name in every project and in
+// the tracker — and each store's per-user PROFILE follows it (see
+// StoreRegistry.Sync); the profiles still hold that store's filters and layout.
+// BUGDESK_HUMAN/BUGDESK_AGENT SEED a profile when there is none yet (a scripted
+// deployment, CI). BUGDESK_USER picks a different profile per process, for two
+// people sharing one checkout, and leaves the file alone.
 
 // Pre-profile UI state: a single shared filters.json. Read once, folded into
-// whichever profile is active, and never written again. Declared here because
-// the first-run handler below migrates on the profile it has just created.
+// whichever profile is active, and never written again.
 string legacyFiltersPath = Path.Combine(ResolveStateDir(app.Environment.ContentRootPath), "filters.json");
-users.MigrateLegacyFilters(legacyFiltersPath);
+if (mode != "tracker" && stores.DefaultProject is { } firstProject)
+    stores.Project(firstProject.Name)?.Users.MigrateLegacyFilters(legacyFiltersPath);
 
-// ---- Live updates ---------------------------------------------------------
-// The markdown files are the source of truth precisely so other things write
-// them — a git pull, an agent through the /bugs skill, somebody's editor. The
-// watcher turns those into SSE so an open browser is never looking at a store
-// that has moved on without it. See StoreWatcher.cs, and note that EVERY write
-// below goes through WriteRecord so the watcher can tell our own echo from a
-// real change.
-var watcher = new StoreWatcher(bugsDir, backlogDir, project.Path, app.Logger);
-app.Lifetime.ApplicationStopping.Register(() => watcher.Dispose());
-
-async Task WriteRecord(string path, string text)
+// ---- Routing: which store a request is for ---------------------------------
+// The UI is served UNDER its store's prefix — /p/bugdesk/, /t/ — and addresses
+// its API relatively, so everything a page asks for reaches the store it was
+// opened on without a single call site knowing which one that is. The prefix is
+// moved into PathBase here, so the static files and every endpoint below see the
+// same paths they always did, and the store travels with the request in
+// Req.Store.
+//
+// A bare address opens a project — the one used last — and an unprefixed /api
+// call (a script, an old tab) goes to that same project. In standalone tracker
+// mode there is only the tracker, and everything is it.
+app.Use(async (http, next) =>
 {
-    await File.WriteAllTextAsync(path, text);
-    watcher.Note(path, text);
-}
+    var path = http.Request.Path.Value ?? "/";
+    Store? store;
+    if (path.StartsWith("/p/", StringComparison.Ordinal))
+    {
+        var rest = path[3..];
+        var slash = rest.IndexOf('/');
+        var name = Uri.UnescapeDataString(slash < 0 ? rest : rest[..slash]);
+        // Relative URLs need the trailing slash, or `api/config` resolves to /p/api/config.
+        if (slash < 0) { http.Response.Redirect($"/p/{Uri.EscapeDataString(name)}/{http.Request.QueryString}"); return; }
+        var tail = rest[slash..];
+        store = stores.Project(name);
+        if (store is null)
+        {
+            if (tail.StartsWith("/api/", StringComparison.Ordinal))
+                await Fail(http, 404, $"no project called '{name}' in {projectsFile.Path}");
+            else
+                http.Response.Redirect("/");
+            return;
+        }
+        http.Request.PathBase = path[..(3 + slash)];
+        http.Request.Path = tail;
+        if (tail is "/" or "/index.html") stores.MarkUsed(store.Name);
+    }
+    else if (path == "/t" || path.StartsWith("/t/", StringComparison.Ordinal))
+    {
+        if (path == "/t") { http.Response.Redirect("/t/"); return; }
+        store = stores.Tracker();
+        if (store is null) { await Fail(http, 404, $"no tracker configured — set [tracker] path in {projectsFile.Path}"); return; }
+        http.Request.PathBase = "/t";
+        http.Request.Path = path[2..];
+    }
+    else if (mode == "tracker")
+    {
+        store = stores.Tracker();
+    }
+    else
+    {
+        var def = stores.DefaultProject;
+        if (path is "/" or "/index.html")
+        {
+            if (def is null) { await Fail(http, 404, $"no projects yet — add one to {projectsFile.Path}"); return; }
+            http.Response.Redirect($"/p/{Uri.EscapeDataString(def.Name)}/{http.Request.QueryString}");
+            return;
+        }
+        store = def is null ? null : stores.Project(def.Name);
+    }
+
+    // A project need not have both stores, and the endpoints of the one it lacks
+    // must not run against an empty path — a bug path with no folder in front of
+    // it resolves against the server's working directory.
+    var api = http.Request.Path.Value ?? "";
+    if (api.StartsWith("/api/", StringComparison.Ordinal) && !api.StartsWith("/api/projects", StringComparison.Ordinal))
+    {
+        if (store is null) { await Fail(http, 404, $"no projects yet — add one to {projectsFile.Path}"); return; }
+        if (!store.HasBugs && (api.StartsWith("/api/bugs", StringComparison.Ordinal) || api == "/api/meta"))
+        { await Fail(http, 404, $"{store.Name} has no bug store"); return; }
+        if (!store.HasBacklog && api.StartsWith("/api/backlog", StringComparison.Ordinal))
+        { await Fail(http, 404, $"{store.Name} has no backlog"); return; }
+    }
+
+    // The TRACKER'S COPY of the record modules. A project page shows the global
+    // tracker beside its own stores by loading ui/js/ticketdesk/ a second time
+    // from this alias: a different URL is a separate module instance, with its
+    // own records, its own API address and its own page kinds, while everything
+    // outside ticketdesk/ (the window manager, the taxonomy, settings) resolves
+    // to the same URLs and stays shared. See ui/js/ticketdesk/instance.js.
+    if (http.Request.Path.Value is { } js && js.StartsWith("/js/ticketdesk@t/", StringComparison.Ordinal))
+        http.Request.Path = "/js/ticketdesk/" + js["/js/ticketdesk@t/".Length..];
+
+    Req.Maybe = store;
+    await next();
+});
+// Explicit, and AFTER the rewrite: left implicit, WebApplication matches routes
+// at the very start of the pipeline — against the path WITH its /p/<name>
+// prefix — and no endpoint below would ever match a prefixed request.
+app.UseRouting();
 
 // ---- Static UI ------------------------------------------------------------
 if (Directory.Exists(uiDir))
@@ -169,23 +259,34 @@ if (Directory.Exists(uiDir))
 }
 
 // ---- Attachments ----------------------------------------------------------
-// Images pasted or dropped into a description / comment land in
-// <bugsDir>/attachments and are referenced from the markdown as
-// `/attachments/<name>`. They live WITH the store on purpose: a screenshot is
-// part of the record, and keeping it beside the .md means the two travel
-// together in git rather than rotting as a dead link. Backlog items share the
-// directory — an attachment is addressed by content hash, so which store
-// referenced it first does not matter.
+// Images pasted or dropped into a description / comment land in the store's
+// attachments folder (<bugs>/attachments in a project, beside the tickets in the
+// tracker) and are referenced from the markdown as `/attachments/<name>`. They
+// live WITH the store on purpose: a screenshot is part of the record, and keeping
+// it beside the .md means the two travel together in git rather than rotting as
+// a dead link.
+//
+// The reference is ROOT-relative and names no store, and it stays that way: it is
+// written into records, and a record must not change meaning when it is read from
+// another page. The names are content hashes, so the same name is the same image
+// wherever it is found — the request's own store is asked first, then the
+// tracker, then every other open store.
+app.MapGet("/attachments/{name}", (string name) =>
 {
-    Directory.CreateDirectory(attachDir);
-    var attachFiles = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(attachDir);
-    app.UseStaticFiles(new StaticFileOptions
+    var type = ImageContentType(name);
+    if (type is null || name.Contains("..") || name.IndexOfAny(new[] { '/', '\\' }) >= 0)
+        return Results.NotFound();
+    var candidates = new List<Store>();
+    if (Req.Maybe is { } own) candidates.Add(own);
+    if (stores.Tracker() is { } tracker) candidates.Add(tracker);
+    candidates.AddRange(stores.Open());
+    foreach (var s in candidates.Distinct())
     {
-        FileProvider = attachFiles,
-        RequestPath = "/attachments",
-        ServeUnknownFileTypes = false, // images only — never serve arbitrary blobs
-    });
-}
+        var full = Path.Combine(s.AttachDir, name);
+        if (File.Exists(full)) return Results.File(full, type);
+    }
+    return Results.NotFound();
+});
 
 // ---- API ------------------------------------------------------------------
 var json = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = false };
@@ -216,7 +317,7 @@ app.MapPost("/api/attachments", async (HttpRequest req) =>
     // the name can never collide or escape the directory.
     var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes))[..16].ToLowerInvariant();
     var fileName = $"{hash}{ext}";
-    var full = Path.Combine(attachDir, fileName);
+    var full = Path.Combine(Req.Store.AttachDir, fileName);
     if (!File.Exists(full)) await File.WriteAllBytesAsync(full, bytes);
 
     return Results.Json(new { ok = true, url = $"/attachments/{fileName}", name = fileName }, json);
@@ -226,13 +327,13 @@ app.MapPost("/api/attachments", async (HttpRequest req) =>
 
 app.MapGet("/api/bugs", () =>
 {
-    var list = LoadAll(bugsDir).OrderBy(b => b.Pri).ThenByDescending(b => b.Updated).Select(b => b.ToSummary()).ToList();
+    var list = LoadAll(Req.Store.BugsDir).OrderBy(b => b.Pri).ThenByDescending(b => b.Updated).Select(b => b.ToSummary()).ToList();
     return Results.Json(new { ok = true, bugs = list }, json);
 });
 
 app.MapGet("/api/bugs/{id:int}", (int id) =>
 {
-    var bug = LoadOne(bugsDir, id);
+    var bug = LoadOne(Req.Store.BugsDir, id);
     return bug is null
         ? Results.Json(new { ok = false, error = "not found" }, json, statusCode: 404)
         : Results.Json(new { ok = true, bug }, json);
@@ -243,7 +344,7 @@ app.MapGet("/api/bugs/{id:int}", (int id) =>
 // configured human on the first ordinary save is exactly that, and a line
 // recording it would be a reassignment nobody performed.
 bool IsDefaultFill(string key, string was, string now) =>
-    (key is "assignee" or "reporter") && was.Length == 0 && now == users.HumanAuthor;
+    (key is "assignee" or "reporter") && was.Length == 0 && now == Req.Store.Users.HumanAuthor;
 
 // An actor name goes into a history line as `- <date> · <actor> · …`, so the two
 // characters it must not contain are a newline and the separator itself. A
@@ -257,7 +358,7 @@ static string CleanActor(string? raw) =>
 
 app.MapPost("/api/bugs/{id:int}", async (int id, HttpRequest req) =>
 {
-    var path = BugPath(bugsDir, id);
+    var path = BugPath(Req.Store.BugsDir, id);
     if (!File.Exists(path)) return Results.Json(new { ok = false, error = "not found" }, json, statusCode: 404);
     var patch = await JsonSerializer.DeserializeAsync<Dictionary<string, JsonElement>>(req.Body, json) ?? new();
     var text = await File.ReadAllTextAsync(path);
@@ -269,7 +370,7 @@ app.MapPost("/api/bugs/{id:int}", async (int id, HttpRequest req) =>
     // local tool over files a person can edit anyway.
     var actor = patch.TryGetValue("actor", out var av) && av.ValueKind == JsonValueKind.String
         ? CleanActor(av.GetString()) : "";
-    if (actor.Length == 0) actor = users.HumanAuthor;
+    if (actor.Length == 0) actor = Req.Store.Users.HumanAuthor;
 
     var changes = new List<FieldChange>();
     foreach (var (k, v) in patch)
@@ -317,8 +418,8 @@ app.MapPost("/api/bugs/{id:int}", async (int id, HttpRequest req) =>
         text = Md.AppendComment(text, actor, cv.GetString()!, statusNote);
     else if (statusNote is not null && patch.TryGetValue("tagRecentComment", out var tv) && tv.ValueKind == JsonValueKind.True)
         text = Md.TagRecentComment(text, actor, statusNote, DateTime.UtcNow).Text;
-    await WriteRecord(path, text);
-    return Results.Json(new { ok = true, bug = LoadOne(bugsDir, id) }, json);
+    await Req.Store.WriteRecord(path, text);
+    return Results.Json(new { ok = true, bug = LoadOne(Req.Store.BugsDir, id) }, json);
 });
 
 // Marking a duplicate is ONE act, not four requests a client can get half-way
@@ -333,7 +434,7 @@ app.MapPost("/api/bugs/{id:int}", async (int id, HttpRequest req) =>
 // why it is not used.
 app.MapPost("/api/bugs/{id:int}/duplicate-of", async (int id, HttpRequest req) =>
 {
-    var path = BugPath(bugsDir, id);        // `self`'s file — the only one the pipeline below writes
+    var path = BugPath(Req.Store.BugsDir, id);        // `self`'s file — the only one the pipeline below writes
     if (!File.Exists(path)) return Results.Json(new { ok = false, error = "not found" }, json, statusCode: 404);
 
     var body = await JsonSerializer.DeserializeAsync<Dictionary<string, JsonElement>>(req.Body, json) ?? new();
@@ -347,7 +448,7 @@ app.MapPost("/api/bugs/{id:int}/duplicate-of", async (int id, HttpRequest req) =
     // history line. Same trust model the comment endpoints' `author` already has.
     var actor = body.TryGetValue("actor", out var av) && av.ValueKind == JsonValueKind.String
         ? CleanActor(av.GetString()) : "";
-    if (actor.Length == 0) actor = users.HumanAuthor;
+    if (actor.Length == 0) actor = Req.Store.Users.HumanAuthor;
     var note = body.TryGetValue("comment", out var cv) && cv.ValueKind == JsonValueKind.String
         ? (cv.GetString() ?? "").Trim() : "";
 
@@ -364,19 +465,19 @@ app.MapPost("/api/bugs/{id:int}/duplicate-of", async (int id, HttpRequest req) =
     string targetTitle, targetType, targetPath;
     if (r.Store == "bugs")
     {
-        var targetBug = LoadOne(bugsDir, r.Id);
+        var targetBug = LoadOne(Req.Store.BugsDir, r.Id);
         if (targetBug is null) return Results.Json(new { ok = false, error = $"no bug #{r.Id} to point at" }, json, statusCode: 404);
         targetTitle = targetBug.Title;
         targetType = "";
-        targetPath = BugPath(bugsDir, r.Id);
+        targetPath = BugPath(Req.Store.BugsDir, r.Id);
     }
     else
     {
-        var targetItem = LoadBacklog(backlogDir).FirstOrDefault(i => i.Id == r.Id);
+        var targetItem = LoadBacklog(Req.Store.BacklogDir).FirstOrDefault(i => i.Id == r.Id);
         if (targetItem is null) return Results.Json(new { ok = false, error = $"no backlog item #{r.Id} to point at" }, json, statusCode: 404);
         targetTitle = targetItem.Title;
         targetType = targetItem.Type;
-        targetPath = Path.Combine(backlogDir, targetItem.FileName);
+        targetPath = Path.Combine(Req.Store.BacklogDir, targetItem.FileName);
     }
     var token = $"duplicates {Refs.Format(r, "bugs", targetType)}";
     var targetDisplay = Refs.Display(r, targetType);
@@ -400,7 +501,7 @@ app.MapPost("/api/bugs/{id:int}/duplicate-of", async (int id, HttpRequest req) =
     // bumps `updated`, and History must already be above the thread.
     text = Md.AppendComment(text, actor,
         note.Length > 0 ? note : $"Closed as a duplicate of {targetDisplay} — {targetTitle}.");
-    await WriteRecord(path, text);
+    await Req.Store.WriteRecord(path, text);
 
     // A courtesy comment on the master, never a reverse link — only the authored
     // direction of a relationship is ever stored. The duplicate is written FIRST
@@ -410,7 +511,7 @@ app.MapPost("/api/bugs/{id:int}/duplicate-of", async (int id, HttpRequest req) =
     var targetNoted = false;
     try
     {
-        await WriteRecord(targetPath, Md.AppendComment(await File.ReadAllTextAsync(targetPath), actor,
+        await Req.Store.WriteRecord(targetPath, Md.AppendComment(await File.ReadAllTextAsync(targetPath), actor,
             $"{selfDisplay} was closed as a duplicate of this."));
         targetNoted = true;
     }
@@ -422,7 +523,7 @@ app.MapPost("/api/bugs/{id:int}/duplicate-of", async (int id, HttpRequest req) =
     return Results.Json(new
     {
         ok = true,
-        bug = LoadOne(bugsDir, id),                 // `self`, re-read after the write
+        bug = LoadOne(Req.Store.BugsDir, id),                 // `self`, re-read after the write
         target = new { store = r.Store, id = r.Id, @ref = targetDisplay, title = targetTitle },
         targetNoted,
     }, json);
@@ -430,16 +531,16 @@ app.MapPost("/api/bugs/{id:int}/duplicate-of", async (int id, HttpRequest req) =
 
 app.MapPost("/api/bugs/{id:int}/comments", async (int id, HttpRequest req) =>
 {
-    var path = BugPath(bugsDir, id);
+    var path = BugPath(Req.Store.BugsDir, id);
     if (!File.Exists(path)) return Results.Json(new { ok = false, error = "not found" }, json, statusCode: 404);
     var body = await JsonSerializer.DeserializeAsync<Dictionary<string, JsonElement>>(req.Body, json) ?? new();
-    var author = body.TryGetValue("author", out var a) ? a.GetString() : users.HumanAuthor;
+    var author = body.TryGetValue("author", out var a) ? a.GetString() : Req.Store.Users.HumanAuthor;
     var comment = body.TryGetValue("body", out var b) ? b.GetString() : "";
     if (string.IsNullOrWhiteSpace(comment)) return Results.Json(new { ok = false, error = "empty comment" }, json, statusCode: 400);
 
-    var text = Md.AppendComment(await File.ReadAllTextAsync(path), author ?? users.HumanAuthor, comment!);
-    await WriteRecord(path, text);
-    return Results.Json(new { ok = true, bug = LoadOne(bugsDir, id) }, json);
+    var text = Md.AppendComment(await File.ReadAllTextAsync(path), author ?? Req.Store.Users.HumanAuthor, comment!);
+    await Req.Store.WriteRecord(path, text);
+    return Results.Json(new { ok = true, bug = LoadOne(Req.Store.BugsDir, id) }, json);
 });
 
 // Create a new bug. The ID is assigned automatically (max existing + 1) — the client
@@ -454,7 +555,7 @@ app.MapPost("/api/bugs", async (HttpRequest req) =>
     if (string.IsNullOrWhiteSpace(title))
         return Results.Json(new { ok = false, error = "title required" }, json, statusCode: 400);
 
-    var nextId = LoadAll(bugsDir).Select(b => b.Id).DefaultIfEmpty(0).Max() + 1;
+    var nextId = LoadAll(Req.Store.BugsDir).Select(b => b.Id).DefaultIfEmpty(0).Max() + 1;
     var labels = body.TryGetValue("labels", out var lv) && lv.ValueKind == JsonValueKind.Array
         ? string.Join(", ", lv.EnumerateArray().Select(e => e.GetString()))
         : "";
@@ -472,11 +573,11 @@ app.MapPost("/api/bugs", async (HttpRequest req) =>
     sb.Append($"severity: {Get("severity", "medium")}\n");
     sb.Append($"type: {Get("type", "bug")}\n");
     sb.Append($"subsystem: {Get("subsystem", "unsorted")}\n");
-    sb.Append($"assignee: {Get("assignee", users.HumanAuthor)}\n");
+    sb.Append($"assignee: {Get("assignee", Req.Store.Users.HumanAuthor)}\n");
     // Who it goes BACK to. Set once here and never derived: "the human" is not a
     // stable answer in a project with a roster, and a handback that guesses hands
     // somebody else's bug to the wrong person.
-    sb.Append($"reporter: {Get("reporter", users.HumanAuthor)}\n");
+    sb.Append($"reporter: {Get("reporter", Req.Store.Users.HumanAuthor)}\n");
     sb.Append($"labels: [{labels}]\n");
     sb.Append($"links: [{links}]\n");
     sb.Append($"created: {Md.Today()}\n");
@@ -485,13 +586,13 @@ app.MapPost("/api/bugs", async (HttpRequest req) =>
     sb.Append(string.IsNullOrWhiteSpace(description) ? "_(no description provided)_" : description);
     sb.Append('\n');
 
-    await WriteRecord(BugPath(bugsDir, nextId), sb.ToString());
-    return Results.Json(new { ok = true, bug = LoadOne(bugsDir, nextId) }, json);
+    await Req.Store.WriteRecord(BugPath(Req.Store.BugsDir, nextId), sb.ToString());
+    return Results.Json(new { ok = true, bug = LoadOne(Req.Store.BugsDir, nextId) }, json);
 });
 
 app.MapGet("/api/meta", () =>
 {
-    var all = LoadAll(bugsDir);
+    var all = LoadAll(Req.Store.BugsDir);
     return Results.Json(new
     {
         ok = true,
@@ -508,11 +609,11 @@ app.MapGet("/api/meta", () =>
 // shape and skills/backlog/SKILL.md for the workflow it serves.
 
 app.MapGet("/api/backlog", () =>
-    Results.Json(new { ok = true, items = BacklogSummaries(backlogDir) }, json));
+    Results.Json(new { ok = true, items = BacklogSummaries(Req.Store.BacklogDir) }, json));
 
 app.MapGet("/api/backlog/meta", () =>
 {
-    var all = LoadBacklog(backlogDir);
+    var all = LoadBacklog(Req.Store.BacklogDir);
     var phases = all.ToDictionary(i => i.Id, i => EffectivePhase(all, i));
     return Results.Json(new
     {
@@ -541,7 +642,7 @@ app.MapGet("/api/backlog/meta", () =>
 
 app.MapGet("/api/backlog/{id:int}", (int id) =>
 {
-    var all = LoadBacklog(backlogDir);
+    var all = LoadBacklog(Req.Store.BacklogDir);
     var item = all.FirstOrDefault(i => i.Id == id);
     if (item is null) return Results.Json(new { ok = false, error = "not found" }, json, statusCode: 404);
     return Results.Json(new { ok = true, item = FullItem(all, item) }, json);
@@ -565,7 +666,7 @@ app.MapPost("/api/backlog", async (HttpRequest req) =>
     if (!BacklogItem.Prefixes.ContainsKey(type))
         return Results.Json(new { ok = false, error = $"type must be one of {string.Join(", ", BacklogItem.Prefixes.Keys)}" }, json, statusCode: 400);
 
-    var all = LoadBacklog(backlogDir);
+    var all = LoadBacklog(Req.Store.BacklogDir);
     var parent = body.TryGetValue("parent", out var pv)
         ? (pv.ValueKind == JsonValueKind.Number ? pv.GetInt32() : BacklogItem.ParseRef(pv.GetString()))
         : 0;
@@ -595,7 +696,7 @@ app.MapPost("/api/backlog", async (HttpRequest req) =>
         // in tracker mode that is the whole point of the record, and asking
         // "who are you filing this as" of a single-operator tool would be a
         // question with one possible answer.
-        Reporter = Get("reporter", users.HumanAuthor),
+        Reporter = Get("reporter", Req.Store.Users.HumanAuthor),
         Due = BacklogItem.NormalizeDate(due),
         Points = Get("points"),
         Subsystem = Get("subsystem", "unsorted"),
@@ -606,18 +707,18 @@ app.MapPost("/api/backlog", async (HttpRequest req) =>
         Description = Get("description"),
         Acceptance = Get("acceptance"),
     };
-    await WriteRecord(Path.Combine(backlogDir, item.FileName), item.Render());
+    await Req.Store.WriteRecord(Path.Combine(Req.Store.BacklogDir, item.FileName), item.Render());
 
-    var reloaded = LoadBacklog(backlogDir);
+    var reloaded = LoadBacklog(Req.Store.BacklogDir);
     return Results.Json(new { ok = true, item = FullItem(reloaded, reloaded.First(i => i.Id == item.Id)) }, json);
 });
 
 app.MapPost("/api/backlog/{id:int}", async (int id, HttpRequest req) =>
 {
-    var all = LoadBacklog(backlogDir);
+    var all = LoadBacklog(Req.Store.BacklogDir);
     var item = all.FirstOrDefault(i => i.Id == id);
     if (item is null) return Results.Json(new { ok = false, error = "not found" }, json, statusCode: 404);
-    var path = Path.Combine(backlogDir, item.FileName);
+    var path = Path.Combine(Req.Store.BacklogDir, item.FileName);
 
     // The status the record had BEFORE this request. The retype clamp below can
     // move the status with no `status` key in the patch at all, and this is the
@@ -633,7 +734,7 @@ app.MapPost("/api/backlog/{id:int}", async (int id, HttpRequest req) =>
     // `actor` still works. Same trust model as the comment endpoints' `author`.
     var actor = patch.TryGetValue("actor", out var av) && av.ValueKind == JsonValueKind.String
         ? CleanActor(av.GetString()) : "";
-    if (actor.Length == 0) actor = users.HumanAuthor;
+    if (actor.Length == 0) actor = Req.Store.Users.HumanAuthor;
 
     var text = await File.ReadAllTextAsync(path);
     string? retype = null;      // set when the patch changes the item's type
@@ -767,16 +868,16 @@ app.MapPost("/api/backlog/{id:int}", async (int id, HttpRequest req) =>
         // Write the NEW file first, then drop the old one: an interruption
         // between the two leaves the record duplicated (visible, fixable by
         // hand) rather than deleted (gone).
-        var next = Path.Combine(backlogDir, $"{BacklogItem.Prefixes[retype]}-{id:D4}.md");
-        await WriteRecord(next, text);
+        var next = Path.Combine(Req.Store.BacklogDir, $"{BacklogItem.Prefixes[retype]}-{id:D4}.md");
+        await Req.Store.WriteRecord(next, text);
         File.Delete(path);
     }
     else
     {
-        await WriteRecord(path, text);
+        await Req.Store.WriteRecord(path, text);
     }
 
-    var reloaded = LoadBacklog(backlogDir);
+    var reloaded = LoadBacklog(Req.Store.BacklogDir);
     return Results.Json(new { ok = true, item = FullItem(reloaded, reloaded.First(i => i.Id == id)) }, json);
 });
 
@@ -786,10 +887,10 @@ app.MapPost("/api/backlog/{id:int}", async (int id, HttpRequest req) =>
 // context the UI never parsed.
 app.MapPost("/api/backlog/{id:int}/criteria", async (int id, HttpRequest req) =>
 {
-    var all = LoadBacklog(backlogDir);
+    var all = LoadBacklog(Req.Store.BacklogDir);
     var item = all.FirstOrDefault(i => i.Id == id);
     if (item is null) return Results.Json(new { ok = false, error = "not found" }, json, statusCode: 404);
-    var path = Path.Combine(backlogDir, item.FileName);
+    var path = Path.Combine(Req.Store.BacklogDir, item.FileName);
 
     var body = await JsonSerializer.DeserializeAsync<Dictionary<string, JsonElement>>(req.Body, json) ?? new();
     var op = body.TryGetValue("op", out var o) ? (o.GetString() ?? "").ToLowerInvariant() : "";
@@ -814,9 +915,9 @@ app.MapPost("/api/backlog/{id:int}/criteria", async (int id, HttpRequest req) =>
     if (next is null)
         return Results.Json(new { ok = false, error = $"no criterion at position {index}" }, json, statusCode: 400);
 
-    await WriteRecord(path, Md.SetFrontmatter(next, "updated", Md.Now()));
+    await Req.Store.WriteRecord(path, Md.SetFrontmatter(next, "updated", Md.Now()));
 
-    var reloaded = LoadBacklog(backlogDir);
+    var reloaded = LoadBacklog(Req.Store.BacklogDir);
     return Results.Json(new { ok = true, item = FullItem(reloaded, reloaded.First(i => i.Id == id)) }, json);
 });
 
@@ -838,7 +939,7 @@ app.MapPost("/api/backlog/{id:int}/criteria", async (int id, HttpRequest req) =>
 // follow-up list where a mis-click costs a project with everything under it.
 app.MapDelete("/api/backlog/{id:int}", async (int id, HttpRequest req) =>
 {
-    var all = LoadBacklog(backlogDir);
+    var all = LoadBacklog(Req.Store.BacklogDir);
     var item = all.FirstOrDefault(i => i.Id == id);
     if (item is null) return Results.Json(new { ok = false, error = "not found" }, json, statusCode: 404);
 
@@ -861,7 +962,7 @@ app.MapDelete("/api/backlog/{id:int}", async (int id, HttpRequest req) =>
     // record — our own delete would announce itself to every open browser as an
     // arrival. It also keeps out of git, in both modes: in a repo the config
     // directory is already self-ignoring, and a tracker is not in a repo at all.
-    var trash = Path.Combine(configDir, "trash");
+    var trash = Path.Combine(Req.Store.ConfigDir, "trash");
     Directory.CreateDirectory(trash);
     var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
 
@@ -875,19 +976,19 @@ app.MapDelete("/api/backlog/{id:int}", async (int id, HttpRequest req) =>
         // the subtree travels with the child rather than being flattened.
         foreach (var child in all.Where(i => i.Parent == id))
         {
-            var path = Path.Combine(backlogDir, child.FileName);
+            var path = Path.Combine(Req.Store.BacklogDir, child.FileName);
             var text = Md.SetFrontmatter(await File.ReadAllTextAsync(path), "parent",
                 item.Parent > 0 ? item.Parent.ToString() : "");
-            await WriteRecord(path, Md.SetFrontmatter(text, "updated", Md.Now()));
+            await Req.Store.WriteRecord(path, Md.SetFrontmatter(text, "updated", Md.Now()));
             promoted.Add(child.Id);
         }
     }
 
     foreach (var doom in doomed)
     {
-        var from = Path.Combine(backlogDir, doom.FileName);
+        var from = Path.Combine(Req.Store.BacklogDir, doom.FileName);
         if (!File.Exists(from)) continue;
-        watcher.NoteDeletion(from);
+        Req.Store.Watcher.NoteDeletion(from);
         File.Move(from, Path.Combine(trash, $"{stamp}-{doom.FileName}"), overwrite: true);
     }
 
@@ -903,19 +1004,19 @@ app.MapDelete("/api/backlog/{id:int}", async (int id, HttpRequest req) =>
 
 app.MapPost("/api/backlog/{id:int}/comments", async (int id, HttpRequest req) =>
 {
-    var all = LoadBacklog(backlogDir);
+    var all = LoadBacklog(Req.Store.BacklogDir);
     var item = all.FirstOrDefault(i => i.Id == id);
     if (item is null) return Results.Json(new { ok = false, error = "not found" }, json, statusCode: 404);
-    var path = Path.Combine(backlogDir, item.FileName);
+    var path = Path.Combine(Req.Store.BacklogDir, item.FileName);
 
     var body = await JsonSerializer.DeserializeAsync<Dictionary<string, JsonElement>>(req.Body, json) ?? new();
-    var author = body.TryGetValue("author", out var a) ? a.GetString() : users.HumanAuthor;
+    var author = body.TryGetValue("author", out var a) ? a.GetString() : Req.Store.Users.HumanAuthor;
     var comment = body.TryGetValue("body", out var b) ? b.GetString() : "";
     if (string.IsNullOrWhiteSpace(comment)) return Results.Json(new { ok = false, error = "empty comment" }, json, statusCode: 400);
 
-    await WriteRecord(path, Md.AppendComment(await File.ReadAllTextAsync(path), author ?? users.HumanAuthor, comment!));
+    await Req.Store.WriteRecord(path, Md.AppendComment(await File.ReadAllTextAsync(path), author ?? Req.Store.Users.HumanAuthor, comment!));
 
-    var reloaded = LoadBacklog(backlogDir);
+    var reloaded = LoadBacklog(Req.Store.BacklogDir);
     return Results.Json(new { ok = true, item = FullItem(reloaded, reloaded.First(i => i.Id == id)) }, json);
 });
 
@@ -927,9 +1028,9 @@ app.MapPost("/api/backlog/{id:int}/comments", async (int id, HttpRequest req) =>
 // share a name.
 app.MapPost("/api/backlog/{id:int}/duplicate-of", async (int id, HttpRequest req) =>
 {
-    var self = LoadBacklog(backlogDir).FirstOrDefault(i => i.Id == id);
+    var self = LoadBacklog(Req.Store.BacklogDir).FirstOrDefault(i => i.Id == id);
     if (self is null) return Results.Json(new { ok = false, error = "not found" }, json, statusCode: 404);
-    var path = Path.Combine(backlogDir, self.FileName);
+    var path = Path.Combine(Req.Store.BacklogDir, self.FileName);
 
     var body = await JsonSerializer.DeserializeAsync<Dictionary<string, JsonElement>>(req.Body, json) ?? new();
     var raw = (body.TryGetValue("target", out var tv) ? tv.ValueKind switch
@@ -942,7 +1043,7 @@ app.MapPost("/api/backlog/{id:int}/duplicate-of", async (int id, HttpRequest req
     // history line. Same trust model the comment endpoints' `author` already has.
     var actor = body.TryGetValue("actor", out var av) && av.ValueKind == JsonValueKind.String
         ? CleanActor(av.GetString()) : "";
-    if (actor.Length == 0) actor = users.HumanAuthor;
+    if (actor.Length == 0) actor = Req.Store.Users.HumanAuthor;
     var note = body.TryGetValue("comment", out var cv) && cv.ValueKind == JsonValueKind.String
         ? (cv.GetString() ?? "").Trim() : "";
 
@@ -957,19 +1058,19 @@ app.MapPost("/api/backlog/{id:int}/duplicate-of", async (int id, HttpRequest req
     string targetTitle, targetType, targetPath;
     if (r.Store == "bugs")
     {
-        var targetBug = LoadOne(bugsDir, r.Id);
+        var targetBug = LoadOne(Req.Store.BugsDir, r.Id);
         if (targetBug is null) return Results.Json(new { ok = false, error = $"no bug #{r.Id} to point at" }, json, statusCode: 404);
         targetTitle = targetBug.Title;
         targetType = "";
-        targetPath = BugPath(bugsDir, r.Id);
+        targetPath = BugPath(Req.Store.BugsDir, r.Id);
     }
     else
     {
-        var targetItem = LoadBacklog(backlogDir).FirstOrDefault(i => i.Id == r.Id);
+        var targetItem = LoadBacklog(Req.Store.BacklogDir).FirstOrDefault(i => i.Id == r.Id);
         if (targetItem is null) return Results.Json(new { ok = false, error = $"no backlog item #{r.Id} to point at" }, json, statusCode: 404);
         targetTitle = targetItem.Title;
         targetType = targetItem.Type;
-        targetPath = Path.Combine(backlogDir, targetItem.FileName);
+        targetPath = Path.Combine(Req.Store.BacklogDir, targetItem.FileName);
     }
     var token = $"duplicates {Refs.Format(r, "backlog", targetType)}";
     var targetDisplay = Refs.Display(r, targetType);
@@ -994,7 +1095,7 @@ app.MapPost("/api/backlog/{id:int}/duplicate-of", async (int id, HttpRequest req
     // bumps `updated`, and History must already be above the thread.
     text = Md.AppendComment(text, actor,
         note.Length > 0 ? note : $"Dropped as a duplicate of {targetDisplay} — {targetTitle}.");
-    await WriteRecord(path, text);
+    await Req.Store.WriteRecord(path, text);
 
     // A courtesy comment on the master, never a reverse link. The duplicate is
     // written FIRST on purpose: an interruption between the two leaves a correctly
@@ -1003,13 +1104,13 @@ app.MapPost("/api/backlog/{id:int}/duplicate-of", async (int id, HttpRequest req
     var targetNoted = false;
     try
     {
-        await WriteRecord(targetPath, Md.AppendComment(await File.ReadAllTextAsync(targetPath), actor,
+        await Req.Store.WriteRecord(targetPath, Md.AppendComment(await File.ReadAllTextAsync(targetPath), actor,
             $"{selfDisplay} was dropped as a duplicate of this."));
         targetNoted = true;
     }
     catch (Exception ex) { app.Logger.LogWarning(ex, "could not note the duplicate on {Ref}", targetDisplay); }
 
-    var reloaded = LoadBacklog(backlogDir);
+    var reloaded = LoadBacklog(Req.Store.BacklogDir);
     return Results.Json(new
     {
         ok = true,
@@ -1063,7 +1164,7 @@ app.MapGet("/api/search", (string? q, int? limit) =>
         if (Match(doc, terms) is { } hit) hits.Add(hit);
     }
 
-    foreach (var bug in LoadAll(bugsDir))
+    foreach (var bug in LoadAll(Req.Store.BugsDir))
     {
         Consider(new SearchDoc(
             Store: "bugs", Id: bug.Id, Ref: $"BUG-{bug.Id:D4}", Type: bug.Type,
@@ -1073,7 +1174,7 @@ app.MapGet("/api/search", (string? q, int? limit) =>
             Comments: bug.Comments));
     }
 
-    var all = LoadBacklog(backlogDir);
+    var all = LoadBacklog(Req.Store.BacklogDir);
     foreach (var item in all)
     {
         Consider(new SearchDoc(
@@ -1106,27 +1207,43 @@ app.MapGet("/api/search", (string? q, int? limit) =>
 // posting this comment" / "on me" / "on the agent" default reflects the
 // configured names instead of a hardcoded pair. `configured: false` is what
 // triggers the first-run name prompt. See ui/index.html.
-app.MapGet("/api/config", () => Results.Json(new
+// The payload both config endpoints answer with: who you are, the store this
+// page is on, and the projects and tracker around it.
+object ConfigPayload(Store s, string? slug = null) => new
 {
     ok = true,
-    // Which app this is. The UI reads it before it evaluates a single page
+    // Which app this page is. The UI reads it before it evaluates a single page
     // module (see ui/index.html) because the taxonomy — which top-nav chips
     // exist, and what they are called — is built at module load.
-    mode,
+    mode = s.IsTracker ? "tracker" : "bugs",
     // Whether `<name>_agent` is a thing you can assign work to here.
-    agentsAssignable,
-    humanAuthor = users.HumanAuthor,
-    agentAuthor = users.AgentAuthor,
-    configured = users.Configured,
-    user = users.ActiveSlug,
-    profiles = users.Profiles(),
-    configDir = users.ConfigDir,
-    collaborators = project.Collaborators(),
-    assignees = project.Assignees(),
-}, json));
+    agentsAssignable = s.AgentsAssignable,
+    humanAuthor = s.Users.HumanAuthor,
+    agentAuthor = s.Users.AgentAuthor,
+    configured = s.Users.Configured,
+    user = slug ?? s.Users.ActiveSlug,
+    profiles = s.Users.Profiles(),
+    configDir = s.Users.ConfigDir,
+    collaborators = s.Project.Collaborators(),
+    assignees = s.Project.Assignees(),
+    // The store this page is on, and which of its two halves exist.
+    store = new { kind = s.Kind, name = s.Name, hasBugs = s.HasBugs, hasBacklog = s.HasBacklog, @base = s.UrlBase },
+    projects = ProjectList(),
+    tracker = new { available = stores.TrackerPath is not null, @base = "/t/", path = stores.TrackerPath },
+    projectsFile = projectsFile.Path,
+    projectsError = projectsFile.Error,
+};
 
-// First run (or "switch user"): adopt a profile by name, creating it if needed.
-// Writing the profile is what makes `configured` true on the next boot.
+// The client fetches this once, before it renders anything, so every "who is
+// posting this comment" / "on me" / "on the agent" default reflects the
+// configured names instead of a hardcoded pair. `configured: false` is what
+// triggers the first-run name prompt. See ui/index.html.
+app.MapGet("/api/config", () => Results.Json(ConfigPayload(Req.Store), json));
+
+// First run (or "switch user"): who you are, in every project and the tracker.
+// Written to projects.toml's [user] — ONE name — and adopted by this store's
+// profile on the spot; every other store follows on its next request (see
+// StoreRegistry.Sync).
 app.MapPost("/api/config/user", async (HttpRequest req) =>
 {
     var body = await JsonSerializer.DeserializeAsync<Dictionary<string, JsonElement>>(req.Body, json) ?? new();
@@ -1136,30 +1253,95 @@ app.MapPost("/api/config/user", async (HttpRequest req) =>
     if (name.Length > 60)
         return Results.Json(new { ok = false, error = "name must be 60 characters or fewer" }, json, statusCode: 400);
 
-    var agent = body.TryGetValue("agentName", out var a) ? a.GetString() : null;
+    var typed = body.TryGetValue("agentName", out var a) ? (a.GetString() ?? "").Trim() : "";
+    var s = Req.Store;
     // An unnamed agent is DERIVED, not left generic: every person's assistant
     // needs a distinguishable name or two people's agents sign the same way.
-    // Except in TRACKER mode, where nobody in the store has an assistant and a
-    // `<name>_agent` beside every person is an entry no picker can use.
-    if (string.IsNullOrWhiteSpace(agent) && agentsAssignable) agent = ProjectConfig.AgentNameFor(name);
-    var slug = users.SelectOrCreate(name, agent);
-    users.MigrateLegacyFilters(legacyFiltersPath);
-    project.Upsert(name, agent);
+    // Except in the tracker, where nobody in the store has an assistant and a
+    // `<name>_agent` beside every person is an entry no picker can use. Only a
+    // name the person TYPED goes into projects.toml; a derived one is derived
+    // again per store.
+    var agent = typed.Length > 0 ? typed : s.AgentsAssignable ? ProjectConfig.AgentNameFor(name) : null;
+    if (Environment.GetEnvironmentVariable("BUGDESK_USER") is not { Length: > 0 })
+        projectsFile.SetUser(name, typed.Length > 0 ? typed : null);
+    var slug = s.Users.SelectOrCreate(name, agent);
+    s.Users.MigrateLegacyFilters(legacyFiltersPath);
+    s.Project.Upsert(name, agent);
     app.Logger.LogInformation("BugDesk: user profile {slug} selected", slug);
 
-    return Results.Json(new
+    return Results.Json(ConfigPayload(s, slug), json);
+});
+
+// ---- Projects ---------------------------------------------------------------
+// The switcher's list, and adding or removing an entry. These edit
+// projects.toml and nothing else: removing a project never touches its folders.
+List<object> ProjectList() => stores.Definitions.Select(d => (object)new
+{
+    name = d.Name,
+    bugs = d.Bugs is { } b ? projectsFile.Resolve(b) : null,
+    backlog = d.Backlog is { } k ? projectsFile.Resolve(k) : null,
+    hasBugs = d.Bugs is not null,
+    hasBacklog = d.Backlog is not null,
+    @base = $"/p/{Uri.EscapeDataString(d.Name)}/",
+    // Named on the command line and not in the file: nothing to remove.
+    transient = stores.Transient is { } t && t.Name == d.Name && !projectsFile.Current.Projects.Any(p => p.Name == d.Name),
+}).ToList();
+
+object ProjectsPayload() => new
+{
+    ok = true,
+    file = projectsFile.Path,
+    error = projectsFile.Error,
+    projects = ProjectList(),
+    tracker = new { available = stores.TrackerPath is not null, path = stores.TrackerPath },
+};
+
+app.MapGet("/api/projects", () => Results.Json(ProjectsPayload(), json));
+
+app.MapPost("/api/projects", async (HttpRequest req) =>
+{
+    var body = await JsonSerializer.DeserializeAsync<Dictionary<string, JsonElement>>(req.Body, json) ?? new();
+    string Get(string k) => body.TryGetValue(k, out var v) && v.ValueKind == JsonValueKind.String ? (v.GetString() ?? "").Trim() : "";
+    var name = Get("name");
+    if (name.Length == 0 || name.Length > 60)
+        return Results.Json(new { ok = false, error = "a project needs a name of 1–60 characters" }, json, statusCode: 400);
+    if (name.IndexOfAny(new[] { '/', '\\', '"', '\'' }) >= 0 || name.Any(char.IsControl))
+        return Results.Json(new { ok = false, error = "a project name cannot contain / \\ or quotes" }, json, statusCode: 400);
+    if (stores.Definitions.Any(d => string.Equals(d.Name, name, StringComparison.OrdinalIgnoreCase)))
+        return Results.Json(new { ok = false, error = $"there is already a project called {name}" }, json, statusCode: 409);
+
+    var bugs = Get("bugs");
+    var backlog = Get("backlog");
+    if (bugs.Length == 0 && backlog.Length == 0)
+        return Results.Json(new { ok = false, error = "give a bugs folder, a backlog folder, or both" }, json, statusCode: 400);
+    // A folder the store can be made in: the store itself may be new, its parent
+    // may not — that is what catches a mistyped path before it is saved.
+    foreach (var (label, dir) in new[] { ("bugs", bugs), ("backlog", backlog) })
     {
-        ok = true,
-        mode,
-        humanAuthor = users.HumanAuthor,
-        agentAuthor = users.AgentAuthor,
-        configured = users.Configured,
-        user = slug,
-        profiles = users.Profiles(),
-        configDir = users.ConfigDir,
-        collaborators = project.Collaborators(),
-        assignees = project.Assignees(),
-    }, json);
+        if (dir.Length == 0) continue;
+        if (!Path.IsPathFullyQualified(dir))
+            return Results.Json(new { ok = false, error = $"the {label} folder must be a full path" }, json, statusCode: 400);
+        if (File.Exists(dir))
+            return Results.Json(new { ok = false, error = $"{dir} is a file, not a folder" }, json, statusCode: 400);
+        if (!Directory.Exists(dir) && !Directory.Exists(Path.GetDirectoryName(Path.GetFullPath(dir))))
+            return Results.Json(new { ok = false, error = $"{Path.GetDirectoryName(Path.GetFullPath(dir))} does not exist" }, json, statusCode: 400);
+    }
+
+    projectsFile.AddProject(name, bugs.Length > 0 ? bugs : null, backlog.Length > 0 ? backlog : null);
+    app.Logger.LogInformation("BugDesk: added project {name} to {file}", name, projectsFile.Path);
+    return Results.Json(ProjectsPayload(), json);
+});
+
+app.MapDelete("/api/projects/{name}", (string name) =>
+{
+    var def = projectsFile.Current.Projects.FirstOrDefault(d => string.Equals(d.Name, name, StringComparison.OrdinalIgnoreCase));
+    if (def is null)
+        return Results.Json(new { ok = false, error = $"{name} is not in {projectsFile.Path}" }, json, statusCode: 404);
+    if (projectsFile.Current.Projects.Count == 1 && stores.Transient is null)
+        return Results.Json(new { ok = false, error = "that is the only project — add another before removing it" }, json, statusCode: 409);
+    projectsFile.RemoveProject(def.Name);
+    app.Logger.LogInformation("BugDesk: removed project {name} from {file}", def.Name, projectsFile.Path);
+    return Results.Json(ProjectsPayload(), json);
 });
 
 // ---- The shared roster -----------------------------------------------------
@@ -1168,9 +1350,9 @@ app.MapPost("/api/config/user", async (HttpRequest req) =>
 app.MapGet("/api/project", () => Results.Json(new
 {
     ok = true,
-    path = project.Path,
-    config = project.Document(),
-    assignees = project.Assignees(),
+    path = Req.Store.Project.Path,
+    config = Req.Store.Project.Document(),
+    assignees = Req.Store.Project.Assignees(),
 }, json));
 
 app.MapPost("/api/project/collaborators", async (HttpRequest req) =>
@@ -1178,8 +1360,8 @@ app.MapPost("/api/project/collaborators", async (HttpRequest req) =>
     var body = await JsonSerializer.DeserializeAsync<Dictionary<string, JsonElement>>(req.Body, json) ?? new();
     if (!body.TryGetValue("collaborators", out var list) || list.ValueKind != JsonValueKind.Array)
         return Results.Json(new { ok = false, error = "collaborators array required" }, json, statusCode: 400);
-    var saved = project.SetCollaborators(JsonNode.Parse(list.GetRawText())!.AsArray());
-    return Results.Json(new { ok = true, collaborators = saved, assignees = project.Assignees() }, json);
+    var saved = Req.Store.Project.SetCollaborators(JsonNode.Parse(list.GetRawText())!.AsArray());
+    return Results.Json(new { ok = true, collaborators = saved, assignees = Req.Store.Project.Assignees() }, json);
 });
 
 // Add or update ONE person without having to send the whole roster — what an
@@ -1191,22 +1373,22 @@ app.MapPost("/api/project/collaborator", async (HttpRequest req) =>
     if (name.Length == 0)
         return Results.Json(new { ok = false, error = "name required" }, json, statusCode: 400);
     var agent = body.TryGetValue("agent", out var a) ? a.GetString() : null;
-    var saved = project.Upsert(name, agent);
-    return Results.Json(new { ok = true, collaborator = saved, assignees = project.Assignees() }, json);
+    var saved = Req.Store.Project.Upsert(name, agent);
+    return Results.Json(new { ok = true, collaborator = saved, assignees = Req.Store.Project.Assignees() }, json);
 });
 
 // The UI's own preference bag, stored in the profile so it follows the person
 // rather than the browser (localStorage does not survive a different machine,
 // and BugDesk is a tool you run from wherever the repo is checked out).
 app.MapGet("/api/user/settings", () =>
-    Results.Json(new { ok = true, settings = users.Settings() }, json));
+    Results.Json(new { ok = true, settings = Req.Store.Users.Settings() }, json));
 
 app.MapPost("/api/user/settings", async (HttpRequest req) =>
 {
     if (JsonNode.Parse(await new StreamReader(req.Body).ReadToEndAsync()) is not JsonObject patch)
         return Results.Json(new { ok = false, error = "expected a JSON object of settings" }, json, statusCode: 400);
-    users.MergeSettings(patch);
-    return Results.Json(new { ok = true, settings = users.Settings() }, json);
+    Req.Store.Users.MergeSettings(patch);
+    return Results.Json(new { ok = true, settings = Req.Store.Users.Settings() }, json);
 });
 
 // ---- Custom queue filters -------------------------------------------------
@@ -1218,17 +1400,17 @@ app.MapPost("/api/user/settings", async (HttpRequest req) =>
 // people on the same repo have different questions to ask of the same bugs.
 // A pre-profile server/state/filters.json is folded into the profile once (see
 // MigrateLegacyFilters) rather than being abandoned on disk.
-app.MapGet("/api/filters", () => Results.Json(new { ok = true, filters = users.Filters() }, json));
+app.MapGet("/api/filters", () => Results.Json(new { ok = true, filters = Req.Store.Users.Filters() }, json));
 
 app.MapPost("/api/filters", async (HttpRequest req) =>
 {
     var body = await JsonSerializer.DeserializeAsync<Dictionary<string, JsonElement>>(req.Body, json) ?? new();
     if (!body.TryGetValue("filters", out var list) || list.ValueKind != JsonValueKind.Array)
         return Results.Json(new { ok = false, error = "filters array required" }, json, statusCode: 400);
-    if (users.ActiveSlug is null)
+    if (Req.Store.Users.ActiveSlug is null)
         return Results.Json(new { ok = false, error = "no user profile yet — set a name first" }, json, statusCode: 409);
-    users.SetFilters(JsonNode.Parse(list.GetRawText())!.AsArray());
-    return Results.Json(new { ok = true, filters = users.Filters() }, json);
+    Req.Store.Users.SetFilters(JsonNode.Parse(list.GetRawText())!.AsArray());
+    return Results.Json(new { ok = true, filters = Req.Store.Users.Filters() }, json);
 });
 
 // ---- Workspace layout -----------------------------------------------------
@@ -1242,7 +1424,7 @@ app.MapPost("/api/workspace_state_read", async (HttpRequest req) =>
 {
     var body = await JsonSerializer.DeserializeAsync<Dictionary<string, JsonElement>>(req.Body, json) ?? new();
     var path = body.TryGetValue("path", out var p) ? p.GetString() ?? "" : "";
-    return Results.Json(new { ok = true, result = users.ReadState(path) }, json);
+    return Results.Json(new { ok = true, result = Req.Store.Users.ReadState(path) }, json);
 });
 
 app.MapPost("/api/workspace_state_write", async (HttpRequest req) =>
@@ -1250,7 +1432,7 @@ app.MapPost("/api/workspace_state_write", async (HttpRequest req) =>
     var body = await JsonSerializer.DeserializeAsync<Dictionary<string, JsonElement>>(req.Body, json) ?? new();
     var path = body.TryGetValue("path", out var p) ? p.GetString() ?? "" : "";
     var data = body.TryGetValue("data", out var d) ? d.GetString() ?? "" : "";
-    var wrote = users.WriteState(path, data);
+    var wrote = Req.Store.Users.WriteState(path, data);
     return Results.Json(new { ok = true, result = new { ok = wrote } }, json);
 });
 
@@ -1264,7 +1446,7 @@ app.MapGet("/api/events", async (HttpContext http, CancellationToken ct) =>
     // behind a reverse proxy until something flushes a whole buffer's worth.
     http.Response.Headers["X-Accel-Buffering"] = "no";
 
-    var channel = watcher.Subscribe();
+    var channel = Req.Store.Watcher.Subscribe();
     var write = async (string frame) =>
     {
         await http.Response.WriteAsync(frame, ct);
@@ -1289,7 +1471,7 @@ app.MapGet("/api/events", async (HttpContext http, CancellationToken ct) =>
     }
     catch (OperationCanceledException) { /* the browser went away */ }
     catch (IOException) { /* the browser went away mid-write */ }
-    finally { watcher.Unsubscribe(channel); }
+    finally { Req.Store.Watcher.Unsubscribe(channel); }
 });
 
 // No catch-all. There used to be one here that answered every unhandled /api call
@@ -1460,7 +1642,12 @@ static int FirstFreePort(int start, int window = 200)
 /// behaviour worth having; naming it explicitly is for when it is not.
 /// </para>
 /// </summary>
-static string ResolveTrackerBase(string[] argv)
+static string ResolveTrackerBase(string[] argv) =>
+    EnsureDir(Path.Combine(TrackerRoot(), ResolveTrackerProject(argv)));
+
+/// <summary>The folder trackers live under: BUGDESK_TRACKER_HOME, else
+/// %APPDATA%\BugDesk on Windows, else ~/.bugdesk.</summary>
+static string TrackerRoot()
 {
     var root = Env("BUGDESK_TRACKER_HOME");
     if (root is null)
@@ -1473,7 +1660,7 @@ static string ResolveTrackerBase(string[] argv)
         root ??= Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".bugdesk");
     }
-    return EnsureDir(Path.Combine(Path.GetFullPath(root), ResolveTrackerProject(argv)));
+    return Path.GetFullPath(root);
 }
 
 static string ResolveTrackerProject(string[] argv)
@@ -1534,51 +1721,68 @@ static string ResolveBugsDir(string contentRoot, string[] argv)
 // The backlog store sits BESIDE the bug store rather than under a path of its
 // own: pointing --bugs-dir at a project brings that project's backlog with it,
 // which is almost always what you want. --backlog-dir / BUGDESK_BACKLOG
-// overrides for the rest.
-static string ResolveBacklogDir(string bugsDir, string[] argv)
+// overrides for the rest. Not created here: a store's folders are made when the
+// store is first opened (StoreRegistry).
+static string ResolveBacklogPath(string bugsDir, string[] argv)
 {
     var flag = ArgValue(argv, "--backlog-dir");
     var env = Environment.GetEnvironmentVariable("BUGDESK_BACKLOG");
-    var dir = flag is not null ? Path.GetFullPath(flag)
+    return flag is not null ? Path.GetFullPath(flag)
         : !string.IsNullOrEmpty(env) ? Path.GetFullPath(env)
         : Path.GetFullPath(Path.Combine(bugsDir, "..", "backlog"));
-    Directory.CreateDirectory(dir);
-    return dir;
 }
 
-// The shared roster — COMMITTED, unlike everything else in the config dir. See
-// ProjectConfig.cs.
-//
-// It lives at `.bugdesk/project.json`, in the same directory as the per-user
-// files, because a `bugdesk.json` at the project root sitting next to a
-// `.bugdesk/` directory reads as two names for one thing rather than as "the
-// team's" and "yours". The difference is real, and the place it actually has an
-// effect is git — so that is where it is now stated: `.bugdesk/.gitignore`
-// ignores everything in there EXCEPT this file (see UserStore.EnsureGitIgnore).
-//
-// A ROOT bugdesk.json still wins when one exists. Repos created before the move
-// have it committed and referenced in their history; silently reading a
-// different, empty file would look exactly like BugDesk losing the roster, and
-// moving a tracked file out from under someone mid-session is worse. It is a
-// `git mv` whenever they want it, and nothing breaks if they never do.
-static string ResolveProjectConfig(string bugsDir, string configDir)
+/// <summary>The projects.toml a first run writes: the store BugDesk was started
+/// on as the first project, and the rest of the format as comments to copy.</summary>
+static string SeedProjectsToml(string name, string bugsDir, string backlogDir)
 {
-    var env = Environment.GetEnvironmentVariable("BUGDESK_PROJECT");
-    if (!string.IsNullOrEmpty(env)) return Path.GetFullPath(env);
+    static string Lit(string s) => s.Contains('\'') ? $"\"{s.Replace("\\", "\\\\").Replace("\"", "\\\"")}\"" : $"'{s}'";
+    var key = name.All(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '-') ? name : Lit(name);
+    return $$"""
+        # BugDesk projects — which stores this BugDesk serves, and where the global
+        # tracker lives. Edit freely: BugDesk re-reads this file whenever it changes.
+        # Paths are absolute or relative to this file; single quotes keep Windows
+        # backslashes exactly as typed.
+        #
+        # [user]              who you are — one name in every project and the tracker
+        # name = "you"
+        #
+        # [tracker]           the one global tracker (TicketDesk). Without it, no Tracker chip.
+        # path = '{{Path.Combine(TrackerRoot(), "tracker")}}'
+        #
+        # [projects.NAME]     a project: its bug store and/or its backlog — either may
+        # bugs    = 'C:\path\to\repo\bugs'      be left out, and that page is then
+        # backlog = 'C:\path\to\repo\backlog'   not offered for the project.
 
-    var legacy = Path.GetFullPath(Path.Combine(bugsDir, "..", "bugdesk.json"));
-    if (File.Exists(legacy)) return legacy;
+        [projects.{{key}}]
+        bugs = {{Lit(bugsDir)}}
+        backlog = {{Lit(backlogDir)}}
 
-    return Path.GetFullPath(Path.Combine(configDir, UserStore.SharedFileName));
+        """.Replace("\r\n", "\n");
 }
 
-// Per-user config, beside the stores. See UserConfig.cs.
-static string ResolveConfigDir(string bugsDir)
+static bool SamePath(string a, string b) =>
+    string.Equals(Path.GetFullPath(a).TrimEnd('\\', '/'), Path.GetFullPath(b).TrimEnd('\\', '/'),
+        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+
+/// <summary>The content type of an image BugDesk serves as an attachment, or null
+/// for anything else — attachments are images, never arbitrary blobs.</summary>
+static string? ImageContentType(string name) => Path.GetExtension(name).ToLowerInvariant() switch
 {
-    var env = Environment.GetEnvironmentVariable("BUGDESK_CONFIG");
-    return !string.IsNullOrEmpty(env)
-        ? Path.GetFullPath(env)
-        : Path.GetFullPath(Path.Combine(bugsDir, "..", ".bugdesk"));
+    ".png" => "image/png",
+    ".jpg" or ".jpeg" => "image/jpeg",
+    ".gif" => "image/gif",
+    ".webp" => "image/webp",
+    ".svg" => "image/svg+xml",
+    ".avif" => "image/avif",
+    _ => null,
+};
+
+/// <summary>An API refusal, in the shape every endpoint answers with.</summary>
+static Task Fail(HttpContext http, int status, string error)
+{
+    http.Response.StatusCode = status;
+    return http.Response.WriteAsJsonAsync(new { ok = false, error });
 }
 
 // Legacy, pre-profile UI state (the shared filters.json). Nothing is written

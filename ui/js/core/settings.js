@@ -182,7 +182,7 @@ export const BUGDESK_SETTINGS_SLICE = {
         'bugdesk.humanName': {
             type: 'text', category: 'general', group: 'Authorship',
             label: 'Your name',
-            description: 'The name shown as assignee and comment author on everything you file. Saved to your per-user profile beside the store, so it follows you rather than this browser. Entering a different name switches BugDesk to that person\'s profile (creating it if it is new), along with their saved filters. Leave blank to use the server\'s BUGDESK_HUMAN default. Takes effect after you reload BugDesk.',
+            description: 'The name shown as assignee and comment author on everything you file. Saved to your per-user profile beside the store, so it follows you rather than this browser. Entering a different name switches to that person\'s profile (creating it if it is new), along with their saved filters. Leave blank to use the server\'s BUGDESK_HUMAN default. Takes effect after a reload.',
             defaultValue: '', placeholder: '(server default)', reloadHint: true,
         },
         // A roster is a list of records, and no scalar control can edit one —
@@ -191,7 +191,7 @@ export const BUGDESK_SETTINGS_SLICE = {
         'bugdesk.collaborators': {
             type: 'action', category: 'general', group: 'Authorship',
             label: 'Collaborators',
-            description: 'Everyone who can be assigned work on this repo, from the shared bugdesk.json beside the stores. Setting your name adds you automatically; edit the list here to add someone who has not opened BugDesk yet, or to remove someone who has left.',
+            description: 'Everyone who can be assigned work on this repo, from the shared bugdesk.json beside the stores. Setting your name adds you automatically; edit the list here to add someone who has not opened it yet, or to remove someone who has left.',
             buttonLabel: 'Manage collaborators…',
             icon: 'group',
             defaultValue: null,
@@ -221,7 +221,7 @@ export const BUGDESK_SETTINGS_SLICE = {
         'bugdesk.agentName': {
             type: 'text', category: 'general', group: 'Authorship',
             label: 'Agent name',
-            description: 'The name your AI assistant signs its comments with. Left blank it is derived from your own name as <you>_agent, which is what keeps two people\'s assistants from signing identically. Takes effect after you reload BugDesk.',
+            description: 'The name your AI assistant signs its comments with. Left blank it is derived from your own name as <you>_agent, which is what keeps two people\'s assistants from signing identically. Takes effect after a reload.',
             defaultValue: '', placeholder: '(server default)', reloadHint: true,
         },
     },

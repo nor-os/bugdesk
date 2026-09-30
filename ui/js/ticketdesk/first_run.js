@@ -21,13 +21,15 @@
  * name, because everything downstream is meaningless without one.
  */
 
+import { appName, appIcon } from '../core/app_identity.js';
+
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 /**
  * Ask for a name and persist the profile.
  *
- * @param {object} cfg  the `/api/config` payload that reported `configured:false`
+ * @param {object} cfg  the `api/config` payload that reported `configured:false`
  * @returns {Promise<object>} the config as it stands afterwards — the caller uses
  *          THIS, not the one it passed in, so the names are the ones just chosen.
  */
@@ -41,8 +43,8 @@ export function askForName(cfg) {
             <div class="bd-firstrun__card" role="dialog" aria-modal="true"
                  aria-labelledby="bd-firstrun-title">
                 <div class="bd-firstrun__brand">
-                    <span class="material-symbols-outlined">bug_report</span>
-                    <span>BugDesk</span>
+                    <img class="bd-firstrun__icon" src="${appIcon(cfg?.mode)}" alt="" />
+                    <span>${esc(appName(cfg?.mode))}</span>
                 </div>
                 <h1 class="bd-firstrun__title" id="bd-firstrun-title">Who's working here?</h1>
                 <p class="bd-firstrun__lede">
@@ -84,7 +86,7 @@ export function askForName(cfg) {
                     <div class="bd-firstrun__error" role="alert" hidden></div>
 
                     <button type="submit" class="bd-firstrun__go">
-                        Start using BugDesk
+                        Start using ${esc(appName(cfg?.mode))}
                     </button>
                 </form>
 
@@ -106,7 +108,7 @@ export function askForName(cfg) {
             errEl.textContent = msg;
             errEl.hidden = false;
             goEl.disabled = false;
-            goEl.textContent = 'Start using BugDesk';
+            goEl.textContent = `Start using ${appName(cfg?.mode)}`;
         };
 
         const submit = async (name, agentName) => {
@@ -117,7 +119,7 @@ export function askForName(cfg) {
             goEl.disabled = true;
             goEl.textContent = 'Saving…';
             try {
-                const res = await fetch('/api/config/user', {
+                const res = await fetch('api/config/user', {
                     method: 'POST',
                     headers: { 'content-type': 'application/json', accept: 'application/json' },
                     body: JSON.stringify({ name: clean, agentName: String(agentName || '').trim() }),
@@ -160,7 +162,7 @@ export async function resolveIdentity() {
     const fallback = { humanAuthor: 'reviewer', agentAuthor: 'agent', configured: false };
     let cfg;
     try {
-        const res = await fetch('/api/config', { headers: { accept: 'application/json' } });
+        const res = await fetch('api/config', { headers: { accept: 'application/json' } });
         cfg = res.ok ? await res.json() : null;
         if (!cfg?.ok) throw new Error('bridge returned no config');
     } catch (err) {
@@ -194,7 +196,7 @@ export async function resolveIdentity() {
  * expressions built at module-evaluation time. That is what the reload offer is
  * for, and why it is offered rather than assumed.
  *
- * @param {object} cfg  a `/api/config`-shaped payload
+ * @param {object} cfg  a `api/config`-shaped payload
  * @returns {{humanChanged: boolean, agentChanged: boolean}}
  */
 /**
@@ -279,7 +281,7 @@ export function installAuthorshipWriteThrough({ eventBus, getSetting } = {}) {
         const live = (typeof window !== 'undefined' && window.__BUGDESK_CONFIG__) || {};
         if (name === (live.humanAuthor || '') && agent === (live.agentAuthor || '')) return;
         try {
-            const res = await fetch('/api/config/user', {
+            const res = await fetch('api/config/user', {
                 method: 'POST',
                 headers: { 'content-type': 'application/json', accept: 'application/json' },
                 body: JSON.stringify({ name, agentName: agent }),
@@ -289,7 +291,7 @@ export function installAuthorshipWriteThrough({ eventBus, getSetting } = {}) {
             await applyIdentity(j, { eventBus });
             eventBus.emit?.('toast:show', {
                 type: 'info',
-                message: `Signed in as ${j.humanAuthor}. Reload BugDesk for saved filters and`
+                message: `Signed in as ${j.humanAuthor}. Reload ${appName()} for saved filters and`
                        + ' the "On me" views to follow.',
             });
         } catch (err) {
@@ -334,7 +336,7 @@ export async function openIdentityDialog({ eventBus } = {}) {
 
     let profiles = [];
     try {
-        const res = await fetch('/api/config', { headers: { accept: 'application/json' } });
+        const res = await fetch('api/config', { headers: { accept: 'application/json' } });
         const j = res.ok ? await res.json() : null;
         if (j?.ok) {
             profiles = Array.isArray(j.profiles) ? j.profiles : [];
@@ -398,7 +400,7 @@ export async function openIdentityDialog({ eventBus } = {}) {
     if (!name) return null;
 
     try {
-        const res = await fetch('/api/config/user', {
+        const res = await fetch('api/config/user', {
             method: 'POST',
             headers: { 'content-type': 'application/json', accept: 'application/json' },
             body: JSON.stringify({ name, agentName: String(result.agentName || '').trim() }),

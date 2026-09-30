@@ -3,6 +3,10 @@ obj/
 *.user
 state/
 
+# Which projects this BugDesk serves and where the tracker lives — folders on
+# THIS machine. Written on first run; see server/ProjectsFile.cs.
+projects.toml
+
 # `npm install` pulls flexdesk down; `npm run sync:flexdesk` copies its dist
 # into ui/vendor/flexdesk/, which IS committed (the UI has no build step and is
 # served straight off disk — see scripts/sync-flexdesk.mjs).

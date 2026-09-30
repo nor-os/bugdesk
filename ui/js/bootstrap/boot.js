@@ -27,6 +27,7 @@ import { EventBus, LoggingService } from '@flexdesk/core';
 import { showAboutDialog } from '@flexdesk/widgets';
 import { registerSettings, registerSettingsEventBus, BUGDESK_SETTINGS_SLICE } from '../core/settings.js';
 import { HelpModal } from '../help/help_modal.js';
+import { appName, appIcon, appSlug } from '../core/app_identity.js';
 
 /**
  * Boot BugDesk up to the point where the tiling shell can be installed.
@@ -66,18 +67,19 @@ export function bootBugDesk({ enableConsoleLogging = false } = {}) {
  * the entries carry their own handlers here, and the hamburger stays generic.
  */
 function buildTopBar() {
+    const name = appName();
     const bar = document.createElement('div');
     bar.className = 'global-top-bar';
     bar.innerHTML = `
         <div class="bar-left">
             <nav class="app-menu" aria-label="Application menu">
-                <span class="ecoagent-brand" style="font-weight:600; padding:0 10px; letter-spacing:0.04em; color:#ddd;">BugDesk</span>
+                <span class="ecoagent-brand"><img class="ecoagent-brand__icon" src="${appIcon()}" alt="" /><span class="ecoagent-brand__name ecoagent-brand__name--${appSlug()}">${name}</span></span>
                 <div class="menu-item" tabindex="0">
                     <span>Help</span>
                     <div class="menu-dropdown">
                         <button class="menu-entry" id="menu-help-topics">Help Topics</button>
                         <hr class="menu-sep" />
-                        <button class="menu-entry" id="menu-help-about">About BugDesk</button>
+                        <button class="menu-entry" id="menu-help-about">About ${name}</button>
                     </div>
                 </div>
             </nav>
@@ -97,7 +99,7 @@ function buildTopBar() {
             </div>
         </div>`;
     bar.querySelector('#menu-help-topics').addEventListener('click', () => HelpModal.open());
-    bar.querySelector('#menu-help-about').addEventListener('click', () => showAboutDialog({ name: 'BugDesk' }));
+    bar.querySelector('#menu-help-about').addEventListener('click', () => showAboutDialog({ name }));
     document.body.appendChild(bar);
     // No F1 binding, and no "F1" hint on Help Topics. The entry used to advertise
     // one, but FlexDesk's keymap owns F1..F8 as "jump to the Nth page", so F1 has
@@ -118,7 +120,7 @@ function buildBottomBar() {
     bar.className = 'global-bottom-bar';
     bar.innerHTML = `
         <div class="bar-left">
-            <div class="sim-status is-info" id="sim-status">BugDesk ready.</div>
+            <div class="sim-status is-info" id="sim-status">${appName()} ready.</div>
         </div>
         <div class="bar-center"></div>
         <div class="bar-right"></div>`;

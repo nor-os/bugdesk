@@ -29,7 +29,7 @@
  * mentions the timeout, and the row says so.
  */
 
-import { taxonomy } from './kind_taxonomy.js';
+import { taxonomy, MERGED_TRACKER } from './kind_taxonomy.js';
 import { HelpModal } from '../help/help_modal.js';
 
 const ROOT_ID = 'twm-cmdpal';
@@ -105,13 +105,25 @@ export function createCommandPalette({ wm } = {}) {
         // "importer" and leave the user reading results for a half-typed word.
         const mine = ++seq;
         setStatus('Searching...');
-        try {
-            const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&limit=40`,
+        // The project's stores, and — on a project page that shows the global
+        // tracker — the tracker's tickets too, tagged so a STORY-0002 from each
+        // can be told apart. The tracker answering badly never hides the
+        // project's results.
+        const ask = async (api) => {
+            const res = await fetch(`${api}/search?q=${encodeURIComponent(query)}&limit=40`,
                 { headers: { accept: 'application/json' } });
             const j = await res.json().catch(() => null);
-            if (mine !== seq || !overlay) return;
             if (!res.ok || !j?.ok) throw new Error(j?.error || `HTTP ${res.status}`);
-            setRows(j.results || [], query, j.count || 0);
+            return j;
+        };
+        try {
+            const [j, t] = await Promise.all([
+                ask('api'),
+                MERGED_TRACKER ? ask('/t/api').catch(() => null) : null,
+            ]);
+            if (mine !== seq || !overlay) return;
+            const tickets = (t?.results || []).map((r) => ({ ...r, tracker: true }));
+            setRows([...(j.results || []), ...tickets], query, (j.count || 0) + (t?.count || 0));
         } catch (err) {
             if (mine !== seq || !overlay) return;
             setRows([], query);
@@ -164,7 +176,7 @@ export function createCommandPalette({ wm } = {}) {
         // A bug opens as a `ticket`, a backlog record as an `item`. As a TAB in
         // the main tile rather than over it: you searched from somewhere, and
         // getting back there should be one click, not a re-navigation.
-        const kind = row.store === 'backlog' ? 'item' : 'ticket';
+        const kind = row.tracker ? 'tracker-item' : row.store === 'backlog' ? 'item' : 'ticket';
         const props = row.store === 'backlog'
             ? { id: String(row.id), label: `${row.ref} - ${row.title}` }
             : { id: `#${row.id}`, label: `#${row.id} - ${row.title}` };
@@ -233,7 +245,7 @@ function _row(r, i, query) {
             </span>
         </div>`;
     }
-    const kind = r.store === 'backlog' ? 'item' : 'ticket';
+    const kind = r.tracker ? 'tracker-item' : r.store === 'backlog' ? 'item' : 'ticket';
     const icon = taxonomy.meta(kind)?.icon || 'description';
     return `<div class="twm-cmdpal__item" data-idx="${i}" role="option">
         <span class="material-symbols-outlined twm-cmdpal__icon">${icon}</span>
@@ -246,7 +258,7 @@ function _row(r, i, query) {
                 ${highlight(r.snippet || '', query)}
             </span>
         </span>
-        <span class="twm-cmdpal__meta">${_esc(r.status || '')}${
+        <span class="twm-cmdpal__meta">${r.tracker ? '<span class="twm-cmdpal__tracker">Tracker</span> ' : ''}${_esc(r.status || '')}${
             r.assignee ? ` - ${_esc(r.assignee)}` : ''}</span>
     </div>`;
 }

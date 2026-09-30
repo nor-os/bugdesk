@@ -59,6 +59,7 @@ import {
     REFINEMENT_RULES, refinementGaps, flatRows, stageActions, stageOf, treeRows,
     typeLabelOf,
 } from './backlog_data.js';
+import { apiUrl, ev, KIND } from './instance.js';
 
 /** Set by createBacklogContent at registration, before any mount runs. */
 let _eventBus = null;
@@ -120,7 +121,7 @@ async function loadCollapsed() {
     if (_collapseLoaded) return _collapsed;
     _collapseLoaded = true;
     try {
-        const res = await fetch('/api/user/settings', { headers: { accept: 'application/json' } });
+        const res = await fetch(apiUrl('/user/settings'), { headers: { accept: 'application/json' } });
         const j = res.ok ? await res.json() : null;
         const ids = j?.settings?.[COLLAPSE_KEY];
         if (Array.isArray(ids)) _collapsed = new Set(ids.map(Number).filter(Boolean));
@@ -131,7 +132,7 @@ async function loadCollapsed() {
 }
 
 function saveCollapsed() {
-    fetch('/api/user/settings', {
+    fetch(apiUrl('/user/settings'), {
         method: 'POST',
         headers: { 'content-type': 'application/json', accept: 'application/json' },
         body: JSON.stringify({ [COLLAPSE_KEY]: Array.from(_collapsed) }),
@@ -246,14 +247,14 @@ function mountBacklogBoard(host, props, ctx) {
     </div>`;
 
     const openBoard = (p) => {
-        if (ctx.wm?.navigate) ctx.wm.navigate('backlog', p, { ctx, dest: 'origin' });
-        else ctx.wm?.openInPrimary?.('backlog', p);
+        if (ctx.wm?.navigate) ctx.wm.navigate(KIND.list, p, { ctx, dest: 'origin' });
+        else ctx.wm?.openInPrimary?.(KIND.list, p);
     };
     const openItem = (id, opts) => {
         const model = ITEMS.find((x) => Number(x.id) === Number(id));
         const p = { id: String(id), label: itemLabel(model) || `#${id}`, filter: view.key || DEFAULT_FILTER };
-        if (ctx.wm?.navigate) ctx.wm.navigate('item', p, { ctx, ...opts });
-        else ctx.wm?.openInTabFromContext?.(ctx, 'item', p);
+        if (ctx.wm?.navigate) ctx.wm.navigate(KIND.item, p, { ctx, ...opts });
+        else ctx.wm?.openInTabFromContext?.(ctx, KIND.item, p);
     };
     const openSavedFilter = (f) => openBoard({ filter: f.id, label: f.label });
 
@@ -400,7 +401,7 @@ function mountBacklogBoard(host, props, ctx) {
                     if (model) {
                         const done = await confirmDelete(model, { onStatus: statusLine });
                         if (done) {
-                            _eventBus?.emit?.('backlog:changed', {});
+                            _eventBus?.emit?.(ev('backlog:changed'), {});
                             refresh();
                         }
                     }
@@ -460,7 +461,7 @@ function mountBacklogBoard(host, props, ctx) {
         onRowOpen: (rowIdx, row, how) => {
             const model = byRef.get(row[REF_COL]);
             if (!model) return;
-            openRecordAs(ctx.wm, ctx, 'item', {
+            openRecordAs(ctx.wm, ctx, KIND.item, {
                 id: String(model.id), label: itemLabel(model), filter: view.key || DEFAULT_FILTER,
             }, how);
         },
@@ -471,7 +472,7 @@ function mountBacklogBoard(host, props, ctx) {
         const ref = el?.closest?.('[data-drag-key]')?.dataset.dragKey;
         const model = ref ? byRef.get(ref) : null;
         return model
-            ? { kind: 'item', props: { id: String(model.id), label: itemLabel(model) }, label: model.ref }
+            ? { kind: KIND.item, props: { id: String(model.id), label: itemLabel(model) }, label: model.ref }
             : null;
     });
 
@@ -539,7 +540,7 @@ function mountBacklogBoard(host, props, ctx) {
     // NOTE the handle: EventBus.on() returns { id, dispose } and off() takes
     // THAT, not (name, handler) — a call shaped like removeEventListener finds
     // no listener id, returns false and leaves the subscription in place.
-    const sub = _eventBus?.on?.('backlog:changed', () => {
+    const sub = _eventBus?.on?.(ev('backlog:changed'), () => {
         if (!view.adhoc) view = resolveFilter(view.key);
         refresh();
     });
@@ -1021,7 +1022,7 @@ function mountItem(host, props, ctx) {
     /** One addressed edit, then repaint from what the bridge says it now is. */
     const criteriaOp = async (op, index, value) => {
         try {
-            const res = await fetch(`/api/backlog/${item.id}/criteria`, {
+            const res = await fetch(apiUrl(`/backlog/${item.id}/criteria`), {
                 method: 'POST',
                 headers: { 'content-type': 'application/json', accept: 'application/json' },
                 body: JSON.stringify({ op, index, value }),
@@ -1333,7 +1334,7 @@ function mountItem(host, props, ctx) {
      *  pickers agree with what was just written, then tell the other pages. */
     const broadcast = async () => {
         try { await loadBacklog(); } catch (err) { console.warn('[bugdesk] backlog reload failed', err); }
-        _eventBus?.emit?.('backlog:changed', { id: item?.id });
+        _eventBus?.emit?.(ev('backlog:changed'), { id: item?.id });
     };
 
     const save = async () => {
@@ -1374,8 +1375,8 @@ function mountItem(host, props, ctx) {
         live.dispose();
         await broadcast();
         const p = { filter: DEFAULT_FILTER };
-        if (ctx.wm?.navigate) ctx.wm.navigate('backlog', p, { ctx, dest: 'origin' });
-        else ctx.wm?.openInPrimary?.('backlog', p);
+        if (ctx.wm?.navigate) ctx.wm.navigate(KIND.list, p, { ctx, dest: 'origin' });
+        else ctx.wm?.openInPrimary?.(KIND.list, p);
     };
 
     const cancel = async () => {
@@ -1517,7 +1518,7 @@ function mountItem(host, props, ctx) {
         const goto = e.target.closest('[data-goto]');
         if (goto) {
             const target = ITEMS.find((x) => Number(x.id) === Number(goto.dataset.goto));
-            ctx.wm?.openInTabFromContext?.(ctx, 'item',
+            ctx.wm?.openInTabFromContext?.(ctx, KIND.item,
                 { id: goto.dataset.goto, label: itemLabel(target) || `#${goto.dataset.goto}` });
             return;
         }
@@ -1635,7 +1636,7 @@ const navAction = (act, glyph, label, danger = false) =>
  * @returns {{ render: () => void, destroy: () => void }}
  */
 export function mountBacklogRail(host, ctx) {
-    const open = (p) => ctx.wm?.openInPrimary?.('backlog', p);
+    const open = (p) => ctx.wm?.openInPrimary?.(KIND.list, p);
     const openFilter = (f) => open({ filter: f.key || f.id, label: f.label });
     const countFor = (expr) => ITEMS.filter(matcherFor(expr)).length;
 
@@ -1883,7 +1884,7 @@ export function mountBacklogRail(host, ctx) {
     host.addEventListener('contextmenu', onContextMenu);
 
     const unsub = onFiltersChanged(render);
-    const sub = _eventBus?.on?.('backlog:changed', () => render());
+    const sub = _eventBus?.on?.(ev('backlog:changed'), () => render());
 
     return {
         render,
@@ -1907,7 +1908,7 @@ export function mountBacklogRail(host, ctx) {
 export function createBacklogContent({ eventBus } = {}) {
     _eventBus = eventBus || null;
     return {
-        backlog: shell('backlog', mountBacklogBoard),
-        item: shell('item', mountItem),
+        [KIND.list]: shell(KIND.list, mountBacklogBoard),
+        [KIND.item]: shell(KIND.item, mountItem),
     };
 }

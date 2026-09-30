@@ -19,6 +19,7 @@ import {
     resetAllSettings,
 } from '../../core/settings.js';
 import { VISIBLE_SETTINGS } from '../../core/settings.js';
+import { appName } from '../../core/app_identity.js';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -840,7 +841,7 @@ export class SettingsPage extends PageBase {
         if (!def?.reloadHint) return;
         this.eventBus?.emit?.('toast:show', {
             title: 'Reload to apply',
-            message: `${def.label} is saved — reload BugDesk for it to take effect.`,
+            message: `${def.label} is saved — reload ${appName()} for it to take effect.`,
             severity: 'info',
             durationMs: 3000,
         });

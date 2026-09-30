@@ -4,11 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>BugDesk</title>
-    <link rel="icon" href="data:," />
+    <link id="app-favicon" rel="icon" type="image/svg+xml" href="assets/icons/bugdesk-glyph.svg" />
     <meta http-equiv="Cache-Control" content="no-cache, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
 
     <link href="vendor/material-symbols/material-symbols-outlined.css" rel="stylesheet" />
+    <link href="vendor/marck-script/marck-script.css" rel="stylesheet" />
+    <link href="vendor/sonsie-one/sonsie-one.css" rel="stylesheet" />
     <link href="css/tokens.css" rel="stylesheet" />
     <link href="css/base.css" rel="stylesheet" />
     <link href="css/components/controls.css" rel="stylesheet" />
@@ -80,7 +82,7 @@
         (() => {
             if (window.pywebview && window.pywebview.api) return;
             const bridge = (method) => async (arg) => {
-                const resp = await fetch('/api/' + method, {
+                const resp = await fetch('api/' + method, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(arg ?? {}),
@@ -104,6 +106,7 @@
     <!-- Original Ecosim chrome bootstrap + tiling-WM installer. -->
     <script type="module">
         import { bootBugDesk } from './js/bootstrap/boot.js';
+        import { appName, appIcon } from './js/core/app_identity.js';
 
         // Resolve WHO IS USING THIS before any ticketdesk module is imported
         // (below and transitively, via install.js's own static imports) — those
@@ -138,7 +141,19 @@
             // pickers are evaluated — same reason as the two names above.
             collaborators: Array.isArray(cfg.collaborators) ? cfg.collaborators : [],
             assignees: Array.isArray(cfg.assignees) ? cfg.assignees : [],
+            // The store this page is on — a project, or the tracker — and the
+            // ones around it. The address says which (/p/<name>/, /t/); the
+            // bridge says what that store has, since a project may have only
+            // bugs or only a backlog.
+            store: cfg.store || null,
+            projects: Array.isArray(cfg.projects) ? cfg.projects : [],
+            tracker: cfg.tracker || { available: false },
         };
+
+        // In tracker mode this window is TicketDesk: its own name and icon. The
+        // <title> and <link> above are BugDesk's, the default.
+        document.title = appName();
+        document.getElementById('app-favicon').href = appIcon();
 
         // The bars, the bus and the settings, then the shell between the bars.
         // A failure is shown on the page rather than left as a blank window: the
@@ -153,10 +168,10 @@
                 logger: loggingService.scoped?.('tiling-shell'),
             });
         } catch (error) {
-            console.error('BugDesk failed to start', error);
+            console.error(`${appName()} failed to start`, error);
             const fallback = document.createElement('pre');
             fallback.className = 'bootstrap-error';
-            fallback.textContent = `BugDesk failed to start: ${error?.message || error}\nSee the browser console for details.`;
+            fallback.textContent = `${appName()} failed to start: ${error?.message || error}\nSee the browser console for details.`;
             document.body.appendChild(fallback);
         }
     </script>

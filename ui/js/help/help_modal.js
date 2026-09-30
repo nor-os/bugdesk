@@ -10,6 +10,7 @@
  */
 
 import { getHelpService } from './help_service.js';
+import { appName } from '../core/app_identity.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Category Display Names
@@ -219,8 +220,8 @@ export class HelpModal {
 
         content.innerHTML = `
             <div class="help-index">
-                <h1>BugDesk Help</h1>
-                <p>Welcome to BugDesk! Select a topic from the sidebar or browse the categories below.</p>
+                <h1>${appName()} Help</h1>
+                <p>Welcome to ${appName()}! Select a topic from the sidebar or browse the categories below.</p>
 
                 <div class="help-index__grid">
                     ${categories.map(category => {

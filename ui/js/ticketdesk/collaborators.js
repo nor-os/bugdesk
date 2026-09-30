@@ -31,6 +31,8 @@
  */
 
 import { AGENTS_ASSIGNABLE, esc } from './data.js';
+import { appName } from '../core/app_identity.js';
+import { apiUrl } from './instance.js';
 
 const icon = (name) => `<span class="material-symbols-outlined">${name}</span>`;
 
@@ -43,7 +45,7 @@ export const agentNameFor = (human) => {
 };
 
 async function fetchRoster() {
-    const res = await fetch('/api/project', { headers: { accept: 'application/json' } });
+    const res = await fetch(apiUrl('/project'), { headers: { accept: 'application/json' } });
     if (!res.ok) throw new Error(`GET /api/project → ${res.status}`);
     const j = await res.json();
     if (!j?.ok) throw new Error('the bridge returned no project config');
@@ -167,7 +169,7 @@ export async function openCollaborators({ eventBus } = {}) {
     // something the user asked for.
     add(newEl.value);
     try {
-        const res = await fetch('/api/project/collaborators', {
+        const res = await fetch(apiUrl('/project/collaborators'), {
             method: 'POST',
             headers: { 'content-type': 'application/json', accept: 'application/json' },
             body: JSON.stringify({
@@ -180,7 +182,7 @@ export async function openCollaborators({ eventBus } = {}) {
         if (!res.ok || !j?.ok) throw new Error(j?.error || `HTTP ${res.status}`);
         eventBus?.emit?.('toast:show', {
             type: 'info',
-            message: 'Collaborators saved. Reload BugDesk for the assignee lists to pick it up.',
+            message: `Collaborators saved. Reload ${appName()} for the assignee lists to pick it up.`,
         });
         return j.collaborators;
     } catch (err) {
