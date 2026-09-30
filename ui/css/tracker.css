@@ -119,6 +119,17 @@
 /* The due pill and its overrun warning side by side, from the column's start. */
 .tk-row__due { display: flex; align-items: center; gap: 2px; min-width: 0; }
 .tk-row > .bd-status { justify-self: start; }
+/* One width per pill column, text centred: pills sized to their own text
+   ("due today", "in 1 day") left the right edges ragged, and the columns read
+   as misaligned even with every pill starting at the same x. */
+.tk-row__due .bd-due,
+.tk-row > .bd-status {
+    display: inline-flex;
+    justify-content: center;
+    box-sizing: border-box;
+}
+.tk-row__due .bd-due { min-width: 96px; }
+.tk-row > .bd-status { min-width: 84px; }
 .tk-row__who { color: var(--text-muted, #888); }
 /* "nobody" is a value, not a blank — it is one of the two things this page
    is looking for, so it reads as a state rather than as missing text. */
