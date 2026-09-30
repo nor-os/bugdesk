@@ -63,11 +63,17 @@ string cliBacklogDir = ResolveBacklogPath(cliBugsDir, args);
 string cliProjectName = Path.GetFileName(Path.GetDirectoryName(cliBugsDir)!.TrimEnd('\\', '/')) is { Length: > 0 } dirName
     ? dirName : "default";
 
-if (mode != "tracker" && !projectsFile.Exists)
-{
-    projectsFile.CreateIfMissing(SeedProjectsToml(cliProjectName, cliBugsDir, cliBacklogDir));
+// Written whenever it is missing — the first run, a run in either mode, and a
+// file deleted while BugDesk is up (ProjectsFile.Seed). The checkout's own
+// store is the first project in both modes, so a file first written by
+// standalone TicketDesk still gives BugDesk something to open; in tracker mode
+// the tracker it opened is recorded too, so the same one shows in every project.
+string? seedTracker = null;
+projectsFile.Seed = () => SeedProjectsToml(cliProjectName, cliBugsDir, cliBacklogDir,
+    mode == "tracker" ? seedTracker ??= ResolveTrackerBase(args) : null);
+projectsFile.Seeded += () =>
     Console.WriteLine($"BugDesk: wrote {projectsFile.Path} — edit it to add projects and the tracker");
-}
+_ = projectsFile.Current;
 
 // ---- Port ------------------------------------------------------------------
 // A tracker is a personal tool you open when you want it, often alongside a
@@ -1737,7 +1743,7 @@ static string ResolveBacklogPath(string bugsDir, string[] argv)
 
 /// <summary>The projects.toml a first run writes: the store BugDesk was started
 /// on as the first project, and the rest of the format as comments to copy.</summary>
-static string SeedProjectsToml(string name, string bugsDir, string backlogDir)
+static string SeedProjectsToml(string name, string bugsDir, string backlogDir, string? trackerPath)
 {
     static string Lit(string s) => s.Contains('\'') ? $"\"{s.Replace("\\", "\\\\").Replace("\"", "\\\"")}\"" : $"'{s}'";
     var key = name.All(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '-') ? name : Lit(name);
@@ -1761,7 +1767,7 @@ static string SeedProjectsToml(string name, string bugsDir, string backlogDir)
         [projects.{{key}}]
         bugs = {{Lit(bugsDir)}}
         backlog = {{Lit(backlogDir)}}
-
+        {{(trackerPath is null ? "" : $"\n[tracker]\npath = {Lit(trackerPath)}\n")}}
         """.Replace("\r\n", "\n");
 }
 

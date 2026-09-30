@@ -65,6 +65,16 @@ sealed class ProjectsFile
 
     public ProjectsFile(string path) => Path = System.IO.Path.GetFullPath(path);
 
+    /// <summary>
+    /// What to write when there is no file — at startup, and whenever it has
+    /// gone missing since (deleted by hand while BugDesk runs). Without it a
+    /// missing file simply meant "no projects", and nothing ever put one back.
+    /// </summary>
+    public Func<string>? Seed { get; set; }
+
+    /// <summary>Raised after <see cref="Seed"/> wrote the file.</summary>
+    public event Action? Seeded;
+
     public bool Exists => File.Exists(Path);
 
     /// <summary>The file as it stands now — re-read when it has changed on disk.
@@ -77,6 +87,17 @@ sealed class ProjectsFile
             lock (_gate)
             {
                 var info = new FileInfo(Path);
+                if (!info.Exists && Seed is { } seed)
+                {
+                    try
+                    {
+                        File.WriteAllText(Path, seed());
+                        info.Refresh();
+                        Seeded?.Invoke();
+                    }
+                    catch (IOException) { /* read-only checkout: serve without one */ }
+                    catch (UnauthorizedAccessException) { }
+                }
                 var stamp = info.Exists ? info.LastWriteTimeUtc : DateTime.MinValue;
                 var length = info.Exists ? info.Length : -1;
                 if (stamp == _stamp && length == _length) return _model;
@@ -101,16 +122,6 @@ sealed class ProjectsFile
         System.IO.Path.GetFullPath(System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Path)!, path));
 
     // ---- writing -----------------------------------------------------------
-
-    /// <summary>Create the file with this content, unless it already exists.</summary>
-    public void CreateIfMissing(string content)
-    {
-        lock (_gate)
-        {
-            if (File.Exists(Path)) return;
-            File.WriteAllText(Path, content);
-        }
-    }
 
     public void AddProject(string name, string? bugs, string? backlog)
     {

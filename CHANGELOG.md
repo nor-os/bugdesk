@@ -14,6 +14,9 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   used last. A project with only one of the two stores offers only that page.
   The file is re-read when it changes; an edit that does not parse is reported
   by line and the last good version stays in force.
+  It is written whenever it is missing — on the first run in either mode, and
+  again if it is deleted while BugDesk runs. Started with `--tracker`, the
+  tracker it opened is recorded in it.
 
 - **A project field and switcher in the top bar.** On project pages it takes
   the Search button's place (Ctrl+K searches everything). Clicking it, or
@@ -34,7 +37,8 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   in the tracker. An existing profile's name is adopted into the file.
 
 - **TicketDesk.** Started with `--tracker`, the app is TicketDesk: its own name
-  in the title, the top bar, dialogs and messages, and its own icon.
+  in the title, the top bar, dialogs and messages, and its own icon: a
+  support headset on a teal badge.
 
 - **Icons and wordmarks.** A BugDesk and a TicketDesk badge as favicon and in
   the top bar, and each name in its own display face (Marck Script, Sonsie One —
