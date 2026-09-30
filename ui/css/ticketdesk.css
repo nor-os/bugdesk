@@ -645,6 +645,68 @@
 }
 .td-topbar-actions .material-symbols-outlined { font-size: 13px; }
 
+/* The project field (install.js's _installProjectBar): which project this
+   window is on, centred in the top bar and drawn as a SEARCH BOX — clicking it
+   opens the switcher in its place, input over the field. Its width is set in
+   JS from the room between the chips and the right-hand buttons. */
+.td-project-bar {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 24px;
+    padding: 0 6px 0 10px;
+    font: inherit;
+    font-size: 12px;
+    color: var(--text-secondary, #c8c8c8);
+    background: rgba(255, 255, 255, 0.055);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 90ms ease, border-color 90ms ease, color 90ms ease;
+}
+.td-project-bar:hover {
+    color: var(--text-bright, #fff);
+    background: rgba(255, 255, 255, 0.085);
+    border-color: rgba(255, 255, 255, 0.16);
+}
+.td-project-bar:focus-visible,
+.td-project-bar--open {
+    outline: none;
+    border-color: var(--accent-bright, #4fc1ff);
+    background: rgba(255, 255, 255, 0.085);
+}
+.td-project-bar .td-project-bar__icon { font-size: 15px; color: var(--accent-bright, #4fc1ff); opacity: 0.85; }
+.td-project-bar__name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: center;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+}
+.td-project-bar__key {
+    flex: none;
+    padding: 1px 5px;
+    font-family: var(--font-family-mono, monospace);
+    font-size: 10px;
+    color: var(--text-muted, #888);
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 4px;
+}
+.td-project-bar--tight .td-project-bar__key { display: none; }
+/* While the global tracker is in front: the tracker belongs to no project, so
+   the field names none (install.js's _syncProjectChip). Still clickable —
+   switching project is as valid from here as from anywhere. */
+.td-project-bar--na .td-project-bar__name { opacity: 0.55; font-style: italic; }
+.td-project-bar--na .td-project-bar__icon { color: var(--text-muted, #888); }
+
 /* ── Navigator panel (panel:left) ───────────────────────────────── */
 .td-nav {
     height: 100%;

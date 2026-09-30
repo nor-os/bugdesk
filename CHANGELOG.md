@@ -15,18 +15,20 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   The file is re-read when it changes; an edit that does not parse is reported
   by line and the last good version stays in force.
 
-- **A project chip and a switcher in the bottom bar.** The chip names the
-  project. Clicking it opens a list: type to filter, the first match is
-  selected, Enter switches. Adding (with the backlog and name filled in from
-  the bugs folder) and removing (Shift+Delete, or the bin on a row) edit
+- **A project field and switcher in the top bar.** On project pages it takes
+  the Search button's place (Ctrl+K searches everything). Clicking it, or
+  Ctrl+P, drops down a list: type to filter, the first match is selected,
+  Enter switches. Adding (with the backlog and name filled in from the bugs
+  folder) and removing (Shift+Delete, or the bin on a row) edit
   `projects.toml` only; no folder is touched.
 
 - **The tracker inside every project.** With `[tracker] path` set, a teal
   **Tracker** section follows Bugs and Backlog, with the dashboard, the tickets
   and the new-ticket mask. Its records, filters, team and live updates are the
   tracker's own, and its links and tabs never open the project's record of the
-  same number. While it is in front, the project chip reads *n/a*. Ctrl+K
-  searches the tracker too.
+  same number. While it is in front, the project field reads *n/a*.
+  `[tracker] enabled = false` hides it and keeps the path; `--tracker` still
+  opens it on its own. Ctrl+K searches the tracker too.
 
 - **One name everywhere.** `[user] name` is who you are in every project and
   in the tracker. An existing profile's name is adopted into the file.

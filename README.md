@@ -168,6 +168,7 @@ name = "alice"                        # who you are, in every project and the tr
 
 [tracker]                             # the one global tracker; omit it for none
 path = 'C:\Users\alice\AppData\Roaming\BugDesk\tracker'
+# enabled = false                     # keep the path, hide the Tracker section
 
 [projects.bugdesk]
 bugs    = 'C:\repos\bugdesk\bugs'
@@ -189,8 +190,9 @@ is served for that run, without being written in.
 used last. Switching project is a navigation, so the back button returns and two
 tabs can sit on two projects.
 
-**The project chip in the bottom bar** says which one you are in. Click it and
-type: the first match is selected, Enter goes there. The same list adds a
+**The project field in the top bar** says which one you are in. Click it (or
+press **Ctrl+P**) and type into the dropdown: the first match is selected,
+Enter goes there. The same list adds a
 project (the last row, or Enter on a name that matches nothing — typing the bugs
 folder fills in the backlog beside it) and removes one (the bin on a row, or
 Shift+Delete). Both only edit `projects.toml`; removing a project never touches
@@ -201,8 +203,10 @@ its folders.
 belongs to no project — with the dashboard, the tickets and the new-ticket mask,
 exactly as in [tracker mode](#tracker-mode). Its records are the tracker's own:
 its STORY-0002 is not the project's, and each opens from its own section. While
-it is in front the project chip reads *n/a*. Ctrl+K searches both, and marks the
-tracker's results.
+it is in front the project field reads *n/a*. Ctrl+K searches both, and marks the
+tracker's results. `enabled = false` under `[tracker]` hides the section (and
+its API) from project pages while keeping the path; `--tracker` still opens it
+on its own.
 
 ## Who you are
 

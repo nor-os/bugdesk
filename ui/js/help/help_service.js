@@ -422,7 +422,7 @@ column widths, when you leave and come back.
 | Jump to Queues (the only top-nav page) | **F1** |
 | Go back (walk up the breadcrumb) | **Backspace**, or the browser's Back (**Alt + ←**, mouse back button, swipe) |
 | Open the command palette (fuzzy bug search + commands) | **Ctrl/⌘ + K** |
-| Switch project — type, **Enter** to go there; add one from the last row, remove one with **Shift + Del** | **Ctrl/⌘ + P**, or click the project in the bottom bar |
+| Switch project — type, **Enter** to go there; add one from the last row, remove one with **Shift + Del** | **Ctrl/⌘ + P**, or click the project field in the top bar |
 | Open this help | **?** |
 | Close a modal / the palette | **Esc** |
 

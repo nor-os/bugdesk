@@ -86,6 +86,7 @@ var app = builder.Build();
 var stores = new StoreRegistry(projectsFile, app.Logger, ResolveStateDir(app.Environment.ContentRootPath));
 if (mode == "tracker")
 {
+    stores.Standalone = true;
     // Standalone TicketDesk. The tracker is the one in projects.toml, unless the
     // command line names one (--project, BUGDESK_TRACKER_PROJECT) or the file has
     // none — then it is found the way it always was, by name under the tracker
@@ -191,7 +192,9 @@ app.Use(async (http, next) =>
     {
         if (path == "/t") { http.Response.Redirect("/t/"); return; }
         store = stores.Tracker();
-        if (store is null) { await Fail(http, 404, $"no tracker configured — set [tracker] path in {projectsFile.Path}"); return; }
+        if (store is null) { await Fail(http, 404, stores.TrackerPath is null
+            ? $"no tracker configured — set [tracker] path in {projectsFile.Path}"
+            : $"the tracker is switched off — [tracker] enabled = false in {projectsFile.Path}"); return; }
         http.Request.PathBase = "/t";
         http.Request.Path = path[2..];
     }
@@ -1229,7 +1232,7 @@ object ConfigPayload(Store s, string? slug = null) => new
     // The store this page is on, and which of its two halves exist.
     store = new { kind = s.Kind, name = s.Name, hasBugs = s.HasBugs, hasBacklog = s.HasBacklog, @base = s.UrlBase },
     projects = ProjectList(),
-    tracker = new { available = stores.TrackerPath is not null, @base = "/t/", path = stores.TrackerPath },
+    tracker = new { available = stores.TrackerAvailable, @base = "/t/", path = stores.TrackerPath },
     projectsFile = projectsFile.Path,
     projectsError = projectsFile.Error,
 };
@@ -1293,7 +1296,7 @@ object ProjectsPayload() => new
     file = projectsFile.Path,
     error = projectsFile.Error,
     projects = ProjectList(),
-    tracker = new { available = stores.TrackerPath is not null, path = stores.TrackerPath },
+    tracker = new { available = stores.TrackerAvailable, path = stores.TrackerPath },
 };
 
 app.MapGet("/api/projects", () => Results.Json(ProjectsPayload(), json));
@@ -1749,6 +1752,7 @@ static string SeedProjectsToml(string name, string bugsDir, string backlogDir)
         #
         # [tracker]           the one global tracker (TicketDesk). Without it, no Tracker chip.
         # path = '{{Path.Combine(TrackerRoot(), "tracker")}}'
+        # enabled = false     keep the path, but hide the Tracker section
         #
         # [projects.NAME]     a project: its bug store and/or its backlog — either may
         # bugs    = 'C:\path\to\repo\bugs'      be left out, and that page is then

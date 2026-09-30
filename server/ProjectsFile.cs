@@ -11,6 +11,7 @@ using System.Text;
 ///
 /// [tracker]                         # global: not tied to any project
 /// path = 'C:\Users\Norman\AppData\Roaming\BugDesk\bugdesk'
+/// enabled = false                   # optional: keep the path, hide the section
 ///
 /// [projects.bugdesk]
 /// bugs    = 'C:\Users\Norman\repos\bugdesk\bugs'
@@ -45,9 +46,10 @@ sealed class ProjectsFile
         string? UserName,
         string? AgentName,
         string? TrackerPath,
+        bool TrackerEnabled,
         IReadOnlyList<ProjectDef> Projects)
     {
-        public static readonly Model Empty = new(null, null, null, Array.Empty<ProjectDef>());
+        public static readonly Model Empty = new(null, null, null, true, Array.Empty<ProjectDef>());
     }
 
     readonly object _gate = new();
@@ -242,6 +244,7 @@ sealed class ProjectsFile
     static Model Interpret(List<(List<string> Key, string Value)> pairs)
     {
         string? user = null, agent = null, tracker = null;
+        var trackerEnabled = true;
         var order = new List<string>();
         var fields = new Dictionary<string, Dictionary<string, string>>(StringComparer.Ordinal);
         foreach (var (key, value) in pairs)
@@ -249,6 +252,7 @@ sealed class ProjectsFile
             if (key is ["user", "name"]) user = value;
             else if (key is ["user", "agent"]) agent = value;
             else if (key is ["tracker", "path"]) tracker = value;
+            else if (key is ["tracker", "enabled"]) trackerEnabled = value.Trim().ToLowerInvariant() is not ("false" or "no" or "off" or "0");
             else if (key.Count == 3 && key[0] == "projects")
             {
                 if (!fields.TryGetValue(key[1], out var f))
@@ -265,7 +269,7 @@ sealed class ProjectsFile
             string? Get(string k) => f.TryGetValue(k, out var v) && v.Trim().Length > 0 ? v.Trim() : null;
             return new ProjectDef(n, Get("bugs"), Get("backlog"), Get("config"), Get("attachments"));
         }).ToList();
-        return new Model(Blank(user), Blank(agent), Blank(tracker), projects);
+        return new Model(Blank(user), Blank(agent), Blank(tracker), trackerEnabled, projects);
 
         static string? Blank(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
     }

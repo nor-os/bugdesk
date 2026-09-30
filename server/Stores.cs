@@ -119,6 +119,15 @@ sealed class StoreRegistry
     public string? TrackerPath =>
         TrackerOverride ?? (_file.Current.TrackerPath is { } p ? _file.Resolve(p) : null);
 
+    /// <summary>Standalone TicketDesk: the tracker is the whole app, so
+    /// <c>[tracker] enabled = false</c> — which hides the Tracker SECTION of
+    /// project pages — does not apply to it.</summary>
+    public bool Standalone { get; set; }
+
+    /// <summary>Whether there is a tracker to serve: a path, and not switched
+    /// off in projects.toml.</summary>
+    public bool TrackerAvailable => TrackerPath is not null && (Standalone || _file.Current.TrackerEnabled);
+
     public Store? Project(string name)
     {
         var def = Definitions.FirstOrDefault(d => Same(d.Name, name));
@@ -128,7 +137,7 @@ sealed class StoreRegistry
     public Store? Tracker()
     {
         var path = TrackerPath;
-        return path is null ? null : Get("t:", PlanTracker(path));
+        return path is null || !TrackerAvailable ? null : Get("t:", PlanTracker(path));
     }
 
     /// <summary>The project a bare address opens: the command line's when it

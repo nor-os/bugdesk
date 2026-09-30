@@ -124,6 +124,11 @@ export async function installTilingShell({ eventBus, logger } = {}) {
             console.error('[bugdesk] the tracker could not be loaded — its section will be empty', err);
         }
     }
+    // A project page whose layout was saved while the tracker was on, opened
+    // now that it is off (`[tracker] enabled = false`, or no path): its tracker
+    // tabs come back with nothing to draw. Say why, rather than FlexDesk's bare
+    // "no factory registered".
+    if (!MERGED_TRACKER && !trackerMode) trackerContent = _trackerOffContent();
     // Order is the override order. Tracker last: it deliberately re-points
     // `home` at the dashboard (see createTrackerContent).
     const content = createContentRegistry({
@@ -246,7 +251,6 @@ export async function installTilingShell({ eventBus, logger } = {}) {
     // add and switch between multiple desktops again.
     _installDesktopBar(wm);
     _installUserChip(wm, eventBus);
-    _installProjectChip(eventBus);
     // C31. FlexDesk's content zoom, in the bottom bar. It scales tile bodies and
     // window content under `wmHost` and nothing a window is dragged across, which
     // is what keeps the snapping above working at any zoom — see FlexDesk's
@@ -274,6 +278,7 @@ export async function installTilingShell({ eventBus, logger } = {}) {
     // lead to the SAME mask page — mode decides whether the entered data
     // creates a ticket or searches for one.
     _installTicketActions(wm, trackerMode);
+    _installProjectBar(eventBus);
 
     _syncPanelToggleButtons(wm);
     _syncDesktopBar(wm);
@@ -402,20 +407,95 @@ function _syncPageShortcuts(wm) {
     _syncProjectChip(topNavKind);
 }
 
-/** The project chip says "n/a" while the Tracker is in front: the tracker
- *  belongs to no project, and a chip still naming one would suggest the tickets
- *  on screen were that project's. */
+/** The project field says "n/a" while the Tracker is in front: the tracker
+ *  belongs to no project, and a field still naming one would suggest the
+ *  tickets on screen were that project's. */
 function _syncProjectChip(topNavKind) {
-    const chip = document.getElementById('twm-project-chip');
-    if (!chip) return;
+    const field = document.getElementById('twm-project-picker');
+    if (!field) return;
     const na = MERGED_TRACKER && topNavKind === 'tracker';
-    if (chip.classList.contains('twm-project-chip--na') === na) return;
+    if (field.classList.contains('td-project-bar--na') === na) return;
     const name = String((window.__BUGDESK_CONFIG__ || {}).store?.name || '');
-    chip.classList.toggle('twm-project-chip--na', na);
-    chip.querySelector('[data-role="name"]').textContent = na ? 'n/a' : name;
-    chip.dataset.tooltip = na
-        ? 'The tracker is global — it belongs to no project. Click to switch project.'
-        : `Project ${name} — click (or Ctrl+P) to switch, add or remove projects`;
+    field.classList.toggle('td-project-bar--na', na);
+    field.querySelector('[data-role="name"]').textContent = na ? 'n/a' : name;
+    field.dataset.tooltip = na
+        ? 'The tracker is global — it belongs to no project. Click or Ctrl+P to switch project.'
+        : 'Project — click or Ctrl+P to switch, add or remove projects';
+}
+
+/**
+ * The project field: which project this window is on, CENTRED in the top bar
+ * and drawn as a search box — which is what it is: click it (or Ctrl+P) and
+ * the switcher opens in the same place, its input over this field, and you
+ * type. Project pages only.
+ *
+ * Its width is whatever the bar can spare: the room between the top-nav chips
+ * and the buttons on the right, measured, so it narrows before it overlaps
+ * either, drops the key hint when tight, and steps aside when there is no room
+ * at all — Ctrl+P still reaches the switcher then.
+ */
+function _installProjectBar(eventBus) {
+    const cfg = window.__BUGDESK_CONFIG__ || {};
+    const bar = document.querySelector('.global-top-bar');
+    if (cfg.store?.kind !== 'project' || !bar || document.getElementById('twm-project-picker')) return;
+
+    const field = document.createElement('button');
+    field.id = 'twm-project-picker';
+    field.type = 'button';
+    field.className = 'td-project-bar has-tooltip';
+    field.dataset.tooltipPlacement = 'bottom';
+    field.dataset.tooltip = 'Project — click or Ctrl+P to switch, add or remove projects';
+    field.setAttribute('aria-haspopup', 'listbox');
+    field.setAttribute('aria-expanded', 'false');
+    field.innerHTML = `
+        <span class="material-symbols-outlined td-project-bar__icon">folder</span>
+        <span class="td-project-bar__name" data-role="name">${_escHtml(cfg.store.name || '')}</span>
+        <kbd class="td-project-bar__key">Ctrl+P</kbd>`;
+    field.addEventListener('click', async () => {
+        const { toggleProjectSwitcher } = await import('./project_switcher.js');
+        toggleProjectSwitcher({ eventBus: eventBus ?? window.__bugdesk?.eventBus });
+    });
+    bar.appendChild(field);
+
+    const place = () => {
+        const b = bar.getBoundingClientRect();
+        const mid = b.left + b.width / 2;
+        // Everything the field must not cover: the brand and the chips on the
+        // left, the buttons on the right.
+        const lefts = [...bar.querySelectorAll('.bar-left > *, .twm-top-nav__btn')]
+            .map((el) => el.getBoundingClientRect()).filter((r) => r.width > 0);
+        const rights = [...bar.querySelectorAll('.bar-right > *')]
+            .map((el) => el.getBoundingClientRect()).filter((r) => r.width > 0);
+        const leftEdge = Math.max(b.left, ...lefts.map((r) => r.right));
+        const rightEdge = Math.min(b.right, ...rights.map((r) => r.left));
+        const room = 2 * Math.min(mid - leftEdge, rightEdge - mid) - 24;
+        const width = Math.min(440, room);
+        field.style.display = width < 120 ? 'none' : '';
+        field.style.width = `${Math.max(120, width)}px`;
+        field.classList.toggle('td-project-bar--tight', width < 230);
+    };
+    place();
+    document.fonts?.ready?.then(place).catch(() => {});
+    try { new ResizeObserver(place).observe(bar); } catch { window.addEventListener('resize', place); }
+}
+
+const _escHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+}[c]));
+
+/** Stand-ins for the tracker's page kinds on a page where the tracker is off. */
+function _trackerOffContent() {
+    const off = (host) => {
+        host.innerHTML = `
+            <div class="td-page"><div class="td-banner">
+                <span class="material-symbols-outlined">space_dashboard</span>
+                The tracker is switched off. Set <code>enabled = true</code> under
+                <code>[tracker]</code> in projects.toml and reload to show it again,
+                or close this tab.
+            </div></div>`;
+        return { title: 'Tracker (off)' };
+    };
+    return Object.fromEntries(['tracker', 'tracker-tickets', 'tracker-item', 'tracker-new'].map((k) => [k, off]));
 }
 
 /**
@@ -475,9 +555,15 @@ function _installTicketActions(wm, trackerMode = false) {
     if (!barRight || barRight.querySelector('.td-topbar-actions')) return;
     const wrap = document.createElement('div');
     wrap.className = 'td-topbar-actions';
+    // On a PROJECT page the project field, centred in the bar, takes Search's
+    // place (see _installProjectBar); search lives on Ctrl+K, which covers every
+    // store the page shows. Standalone TicketDesk has no project to name and
+    // keeps its Search button.
+    const isProject = (window.__BUGDESK_CONFIG__ || {}).store?.kind === 'project';
     wrap.innerHTML = `
+        ${isProject ? '' : `
         <button class="ea-btn" data-td="search" title="Search">
-            <span class="material-symbols-outlined">search</span> Search</button>
+            <span class="material-symbols-outlined">search</span> Search</button>`}
         <button class="ea-btn ea-btn--primary" data-td="item" title="New item">
             <span class="material-symbols-outlined">add</span> New Item</button>`;
     wrap.addEventListener('click', async (e) => {
@@ -875,43 +961,8 @@ function _installUserChip(wm, eventBus) {
 }
 
 /**
- * Which project this window is on, in the bottom bar beside who you are.
- *
- * Bugs and backlog belong to a project — a repo, as listed in projects.toml —
- * and with more than one of them the thing most worth checking before filing
- * anything is WHERE it will land. Clicking the chip opens the switcher (type,
- * Enter), which also adds and removes projects. Absent in standalone TicketDesk,
- * whose one store belongs to no project.
- */
-function _installProjectChip(eventBus) {
-    const cfg = window.__BUGDESK_CONFIG__ || {};
-    if (cfg.store?.kind !== 'project') return;
-    const user = document.getElementById('twm-user-chip');
-    const host = user?.parentElement ?? document.querySelector('.global-bottom-bar .bar-left');
-    if (!host || document.getElementById('twm-project-chip')) return;
-
-    const name = String(cfg.store.name || '');
-    const btn = document.createElement('button');
-    btn.id = 'twm-project-chip';
-    btn.type = 'button';
-    btn.className = 'twm-user-chip twm-project-chip has-tooltip';
-    btn.dataset.tooltipPlacement = 'top';
-    btn.dataset.tooltip = `Project ${name} — click (or Ctrl+P) to switch, add or remove projects`;
-    btn.setAttribute('aria-label', `Project ${name}. Switch project.`);
-    btn.innerHTML = `<span class="material-symbols-outlined">folder</span><span data-role="name">${
-        name.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
-    }</span>`;
-    btn.addEventListener('click', () => {
-        import('./project_switcher.js')
-            .then((m) => m.openProjectSwitcher({ eventBus: eventBus ?? window.__bugdesk?.eventBus }))
-            .catch((err) => console.error('[bugdesk] project switcher failed', err));
-    });
-    host.insertBefore(btn, user ? user.nextSibling : host.firstChild);
-}
-
-/**
- * Ctrl/⌘+P opens the project switcher — the keyboard way to the chip in the
- * bottom bar. BugDesk's own listener, because FlexDesk's keymap has no slot for
+ * Ctrl/⌘+P opens the project switcher — the keyboard way to the project field
+ * in the top bar. BugDesk's own listener, because FlexDesk's keymap has no slot for
  * an app binding. It takes the key from the browser's Print, which is no loss
  * in an app whose pages are tiles. Only on a project page: standalone TicketDesk
  * has no project to switch, and there the key does what the browser does.

@@ -268,3 +268,26 @@
 
 /* A result from the global tracker, on a project page (command_palette.js). */
 .twm-cmdpal__tracker { color: #2dd4bf; font-weight: 600; }
+
+/* The switcher opened FROM the top-bar project field: no dimming and no
+   centring — project_switcher.js lays it over the field, input where the field
+   was — rounded like the field, so it reads as the search box grown open. */
+.twm-projects-overlay--anchored {
+    display: block;
+    padding: 0;
+    background: transparent;
+    /* Above the top bar (7000): the panel's input sits OVER the field, which
+       lives in the bar. */
+    z-index: 7100;
+}
+.twm-projects--dropdown {
+    position: fixed;
+    max-height: min(70vh, 520px);
+    border-radius: 8px;
+    border-color: var(--accent-bright, #4fc1ff);
+}
+.twm-projects--dropdown .twm-cmdpal__inputrow { padding: 4px 10px; }
+.twm-projects--dropdown .twm-cmdpal__input { font-size: 12px; }
+.twm-projects--dropdown .twm-cmdpal__item { padding: 5px 10px; }
+.twm-projects--dropdown .twm-cmdpal__snippet { font-size: 10px; }
+.twm-projects--dropdown .twm-cmdpal__keys { display: none; }

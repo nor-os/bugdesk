@@ -952,8 +952,3 @@ tr[draggable="true"]:active,
    and the title has the rest. */
 .bd-duewarn--dot { margin-left: 4px; }
 .bd-duewarn--dot .material-symbols-outlined { font-size: 12px; }
-
-/* The project chip while the global tracker is in front: the tracker belongs to
-   no project, so the chip names none (install.js's _syncProjectChip). Still
-   clickable — switching project is as valid from here as from anywhere. */
-.twm-project-chip--na { opacity: 0.55; font-style: italic; }

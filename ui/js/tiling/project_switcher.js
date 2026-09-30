@@ -11,7 +11,9 @@
  *   | projects.toml: C:\repos\bugdesk\projects.toml   Enter |
  *   +------------------------------------------------------+
  *
- * Opened from the project chip in the bottom bar. Type to narrow, the first
+ * Opened from the project field centred in the top bar (or Ctrl+P), in the
+ * field's own place — its input over the field — and centred like the Ctrl+K
+ * palette when there is no field. Type to narrow, the first
  * match is already selected, Enter goes there. The same list adds a project
  * (the last row, or Enter when nothing matches — the typed text becomes its
  * name) and removes one (the bin on a row, or Shift+Delete). Both only edit
@@ -29,6 +31,8 @@
  */
 
 const ROOT_ID = 'twm-projects';
+/** The top-bar field the dropdown hangs from (see install.js). */
+const ANCHOR_ID = 'twm-project-picker';
 
 const _esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -51,10 +55,13 @@ function describe(p) {
     return p.hasBugs ? 'bugs only' : 'backlog only';
 }
 
-/** Ctrl+P: open the switcher, or close it when it is already open. */
+/** Closes whichever switcher is open, so every way of closing it — Esc, a
+ *  click outside, Ctrl+P again — also un-presses the top-bar field. */
+let closeCurrent = null;
+
+/** Ctrl+P, or a click on the top-bar field: open the switcher, or close it. */
 export function toggleProjectSwitcher({ eventBus } = {}) {
-    const open = document.getElementById(ROOT_ID);
-    if (open) { open.remove(); return; }
+    if (document.getElementById(ROOT_ID)) { closeCurrent?.(); return; }
     openProjectSwitcher({ eventBus });
 }
 
@@ -65,11 +72,12 @@ export function openProjectSwitcher({ eventBus, select = null } = {}) {
     let rows = [];         // what is on screen: projects, then the add row
     let active = 0;
 
+    const anchor = document.getElementById(ANCHOR_ID);
     const overlay = document.createElement('div');
     overlay.id = ROOT_ID;
-    overlay.className = 'twm-cmdpal-overlay';
+    overlay.className = `twm-cmdpal-overlay${anchor ? ' twm-projects-overlay--anchored' : ''}`;
     overlay.innerHTML = `
-        <div class="twm-cmdpal twm-projects" role="dialog" aria-label="Switch project">
+        <div class="twm-cmdpal twm-projects${anchor ? ' twm-projects--dropdown' : ''}" role="dialog" aria-label="Switch project">
             <div class="twm-cmdpal__inputrow">
                 <span class="material-symbols-outlined twm-cmdpal__glyph">folder_open</span>
                 <input type="text" class="twm-cmdpal__input" autocomplete="off" spellcheck="false"
@@ -86,11 +94,38 @@ export function openProjectSwitcher({ eventBus, select = null } = {}) {
             </div>
         </div>`;
     document.body.appendChild(overlay);
+    const panel = overlay.querySelector('.twm-projects');
+    // IN PLACE, when there is a field to open from: the panel is centred on the
+    // field with its search input laid over it, so clicking the field reads as
+    // clicking into a search box that then grows its results. Kept inside the
+    // window; the overlay behind it is transparent and only catches the click
+    // that closes it.
+    if (anchor) {
+        const r = anchor.getBoundingClientRect();
+        const width = Math.min(Math.max(r.width, 520), window.innerWidth - 16);
+        const left = r.left + r.width / 2 - width / 2;
+        panel.style.width = `${width}px`;
+        panel.style.top = `${Math.max(2, r.top - 3)}px`;
+        panel.style.left = `${Math.max(8, Math.min(left, window.innerWidth - width - 8))}px`;
+        anchor.classList.add('td-project-bar--open');
+        anchor.setAttribute('aria-expanded', 'true');
+    }
     const input = overlay.querySelector('.twm-cmdpal__input');
     const list = overlay.querySelector('[data-role="list"]');
     const status = overlay.querySelector('[data-role="status"]');
 
-    const close = () => overlay.remove();
+    const close = () => {
+        overlay.remove();
+        window.removeEventListener('resize', close);
+        if (anchor) {
+            anchor.classList.remove('td-project-bar--open');
+            anchor.setAttribute('aria-expanded', 'false');
+        }
+    };
+    // A dropdown measured against a field that has since moved is in the wrong
+    // place; closing is the honest answer to a resize.
+    window.addEventListener('resize', close);
+    closeCurrent = close;
 
     const render = () => {
         const q = input.value.trim().toLowerCase();
