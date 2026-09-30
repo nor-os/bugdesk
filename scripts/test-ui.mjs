@@ -202,6 +202,33 @@ t('isLast follows the sorted order, so the tree lines still join up', () => {
     assert.deepEqual(rs.map((r) => r.isLast), [false, true, false, true, false, true]);
 });
 
+t('finished: a closed story with an open task is not finished', () => {
+    const m = data.markFinished([
+        { id: 1, parent: 0, status: 'done' },          // epic, closed early
+        { id: 2, parent: 1, status: 'done' },          // story, closed
+        { id: 3, parent: 2, status: 'in-progress' },   // its task, still open
+        { id: 4, parent: 1, status: 'dropped' },       // a dropped story, nothing under it
+    ]);
+    assert.deepEqual(m.map((i) => i.finished), ['no', 'no', 'no', 'yes']);
+});
+
+t('finished: a whole subtree done is finished, top to bottom', () => {
+    const m = data.markFinished([
+        { id: 1, parent: 0, status: 'done' },
+        { id: 2, parent: 1, status: 'done' },
+        { id: 3, parent: 2, status: 'dropped' },
+    ]);
+    assert.deepEqual(m.map((i) => i.finished), ['yes', 'yes', 'yes']);
+});
+
+t('finished: an open project stays unfinished whatever is under it', () => {
+    const m = data.markFinished([
+        { id: 1, parent: 0, status: 'in-progress' },
+        { id: 2, parent: 1, status: 'done' },
+    ]);
+    assert.deepEqual(m.map((i) => i.finished), ['no', 'yes']);
+});
+
 t('collapsibleIds lists only parents', () =>
     assert.deepEqual(data.collapsibleIds().sort((a, b) => a - b), [1, 2]));
 

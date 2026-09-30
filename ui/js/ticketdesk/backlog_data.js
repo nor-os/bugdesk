@@ -458,9 +458,38 @@ export async function loadBacklog() {
     const [listRes, metaRes] = await Promise.all([apiGet('/backlog'), apiGet('/backlog/meta')]);
     const raw = Array.isArray(listRes.items) ? listRes.items : [];
     const byId = new Map(raw.map((i) => [Number(i.id), i]));
-    ITEMS = raw.map((i) => mapItem(i, byId));
+    ITEMS = markFinished(raw.map((i) => mapItem(i, byId)));
     PHASES = Array.isArray(metaRes.phases) ? metaRes.phases : [];
     return { count: ITEMS.length };
+}
+
+/**
+ * `finished` — 'yes' when an item AND everything under it is done or dropped.
+ *
+ * A project, epic or story is not finished because its own status says done:
+ * the story closed while two of its tasks are still open is still work in
+ * flight, and the open views keep it (see ACTIVE in ./backlog_filters.js). Only
+ * a whole finished subtree leaves them — and is then what "Closed" / "Done"
+ * show. Derived on load, like dueState, so a filter's answer cannot change
+ * under it mid-session.
+ */
+export function markFinished(items) {
+    const kids = new Map();
+    for (const i of items) {
+        const p = Number(i.parent);
+        if (p > 0) { if (!kids.has(p)) kids.set(p, []); kids.get(p).push(i); }
+    }
+    const memo = new Map();
+    const finished = (item, seen = new Set()) => {
+        const id = Number(item.id);
+        if (memo.has(id)) return memo.get(id);
+        if (seen.has(id)) return isClosedItem(item);     // a cycle: judge it alone
+        seen.add(id);
+        const done = isClosedItem(item) && (kids.get(id) || []).every((k) => finished(k, seen));
+        memo.set(id, done);
+        return done;
+    };
+    return items.map((i) => ({ ...i, finished: finished(i) ? 'yes' : 'no' }));
 }
 
 /* ── the tree ────────────────────────────────────────────────────────

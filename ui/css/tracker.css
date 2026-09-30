@@ -96,7 +96,11 @@
 
 .tk-row {
     display: grid;
-    grid-template-columns: 18px 74px 1fr 110px 96px auto;
+    /* EVERY column fixed but the title's. Each row is a grid of its own, so an
+       `auto` column sized to the row's own pill ("In progress" is wider than
+       "Draft") handed the difference to the title, and the pills of the rows
+       below no longer lined up. */
+    grid-template-columns: 18px 74px minmax(0, 1fr) 110px 124px 92px;
     align-items: center;
     gap: 8px;
     padding: 3px 8px;
@@ -112,6 +116,9 @@
 .tk-row__title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tk-row__who,
 .tk-row__due { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The due pill and its overrun warning side by side, from the column's start. */
+.tk-row__due { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.tk-row > .bd-status { justify-self: start; }
 .tk-row__who { color: var(--text-muted, #888); }
 /* "nobody" is a value, not a blank — it is one of the two things this page
    is looking for, so it reads as a state rather than as missing text. */
@@ -157,6 +164,7 @@
 }
 
 @media (max-width: 760px) {
-    .tk-row { grid-template-columns: 18px 68px 1fr auto; }
+    /* Five cells without the assignee: glyph, ref, title, due, status. */
+    .tk-row { grid-template-columns: 18px 68px minmax(0, 1fr) 112px 88px; }
     .tk-row__who { display: none; }
 }

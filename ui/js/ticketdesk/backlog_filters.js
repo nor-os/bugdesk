@@ -60,6 +60,15 @@ export const FILTER_FIELDS = [
         options: STATUSES,
         get: (i) => i.status || '',
     },
+    {
+        // Done or dropped, AND everything under it too — see markFinished in
+        // ./backlog_data.js. What the open views and "Closed" are built on, so
+        // an epic closed early stays visible while its stories are not.
+        key: 'finished', label: 'Finished', type: 'enum',
+        options: [{ value: 'no', label: 'no — it or something under it is open' },
+                  { value: 'yes', label: 'yes — it and everything under it is done' }],
+        get: (i) => i.finished || 'no',
+    },
     { key: 'title', label: 'Title', type: 'text', get: (i) => i.title || '' },
     {
         key: 'phase', label: 'Phase', type: 'enum',
@@ -138,6 +147,12 @@ const and = (...children) => ({ kind: 'group', op: 'AND', children });
  * rather than a feature request. */
 
 const OPEN = clause('status', 'none_of', ['done', 'dropped']);
+/** Not FINISHED: open itself, or holding anything still open. What the views
+ *  that list "the work" use — a project, epic or story stays in them until it
+ *  and everything under it is done. OPEN (its own status) is for the views
+ *  about one record's own work: on me, nobody on it, no date. */
+const ACTIVE = clause('finished', 'is', 'no');
+const FINISHED = clause('finished', 'is', 'yes');
 
 /**
  * TRACKER views. A different job asks different questions: a manager following
@@ -188,19 +203,19 @@ const TRACKER_FILTERS = [
     },
     {
         key: 'board', label: 'Everything open', icon: 'list', builtin: true,
-        expr: and(OPEN),
+        expr: and(ACTIVE),
     },
     { key: 'all', label: 'Everything', icon: 'list_alt', builtin: true, expr: emptyExpr() },
     {
         key: 'done', label: 'Closed', icon: 'check_circle', builtin: true,
-        expr: and(clause('status', 'one_of', ['done', 'dropped'])),
+        expr: and(FINISHED),
     },
 ];
 
 const BACKLOG_FILTERS = [
     {
         key: 'board', label: 'Backlog', icon: 'workspaces', builtin: true,
-        expr: and(clause('status', 'none_of', ['done', 'dropped'])),
+        expr: and(ACTIVE),
     },
     { key: 'all', label: 'Everything', icon: 'list', builtin: true, expr: emptyExpr() },
     {
@@ -236,7 +251,7 @@ const BACKLOG_FILTERS = [
     },
     {
         key: 'done', label: 'Done', icon: 'check_circle', builtin: true,
-        expr: and(clause('status', 'one_of', ['done', 'dropped'])),
+        expr: and(FINISHED),
     },
 ];
 
@@ -286,11 +301,11 @@ export function adhocFilter(expr, label) {
 /** The expression that selects one whole work package. */
 export const epicExpr = (ref) => and(clause('epic', 'is', ref));
 
-/** The same, one level up: everything under one project, at any depth — OPEN,
- *  like "Everything open": a project is opened to see what is still to do, and
- *  its finished work buried that. The status clause is an ordinary one in the
- *  filter editor, so removing it brings the closed items back. */
-export const projectExpr = (ref) => and(OPEN, clause('project', 'is', ref));
+/** The same, one level up: everything under one project, at any depth — minus
+ *  what is FINISHED, like "Everything open": a project is opened to see what is
+ *  still to do. The clause is an ordinary one in the filter editor, so removing
+ *  it brings the finished work back. */
+export const projectExpr = (ref) => and(ACTIVE, clause('project', 'is', ref));
 
 /** Everything on one person's plate, open. What a dashboard row navigates to. */
 export const assigneeExpr = (name) => and(OPEN, clause('assignee', 'is', name || 'none'));
