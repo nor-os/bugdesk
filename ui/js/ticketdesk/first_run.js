@@ -43,8 +43,8 @@ export function askForName(cfg) {
             <div class="bd-firstrun__card" role="dialog" aria-modal="true"
                  aria-labelledby="bd-firstrun-title">
                 <div class="bd-firstrun__brand">
-                    <img class="bd-firstrun__icon" src="${appIcon(cfg?.mode)}" alt="" />
-                    <span>${esc(appName(cfg?.mode))}</span>
+                    <img class="bd-firstrun__icon" src="${appIcon(cfg?.app)}" alt="" />
+                    <span>${esc(appName(cfg?.app))}</span>
                 </div>
                 <h1 class="bd-firstrun__title" id="bd-firstrun-title">Who's working here?</h1>
                 <p class="bd-firstrun__lede">
@@ -86,7 +86,7 @@ export function askForName(cfg) {
                     <div class="bd-firstrun__error" role="alert" hidden></div>
 
                     <button type="submit" class="bd-firstrun__go">
-                        Start using ${esc(appName(cfg?.mode))}
+                        Start using ${esc(appName(cfg?.app))}
                     </button>
                 </form>
 
@@ -108,7 +108,7 @@ export function askForName(cfg) {
             errEl.textContent = msg;
             errEl.hidden = false;
             goEl.disabled = false;
-            goEl.textContent = `Start using ${appName(cfg?.mode)}`;
+            goEl.textContent = `Start using ${appName(cfg?.app)}`;
         };
 
         const submit = async (name, agentName) => {

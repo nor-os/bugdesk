@@ -130,6 +130,10 @@
             // be resolved here, before either is evaluated — same reason as the
             // two names below.
             mode: cfg.mode === 'tracker' ? 'tracker' : 'bugs',
+            // Which PRODUCT: TicketDesk only when the server was started with
+            // --tracker; BugDesk otherwise, whatever store this page is on.
+            // See core/app_identity.js.
+            app: cfg.app === 'ticketdesk' ? 'ticketdesk' : 'bugdesk',
             // Whether `<name>_agent` is assignable here — false in tracker mode.
             agentsAssignable: cfg.agentsAssignable !== false,
             // True when the names below came from the bridge, not the fallback.

@@ -1225,6 +1225,10 @@ object ConfigPayload(Store s, string? slug = null) => new
     // module (see ui/index.html) because the taxonomy — which top-nav chips
     // exist, and what they are called — is built at module load.
     mode = s.IsTracker ? "tracker" : "bugs",
+    // Which APP this is — decided by how the server was STARTED, never by the
+    // page: `--tracker` is TicketDesk, everything else is BugDesk, including
+    // the tracker's own page (/t/) inside a BugDesk.
+    app = mode == "tracker" ? "ticketdesk" : "bugdesk",
     // Whether `<name>_agent` is a thing you can assign work to here.
     agentsAssignable = s.AgentsAssignable,
     humanAuthor = s.Users.HumanAuthor,
