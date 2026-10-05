@@ -46,7 +46,11 @@ sealed class Store : IDisposable
         Watcher.Note(path, text);
     }
 
-    public void Dispose() => Watcher.Dispose();
+    public void Dispose()
+    {
+        Records.Release(this);
+        Watcher.Dispose();
+    }
 }
 
 /// <summary>The store the current request is addressed to. Set by the routing
@@ -262,7 +266,7 @@ sealed class StoreRegistry
         if (tracker) Directory.CreateDirectory(spec.Backlog);
         else { Ensure(spec.Bugs); Ensure(spec.Backlog); }
         Directory.CreateDirectory(spec.Attach);
-        return new Store
+        var store = new Store
         {
             Name = spec.Name,
             Kind = spec.Kind,
@@ -275,6 +279,8 @@ sealed class StoreRegistry
             Watcher = new StoreWatcher(spec.Bugs, spec.Backlog, spec.Roster, _log),
             Signature = spec.Signature,
         };
+        Records.Attach(store);
+        return store;
     }
 
     /// <summary>

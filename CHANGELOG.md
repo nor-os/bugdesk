@@ -7,6 +7,15 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Records are parsed once, not on every request.** The bug and backlog
+  folders are cached in memory and mirrored to `.bugdesk/cache/*.json` (a
+  tracker: `config/cache/`), so a restart does not re-parse them either. The
+  markdown files remain the only source of truth: each lookup compares every
+  file's modified time and size with what was parsed and re-reads only the
+  ones that differ, so an edit in vim, a `git pull` or an agent shows up
+  without any event having to arrive. The cache is derived and ignores itself
+  in git; delete it any time. Tree walks (ancestors, descendants, inherited
+  phase and due date) use an id and parent index instead of scanning the list.
 - **Several projects in one BugDesk.** `projects.toml` in the checkout lists
   them — each with a bugs folder, a backlog folder or both — along with the
   global tracker and your name. The first run writes it from the store BugDesk

@@ -1918,45 +1918,37 @@ static string BugPath(string dir, int id) => Path.Combine(dir, $"BUG-{id:D4}.md"
 static string Article(string word) =>
     word.Length > 0 && "aeiou".Contains(char.ToLowerInvariant(word[0])) ? "an" : "a";
 
-static List<Bug> LoadAll(string dir) =>
-    Directory.Exists(dir)
-        ? Directory.EnumerateFiles(dir, "BUG-*.md").Select(Bug.Parse).Where(b => b != null).Select(b => b!).ToList()
-        : new();
+/// Records come from the per-folder cache (RecordCache.cs): shared between
+/// requests, so read-only — an edit goes to the file and the next load sees it.
+static IReadOnlyList<Bug> LoadAll(string dir) =>
+    Directory.Exists(dir) ? Records.Bugs(dir).All() : Array.Empty<Bug>();
 
-static Bug? LoadOne(string dir, int id)
-{
-    var p = BugPath(dir, id);
-    return File.Exists(p) ? Bug.Parse(p) : null;
-}
+static Bug? LoadOne(string dir, int id) =>
+    Directory.Exists(dir) ? Records.Bugs(dir).One(Path.GetFileName(BugPath(dir, id))) : null;
 
-static List<BacklogItem> LoadBacklog(string dir)
-{
-    if (!Directory.Exists(dir)) return new();
-    var items = new List<BacklogItem>();
-    foreach (var prefix in BacklogItem.Prefixes.Values)
-        foreach (var path in Directory.EnumerateFiles(dir, $"{prefix}-*.md"))
-            if (BacklogItem.Parse(path) is { } item) items.Add(item);
-    return items;
-}
+static IReadOnlyList<BacklogItem> LoadBacklog(string dir) =>
+    Directory.Exists(dir) ? Records.Backlog(dir).All() : Array.Empty<BacklogItem>();
 
 /// Ids from `id` up to the root, exclusive of `id` itself.
-static List<int> Ancestors(List<BacklogItem> all, int id)
+static List<int> Ancestors(IReadOnlyList<BacklogItem> all, int id)
 {
+    var byId = BacklogIndex.For(all).ById;
     var chain = new List<int>();
     var seen = new HashSet<int> { id };
-    var cur = all.FirstOrDefault(i => i.Id == id)?.Parent ?? 0;
+    var cur = byId.GetValueOrDefault(id)?.Parent ?? 0;
     while (cur > 0 && seen.Add(cur))
     {
         chain.Add(cur);
-        cur = all.FirstOrDefault(i => i.Id == cur)?.Parent ?? 0;
+        cur = byId.GetValueOrDefault(cur)?.Parent ?? 0;
     }
     return chain;
 }
 
 /// Every id BELOW `id`, at any depth. The set a cascade deletes, and the set a
 /// bare delete refuses to strand.
-static List<int> Descendants(List<BacklogItem> all, int id)
+static List<int> Descendants(IReadOnlyList<BacklogItem> all, int id)
 {
+    var byParent = BacklogIndex.For(all).ByParent;
     var out_ = new List<int>();
     var seen = new HashSet<int> { id };
     var queue = new Queue<int>();
@@ -1964,7 +1956,7 @@ static List<int> Descendants(List<BacklogItem> all, int id)
     while (queue.Count > 0)
     {
         var parent = queue.Dequeue();
-        foreach (var child in all.Where(i => i.Parent == parent))
+        foreach (var child in byParent[parent])
         {
             if (!seen.Add(child.Id)) continue;   // a cycle survived some hand edit
             out_.Add(child.Id);
@@ -1985,12 +1977,12 @@ static List<int> Descendants(List<BacklogItem> all, int id)
 /// un-copied.
 /// </para>
 /// </summary>
-static string EffectiveDue(List<BacklogItem> all, BacklogItem item)
+static string EffectiveDue(IReadOnlyList<BacklogItem> all, BacklogItem item)
 {
     if (item.Due.Length > 0) return item.Due;
     foreach (var id in Ancestors(all, item.Id))
     {
-        var anc = all.FirstOrDefault(i => i.Id == id);
+        var anc = BacklogIndex.For(all).ById.GetValueOrDefault(id);
         if (anc is { Due.Length: > 0 }) return anc.Due;
     }
     return "";
@@ -1999,12 +1991,12 @@ static string EffectiveDue(List<BacklogItem> all, BacklogItem item)
 /// The item's own phase, or the nearest ancestor's. Epics carry the label;
 /// stories and tasks inherit it, so "what is left in phase X" is answerable
 /// without stamping the same string onto every descendant.
-static string EffectivePhase(List<BacklogItem> all, BacklogItem item)
+static string EffectivePhase(IReadOnlyList<BacklogItem> all, BacklogItem item)
 {
     if (item.Phase.Length > 0) return item.Phase;
     foreach (var id in Ancestors(all, item.Id))
     {
-        var anc = all.FirstOrDefault(i => i.Id == id);
+        var anc = BacklogIndex.For(all).ById.GetValueOrDefault(id);
         if (anc is { Phase.Length: > 0 }) return anc.Phase;
     }
     return "";
@@ -2049,7 +2041,7 @@ static List<object> BacklogSummaries(string dir)
 /// One item with everything the detail page needs: the record, its resolved
 /// phase, and enough of its neighbours to render breadcrumbs and a child list
 /// without a second round trip.
-static object FullItem(List<BacklogItem> all, BacklogItem item)
+static object FullItem(IReadOnlyList<BacklogItem> all, BacklogItem item)
 {
     var childCount = all.Count(i => i.Parent == item.Id);
     return new
