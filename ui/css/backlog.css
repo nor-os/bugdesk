@@ -952,3 +952,15 @@ tr[draggable="true"]:active,
    and the title has the rest. */
 .bd-duewarn--dot { margin-left: 4px; }
 .bd-duewarn--dot .material-symbols-outlined { font-size: 12px; }
+
+/* The picker's facets (item_picker.js): type, status and assignee, each the
+   app's own dropdown, on a second row under the chips. */
+.bd-picker__filters--more { gap: 12px; flex-wrap: wrap; }
+.bd-picker__facet { display: inline-flex; align-items: center; gap: 6px; min-width: 150px; }
+.bd-picker__facet > label { color: var(--text-secondary, #9a9a9a); font-size: var(--font-size-xs, 11px); }
+.bd-picker__facet .bd-sel { flex: 1; min-width: 110px; }
+
+/* The link target's in-place search (attachRecordTypeahead): the dropdown
+   panel's look, with a finished record dimmed rather than hidden. */
+.bd-typeahead .bd-sel__optlabel b { margin-right: 6px; }
+.bd-typeahead .bd-typeahead__closed { opacity: 0.55; }

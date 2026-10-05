@@ -52,13 +52,14 @@ import { openFilterEditor } from './filter_editor.js';
 import { renderMarkdown } from './markdown.js';
 import { attachMarkdownEditor } from './md_editor.js';
 import {
-    linkTypeDef, linkTypeOptions, formatLink, linkRows, validateNewLink, withoutLink,
+    LINK_TYPES, linkTypeDef, linkTypeOptions, formatLink, linkRows, validateNewLink, withoutLink,
 } from './links.js';
 import { bugRef, displayRef, formatRef, parseKey, parseRef, refKey } from './refs.js';
 import { allRows, canonRef, findRow, openRow, storesAvailable } from './records.js';
 import { renderHistory } from './history.js';
 import { CONFIG, ev, KIND, trackerModule } from './instance.js';
-import { openRecordPicker } from './item_picker.js';
+import { attachRecordTypeahead, openRecordPicker } from './item_picker.js';
+import { attachSelect } from './select_field.js';
 import { attachTagInput } from './tag_input.js';
 import { ITEMS, isClosedItem, loadBacklog } from './backlog_data.js';
 import { watchRecord } from './live.js';
@@ -976,8 +977,23 @@ function mountTicket(host, props, ctx) {
         if (descEl) descEditor = attachMarkdownEditor(descEl, { onStatus: statusLine, minHeight: 200 });
     }
 
+    /* The link adder (BUG-0011): the type is the app's own dropdown rather than
+     * the browser's <select>, and the target field searches as you type. Enter
+     * in a filled field with no suggestion list open is "Link". */
+    const linkWidgets = [];
+    if (mode !== 'search') {
+        const typeEl = host.querySelector('[data-f="linktype"]');
+        if (typeEl) linkWidgets.push(attachSelect(typeEl, { options: LINK_TYPES.map((d) => ({ value: d.type, label: d.label })) }));
+        linkWidgets.push(attachRecordTypeahead(host.querySelector('[data-f="linktarget"]'), {
+            stores: storesAvailable(), selfStore: 'bugs',
+            exclude: () => (t.bugId ? bugRef(t.bugId) : null),
+            onEnter: () => host.querySelector('[data-a="addlink"]')?.click(),
+        }));
+    }
+
     /** Every sub-widget this mount owns, torn down together. */
     const destroyWidgets = () => {
+        for (const w of linkWidgets) { try { w.destroy(); } catch { /* already gone */ } }
         try { tagInput?.destroy(); } catch { /* already gone */ }
         try { descEditor?.destroy(); } catch { /* already gone */ }
     };

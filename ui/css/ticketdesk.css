@@ -1050,6 +1050,7 @@
 /* Add-a-link row: type, target, button. */
 .td-linkadd { display: flex; gap: 6px; align-items: center; margin-top: 8px; }
 .td-linkadd__type { flex: 0 0 auto; min-width: 140px; }
+.td-linkadd .bd-sel { flex: 0 0 auto; min-width: 140px; }   /* the link type, once select_field.js replaces the <select> */
 .td-linkadd__target { flex: 1 1 auto; min-width: 0; }
 
 

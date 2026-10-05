@@ -30,7 +30,7 @@ import { attachMarkdownEditor } from './md_editor.js';
 import { attachTagInput } from './tag_input.js';
 import { attachSelect } from './select_field.js';
 import { watchRecord } from './live.js';
-import { attachParentPicker, childTypesFor, openItemPicker, openRecordPicker } from './item_picker.js';
+import { attachParentPicker, attachRecordTypeahead, childTypesFor, openItemPicker, openRecordPicker } from './item_picker.js';
 import { installRecordDragSource, markDragCell, openRecordAs } from './record_dnd.js';
 import { confirmDelete } from './delete_item.js';
 import { attachCommentEditing, editButtonHTML } from './comment_edit.js';
@@ -41,7 +41,7 @@ import { onFiltersChanged } from './filter_store.js';
 import { shell, statusLine } from './pages.js';
 import { esc, formatStamp, initials, HUMAN_AUTHOR, TICKETS, assigneeChoices, loadData, rememberAssignee } from './data.js';
 import {
-    linkTypeDef, linkTypeOptions, formatLink, linkRows, validateNewLink, withoutLink,
+    LINK_TYPES, linkTypeDef, linkTypeOptions, formatLink, linkRows, validateNewLink, withoutLink,
 } from './links.js';
 import { displayRef, formatRef, itemRefOf, parseKey, parseRef, refKey } from './refs.js';
 import { allRows, canonRef, findRow, openRow, storesAvailable } from './records.js';
@@ -1166,6 +1166,19 @@ function mountItem(host, props, ctx) {
         if (field) field.value = '';
     };
 
+    // The link adder's own controls (BUG-0011), made once: they live outside the
+    // record slot that `fieldSelects` is rebuilt in. See the bug page.
+    const linkWidgets = [];
+    {
+        const typeEl = host.querySelector('[data-f="linktype"]');
+        if (typeEl) linkWidgets.push(attachSelect(typeEl, { options: LINK_TYPES.map((d) => ({ value: d.type, label: d.label })) }));
+        linkWidgets.push(attachRecordTypeahead(host.querySelector('[data-f="linktarget"]'), {
+            stores: storesAvailable(), selfStore: 'backlog',
+            exclude: () => (item ? itemRefOf(item) : null),
+            onEnter: () => addLink(),
+        }));
+    }
+
     /* ── description + comments ─────────────────────────────────── */
 
     /* ── description ─────────────────────────────────────────────────
@@ -1630,6 +1643,7 @@ function mountItem(host, props, ctx) {
             host.removeEventListener('change', onCriteriaChange);
             host.removeEventListener('keydown', onCriteriaKey);
             destroyWidgets();
+            for (const w of linkWidgets) { try { w.destroy(); } catch { /* already gone */ } }
         },
     };
 }

@@ -33,7 +33,8 @@ import {
     childTypesFor, parentTypesFor, typeLabelOf,
 } from './backlog_data.js';
 import { allRows, findRow, storesAvailable } from './records.js';
-import { parseKey, parseRef, refKey, sameRef } from './refs.js';
+import { formatRef, parseKey, parseRef, refKey, sameRef } from './refs.js';
+import { attachSelect } from './select_field.js';
 
 const icon = (name) => `<span class="material-symbols-outlined">${name}</span>`;
 
@@ -150,6 +151,11 @@ export function openRecordPicker({
                     </button>
                     <span class="bd-picker__count" data-slot="count"></span>
                 </div>
+                <div class="bd-picker__filters bd-picker__filters--more" role="group" aria-label="More filters">
+                    ${multiStore ? '<span class="bd-picker__facet"><label>Type</label><select data-facet="type"></select></span>' : ''}
+                    <span class="bd-picker__facet"><label>Status</label><select data-facet="status"></select></span>
+                    <span class="bd-picker__facet"><label>Assignee</label><select data-facet="assignee"></select></span>
+                </div>
                 <ul class="bd-picker__list" data-slot="list" role="listbox"></ul>
                 <div class="bd-picker__foot">
                     <button type="button" class="ea-btn" data-a="clear">Leave empty</button>
@@ -169,6 +175,7 @@ export function openRecordPicker({
             if (settled) return;
             settled = true;
             document.removeEventListener('keydown', onKey, true);
+            for (const f of facetSelects) { try { f.destroy(); } catch { /* gone */ } }
             overlay.remove();
             try { returnFocus?.focus(); } catch { /* gone */ }
             resolve(value);
@@ -179,6 +186,34 @@ export function openRecordPicker({
          * has to know which store the thing under the cursor came from. */
         const rows = () => allRows(offered);
 
+        /* THE FACETS — type, status, assignee — the same questions the filter
+         * editor asks of a list, narrowed to what a picker needs. Each is a
+         * custom dropdown whose options are the values actually present, so
+         * nothing offered can match zero rows by construction. Empty = any.
+         * The type facet only exists across stores: within one store the type
+         * chips already answer it. A type is keyed with its store, because
+         * `task` is a backlog task in one and a Chore bug in the other. */
+        const facets = { type: '', status: '', assignee: '' };
+        const facetOf = {
+            type: (row) => `${row.store}:${row.type}`,
+            status: (row) => String(row.status || ''),
+            assignee: (row) => String(row.record?.assignee || ''),
+        };
+        const facetOptions = (name) => {
+            const seen = new Map();
+            for (const row of rows()) {
+                if (multiStore && !activeStores.has(row.store)) continue;
+                const v = facetOf[name](row);
+                if (!v || seen.has(v)) continue;
+                seen.set(v, name === 'type'
+                    ? { value: v, label: row.typeLabel || row.type, hint: STORE_LABEL[row.store] || row.store,
+                        icon: row.store === 'bugs' ? 'bug_report' : TYPE_ICON[row.type] }
+                    : { value: v, label: v });
+            }
+            return [{ value: '', label: 'Any' },
+                ...[...seen.values()].sort((a, b) => a.label.localeCompare(b.label))];
+        };
+
         /** Rows of the right kind, not blocked, matching the query. `closed`
          *  is applied separately so the count can say how many it removed. */
         const candidates = () => {
@@ -187,6 +222,9 @@ export function openRecordPicker({
                 if (multiStore) { if (!activeStores.has(row.store)) return false; }
                 else if (!active.has(row.type)) return false;
                 if (blocked.has(row.key)) return false;
+                for (const name of Object.keys(facets)) {
+                    if (facets[name] && facetOf[name](row) !== facets[name]) return false;
+                }
                 if (!q) return true;
                 // Ref OR title. Searching by title is the primary way a master
                 // is found in "what is #42 a duplicate of?" — a reference match
@@ -233,6 +271,15 @@ export function openRecordPicker({
             listEl.querySelector('.bd-picker__row--on')?.scrollIntoView({ block: 'nearest' });
         };
         render();
+
+        const facetSelects = [...overlay.querySelectorAll('[data-facet]')].map((el) => {
+            const name = el.dataset.facet;
+            return attachSelect(el, {
+                value: '', emptyLabel: 'Any',
+                optionsFor: () => facetOptions(name),
+                onChange: (v) => { facets[name] = v; cursor = 0; render(); },
+            });
+        });
 
         // The DOM carries the row's IDENTITY, not its index: `refKey` survives a
         // re-render, a store reload and a row that moved, and it is the same key
@@ -303,6 +350,8 @@ export function openRecordPicker({
         });
 
         const onKey = (e) => {
+            // A facet dropdown that is open answers its own keys (select_field.js).
+            if (document.querySelector('.bd-sel__panel')) return;
             if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(null); }
             else if (e.key === 'ArrowDown') { e.preventDefault(); cursor++; render(); }
             else if (e.key === 'ArrowUp') { e.preventDefault(); cursor--; render(); }
@@ -414,5 +463,115 @@ export function attachParentPicker(el, { typeOf, value = 0, excludeId = null, on
         value: () => current,
         set: (id) => commit(id),
         destroy: () => { root.removeEventListener('click', onClick); root.remove(); },
+    };
+}
+
+/**
+ * THE LINK TARGET FIELD, SEARCHABLE IN PLACE (BUG-0011). Typing into it lists
+ * the records whose reference or title match, right under the field; ↑/↓ move,
+ * Enter or a click puts the record's reference in the field. The field stays an
+ * ordinary text input — a typed `#42` or `STORY-7` still goes through the same
+ * parser on Link — so this is a second way in, not a second set of rules. The
+ * magnifier beside it is still the full search, with filters.
+ *
+ * Open records come first; closed ones follow, dimmed, because linking to a
+ * finished record is legitimate ("caused-by #12") but rarely the one meant.
+ *
+ * @param {HTMLInputElement} input
+ * @param {object}   o
+ * @param {string[]} o.stores        which stores to search
+ * @param {string}   o.selfStore     how a picked ref is written (`bugs`/`backlog`)
+ * @param {() => object|null} [o.exclude] the record's own ref — not offered
+ * @param {() => void} [o.onEnter]   Enter with no list open (i.e. "Link")
+ * @returns {{ destroy(): void }}
+ */
+export function attachRecordTypeahead(input, { stores, selfStore, exclude = null, onEnter = null, limit = 8 }) {
+    if (!input) return { destroy() {} };
+    let panel = null;
+    let results = [];
+    let cursor = 0;
+
+    const close = () => {
+        panel?.remove();
+        panel = null;
+        window.removeEventListener('scroll', onScroll, true);
+    };
+    const onScroll = (e) => { if (!panel?.contains(e.target)) close(); };
+
+    const search = () => {
+        const q = input.value.trim().toLowerCase();
+        if (!q) return [];
+        const self = exclude?.();
+        const selfKey = self ? refKey(self) : null;
+        const hits = allRows(stores.filter((st) => storesAvailable().includes(st))).filter((row) =>
+            row.key !== selfKey
+            && (row.label.toLowerCase().includes(q) || String(row.title || '').toLowerCase().includes(q)));
+        // Open before closed; within each, a reference that STARTS with what was
+        // typed before a title that merely contains it.
+        const rank = (row) => (row.closed ? 2 : 0) + (row.label.toLowerCase().startsWith(q) ? 0 : 1);
+        return hits.sort((a, b) => rank(a) - rank(b)).slice(0, limit);
+    };
+
+    const paint = () => {
+        if (!results.length) { close(); return; }
+        if (!panel) {
+            panel = document.createElement('div');
+            panel.className = 'bd-sel__panel bd-typeahead';
+            panel.innerHTML = '<ul class="bd-sel__list" role="listbox"></ul>';
+            document.body.appendChild(panel);
+            window.addEventListener('scroll', onScroll, true);
+            // mousedown, not click: a click lands after the input's blur closed us.
+            panel.addEventListener('mousedown', (e) => {
+                const li = e.target.closest('[data-pick]');
+                if (!li) return;
+                e.preventDefault();
+                pick(Number(li.dataset.pick));
+            });
+        }
+        const r = input.getBoundingClientRect();
+        Object.assign(panel.style, { left: `${r.left}px`, top: `${r.bottom + 2}px`, minWidth: `${Math.max(r.width, 320)}px` });
+        panel.querySelector('ul').innerHTML = results.map((row, n) => `
+            <li class="bd-sel__opt${n === cursor ? ' bd-sel__opt--on' : ''}${row.closed ? ' bd-typeahead__closed' : ''}"
+                role="option" aria-selected="${n === cursor}" data-pick="${n}">
+                <span class="material-symbols-outlined bd-sel__icon">${esc(row.icon)}</span>
+                <span class="bd-sel__optlabel"><b class="td-mono">${esc(row.label)}</b> ${esc(row.title)}</span>
+                <span class="bd-sel__hint">${esc(row.status)}</span>
+            </li>`).join('');
+    };
+
+    const pick = (n) => {
+        const row = results[n];
+        if (!row) return;
+        input.value = formatRef(row.ref, selfStore);
+        results = [];
+        close();
+        input.focus();
+    };
+
+    const onInput = () => { cursor = 0; results = search(); paint(); };
+    const onKey = (e) => {
+        if (panel) {
+            if (e.key === 'ArrowDown') { e.preventDefault(); cursor = Math.min(cursor + 1, results.length - 1); paint(); return; }
+            if (e.key === 'ArrowUp') { e.preventDefault(); cursor = Math.max(cursor - 1, 0); paint(); return; }
+            if (e.key === 'Enter') { e.preventDefault(); pick(cursor); return; }
+            if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); results = []; close(); return; }
+        } else if (e.key === 'Enter' && input.value.trim() && onEnter) {
+            e.preventDefault();
+            onEnter();
+        }
+    };
+    const onBlur = () => setTimeout(close, 120);
+
+    input.setAttribute('autocomplete', 'off');
+    input.addEventListener('input', onInput);
+    input.addEventListener('keydown', onKey);
+    input.addEventListener('blur', onBlur);
+    return {
+        destroy() {
+            close();
+            input.removeEventListener('input', onInput);
+            input.removeEventListener('keydown', onKey);
+            input.removeEventListener('blur', onBlur);
+        },
     };
 }
