@@ -508,7 +508,12 @@ Report `<REF> <title> — <status>, <points>, <assignee>`.
 **Show** — one file, rendered in order: frontmatter, description, acceptance
 criteria (with the met/total count), comments.
 
-**New** — scan every prefix for the current max `id`, use `max + 1`. Write the
+**New** — `git pull --rebase` first, then take the highest id this checkout has
+**ever** seen across every prefix and use `max + 1`: the filenames in the
+folder, every one ever added on any ref
+(`git log --all --format= --name-only --diff-filter=A -- <backlog dir>`), and
+any in `<config>/trash/`. See `/bugs` for why the folder alone hands out ids
+twice. Write the
 file per the format above with `status: draft`, `created` today, `updated` now, and
 a `parent` if you know it. A brand-new item is `draft` even if you happen to
 write good criteria for it immediately — promote it with the refine step, so

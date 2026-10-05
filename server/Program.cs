@@ -584,7 +584,7 @@ app.MapDelete("/api/bugs/{id:int}", (int id) =>
     return Results.Json(new { ok = true, deleted = id, trash }, json);
 });
 
-// Create a new bug. The ID is assigned automatically (max existing + 1) — the client
+// Create a new bug. The ID is assigned automatically (above every id ever seen — see RecordIds.cs) — the client
 // never supplies it. Returns the created bug (with its new id) so the UI can open it.
 app.MapPost("/api/bugs", async (HttpRequest req) =>
 {
@@ -596,7 +596,9 @@ app.MapPost("/api/bugs", async (HttpRequest req) =>
     if (string.IsNullOrWhiteSpace(title))
         return Results.Json(new { ok = false, error = "title required" }, json, statusCode: 400);
 
-    var nextId = LoadAll(Req.Store.BugsDir).Select(b => b.Id).DefaultIfEmpty(0).Max() + 1;
+    // Above every bug id this checkout has ever seen, not just the folder's — see RecordIds.cs.
+    var nextId = RecordIds.Next(Req.Store.BugsDir, new[] { "BUG" }, Path.Combine(Req.Store.ConfigDir, "trash"),
+        LoadAll(Req.Store.BugsDir).Select(b => b.Id));
     var labels = body.TryGetValue("labels", out var lv) && lv.ValueKind == JsonValueKind.Array
         ? string.Join(", ", lv.EnumerateArray().Select(e => e.GetString()))
         : "";
@@ -726,7 +728,9 @@ app.MapPost("/api/backlog", async (HttpRequest req) =>
 
     var item = new BacklogItem
     {
-        Id = all.Select(i => i.Id).DefaultIfEmpty(0).Max() + 1,
+        // One sequence across every prefix, above every id ever seen — see RecordIds.cs.
+        Id = RecordIds.Next(Req.Store.BacklogDir, BacklogItem.Prefixes.Values, Path.Combine(Req.Store.ConfigDir, "trash"),
+            all.Select(i => i.Id)),
         Type = type,
         Title = title,
         Status = status,

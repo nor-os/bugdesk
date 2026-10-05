@@ -440,8 +440,14 @@ default view excludes `closed`). Report id, title, status, severity, assignee.
 **Show** — read one file, render frontmatter + `## Description` +
 `## Comments` in order.
 
-**New** — scan existing `BUG-*.md` filenames for the current max `id`, use
-`max + 1`. Write the file per the format above: `status: open`,
+**New** — `git pull --rebase` first, then take the highest id this checkout has
+**ever** seen for the store, and use `max + 1`. That is the highest of: the
+`BUG-*.md` filenames in the folder; every one ever added on any ref, which
+`git log --all --format= --name-only --diff-filter=A -- <bugs dir>` lists; and
+any in `<config>/trash/`. The folder alone is not enough: a bug filed on another
+branch, or one deleted or moved away, leaves an id that `max(folder) + 1` hands
+out again, and two records then share a number (BUG-0015). BugDesk's server
+allocates the same way. Write the file per the format above: `status: open`,
 `assignee: <human>`, `reporter: <the same human>` — or, if the user is relaying
 somebody else's report, that person — `created` today and `updated` now. No
 `## History` section: nothing has happened yet. Commit and push it.
