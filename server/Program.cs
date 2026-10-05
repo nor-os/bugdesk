@@ -552,6 +552,38 @@ app.MapPost("/api/bugs/{id:int}/comments", async (int id, HttpRequest req) =>
     return Results.Json(new { ok = true, bug = LoadOne(Req.Store.BugsDir, id) }, json);
 });
 
+// Edit one comment's text. Addressed by its position in the thread (oldest first)
+// AND the date and author the client saw there, so an edit can never land on a
+// different comment after the file moved underneath the page. The header is left
+// alone — who wrote it, when, and which status move it was the message for.
+app.MapPost("/api/bugs/{id:int}/comments/{index:int}", async (int id, int index, HttpRequest req) =>
+{
+    var path = BugPath(Req.Store.BugsDir, id);
+    if (!File.Exists(path)) return Results.Json(new { ok = false, error = "not found" }, json, statusCode: 404);
+    var (text, error) = await EditCommentIn(path, index, req);
+    if (text is null) return Results.Json(new { ok = false, error }, json, statusCode: 409);
+    await Req.Store.WriteRecord(path, text);
+    return Results.Json(new { ok = true, bug = LoadOne(Req.Store.BugsDir, id) }, json);
+});
+
+// Delete a bug: the file moves to the store's trash, beside it rather than in it
+// (see DELETE /api/backlog/{id} for why), so a mis-click is a file move away from
+// undone even where the store is not in git. Links other records hold to it are
+// left as they are and show as "(no such bug)" — rewriting somebody else's record
+// is not part of deleting this one.
+app.MapDelete("/api/bugs/{id:int}", (int id) =>
+{
+    var path = BugPath(Req.Store.BugsDir, id);
+    if (!File.Exists(path)) return Results.Json(new { ok = false, error = "not found" }, json, statusCode: 404);
+    var trash = Path.Combine(Req.Store.ConfigDir, "trash");
+    Directory.CreateDirectory(trash);
+    Req.Store.Watcher.NoteDeletion(path);
+    var to = Path.Combine(trash, $"{DateTime.Now:yyyyMMdd-HHmmss}-{Path.GetFileName(path)}");
+    File.Move(path, to, overwrite: true);
+    app.Logger.LogInformation("BugDesk: deleted bug #{id} to {trash}", id, trash);
+    return Results.Json(new { ok = true, deleted = id, trash }, json);
+});
+
 // Create a new bug. The ID is assigned automatically (max existing + 1) — the client
 // never supplies it. Returns the created bug (with its new id) so the UI can open it.
 app.MapPost("/api/bugs", async (HttpRequest req) =>
@@ -1025,6 +1057,19 @@ app.MapPost("/api/backlog/{id:int}/comments", async (int id, HttpRequest req) =>
 
     await Req.Store.WriteRecord(path, Md.AppendComment(await File.ReadAllTextAsync(path), author ?? Req.Store.Users.HumanAuthor, comment!));
 
+    var reloaded = LoadBacklog(Req.Store.BacklogDir);
+    return Results.Json(new { ok = true, item = FullItem(reloaded, reloaded.First(i => i.Id == id)) }, json);
+});
+
+// The backlog half of editing a comment — same contract as the bug endpoint.
+app.MapPost("/api/backlog/{id:int}/comments/{index:int}", async (int id, int index, HttpRequest req) =>
+{
+    var item = LoadBacklog(Req.Store.BacklogDir).FirstOrDefault(i => i.Id == id);
+    if (item is null) return Results.Json(new { ok = false, error = "not found" }, json, statusCode: 404);
+    var path = Path.Combine(Req.Store.BacklogDir, item.FileName);
+    var (text, error) = await EditCommentIn(path, index, req);
+    if (text is null) return Results.Json(new { ok = false, error }, json, statusCode: 409);
+    await Req.Store.WriteRecord(path, text);
     var reloaded = LoadBacklog(Req.Store.BacklogDir);
     return Results.Json(new { ok = true, item = FullItem(reloaded, reloaded.First(i => i.Id == id)) }, json);
 });
@@ -1909,6 +1954,16 @@ static string? ExtensionForImage(string contentType, string? name)
     return fromName is ".png" or ".jpg" or ".jpeg" or ".gif" or ".webp" or ".svg" or ".avif"
         ? (fromName == ".jpeg" ? ".jpg" : fromName)
         : null;
+}
+
+/// The request half of a comment edit: `{ date, author, body }` in, the edited
+/// text out — or null and why.
+static async Task<(string? Text, string Error)> EditCommentIn(string path, int index, HttpRequest req)
+{
+    var body = await JsonSerializer.DeserializeAsync<Dictionary<string, JsonElement>>(req.Body) ?? new();
+    string Get(string k) => body.TryGetValue(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() ?? "" : "";
+    var text = Md.EditComment(await File.ReadAllTextAsync(path), index, Get("date"), Get("author"), Get("body"), out var error);
+    return (text, error);
 }
 
 static string BugPath(string dir, int id) => Path.Combine(dir, $"BUG-{id:D4}.md");

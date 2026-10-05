@@ -1092,3 +1092,13 @@
     border-color: color-mix(in srgb, var(--ea-accent, #1177b3) 35%, transparent);
     border-left-color: var(--ea-accent, #1177b3);
 }
+
+/* Editing a comment (ticketdesk/comment_edit.js): the pencil sits at the right
+   of the header, after a status tag when there is one, and only shows while the
+   entry is hovered or has focus — a thread is read far more often than edited. */
+.td-wentry__head .td-wentry__edit { margin-left: auto; opacity: 0; transition: opacity 0.12s; align-self: center; }
+.td-wentry__head .td-chip--status + .td-wentry__edit { margin-left: 0; }
+.td-wentry:hover .td-wentry__edit,
+.td-wentry:focus-within .td-wentry__edit { opacity: 1; }
+.td-wentry__editor { margin-top: 4px; }
+.td-wentry__editbar { display: flex; justify-content: flex-end; margin-top: 4px; }

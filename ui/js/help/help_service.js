@@ -238,10 +238,17 @@ comments are attributed.
 A bug's mask shows the stage as a chevron strip plus **Action**
 buttons for the only legal moves from that stage (from Testing, for
 example: "Back to investigation", "Close" or "Back to open"). Every
-stage after Open can go back to Open, and Closed reopens to Open. There's
-no way to jump straight from Open to Closed — the buttons only ever offer
-what the lifecycle allows. The same moves are on a bug's right-click menu
-in the queue and in search results.
+stage after Open can go back to Open, and Closed reopens to Open. **Close**
+is offered from every stage, so a non-issue or a wontfix does not have to
+be walked through testing; its message says why it ended there. The same
+moves are on a bug's right-click menu in the queue and in search results.
+
+**Delete…** (on the bug's page and its right-click menu) removes a bug
+that should never have been filed. It asks first, and the file is moved to
+a trash folder beside the store rather than erased. A bug that was real is
+better closed, so the decision stays on record. A comment's text can be
+edited with the pencil in its header; who wrote it, when, and which move it
+was the message for stay as they were.
 
 Every move except **Start investigation** asks for a message in a dialog,
 and the message is posted as a comment tagged with the move (for example

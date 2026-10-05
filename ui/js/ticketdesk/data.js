@@ -301,6 +301,31 @@ export async function postComment(id, body, author = HUMAN_AUTHOR) {
 }
 
 /**
+ * Replace the text of one comment in either store. `index` is the comment's
+ * position in the thread, oldest first; `date` and `author` are what the page
+ * showed there, and the bridge refuses the edit if the file no longer has them.
+ * `path` is `/bugs/<id>` or `/backlog/<id>`. Resolves to the bridge's answer.
+ */
+export async function editRecordComment(path, index, { date, author }, body) {
+    const res = await fetch(apiUrl(`${path}/comments/${index}`), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', accept: 'application/json' },
+        body: JSON.stringify({ date, author, body }),
+    });
+    const j = await res.json().catch(() => null);
+    if (!res.ok || !j?.ok) throw new Error(j?.error || `edit failed (${res.status})`);
+    return j;
+}
+
+/** Move a bug to the store's trash. */
+export async function deleteBug(id) {
+    const res = await fetch(apiUrl(`/bugs/${id}`), { method: 'DELETE', headers: { accept: 'application/json' } });
+    const j = await res.json().catch(() => null);
+    if (!res.ok || !j?.ok) throw new Error(j?.error || `delete failed (${res.status})`);
+    return j;
+}
+
+/**
  * A record's `updated` value, as the reader's local time to the minute.
  *
  * The bridge writes `updated` in UTC (`2026-09-13T14:05Z`) so records written in

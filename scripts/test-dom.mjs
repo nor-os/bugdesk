@@ -2124,12 +2124,52 @@ await t('a status change\'s message shows its tag in the thread', async () => {
     const moved = entries.map((e) => e.classList.contains('td-wentry--move'));
     assert.deepEqual(moved.filter(Boolean).length, 1, `exactly one entry is a status message: ${moved}`);
     const head = entries[moved.indexOf(true)].querySelector('.td-wentry__head');
-    assert.equal(head.lastElementChild.className, 'td-chip td-chip--status');
+    // Last but for the edit pencil, which always closes the header.
+    assert.ok(head.lastElementChild.matches('[data-a="edit-comment"]'), 'no edit pencil at the end of the header');
+    assert.equal(head.lastElementChild.previousElementSibling.className, 'td-chip td-chip--status');
     // The author is named once: the badge beside the name repeated it.
     assert.deepEqual([...head.querySelectorAll('.td-chip')].map((c) => c.className),
         ['td-chip td-chip--status'], 'the author is named twice in the header');
     assert.equal(head.querySelector('b').textContent, me);
     m.done();
+});
+
+/* BUG-0012: a comment can be edited. The pencil addresses the comment by its
+ * position in the FILE — the thread is drawn newest first — plus the date and
+ * author shown, and only the text goes to the bridge. */
+await t('editing a comment posts its file index, date, author and the new text', async () => {
+    const realFetchLocal = globalThis.fetch;
+    const m = await mountTicketPage(bug42({ comments: [
+        { date: '2026-09-12', author: 'alice', body: 'Oldest.', note: '' },
+        { date: '2026-09-13T14:05Z', author: me, body: 'Newest.', note: '' },
+    ] }));
+    let posted = null;
+    put('fetch', async (url, init) => {
+        if (init?.method === 'POST' && /\/bugs\/42\/comments\/\d+$/.test(String(url))) {
+            posted = { url: String(url), body: JSON.parse(init.body) };
+            return new Response(JSON.stringify({ ok: true, bug: { id: 42, title: 'x', status: 'open', comments: [], history: [] } }),
+                                { headers: { 'content-type': 'application/json' } });
+        }
+        return realFetchLocal(url, init);
+    });
+    try {
+        const entries = [...m.host.querySelectorAll('[data-slot="comments"] .td-wentry')];
+        const oldest = entries.find((e) => e.textContent.includes('Oldest.'));
+        assert.equal(oldest.dataset.cidx, '0', 'the oldest comment is not file index 0');
+        oldest.querySelector('[data-a="edit-comment"]').click();
+        const ta = oldest.querySelector('.td-wentry__editor textarea');
+        assert.ok(ta, 'no editor opened');
+        assert.equal(ta.value, 'Oldest.');
+        ta.value = 'Oldest, edited.';
+        oldest.querySelector('.td-mde__submit').click();
+        for (let i = 0; i < 20 && !posted; i++) await new Promise((r) => setTimeout(r, 10));
+        assert.ok(posted, 'nothing was posted');
+        assert.match(posted.url, /\/bugs\/42\/comments\/0$/);
+        assert.deepEqual(posted.body, { date: '2026-09-12', author: 'alice', body: 'Oldest, edited.' });
+    } finally {
+        put('fetch', realFetchLocal);
+        m.done();
+    }
 });
 
 await t('the History pane exists, starts hidden, and Comments does not', async () => {

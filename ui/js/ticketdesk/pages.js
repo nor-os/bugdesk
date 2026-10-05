@@ -42,7 +42,7 @@ import { mountTileBreadcrumb } from '@flexdesk/wm';
 import { activeTopNavKind, taxonomy } from '../tiling/kind_taxonomy.js';
 import { installRecordDragSource, markDragCell, openRecordAs } from './record_dnd.js';
 import { DataTable } from '../ui/components/data_table.js';
-import { showContextMenu } from '@flexdesk/widgets';
+import { openConfirm, showContextMenu } from '@flexdesk/widgets';
 import {
     BUILTIN_FILTERS, FILTER_FIELDS, MODEL, SCOPE,
     describeFilter, deleteFilter, duplicateFilter, getFilter,
@@ -63,10 +63,11 @@ import { attachTagInput } from './tag_input.js';
 import { ITEMS, isClosedItem, loadBacklog } from './backlog_data.js';
 import { watchRecord } from './live.js';
 import { BUG_TRANSITIONS, moveBug, resolveMoveMessage } from './bug_transitions.js';
+import { attachCommentEditing, editButtonHTML } from './comment_edit.js';
 import { paintRecordCount, publishRecordCount } from './record_count.js';
 import {
     esc, STAGES, TICKETS, TEAM, HUMAN_AUTHOR, AGENT_AUTHOR, assigneeOptions, formatStamp,
-    fetchBug, patchBug, postComment, createBug, duplicateBug, loadData, initials, teamNames,
+    fetchBug, patchBug, postComment, createBug, deleteBug, duplicateBug, loadData, initials, teamNames,
     machineStatus, machineType, typeCode, typeLabelOf, humanizeStatus,
 } from './data.js';
 
@@ -372,6 +373,8 @@ function mountQueues(host, props, ctx) {
             { separator: true },
             { label: n > 1 ? `Copy ${n} bug IDs` : 'Copy bug ID', icon: 'content_copy', action: 'copy-id', disabled: !n },
             { separator: true },
+            { label: 'Delete…', icon: 'delete', action: 'delete', disabled: !cm.row, danger: true },
+            { separator: true },
             // Greyed out rather than hidden, so the menu keeps a stable shape
             // whichever cell the user happened to hit.
             { label: cc ? `Filter by ${fieldLabel} “${cc.value}”` : 'Filter by this cell',
@@ -400,6 +403,9 @@ function mountQueues(host, props, ctx) {
             case 'open-window': if (one) openTicket(one, { dest: 'window' }); break;
             case 'open-split-h': if (one) openTicket(one, { dest: 'split-h' }); break;
             case 'open-split-v': if (one) openTicket(one, { dest: 'split-v' }); break;
+            case 'delete':
+                if (cm.row) confirmDeleteBug(TICKETS.find((x) => x.id === cm.row[QUEUE_ID_COL]));
+                break;
             case 'copy-id':
                 if (ids.length) copyText(ids.join('\n'),
                     `Copied ${ids.length} bug ID${ids.length === 1 ? '' : 's'}.`);
@@ -601,7 +607,38 @@ const WORKFLOW_ACTIONS = [
     { id: 'duplicate', label: 'Mark as duplicate and close', icon: 'content_copy',
       title: 'Pick the record this duplicates, link it, and close this one',
       when: (closed) => !closed },
+    { id: 'delete', label: 'Delete…', icon: 'delete',
+      title: 'Delete this bug — it is moved to the store\'s trash',
+      when: () => true },
 ];
+
+/**
+ * Ask, then delete one bug. The bridge moves the file to the store's trash
+ * (beside the store, not in it), so this is undone by moving it back; closing
+ * is still the right answer for a bug that was real, and the dialog says so.
+ * Resolves to true when the bug was deleted.
+ */
+async function confirmDeleteBug(bug) {
+    if (!bug?.bugId) return false;
+    const ok = await openConfirm({
+        title: `Delete bug #${bug.bugId}`,
+        message: `<p>Delete <b>#${esc(bug.bugId)} — ${esc(bug.summary || '')}</b>?</p>
+            <p class="td-dim">The file is moved to the store's trash folder, not erased.
+            To record that it was dealt with, Close it instead.</p>`,
+        confirmLabel: 'Delete', danger: true, icon: 'delete',
+    });
+    if (!ok) return false;
+    try {
+        await deleteBug(bug.bugId);
+        statusLine(`Bug #${bug.bugId} deleted (moved to the trash).`);
+        await loadData();
+        _eventBus?.emit?.('bugs:changed', { store: 'bugs', id: bug.bugId });
+        return true;
+    } catch (err) {
+        statusLine(`Could not delete bug #${bug.bugId}: ${err?.message || err}`);
+        return false;
+    }
+}
 const STAGE_STATUS = ['Open', 'Investigation', 'Testing', 'Closed'];
 const SEV_PRI = { crash: 1, high: 2, medium: 3, low: 4 };
 
@@ -1225,14 +1262,17 @@ function mountTicket(host, props, ctx) {
     // note's coloured edge. A status change's message gets the whole entry
     // marked (`--move`) and its tag at the right of the header, so a decision
     // does not read as another remark.
-    const commentHTML = (c) => `
-        <div class="td-wentry td-wentry--${c.author === HUMAN_AUTHOR ? 'human' : 'agent'}${c.note ? ' td-wentry--move' : ''}">
+    // `idx` is the comment's position in the FILE (oldest first) — what an edit is
+    // addressed by, whatever order the thread is drawn in.
+    const commentHTML = (c, idx) => `
+        <div class="td-wentry td-wentry--${c.author === HUMAN_AUTHOR ? 'human' : 'agent'}${c.note ? ' td-wentry--move' : ''}" data-cidx="${idx}">
             <span class="td-avatar">${esc(initials(c.author))}</span>
             <div>
                 <div class="td-wentry__head">
                     <b>${esc(c.author)}</b>
                     <span class="td-dim td-mono">${esc(formatStamp(c.date))}</span>
                     ${statusTag(c.note)}
+                    ${editButtonHTML()}
                 </div>
                 <div class="td-wentry__text td-md">${md(c.body)}</div>
             </div>
@@ -1274,15 +1314,19 @@ function mountTicket(host, props, ctx) {
     };
 
     let composer = null;   // the live markdown editor, torn down on re-render
+    let commentEditing = null;   // the pencils on the thread, likewise
     const renderComments = (bug) => {
         const el = cmtHost();
         if (!el) return;
         try { composer?.destroy(); } catch { /* previous mount already gone */ }
         composer = null;
+        try { commentEditing?.destroy(); } catch { /* previous mount already gone */ }
+        commentEditing = null;
         // NEWEST FIRST. The composer sits at the top, so the reply you just
         // wrote appears where you are looking instead of scrolling away below
         // a year of history.
-        const comments = (bug.comments || []).slice().reverse();
+        const thread = bug.comments || [];
+        const comments = thread.map((c, idx) => [c, idx]).reverse();
         el.innerHTML = `
             <div class="td-composer">
                 <span class="td-avatar">${esc(initials(HUMAN_AUTHOR))}</span>
@@ -1291,7 +1335,13 @@ function mountTicket(host, props, ctx) {
                         placeholder="Add a comment as ${esc(HUMAN_AUTHOR)}… (Enter posts, Alt+Enter for a new line, paste a screenshot to attach it)"></textarea>
                 </div>
             </div>
-            <div class="td-wstream">${comments.length ? comments.map(commentHTML).join('') : '<div class="td-dim">No comments yet.</div>'}</div>`;
+            <div class="td-wstream">${comments.length ? comments.map(([c, idx]) => commentHTML(c, idx)).join('') : '<div class="td-dim">No comments yet.</div>'}</div>`;
+        if (t.bugId) {
+            commentEditing = attachCommentEditing(el.querySelector('.td-wstream'), {
+                comments: thread, path: `/bugs/${t.bugId}`, onStatus: statusLine,
+                onSaved: (answer) => applyRecord(answer.bug),
+            });
+        }
 
         const ta = el.querySelector('textarea');
         const post = async (text) => {
@@ -1365,8 +1415,8 @@ function mountTicket(host, props, ctx) {
     };
 
     // Chevrons are display-only — the lifecycle is driven exclusively by the
-    // Action buttons below, so no invalid transition (e.g. close from
-    // investigation) is reachable from the UI.
+    // Action buttons below, so only the moves in BUG_TRANSITIONS are reachable
+    // from the UI.
     host.addEventListener('click', (e) => {
         const wf = e.target.closest('[data-wf]');
         if (!wf) return;
@@ -1436,7 +1486,15 @@ function mountTicket(host, props, ctx) {
 
     // [data-wfa], not [data-wf]: a `data-wf` value is a target STATUS, and these are not
     // statuses, so they get their own attribute rather than a lookalike one.
-    const WF_ACTIONS = { duplicate: markDuplicate };
+    const deleteThis = async () => {
+        const stored = TICKETS.find((x) => x.bugId === t.bugId) || t;
+        if (!(await confirmDeleteBug(stored))) return;
+        live.clear();
+        // The record is gone; leave its page the way Backspace would — back to the
+        // list it was opened from.
+        ctx.wm?.navigateBack?.();
+    };
+    const WF_ACTIONS = { duplicate: markDuplicate, delete: deleteThis };
     host.addEventListener('click', (e) => {
         const a = e.target.closest('[data-wfa]');
         if (a) { WF_ACTIONS[a.dataset.wfa]?.(); }
@@ -1479,6 +1537,7 @@ function mountTicket(host, props, ctx) {
             // tile and the handler would otherwise pile up one per ticket opened.
             actionsEl?.removeEventListener('click', onAction);
             try { composer?.destroy(); } catch { /* already gone */ }
+            try { commentEditing?.destroy(); } catch { /* already gone */ }
         },
     };
 }

@@ -2,14 +2,12 @@
  * ticketdesk/delete_item.js — removing a record, and asking the one question
  * that actually has to be asked first.
  *
- * TRACKER MODE ONLY, on purpose. In a shared backlog the right way to cancel
- * work is `dropped` — the file stays, with a comment saying why, because the
- * decision not to build something is itself worth keeping and somebody will ask
- * about it in three months. A tracker is the opposite case: it is one person's
- * follow-up list, a mis-filed ticket is noise rather than history, and an intake
- * pass over a long email thread can easily produce a duplicate nobody wants a
- * record of. Both skills still say to drop rather than delete; this is the
- * exception that mode earns, not a general licence.
+ * IN EVERY MODE (BUG-0012). It used to be tracker-only: in a shared backlog
+ * the right way to cancel work is `dropped`, because the decision not to build
+ * something is worth keeping. That still holds, and the skills still say to
+ * drop rather than delete — but a mis-filed record, a test entry or a
+ * duplicate nobody wants a trace of is noise, not history, and the person
+ * triaging has to be able to remove it without a file manager.
  *
  * WHAT IT ASKS. Deleting something with work under it has two defensible
  * answers and no safe default:
@@ -28,7 +26,7 @@
  * any repo, so there is no `git checkout` to undo a mis-click.
  */
 
-import { ITEMS, itemRef, loadBacklog, typeLabelOf } from './backlog_data.js';
+import { ITEMS, TRACKER, itemRef, loadBacklog, typeLabelOf } from './backlog_data.js';
 import { appName } from '../core/app_identity.js';
 import { apiUrl } from './instance.js';
 
@@ -67,8 +65,9 @@ export async function confirmDelete(item, { onStatus } = {}) {
     if (kids.length === 0) {
         if (!window.confirm(
             `Delete ${ref} — ${item.title}?\n\n`
-            + `This ${noun} is not in a git repository, so the only copy is the one on disk. `
-            + `${appName()} moves it to a .trash folder beside the store rather than removing it.`
+            + (TRACKER ? `This ${noun} is not in a git repository, so the only copy is the one on disk. ` : '')
+            + `${appName()} moves it to a trash folder beside the store rather than removing it.`
+            + (TRACKER ? '' : `\n\nTo keep the decision on record instead, drop it.`)
         )) return null;
     } else {
         // Three-way, and window.confirm only says yes or no — so it is asked as

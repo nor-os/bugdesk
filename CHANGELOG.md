@@ -7,6 +7,14 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Delete a record, close a bug from anywhere, edit a comment** (BUG-0012).
+  A bug can be deleted from its page or the queue's right-click menu, and a
+  backlog item in every mode, not only in tracker mode. Each asks first, and the
+  file is moved to a trash folder beside the store. **Close** is offered from
+  every bug status, still with its message. A comment's text can be edited with
+  the pencil in its header; the header (author, time, the move it was the
+  message for) is kept, and the edit is refused if the comment changed on disk
+  meanwhile.
 - **Records are parsed once, not on every request.** The bug and backlog
   folders are cached in memory and mirrored to `.bugdesk/cache/*.json` (a
   tracker: `config/cache/`), so a restart does not re-parse them either. The

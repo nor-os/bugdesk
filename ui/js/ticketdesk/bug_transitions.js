@@ -22,9 +22,14 @@
 import { HUMAN_AUTHOR, fetchBug, patchBug } from './data.js';
 
 /** Moves per status, primary (the usual next step) first: `[label, target]`. */
+//
+// CLOSE IS ALWAYS OFFERED. A bug that turns out to be a non-issue, a duplicate
+// nobody linked or a wontfix should not have to be walked through testing to be
+// put down; the close message (required, like every move but starting work)
+// says why it ended where it did.
 export const BUG_TRANSITIONS = {
-    open: [['Start investigation', 'investigation']],
-    investigation: [['Hand to testing', 'testing'], ['Back to open', 'open']],
+    open: [['Start investigation', 'investigation'], ['Close', 'closed']],
+    investigation: [['Hand to testing', 'testing'], ['Close', 'closed'], ['Back to open', 'open']],
     testing: [['Back to investigation', 'investigation'], ['Close', 'closed'], ['Back to open', 'open']],
     // Reopening goes to OPEN: a closed bug that is wrong again starts over as
     // something nobody has looked at yet.

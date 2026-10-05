@@ -33,6 +33,7 @@ import { watchRecord } from './live.js';
 import { attachParentPicker, childTypesFor, openItemPicker, openRecordPicker } from './item_picker.js';
 import { installRecordDragSource, markDragCell, openRecordAs } from './record_dnd.js';
 import { confirmDelete } from './delete_item.js';
+import { attachCommentEditing, editButtonHTML } from './comment_edit.js';
 import { openFilterEditor } from './filter_editor.js';
 import { openNewItem } from './new_item.js';
 import { paintRecordCount, publishRecordCount } from './record_count.js';
@@ -371,11 +372,9 @@ function mountBacklogBoard(host, props, ctx) {
                 // than hidden — the menu keeps one shape whichever row you hit.
                 { label: 'Add child…', icon: 'add', action: 'add-child',
                   disabled: !model || childTypesFor(model.type).length === 0 },
-                ...(TRACKER ? [
-                    { separator: true },
-                    { label: 'Delete…', icon: 'delete', action: 'delete',
-                      disabled: !model, danger: true },
-                ] : []),
+                { separator: true },
+                { label: 'Delete…', icon: 'delete', action: 'delete',
+                  disabled: !model, danger: true },
                 { separator: true },
                 { label: refs.length > 1 ? `Copy ${refs.length} references` : 'Copy reference',
                   icon: 'content_copy', action: 'copy-ref', disabled: !refs.length },
@@ -613,10 +612,10 @@ function mountItem(host, props, ctx) {
         <div class="td-mask">
             <section class="td-group">
                 <div class="td-group__title">${TRACKER ? 'Ticket' : 'Backlog Item'}
-                    ${TRACKER ? `<span class="td-group__actions">
+                    <span class="td-group__actions">
                         <button class="ea-btn ea-btn--small ea-btn--danger" data-a="delete"
                                 title="Delete this record">${icon('delete')} Delete</button>
-                    </span>` : ''}
+                    </span>
                 </div>
                 <div class="td-group__body td-grid2" data-slot="record"></div>
             </section>
@@ -697,17 +696,18 @@ function mountItem(host, props, ctx) {
 
     let tagInput = null;
     let composer = null;
+    let commentEditing = null;    // the pencils on the thread (comment_edit.js)
     let acceptanceEditor = null;
     let descEditor = null;
     const fieldSelects = [];      // custom dropdowns replacing the bare <select>s
     let parentPicker = null;      // the shared search control (item_picker.js)
     const destroyWidgets = () => {
-        for (const w of [tagInput, composer, acceptanceEditor, descEditor, parentPicker, ...fieldSelects]) {
+        for (const w of [tagInput, composer, commentEditing, acceptanceEditor, descEditor, parentPicker, ...fieldSelects]) {
             try { w?.destroy(); } catch { /* already gone */ }
         }
         fieldSelects.length = 0;
         parentPicker = null;
-        tagInput = composer = acceptanceEditor = descEditor = null;
+        tagInput = composer = commentEditing = acceptanceEditor = descEditor = null;
     };
 
     /* ── record ─────────────────────────────────────────────────── */
@@ -1221,14 +1221,16 @@ function mountItem(host, props, ctx) {
         } catch (err) { statusLine(`Save failed: ${err?.message || err}`); }
     };
 
-    const commentHTML = (c) => `
-        <div class="td-wentry td-wentry--${c.author === HUMAN_AUTHOR ? 'human' : 'agent'}${c.note ? ' td-wentry--move' : ''}">
+    // `idx` is the comment's position in the file — see comment_edit.js.
+    const commentHTML = (c, idx) => `
+        <div class="td-wentry td-wentry--${c.author === HUMAN_AUTHOR ? 'human' : 'agent'}${c.note ? ' td-wentry--move' : ''}" data-cidx="${idx}">
             <span class="td-avatar">${esc(initials(c.author))}</span>
             <div>
                 <div class="td-wentry__head">
                     <b>${esc(c.author)}</b>
                     <span class="td-dim td-mono">${esc(formatStamp(c.date))}</span>
                     ${statusTag(c.note)}
+                    ${editButtonHTML()}
                 </div>
                 <div class="td-wentry__text td-md">${md(c.body)}</div>
             </div>
@@ -1267,9 +1269,12 @@ function mountItem(host, props, ctx) {
         const el = $('[data-slot="comments"]');
         try { composer?.destroy(); } catch { /* previous mount already gone */ }
         composer = null;
+        try { commentEditing?.destroy(); } catch { /* previous mount already gone */ }
+        commentEditing = null;
         // Newest first, composer at the top — the reply you just wrote appears
         // where you are looking. Same reasoning as the bug mask.
-        const comments = (item.comments || []).slice().reverse();
+        const thread = item.comments || [];
+        const comments = thread.map((c, idx) => [c, idx]).reverse();
         el.innerHTML = `
             <div class="td-composer">
                 <span class="td-avatar">${esc(initials(HUMAN_AUTHOR))}</span>
@@ -1278,7 +1283,11 @@ function mountItem(host, props, ctx) {
                         placeholder="Add a comment as ${esc(HUMAN_AUTHOR)}… (Enter posts, Alt+Enter for a new line)"></textarea>
                 </div>
             </div>
-            <div class="td-wstream">${comments.length ? comments.map(commentHTML).join('') : '<div class="td-dim">No comments yet.</div>'}</div>`;
+            <div class="td-wstream">${comments.length ? comments.map(([c, idx]) => commentHTML(c, idx)).join('') : '<div class="td-dim">No comments yet.</div>'}</div>`;
+        commentEditing = attachCommentEditing(el.querySelector('.td-wstream'), {
+            comments: thread, path: `/backlog/${item.id}`, onStatus: statusLine,
+            onSaved: (answer) => apply(answer.item),
+        });
 
         composer = attachMarkdownEditor(el.querySelector('textarea'), {
             submitLabel: 'Comment',

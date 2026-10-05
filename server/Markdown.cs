@@ -371,6 +371,46 @@ static class Md
         return SetFrontmatter(next, "updated", Now());
     }
 
+    /// <summary>
+    /// Replace the body of the <paramref name="index"/>-th comment (file order, oldest
+    /// first), leaving its header — date, author, a status note — exactly as it was.
+    /// <paramref name="date"/> and <paramref name="author"/> must still match that header:
+    /// the index is a position, and a comment appended or edited in the file since the
+    /// page was drawn would otherwise put the new text under somebody else's name.
+    /// Returns null, with <paramref name="error"/> set, when the edit cannot be made.
+    /// </summary>
+    public static string? EditComment(string text, int index, string date, string author, string body, out string error)
+    {
+        error = "";
+        body = body.Trim();
+        if (body.Length == 0) { error = "a comment cannot be empty"; return null; }
+        // A heading or a comment header inside the body would split the thread on the
+        // next read: everything after it would become a section or a comment of its own.
+        if (Regex.IsMatch(body, @"^##\s", RegexOptions.Multiline) || CommentHdr.IsMatch(body))
+        {
+            error = "a comment cannot contain a ## heading or a ### date · author line";
+            return null;
+        }
+        var i = text.IndexOf("## Comments", StringComparison.Ordinal);
+        var matches = i < 0 ? null : CommentHdr.Matches(text[i..]);
+        if (matches is null || index < 0 || index >= matches.Count) { error = "no such comment"; return null; }
+        var m = matches[index];
+        if (m.Groups["date"].Value != date
+            || !string.Equals(m.Groups["author"].Value.Trim(), author.Trim(), StringComparison.Ordinal))
+        {
+            error = "the comment has changed on disk since it was shown — reload and try again";
+            return null;
+        }
+        // From the end of the header LINE — the match's trailing `\s*` can run on
+        // through the blank line below it.
+        var lineEnd = text.IndexOf('\n', i + m.Index);
+        var start = lineEnd < 0 ? text.Length : lineEnd + 1;
+        var stop = index + 1 < matches.Count ? i + matches[index + 1].Index : text.Length;
+        var tail = index + 1 < matches.Count ? "\n\n" : "\n";
+        var next = text[..start] + (lineEnd < 0 ? "\n\n" : "\n") + body + tail + text[stop..];
+        return SetFrontmatter(next, "updated", Now());
+    }
+
     /// <summary>A note has to stay inside its brackets on one header line.</summary>
     static string CleanNote(string note) =>
         Regex.Replace(note, @"[()\r\n]+", " ").Trim();

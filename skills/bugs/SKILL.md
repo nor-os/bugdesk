@@ -305,7 +305,8 @@ same edit whose header note is the move (see Comment headers).
 `open` is where a bug starts, and where it goes back to when nobody should be
 on it yet: mis-triaged, abandoned, or reopened as something to look at fresh.
 A person does that from the UI; as an agent, only move a bug back to `open`
-when the user asks. `closed` is only reached from `testing`. How you move a bug through it is not a matter of taste — see
+when the user asks. As an agent, `closed` is only reached from `testing`; the
+human may close a bug from any status in the UI, with a message saying why. How you move a bug through it is not a matter of taste — see
 the next section.
 
 ## Working on a bug — the sequence
