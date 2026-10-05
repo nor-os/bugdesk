@@ -29,7 +29,7 @@ import { HelpModal } from '../help/help_modal.js';
 import { installRecordCount, paintRecordCount } from '../ticketdesk/record_count.js';
 
 import {
-    WindowManager, createContentRegistry, installKeymap, mountZoomControl, openTileTabMenu,
+    WindowManager, createContentRegistry, installKeymap, mountZoomControl,
 } from '@flexdesk/wm';
 import { createPywebviewHost } from '@flexdesk/host';
 import { createTableStateStore, installAutoScrollbars, openForm, showContextMenu } from '@flexdesk/widgets';
@@ -742,17 +742,24 @@ function _tileTabMenu(wm, leafId, x, y) {
     const tabs = Array.isArray(leaf.tabs) ? leaf.tabs : [];
     if (tabs.length === 0) return;
     const activeIdx = Math.max(0, Math.min(tabs.length - 1, leaf.activeTabIdx || 0));
-    openTileTabMenu({
-        x, y,
-        tabs: tabs.map((t) => ({ kind: t.kind, title: t.title })),
-        activeIdx,
-        onPick: (idx) => {
-            tree.setActiveLeafTab(leafId, idx);
-            tree.focus(leafId);
-            wm.renderer.render();
-            wm._persist?.();
-            wm._notifyChange?.('tab-switch-from-menu');
-        },
+    // FlexDesk's standard context menu, listing the tile's tabs. This used to
+    // call FlexDesk's openTileTabMenu with a tab list, but that function is an
+    // "open a record in a new tab" picker that needs an entity catalogue; given
+    // tabs it logged an error and drew nothing, so the ☰ did nothing at all.
+    const items = tabs.map((t, i) => ({
+        label: t.title || taxonomy.meta(t.kind)?.label || t.kind,
+        icon: i === activeIdx ? 'check' : (taxonomy.meta(t.kind)?.icon || 'tab'),
+        action: `tab:${i}`,
+    }));
+    items.push({ separator: true });
+    items.push({ label: 'Close other tabs', icon: 'tab_close', action: 'close-others',
+                 disabled: tabs.length < 2 });
+    showContextMenu(x, y, items, (action) => {
+        if (action.startsWith('tab:')) {
+            wm._leafTabAction(leafId, 'switch', { idx: Number(action.slice(4)) });
+        } else if (action === 'close-others') {
+            wm._leafTabAction(leafId, 'close-others', { idx: activeIdx });
+        }
     });
 }
 
