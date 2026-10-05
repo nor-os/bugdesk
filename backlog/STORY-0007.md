@@ -3,7 +3,7 @@ id: 7
 type: story
 title: "Add custom actions"
 status: draft
-parent: 3
+parent: 17
 phase:
 assignee:
 reporter: norman
@@ -13,7 +13,7 @@ subsystem: unsorted
 labels: []
 links: []
 created: 2026-10-05
-updated: 2026-10-05T19:13Z
+updated: 2026-10-05T21:12Z
 ---
 
 ## Description
