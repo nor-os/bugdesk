@@ -49,6 +49,14 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The UI's API calls are relative to the page, so they reach the project it
   was opened on. An unprefixed `/api/…` call reaches the default project.
 
+### Fixed
+
+- Sorting a list goes back to its first page. It stayed on the page you were
+  on, so on page 3 a new order showed its rows 201–300, which looked as if
+  sorting and filtering only covered the visible page (BUG-0013). An ad-hoc
+  filter view and search results no longer reopen on a page left over from a
+  different list.
+
 ## 0.3.0 — 2026-09-10
 
 ### Added

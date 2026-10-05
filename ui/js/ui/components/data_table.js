@@ -190,6 +190,10 @@ export class DataTable {
             // straight through the bridge.
             persistKey: null,
             stateStore: null,
+            // Whether the page you were on is restored with the rest. Off for a
+            // key whose rows change from one mount to the next (ad-hoc filters,
+            // search results): their old page is a place in another list.
+            persistPage: true,
             ...config,
         };
 
@@ -278,8 +282,9 @@ export class DataTable {
             applied = true;
         }
         // The page you were on. Clamped at render, because the rows may have
-        // shrunk since it was saved.
-        if (Number.isInteger(blob.offset) && blob.offset >= 0) {
+        // shrunk since it was saved. Not for a key shared by DIFFERENT row sets
+        // (`persistPage: false`): page 3 of one search is not a place in the next.
+        if (this.config.persistPage !== false && Number.isInteger(blob.offset) && blob.offset >= 0) {
             this._state.offset = blob.offset;
             applied = true;
         }
@@ -526,6 +531,10 @@ export class DataTable {
         // Invalidate processed cache
         this._processedRows = null;
         this._processedIndexMap = null;
+        // A new order starts at its first page. Staying on page 3 showed rows
+        // 201–300 of the NEW order — on 250 rows sorted descending, rows 50…1 —
+        // which reads exactly like "it only sorted the page I was on".
+        this._state.offset = 0;
 
         // Auto-spinner: if the sort handler returns a Promise (i.e.
         // it does a server-side refetch), show the loading overlay

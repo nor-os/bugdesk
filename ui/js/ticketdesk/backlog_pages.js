@@ -333,6 +333,8 @@ function mountBacklogBoard(host, props, ctx) {
     const persistKey = `backlog:board:${view.key || 'adhoc'}${flat ? ':flat' : ''}`;
     const table = new DataTable(host.querySelector('.td-tablehost'), {
         ...(ctx?.tableStore ? { stateStore: ctx.tableStore, persistKey } : {}),
+        // Ad-hoc views share one slot; see the bug queue.
+        persistPage: !!view.key,
         headers: BOARD_HEADERS,
         rows: [],
         // A board can outgrow one page; the strip appears only when it does.

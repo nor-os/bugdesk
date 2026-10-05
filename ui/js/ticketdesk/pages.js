@@ -430,6 +430,9 @@ function mountQueues(host, props, ctx) {
     const persistKey = `bugs:queue:${resolved.key || 'adhoc'}`;
     const table = new DataTable(host.querySelector('.td-tablehost'), {
         ...(ctx?.tableStore ? { stateStore: ctx.tableStore, persistKey } : {}),
+        // Every ad-hoc view shares the 'adhoc' slot, so its page would land a
+        // new filter's results on whatever page the last one was left on.
+        persistPage: !!resolved.key,
         headers: QUEUE_HEADERS,
         rows: TICKETS.filter(resolved.match).map(queueRow),
         // A queue can outgrow one page; the strip appears only when it does.
@@ -1028,6 +1031,8 @@ function mountTicket(host, props, ctx) {
                 // The results are rebuilt on every search, so this is how a sort
                 // you chose survives running the next one.
                 ...(ctx?.tableStore ? { stateStore: ctx.tableStore, persistKey: 'bugs:search' } : {}),
+                // A new search starts on its first page, not the last one's.
+                persistPage: false,
                 headers: ['Ref', 'Store', 'Type', 'Summary', 'Status', 'Updated', 'Assignee'],
                 rows: matches.map((m) => [m.ref, m.store === 'backlog' ? 'Backlog' : 'Bugs',
                                           m.type, m.summary, m.status, m.sla, m.assignee]),

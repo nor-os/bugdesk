@@ -1838,6 +1838,38 @@ await t('the page you were on survives a remount, and a page past the end lands 
     c.table.dispose(); c.host.remove();
 });
 
+/* BUG-0013, "filtering and sorting only work on the current page": they always
+ * covered every row, but the table stayed on the page you were on — sorted
+ * descending from page 3 of 250, it showed rows 50…1 — and a table sharing a
+ * key across different row sets (ad-hoc views, search) reopened on the last
+ * one's page. */
+await t('a sort starts at the first page of the new order', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const rows = Array.from({ length: 250 }, (_, i) => [i + 1, `row ${i + 1}`]);
+    const table = new PagedTable(host, { headers: ['Id', 'Summary'], rows, pagination: true, sortable: true });
+    table.render();
+    table.goToPage(2);
+    table.sortBy(0, false);
+    assert.equal(table.getDisplayedRows()[0][0], 250, 'the sort kept the old page');
+    assert.match(host.querySelector('.pagination-controls').textContent, /1–100 of 250/);
+    table.dispose();
+    host.remove();
+});
+
+await t('persistPage: false keeps the sort but not the page', () => {
+    const saved = new Map([['shared', { sortColumn: 0, sortAscending: false, filters: [], offset: 200 }]]);
+    const stateStore = { ready: async () => {}, get: (k) => saved.get(k), set: (k, v) => saved.set(k, v) };
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const table = new PagedTable(host, { headers: ['Id', 'Summary'], rows: manyRows, pagination: true, sortable: true,
+                                         stateStore, persistKey: 'shared', persistPage: false });
+    table.render();
+    assert.equal(table.getDisplayedRows()[0][0], '#99', 'the sort was not restored, or the page was');
+    table.dispose();
+    host.remove();
+});
+
 
 console.log('\nInspector, end to end');
 
