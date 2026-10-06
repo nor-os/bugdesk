@@ -1,6 +1,6 @@
 ---
 id: 5
-type: task
+type: story
 title: "Alerts"
 status: draft
 parent: 17
@@ -13,7 +13,7 @@ subsystem: unsorted
 labels: []
 links: []
 created: 2026-10-05
-updated: 2026-10-05T21:12Z
+updated: 2026-10-06T01:55Z
 ---
 
 ## Description

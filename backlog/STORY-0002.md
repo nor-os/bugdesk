@@ -3,7 +3,7 @@ id: 2
 type: story
 title: "Store-specific prefixes"
 status: draft
-parent:
+parent: 19
 phase:
 assignee:
 reporter: norman
@@ -13,7 +13,7 @@ subsystem: unsorted
 labels: []
 links: []
 created: 2026-10-05
-updated: 2026-10-05T18:43Z
+updated: 2026-10-06T01:55Z
 ---
 
 ## Description

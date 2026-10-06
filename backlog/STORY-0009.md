@@ -1,9 +1,9 @@
 ---
 id: 9
 type: story
-title: "Add webview"
+title: "Spike: desktop app via webview"
 status: draft
-parent:
+parent: 21
 phase:
 assignee:
 reporter: norman
@@ -13,7 +13,7 @@ subsystem: unsorted
 labels: []
 links: []
 created: 2026-10-05
-updated: 2026-10-05T19:48Z
+updated: 2026-10-06T01:55Z
 ---
 
 ## Description

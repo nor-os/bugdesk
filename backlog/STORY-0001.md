@@ -3,7 +3,7 @@ id: 1
 type: story
 title: "Add Conversion journeys"
 status: draft
-parent:
+parent: 19
 phase:
 assignee:
 reporter: norman
@@ -13,7 +13,7 @@ subsystem: unsorted
 labels: []
 links: []
 created: 2026-10-02
-updated: 2026-10-02T09:54Z
+updated: 2026-10-06T01:55Z
 ---
 
 ## Description
