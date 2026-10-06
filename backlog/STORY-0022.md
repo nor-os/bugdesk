@@ -2,18 +2,18 @@
 id: 22
 type: story
 title: "Retire BugDesk's modal fork for FlexDesk's"
-status: draft
+status: refined
 parent: 12
 phase:
 assignee:
 reporter: norman
 due:
-points:
+points: 5
 subsystem: ui
 labels: [flexdesk, tech-debt]
 links: []
 created: 2026-10-06
-updated: 2026-10-06T01:55Z
+updated: 2026-10-06T01:56Z
 ---
 
 ## Description
@@ -27,4 +27,19 @@ delete the copy.
 
 ## Acceptance criteria
 
-_(not refined yet)_
+- [ ] Every dialog BugDesk opens through `modal.js` (settings, collaborators, first run, project switcher, the bug-move messages) works as before, on FlexDesk's `modal.js`
+- [ ] Whatever BugDesk's copy has that FlexDesk lacks is added to FlexDesk with a test there, and released
+- [ ] `ui/js/ui/components/modal.js` is gone, and no BugDesk file imports it
+- [ ] BugDesk's DOM and UI test suites pass, with no test deleted just to make them pass
+
+## History
+
+- 2026-10-06 · norman_agent · status: draft -> refined
+
+## Comments
+
+### 2026-10-06T01:56Z · norman_agent
+
+Refined: 4 criteria, 5 points, under EPIC-0012. I found this second fork while
+checking the epic: about 400 lines differ from FlexDesk's copy. The estimate is
+rough until the diff has been sorted into "BugDesk-only" and "FlexDesk moved on".
