@@ -60,6 +60,11 @@ operation(s) a request implies.
    `backlog/` at the root of the current project; otherwise ask. This is the
    same resolution BugDesk's own server uses — see `ResolveBacklogDir` in
    `bugdesk/server/Program.cs` if you have that repo checked out.
+
+   **"The current project" means its main checkout on the default branch, never
+   a worktree or a feature branch**, and it means the project whose code the
+   item changes, which is not always the one you are working in. See
+   [Where records live](#where-records-live) below before your first edit.
 2. **The two names.** Identical to `/bugs`, and resolved the same way the
    server does — **from the same files**. The HUMAN is the person this checkout
    belongs to — the default `reporter` on anything you file here, and the
@@ -137,6 +142,41 @@ on its next reload; nothing needs restarting, and nothing needs an API call.
 
 Don't hardcode `"agent"` / `"reviewer"` / a person's name in anything you
 write — always use whatever you resolved here.
+
+## Where records live
+
+The rules are the same as for bugs, and the full text, including the commands,
+is in [`/bugs`](../bugs/SKILL.md), section *Where records live — the default
+branch of the right repo*. In short:
+
+- **Backlog items are filed, refined, claimed, commented and handed back on the
+  default branch, in the main checkout.** Never in a worktree, never on a
+  feature branch, even while the code for the item is built in one. From a
+  worktree, the main checkout is the first entry of `git worktree list`; if it is
+  not on the default branch, stop and ask rather than switching it.
+- **Commit your record files by path** (`git commit -m "..." -- backlog/STORY-0007.md`),
+  so nobody's uncommitted work in that checkout is swept into your commit, and
+  never `git stash` there. Record-only commits go straight to main; code lands
+  however the repo lands code.
+- **The refine, claim and handback commits of the sequence below are all made
+  on main.** The claim is only an announcement if the people reading main can
+  see it. The work itself is on your branch, and the handback comment names that
+  branch and its tip.
+- **No placeholder ids** (`STORY-NEXT-*`, `XXXX`, "number pending from the
+  integrator"). Pull main and take `max + 1`. That is the only number that
+  cannot collide, because main is the only place records live.
+- **Cross-project work: each item goes in the backlog of the repo whose code it
+  changes.** A feature that needs a library to offer something and an
+  application to use it is two items: the library's part in the library's
+  backlog, the application's part in the application's. Resolve the other store
+  with step 0 from that repo's main checkout, refer between the two **in prose
+  with the project's name and path** (*"FlexDesk STORY-0004,
+  `../FlexDesk/backlog/STORY-0004.md`"*), never in `links:` (a link always
+  resolves in the current project), and commit in each repo separately. If the
+  right repo has no store, ask before creating one.
+- **Already on a branch, or in the wrong repo?** Re-file it on the right main
+  with that store's next id, then drop the stray copy with a comment naming the
+  new home. Don't delete it.
 
 ## File format
 
@@ -508,7 +548,10 @@ Report `<REF> <title> — <status>, <points>, <assignee>`.
 **Show** — one file, rendered in order: frontmatter, description, acceptance
 criteria (with the met/total count), comments.
 
-**New** — `git pull --rebase` first, then take the highest id this checkout has
+**New** — first decide **which repo's backlog** the item belongs in (the repo
+whose code it changes; see [Where records live](#where-records-live)), then work
+in **that repo's main checkout, on its default branch**, never a worktree.
+`git pull --rebase` there first, then take the highest id this checkout has
 **ever** seen across every prefix and use `max + 1`: the filenames in the
 folder, every one ever added on any ref
 (`git log --all --format= --name-only --diff-filter=A -- <backlog dir>`), and
@@ -598,6 +641,14 @@ written twice, so a record only needs whichever one is true of it.
   never happened.
 - Don't renumber or reuse an `id`, even for an item you're dropping — and
   remember the sequence is shared across all three prefixes.
+- **Don't file, refine, claim or hand back an item in a worktree or on a
+  feature branch.** Records live on the default branch, in the main checkout,
+  committed there by path, while the code is built on the branch.
+- **Don't use a placeholder id** (`NEXT`, `XXXX`, "pending"). Pull main and take
+  the next number.
+- **Don't put another repo's work in this backlog.** File the library's part in
+  the library's store and the application's part here, and refer between them
+  in prose, not in `links:`.
 - Don't create tasks under an unrefined story, or stories under an epic you
   haven't read.
 - **Don't start work before the claim is pushed**, and don't batch the claim

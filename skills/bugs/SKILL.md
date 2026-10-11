@@ -51,6 +51,12 @@ the operations below. Use judgment about which operation(s) a request implies.
    otherwise ask the user. (This is the same resolution BugDesk's own server
    uses — see `bugdesk/server/Program.cs`'s `ResolveBugsDir`, if you have that
    repo checked out and want to confirm.)
+
+   **"The current project" means its main checkout on the default branch, never
+   a worktree or a feature branch**, and it means the project whose code the
+   bug is in, which is not always the one you are working in. Both rules are in
+   [Where records live](#where-records-live--the-default-branch-of-the-right-repo)
+   below; read it before your first edit.
 2. **The two names.** The HUMAN is the person this checkout belongs to — the
    default `reporter` on anything you file here, and the fallback owner of a
    record whose `reporter` predates the field; the AGENT is the exact string you
@@ -129,6 +135,117 @@ on its next reload; nothing needs restarting, and nothing needs an API call.
 Don't hardcode `"agent"`/`"reviewer"`/`"claude"`/`"norman"` in anything you
 write — always use whatever you resolved here, since a project can configure
 either name to anything.
+
+## Where records live — the default branch of the right repo
+
+This section applies to the bug store and the backlog store alike; `/backlog`
+points here. (A `/tracker` store is not in a repo at all and is unaffected.)
+
+### Records are kept on the default branch, in the main checkout
+
+**Every record is read, filed and edited on the repo's default branch (`main`,
+or whatever `origin/HEAD` names), in its main checkout.** Never in a worktree,
+never on a feature branch, never "on my branch for now, to be moved later". This
+holds when your *code* work happens in a worktree, which is the normal case: the
+code goes on the branch, the record goes on main.
+
+Why: a record on a branch is invisible to everybody reading main, and it gets an
+id that nobody else can see when they allocate theirs. When several agents work
+in parallel worktrees, each files "the next free number" in its own copy of the
+store, and the merges then collide: two STORY-0252s, a BUG-0095 that means two
+different bugs, and placeholder files (`STORY-NEXT-*.md`, `BUG-XXXX-*.md`,
+"number pending from the integrator") that somebody has to renumber by hand,
+references and all. One store, on one branch, is what makes `max + 1` true.
+
+**Finding the main checkout from a worktree.** `git worktree list` prints it
+first; equivalently, the parent of `git rev-parse --path-format=absolute
+--git-common-dir`. You are in a worktree when that differs from `git rev-parse
+--git-dir`. Resolve the store (step 0) against that path, not against your
+working directory:
+
+```bash
+main=$(git worktree list --porcelain | sed -n '1s/^worktree //p')
+git -C "$main" rev-parse --abbrev-ref HEAD    # must be the default branch
+```
+
+**The main checkout must be on the default branch.** If it is not, stop and
+ask. Do not `git switch` it, do not `git stash` in it: other sessions may be
+working in that checkout, and both moves change files under them.
+
+**How to commit there without disturbing anybody.** The main checkout may hold
+other people's uncommitted work. Commit only your record files, by path:
+
+```bash
+git -C "$main" pull --rebase           # see "Every record edit is committed and pushed"
+# ... edit "$main"/bugs/BUG-0042.md ...
+git -C "$main" add -- bugs/BUG-0042.md
+git -C "$main" commit -m "BUG-0042: comment" -- bugs/BUG-0042.md
+git -C "$main" push
+```
+
+`git commit -- <paths>` commits those paths and nothing else that happens to be
+staged. If the pull refuses because of somebody's uncommitted changes in the
+same record file, that is the UI's edit: commit it first as its own commit, per
+the store discipline below. If it refuses because of somebody's *code* edits,
+ask; don't stash them.
+
+**Record-only commits go straight to main.** They need no integrator, branch or
+review: a record commit touches nothing but the store, so it cannot break the
+build, and holding it back is exactly the delay this section exists to remove.
+Code still lands however the repo lands code.
+
+**On a branch, mention the record; don't carry it.** The code commits on your
+branch name the record (`BUG-0042: ...`), and your handback comment on main names
+the branch and its tip. A branch that adds or edits files under `bugs/` or
+`backlog/` is a mistake to fix before it is merged: move each edit onto main (a
+new record gets main's next id, not the one it had on the branch), then drop it
+from the branch.
+
+**Status follows the work, not the merge.** A bug fixed on a branch moves to
+`testing` on main when you hand it back, with a comment saying the fix is on
+`<branch>` @ `<tip>` and not yet on main; whoever lands it adds a comment when it
+does. Don't wait for the merge to update the record.
+
+**Never invent a placeholder id.** No `NEXT`, no `XXXX`, no "the integrator will
+assign one". Pull main, take `max + 1`, commit, push. If the push is rejected,
+pull again and re-check the number; if somebody took it, renumber your file
+before pushing (it was never visible to anyone, so renumbering it is free).
+
+### Cross-project work: the record goes in the repo whose code changes
+
+Work often crosses repositories: an application and the library it consumes, a
+service and its client. **File each record in the store of the repo whose code
+has to change to fix the bug or build the feature**, not in the repo you happen
+to be working in or the one where you saw the symptom.
+
+- **A defect in the library, seen in the application** is a bug in the
+  library's store. If the application also needs work (a stopgap, a version
+  pin, deleting its workaround once the library ships), that is a *second*
+  record in the application's store, describing only the application's part.
+- **A feature that needs both** is two records: what the library must offer, in
+  the library's backlog; what the application does with it, in the
+  application's. Don't put the library's acceptance criteria in the
+  application's story, or the application's backlog fills up with work it
+  cannot do.
+- **Resolve the other repo's store with step 0, from that repo's main
+  checkout** (`../library`, a sibling clone, or wherever the user keeps it).
+  Its names and roster are its own `.bugdesk/`, not yours; its ids are its own
+  sequence.
+- **Refer across repos in prose, not in `links:`.** A `links:` target always
+  resolves inside the current project, so `relates-to BUG-0001` in the
+  application means the application's BUG-0001. Name the other project instead,
+  with the path: *"the library side is FlexDesk BUG-0001
+  (`../FlexDesk/bugs/BUG-0001.md`)"*, in the description or a comment, on both
+  records.
+- **Commit in each repo separately**, each on its own default branch, and push
+  both.
+- **The other repo has no store?** Don't file there by creating one on your own.
+  Ask; setting up a store (`bugs/`, `backlog/`, `.bugdesk/project.json`) is the
+  repo owner's decision. Until they answer, file nothing in the wrong repo as a
+  stand-in. Say where the record would go and wait.
+- **Already filed in the wrong repo?** File it again in the right store with
+  that store's next id, carry the description over, and `dropped`/`closed` the
+  original with a comment naming the new home. Don't delete it.
 
 ## File format
 
@@ -440,7 +557,10 @@ default view excludes `closed`). Report id, title, status, severity, assignee.
 **Show** — read one file, render frontmatter + `## Description` +
 `## Comments` in order.
 
-**New** — `git pull --rebase` first, then take the highest id this checkout has
+**New** — first decide **which repo's store** the bug belongs in (the repo whose
+code has to change; see [Cross-project work](#cross-project-work-the-record-goes-in-the-repo-whose-code-changes)),
+then work in **that repo's main checkout, on its default branch**, never a
+worktree. `git pull --rebase` there first, then take the highest id this checkout has
 **ever** seen for the store, and use `max + 1`. That is the highest of: the
 `BUG-*.md` filenames in the folder; every one ever added on any ref, which
 `git log --all --format= --name-only --diff-filter=A -- <bugs dir>` lists; and
@@ -505,6 +625,17 @@ acceptance criteria and an estimate is a backlog item, not a bug of type task.
 - **Don't work on a bug somebody else has claimed** because the fix looks
   obvious to you. Ask them.
 - Don't renumber or reuse an `id`, even for a bug you're deleting/replacing.
+- **Don't file or edit a record in a worktree or on a feature branch.** Records
+  live on the default branch, in the main checkout, and are committed there by
+  path, even while the code work is on a branch. See
+  [Where records live](#where-records-live--the-default-branch-of-the-right-repo).
+- **Don't use a placeholder id** (`NEXT`, `XXXX`, "pending"). Pull main and take
+  the next number.
+- **Don't file a bug in the repo you happen to be in** when the code that has to
+  change is in another one. File it in that repo's store, and refer between the
+  two in prose, not in `links:`.
+- Don't `git stash` or `git switch` in the main checkout to make room for a
+  record commit. Commit your record by path; ask if that is blocked.
 - **Don't call the BugDesk API, and don't ask the user to start the server.**
   Not to read a name, not to check the roster, not to save a bug. It is optional
   tooling for the human, not a dependency of the file format — and an answer
