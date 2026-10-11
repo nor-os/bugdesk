@@ -8,12 +8,12 @@ phase:
 assignee:
 reporter: norman
 due:
-points: 8
+points: 5
 subsystem: ui
 labels: [flexdesk, tech-debt]
-links: [relates-to BUG-0013]
+links: [relates-to BUG-0013, requires 23]
 created: 2026-10-05
-updated: 2026-10-05T20:26Z
+updated: 2026-10-11T13:39Z
 ---
 
 ## Description
@@ -40,9 +40,18 @@ Plan: add each feature to FlexDesk with a FlexDesk test, release FlexDesk
 (publishing to npm needs the go-ahead), point BugDesk's tables at
 `@flexdesk/widgets`' `DataTable`, and delete the copy.
 
+_Re-checked against FlexDesk 0.7.0 on 2026-10-11:_
+- _covered upstream: sort returns to page 1 (`resetPageOnSort`), the row
+  surviving a sort or refresh (`getRowKey`), and opening a row with modifier
+  keys (`onRowActivate(idx, row, ev)` passes the event)_
+- _partly covered: right-click menus. `onRowContextMenu` lets BugDesk draw its
+  own menu, but there is no item-list API_
+- _still missing: a hook for the record count, and remembering the page (with a
+  `persistPage`-style opt-out); only sort and filters are remembered_
+
 ## Acceptance criteria
 
-- [ ] FlexDesk's own `DataTable` supports each of the five features above, and every one has a test in FlexDesk's suite
+- [ ] FlexDesk's own `DataTable` covers what is still missing (the record count, a remembered page with an opt-out, and the right-click menus BugDesk draws), each with a test in FlexDesk's suite
 - [ ] A FlexDesk release carrying them is published and vendored into BugDesk, with the npm publish approved by norman first
 - [ ] `ui/js/ui/components/data_table.js` is gone, and no BugDesk file imports it
 - [ ] On the bug queue, the backlog board and search results, the right-click menus, the record count in the status bar, and the Enter / Ctrl+Enter / Alt+T / Alt+N / Alt+Shift+H / Alt+Shift+V shortcuts behave as before the switch
@@ -64,3 +73,10 @@ here on; no item had an estimate before. I kept it as one story instead of
 splitting off the upstream work, because the upstream features are only "done"
 once BugDesk runs on them. The criteria include an explicit regression check for
 BUG-0013, and they gate the npm publish on your go-ahead.
+
+### 2026-10-11T13:39Z · norman_agent
+
+Re-checked against FlexDesk 0.7.0 (see the note in the description). Three
+of the five gaps are closed upstream, so criterion 1 now names only what is
+left, and the estimate drops from 8 to 5. The other criteria are unchanged.
+Requires STORY-0023.
