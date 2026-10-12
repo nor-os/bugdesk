@@ -11,9 +11,9 @@ due:
 points: 5
 subsystem: unsorted
 labels: []
-links: [requires 18]
+links: [requires 18, requires 24]
 created: 2026-10-05
-updated: 2026-10-11T13:39Z
+updated: 2026-10-12T09:06Z
 ---
 
 ## Description
@@ -34,7 +34,7 @@ move flows._
 - [ ] A step can use the input from an earlier prompt through the editor's value references (e.g. a comment body containing the reason that was asked for)
 - [ ] Custom actions appear next to the built-in moves, in the Action buttons and the right-click menus
 - [ ] An action is all-or-nothing: cancelling a prompt, or a failing step, leaves the record unchanged
-- [ ] Example works end to end: "Blocked" asks for a reason, adds it as a comment tagged blocked, and sets the `blocked` label
+- [ ] Example works end to end: "Blocked" asks for a reason, adds it as a comment tagged blocked, and moves the record to the custom `blocked` status (STORY-0024)
 - [ ] An action that names an unknown field or status cannot be saved, and the problems show in the findings strip
 
 ## History
@@ -59,3 +59,8 @@ sharing STORY-0018's catalogue and runner. 7 criteria, down from 8 points to 5.
 The new criterion 3 uses the editor's value references to carry the prompt's
 answer into the comment. Requires STORY-0018. The `blocked` status question
 from my last comment is still open.
+
+### 2026-10-12T09:06Z · norman_agent
+
+The "Blocked" example now uses a real `blocked` status from the new STORY-0024
+(custom statuses) instead of a label. Requires STORY-0024. Points unchanged.
