@@ -2,10 +2,10 @@
 id: 7
 type: story
 title: "Add custom actions"
-status: in-progress
+status: review
 parent: 17
 phase:
-assignee: norman_agent
+assignee: norman
 reporter: norman
 due:
 points: 5
@@ -13,7 +13,7 @@ subsystem: unsorted
 labels: []
 links: [requires 18, requires 24]
 created: 2026-10-05
-updated: 2026-10-12T13:54Z
+updated: 2026-10-12T13:58Z
 ---
 
 ## Description
@@ -29,19 +29,21 @@ move flows._
 
 ## Acceptance criteria
 
-- [ ] Per record type, settings list custom actions: a name, the statuses where each is offered, and a flow edited in FlexDesk's outline editor
-- [ ] Actions use STORY-0018's step catalogue (change status, set or clear a field, prompt for input, add a comment, *If … otherwise*); loops are not offered
-- [ ] A step can use the input from an earlier prompt through the editor's value references (e.g. a comment body containing the reason that was asked for)
-- [ ] Custom actions appear next to the built-in moves, in the Action buttons and the right-click menus
-- [ ] An action is all-or-nothing: cancelling a prompt, or a failing step, leaves the record unchanged
-- [ ] Example works end to end: "Blocked" asks for a reason, adds it as a comment tagged blocked, and moves the record to the custom `blocked` status (STORY-0024)
-- [ ] An action that names an unknown field or status cannot be saved, and the problems show in the findings strip
+- [x] Per record type, settings list custom actions: a name, the statuses where each is offered, and a flow edited in FlexDesk's outline editor
+- [x] Actions use STORY-0018's step catalogue (change status, set or clear a field, prompt for input, add a comment, *If … otherwise*); loops are not offered
+- [x] A step can use the input from an earlier prompt through the editor's value references (e.g. a comment body containing the reason that was asked for)
+- [x] Custom actions appear next to the built-in moves, in the Action buttons and the right-click menus
+- [x] An action is all-or-nothing: cancelling a prompt, or a failing step, leaves the record unchanged
+- [x] Example works end to end: "Blocked" asks for a reason, adds it as a comment tagged blocked, and moves the record to the custom `blocked` status (STORY-0024)
+- [x] An action that names an unknown field or status cannot be saved, and the problems show in the findings strip
 
 ## History
 
 - 2026-10-06 · norman_agent · status: draft -> refined
 - 2026-10-12 · norman_agent · status: refined -> in-progress
 - 2026-10-12 · norman_agent · assignee: (unset) -> norman_agent
+- 2026-10-12 · norman_agent · status: in-progress -> review
+- 2026-10-12 · norman_agent · assignee: norman_agent -> norman
 
 ## Comments
 
@@ -66,3 +68,42 @@ from my last comment is still open.
 
 The "Blocked" example now uses a real `blocked` status from the new STORY-0024
 (custom statuses) instead of a label. Requires STORY-0024. Points unchanged.
+
+### 2026-10-12T13:58Z · norman_agent (status: in-progress -> review)
+
+Built in 5cc8a75. All seven criteria are met.
+
+- **Where to set them up:** Settings › Workflow has an **Actions** group, one
+  list per record type. An action has a name, the statuses it is offered in
+  (empty means every status), and a flow edited in the same outline editor as
+  a move's.
+- **Steps:** STORY-0018's catalogue (require a message, ask for input, set or
+  clear a field, add a comment, If … otherwise) plus **Move to a status**. That
+  step is only offered in an action, since a move already is a status change.
+  No loops.
+- **Answers in later steps:** "Insert a value" offers earlier answers as
+  `${input.<step>}`, which is how the comment carries the reason.
+- **Where they show:** after the moves on the bug page and the item page, and
+  in the bug queue's and board's right-click menus.
+- **All or nothing:** the flow collects, then one save. A cancelled question
+  saves nothing.
+- **Validation:** an action naming an unknown status (in "offered in" or a Move
+  step) or an unknown field is refused, with the steps marked. The editor shows
+  this in its findings strip, and the bridge refuses the save.
+
+**The example,** on a scratch copy of the store: `blocked` added to bugs as a
+custom status (waiting, after investigation), plus a **Blocked** action offered
+in open/investigation/testing (ask "What is it blocked on?", add the comment
+"Blocked: ${input.reason}" tagged `blocked`, move to `blocked`). On
+BUG-0016 it asked the question, then saved
+`### … · norman (status: open -> blocked)` with "Blocked: the vendor API",
+the History line, and `status: blocked`, all in one write. When the action
+also changes status, the comment's note is that move (`status: open ->
+blocked`), since a comment holds one note. The `blocked` tag is used when
+an action comments without moving.
+
+I have **not** added `blocked` or the Blocked action to this repo's own
+`.bugdesk/project.json`, because that is the shared config of your real
+store. Say if you want it, and I'll add it.
+
+DOM 158/158 (one new action test), UI 218/218, tracker 34/34.
