@@ -2,10 +2,10 @@
 id: 7
 type: story
 title: "Add custom actions"
-status: refined
+status: in-progress
 parent: 17
 phase:
-assignee:
+assignee: norman_agent
 reporter: norman
 due:
 points: 5
@@ -13,7 +13,7 @@ subsystem: unsorted
 labels: []
 links: [requires 18, requires 24]
 created: 2026-10-05
-updated: 2026-10-12T09:06Z
+updated: 2026-10-12T13:54Z
 ---
 
 ## Description
@@ -40,6 +40,8 @@ move flows._
 ## History
 
 - 2026-10-06 · norman_agent · status: draft -> refined
+- 2026-10-12 · norman_agent · status: refined -> in-progress
+- 2026-10-12 · norman_agent · assignee: (unset) -> norman_agent
 
 ## Comments
 
