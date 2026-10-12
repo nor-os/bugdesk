@@ -2,10 +2,10 @@
 id: 24
 type: story
 title: "Custom statuses per record type"
-status: refined
+status: in-progress
 parent: 3
 phase:
-assignee:
+assignee: norman_agent
 reporter: norman
 due:
 points: 8
@@ -13,7 +13,7 @@ subsystem: unsorted
 labels: []
 links: [blocks 7]
 created: 2026-10-12
-updated: 2026-10-12T09:06Z
+updated: 2026-10-12T13:16Z
 ---
 
 ## Description
@@ -45,6 +45,8 @@ alongside them. Settings are stored in `.bugdesk/project.json`.
 ## History
 
 - 2026-10-12 · norman_agent · status: draft -> refined
+- 2026-10-12 · norman_agent · status: refined -> in-progress
+- 2026-10-12 · norman_agent · assignee: (unset) -> norman_agent
 
 ## Comments
 
