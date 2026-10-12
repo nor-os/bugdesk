@@ -536,6 +536,7 @@ async function _loadTrackerCopy({ eventBus }) {
         assignees: Array.isArray(cfg.assignees) ? cfg.assignees : [],
         store: cfg.store || { kind: 'tracker', hasBugs: false, hasBacklog: true },
         schema: cfg.schema || null,
+        workflow: cfg.workflow || null,
         tracker: cfg.tracker || { available: true },
     };
     const T = '../ticketdesk@t/';

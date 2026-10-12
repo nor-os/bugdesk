@@ -204,6 +204,22 @@ class ProjectConfig
         }
     }
 
+    /// <summary>The workflow — move tables, their flows and the custom actions
+    /// (see <see cref="RecordWorkflow"/>) — as stored, or null.</summary>
+    public JsonNode? Workflow() => Read()?["workflow"]?.DeepClone();
+
+    /// <summary>Replace the workflow. The caller has checked it.</summary>
+    public void SetWorkflow(JsonNode? workflow)
+    {
+        lock (_gate)
+        {
+            var doc = Read() ?? new JsonObject();
+            if (workflow is null || (workflow is JsonObject o && o.Count == 0)) doc.Remove("workflow");
+            else doc["workflow"] = workflow.DeepClone();
+            Write(doc);
+        }
+    }
+
     /// <summary>The whole document, for the UI to render and for future keys.</summary>
     public JsonObject Document() => Read() ?? new JsonObject { ["collaborators"] = new JsonArray() };
 

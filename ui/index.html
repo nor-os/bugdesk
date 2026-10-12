@@ -155,6 +155,8 @@
             // Custom fields, hidden built-ins and custom statuses per record type
             // (project.json's `schema`). Read at module load by ticketdesk/schema.js.
             schema: cfg.schema || null,
+            // The move tables, their flows and the custom actions (workflow.js).
+            workflow: cfg.workflow || null,
             projects: Array.isArray(cfg.projects) ? cfg.projects : [],
             tracker: cfg.tracker || { available: false },
         };

@@ -120,6 +120,7 @@ export const VISIBLE_SETTINGS = new Set([
     'bugdesk.agentName',
     'bugdesk.collaborators',
     'bugdesk.recordTypes',
+    'bugdesk.workflow',
     'bugdesk.modifierOpen',
     // Read by FlexDesk's managed windows, which BugDesk's floats are.
     'window.animateMinimize',
@@ -170,6 +171,7 @@ export const BUGDESK_SETTINGS_SLICE = {
             // path and the row renders like every other one.
             collaborators: null,
             recordTypes: null,
+            workflow: null,
         },
     },
 
@@ -215,6 +217,20 @@ export const BUGDESK_SETTINGS_SLICE = {
             onClick: async () => {
                 const { openSchemaEditor } = await import('../ticketdesk/schema_editor.js');
                 return openSchemaEditor({ eventBus: window.__ecoagent?.eventBus });
+            },
+        },
+
+        // The moves, what they do on the side, and the custom actions.
+        'bugdesk.workflow': {
+            type: 'action', category: 'general', group: 'Project',
+            label: 'Workflow',
+            description: 'Which moves each status offers, what they are called, which need a message, and what a move does on the side (clear the assignee, ask a question, add a comment) — per record type. Saved in the shared project.json beside the stores. With nothing set, records move the built-in way.',
+            buttonLabel: 'Edit workflow…',
+            icon: 'account_tree',
+            defaultValue: null,
+            onClick: async () => {
+                const { openWorkflowEditor } = await import('../ticketdesk/workflow_editor.js');
+                return openWorkflowEditor({ eventBus: window.__ecoagent?.eventBus });
             },
         },
 

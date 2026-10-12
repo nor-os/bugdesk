@@ -21,6 +21,7 @@
 
 import { HUMAN_AUTHOR, fetchBug, humanizeStatus, patchBug } from './data.js';
 import { customStatus, customStatuses, isFinished } from './schema.js';
+import { movesFor, planMove } from './workflow.js';
 
 /** Moves per status, primary (the usual next step) first: `[label, target]`. */
 //
@@ -114,13 +115,16 @@ export function recentMessage(comments, author, now = Date.now()) {
  * @param {{bugId:number, from:string, to:string, label:string, title?:string,
  *          author?:string, ask?:Function}} o  `ask` stands in for the dialog in tests
  */
-export async function resolveMoveMessage({ bugId, from, to, label, title = '', author = HUMAN_AUTHOR, ask = null }) {
-    if (!needsMessage(from, to)) return {};
+export async function resolveMoveMessage({ bugId, from, to, label, title = '', author = HUMAN_AUTHOR, ask = null,
+                                          required = null, prompt: question = '', comments = null }) {
+    // `required` is the configured move's rule (Settings › Workflow); without one,
+    // the built-in rule: every move but starting work.
+    if (!(required ?? needsMessage(from, to))) return {};
     try {
-        const bug = await fetchBug(bugId);
-        if (recentMessage(bug?.comments, author)) return { tagRecentComment: true };
+        const thread = comments ?? (await fetchBug(bugId))?.comments;
+        if (recentMessage(thread, author)) return { tagRecentComment: true };
     } catch { /* no fresh copy: ask, rather than guess */ }
-    const prompt = messagePrompt(from, to);
+    const prompt = question || messagePrompt(from, to);
     const open = ask || (async (opts) => {
         const { openForm } = await import('../ui/components/modal.js');
         return openForm(opts);
@@ -139,7 +143,37 @@ export async function resolveMoveMessage({ bugId, from, to, label, title = '', a
  * path. Returns the saved bug, or null when the user cancelled.
  */
 export async function moveBug({ bugId, from, to, label, title = '', author = HUMAN_AUTHOR, ask = null }) {
-    const extra = await resolveMoveMessage({ bugId, from, to, label, title, author, ask });
-    if (!extra) return null;
-    return patchBug(bugId, { status: to, ...extra }, author);
+    const bug = await fetchBug(bugId).catch(() => null);
+    const type = bug?.type || 'bug';
+    const move = bugMovesFor(from, type).find((m) => m.to === to && m.label === label)
+        || bugMovesFor(from, type).find((m) => m.to === to)
+        || { to, label, message: needsMessage(from, to), flow: null };
+    const patch = await planBugMove({ bugId, bug: bug || { id: bugId, status: from, comments: [] }, move, from, title, author, ask });
+    if (!patch) return null;
+    return patchBug(bugId, patch, author);
+}
+
+/**
+ * The moves a bug is offered: the project's table (Settings › Workflow) when it
+ * has one, else the built-in moves, custom statuses included. One list for the
+ * Action buttons and the right-click menu.
+ */
+export const bugMovesFor = (status, type = 'bug') => movesFor('bugs', type, status, bugMoves(status, type));
+
+/**
+ * What a move saves: its status, its message and what its flow collected — one
+ * patch, or null when anything was cancelled (workflow.js's planMove).
+ */
+export async function planBugMove({ bugId, bug, move, from, title = '', author = HUMAN_AUTHOR, ask = null }) {
+    const open = ask || (async (opts) => {
+        const { openForm } = await import('../ui/components/modal.js');
+        return openForm(opts);
+    });
+    return planMove({
+        store: 'bugs', record: bug, move, ask: open,
+        askMessage: (prompt) => resolveMoveMessage({
+            bugId, from, to: move.to || from, label: move.label, title, author, ask: open,
+            required: true, prompt, comments: bug?.comments || null,
+        }),
+    });
 }

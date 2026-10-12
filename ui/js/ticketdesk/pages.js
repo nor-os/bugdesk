@@ -65,7 +65,7 @@ import { customStatus, isHidden, statusKnown } from './schema.js';
 import { attachTagInput } from './tag_input.js';
 import { ITEMS, isClosedItem, loadBacklog } from './backlog_data.js';
 import { watchRecord } from './live.js';
-import { bugMoves, moveBug, resolveMoveMessage } from './bug_transitions.js';
+import { bugMovesFor, moveBug, planBugMove } from './bug_transitions.js';
 import { attachCommentEditing, editButtonHTML } from './comment_edit.js';
 import { paintRecordCount, publishRecordCount } from './record_count.js';
 import {
@@ -577,10 +577,10 @@ function stageIndexOf(status, type = 'bug') {
 
 /** The status moves of one bug as context-menu entries, then a separator. */
 function statusMenuItems(bug) {
-    const moves = bug ? bugMoves(bug.rawStatus, bug.rawType) : [];
+    const moves = bug ? bugMovesFor(bug.rawStatus, bug.rawType) : [];
     if (!moves.length) return [];
     return [
-        ...moves.map(([label, target]) => ({
+        ...moves.map(({ label, to: target }) => ({
             label, icon: target === 'closed' ? 'task_alt' : target === 'open' ? 'undo' : 'swap_horiz',
             action: `move:${target}:${label}`,
         })),
@@ -1249,8 +1249,8 @@ function mountTicket(host, props, ctx) {
         // The workflow buttons are written in this SAME innerHTML: the strip is
         // repainted on every stage change, so anything appended afterwards survives
         // until the first time the user moves the bug and then silently disappears.
-        strip.innerHTML = bugMoves(state.status, type)
-            .map(([label, target], i) => `<button class="ea-btn td-stageaction ${i === 0 ? 'ea-btn--primary td-stageaction--primary' : ''}" data-wf="${esc(target)}">${esc(label)}</button>`).join('')
+        strip.innerHTML = bugMovesFor(state.status, type)
+            .map(({ label, to: target }, i) => `<button class="ea-btn td-stageaction ${i === 0 ? 'ea-btn--primary td-stageaction--primary' : ''}" data-wf="${esc(target)}">${esc(label)}</button>`).join('')
             + WORKFLOW_ACTIONS.filter((a) => a.when(closed)).map((a) =>
                 `<button class="ea-btn td-stageaction td-stageaction--alt" data-wfa="${esc(a.id)}"
                          title="${esc(a.title)}">${icon(a.icon)} ${esc(a.label)}</button>`).join('');
@@ -1295,11 +1295,17 @@ function mountTicket(host, props, ctx) {
         // Sent only when it CHANGED. An ordinary save of a record written before the
         // field existed must not insert a `reporter:` line nobody typed.
         if (fval('reporter') !== (t.reporter || '')) patch.reporter = fval('reporter');
-        // A status move's message (bug_transitions.js), saved with the move.
-        if (state.moveMessage) Object.assign(patch, state.moveMessage);
         // Only the custom fields that changed — see custom_fields.js.
         const fields = customFieldsCtl?.collect() || {};
         if (Object.keys(fields).length) patch.fields = fields;
+        // What a move saves besides its status — its message, and whatever its
+        // flow set or cleared (Settings › Workflow) — over the form's values: the
+        // move ran after them, so its "clear the assignee" wins.
+        if (state.moveMessage) {
+            const { fields: moveFields, ...rest } = state.moveMessage;
+            Object.assign(patch, rest);
+            if (moveFields) patch.fields = { ...(patch.fields || {}), ...moveFields };
+        }
         return patch;
     };
 
@@ -1486,13 +1492,28 @@ function mountTicket(host, props, ctx) {
     const applyStage = async (target, label) => {
         if (!target) return;
         if (t.bugId) {
-            const extra = await resolveMoveMessage({
-                bugId: t.bugId, from: state.status, to: target, label, title: t.summary || '',
-            });
-            if (!extra) { statusLine('Status unchanged.'); return; }
+            const type = machineType(fval('type')) || t.rawType || 'bug';
+            const moves = bugMovesFor(state.status, type);
+            const move = moves.find((m) => m.to === target && m.label === label) || moves.find((m) => m.to === target);
+            if (!move) return;
+            // The flow reads the record as it is on disk, with its comments for
+            // the five-minute message rule; the move is then this page's ONE save.
+            let bug = null;
+            try { bug = await fetchBug(t.bugId); } catch { /* the plan asks rather than guesses */ }
+            let patch;
+            try {
+                patch = await planBugMove({
+                    bugId: t.bugId, bug: bug || { id: t.bugId, status: state.status, comments: [] },
+                    move, from: state.status, title: t.summary || '',
+                });
+            } catch (err) { statusLine(`${label}: ${err?.message || err}`); return; }
+            if (!patch) { statusLine('Status unchanged.'); return; }
+            const { status: next, ...extra } = patch;
             state.moveMessage = Object.keys(extra).length ? extra : null;
+            gotoStatus(next || target);
+        } else {
+            gotoStatus(target);
         }
-        gotoStatus(target);
         await save();
     };
 

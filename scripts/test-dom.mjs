@@ -2826,5 +2826,83 @@ console.log('\nRecord schema');
     schema.setSchema(null);
 }
 
+/* ── workflow: configured moves and their flows (STORY-0018) ────────── */
+
+console.log('\nWorkflow');
+{
+    const wf = await import(join(UI, 'ticketdesk', 'workflow.js'));
+    const flow = (nodes, links) => ({
+        nodes: [{ id: 'start', type: 'start', config: {} }, ...nodes],
+        connections: links.map(([source, target, sourcePort = 'out']) => ({ source, target, sourcePort, targetPort: 'in' })),
+    });
+
+    await t('with nothing configured, a store moves the built-in way', () => {
+        wf.setWorkflow(null);
+        const moves = wf.movesFor('bugs', 'bug', 'open', [['Start investigation', 'investigation'], ['Close', 'closed']]);
+        assert.deepEqual(moves.map((m) => [m.label, m.to, m.message]),
+            [['Start investigation', 'investigation', false], ['Close', 'closed', true]]);
+    });
+
+    await t('a configured table replaces them, and "*" offers a move from every other status', () => {
+        wf.setWorkflow({ bugs: { moves: [
+            { from: 'open', label: 'Begin', to: 'investigation' },
+            { from: '*', label: 'Close', to: 'closed', message: true },
+        ] } });
+        assert.deepEqual(wf.movesFor('bugs', 'bug', 'open', [['X', 'testing']]).map((m) => m.label), ['Begin', 'Close']);
+        assert.deepEqual(wf.movesFor('bugs', 'bug', 'closed', []).map((m) => m.label), [], 'never a move to where it already is');
+        wf.setWorkflow(null);
+    });
+
+    await t('a flow that clears the assignee saves it cleared, in the same patch as the move', async () => {
+        const graph = flow([{ id: 'c', type: 'clear-field', config: { field: 'assignee' } }], [['start', 'c']]);
+        const patch = await wf.planMove({ store: 'backlog', record: { status: 'refined', assignee: 'bob' },
+            move: { to: 'in-progress', message: false, flow: graph }, ask: async () => null, askMessage: async () => null });
+        assert.deepEqual(patch, { status: 'in-progress', assignee: '' });
+    });
+
+    await t('an answer reaches a later step, and If … otherwise reads the record', async () => {
+        const graph = flow([
+            { id: 'why', type: 'prompt', config: { question: 'Why?' } },
+            { id: 'if', type: 'condition', config: { field: 'severity', op: 'is', value: 'crash' } },
+            { id: 'loud', type: 'add-comment', config: { body: 'URGENT: ${input.why}', tag: 'blocked' } },
+            { id: 'quiet', type: 'add-comment', config: { body: 'Blocked: ${input.why} on ${record.title}' } },
+        ], [['start', 'why'], ['why', 'if'], ['if', 'loud', 'true'], ['if', 'quiet', 'false']]);
+        const ask = async () => ({ answer: 'waiting on the vendor' });
+        const crash = await wf.planMove({ store: 'bugs', record: { status: 'open', severity: 'crash', title: 'T' },
+            move: { to: 'investigation', flow: graph }, ask, askMessage: async () => null });
+        assert.equal(crash.comment, 'URGENT: waiting on the vendor');
+        assert.equal(crash.commentNote, 'blocked');
+        const low = await wf.planMove({ store: 'bugs', record: { status: 'open', severity: 'low', title: 'T' },
+            move: { to: 'investigation', flow: graph }, ask, askMessage: async () => null });
+        assert.equal(low.comment, 'Blocked: waiting on the vendor on T');
+    });
+
+    await t('cancelling a prompt cancels the whole move — nothing to save', async () => {
+        const graph = flow([{ id: 'q', type: 'prompt', config: { question: 'Sure?' } },
+                            { id: 'c', type: 'clear-field', config: { field: 'assignee' } }], [['start', 'q'], ['q', 'c']]);
+        assert.equal(await wf.planMove({ store: 'bugs', record: { status: 'open' },
+            move: { to: 'closed', flow: graph }, ask: async () => null, askMessage: async () => null }), null);
+        assert.equal(await wf.planMove({ store: 'bugs', record: { status: 'open' },
+            move: { to: 'closed', message: true }, ask: async () => null, askMessage: async () => null }), null);
+    });
+
+    await t('a flow naming an unknown field or step is found, on that step', () => {
+        const graph = flow([
+            { id: 'bad', type: 'set-field', config: { field: 'nope', value: '${input.ghost}' } },
+            { id: 'loop', type: 'loop-over-rows', config: {} },
+        ], [['start', 'bad']]);
+        const found = wf.checkFlow(graph, 'bugs', ['bug']);
+        assert.deepEqual(found.map((f) => [f.code, f.node_id]).sort(),
+            [['unknown_field', 'bad'], ['unknown_reference', 'bad'], ['unknown_step', 'loop']].sort());
+    });
+
+    await t('the built-in table is what an unconfigured store already does', () => {
+        const story = wf.builtinMoves('backlog', 'story');
+        assert.ok(story.some((m) => m.from === 'refined' && m.to === 'in-progress' && m.label === 'Start work'));
+        assert.ok(story.some((m) => m.from === 'dropped' && m.to === 'draft'));
+        assert.equal(wf.builtinMoves('bugs').filter((m) => m.message === false).length, 1, 'only starting work skips the message');
+    });
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

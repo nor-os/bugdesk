@@ -31,6 +31,7 @@ import { attachTagInput } from './tag_input.js';
 import { attachSelect, setRowVisible } from './select_field.js';
 import { mountCustomFields } from './custom_fields.js';
 import { hiddenForAll, isHidden, statusKnown, withCustomStatuses } from './schema.js';
+import { movesFor, planMove } from './workflow.js';
 import { watchRecord } from './live.js';
 import { attachParentPicker, attachRecordTypeahead, childTypesFor, openItemPicker, openRecordPicker } from './item_picker.js';
 import { installRecordDragSource, markDragCell, openRecordAs } from './record_dnd.js';
@@ -153,6 +154,34 @@ function saveCollapsed() {
  * three hand-kept-in-step lists is how a Status pill ends up painted over an
  * Assignee, so the indices are derived from the spec instead.
  */
+/* ── moves ──────────────────────────────────────────────────────────
+ * The moves an item is offered — the project's table for its type (Settings ›
+ * Workflow) when there is one, else its ladder's — and what one saves. Shared by
+ * the item page's Action buttons and the board's right-click menu. */
+
+export const itemMovesFor = (it) => movesFor('backlog', it.type, it.status, stageActions(it));
+
+async function askItem(form) {
+    const { openForm } = await import('../ui/components/modal.js');
+    return openForm(form);
+}
+
+/** One move's patch — status, message, what its flow collected — or null. */
+export async function planItemMove(it, move) {
+    return planMove({
+        store: 'backlog', record: it, move, ask: askItem,
+        askMessage: async (prompt) => {
+            const r = await askItem({
+                title: `${move.label} — ${itemRef(it)}`,
+                fields: [{ name: 'message', label: prompt || 'Message', type: 'textarea', rows: 6, required: true }],
+                submitLabel: move.label || 'Move',
+            });
+            const text = String(r?.message || '').trim();
+            return text ? { comment: text } : null;
+        },
+    });
+}
+
 const BOARD_COLS = [
     // `filter` names the filter field a right-click "Filter by" uses, and
     // `filterValue` the value it matches, read from the ITEM rather than the
@@ -372,7 +401,15 @@ function mountBacklogBoard(host, props, ctx) {
             const refs = menuRefs(cm);
             const model = cm.row ? byRef.get(cm.row[REF_COL]) : null;
             const cc = cellClause(cm);
+            // The item's moves — the same list as its page's Action buttons —
+            // when one row is under the pointer.
+            const moves = model && refs.length <= 1 ? itemMovesFor(model).map((m) => ({
+                label: m.label, icon: m.to === 'dropped' ? 'block' : 'swap_horiz',
+                action: `move:${m.to}:${m.label}`,
+                disabled: isGated(m.to) && refinementGaps(model).length > 0,
+            })) : [];
             return [
+                ...(moves.length ? [...moves, { separator: true }] : []),
                 { label: refs.length > 1 ? `Open ${refs.length} items in tabs` : 'Open',
                   icon: 'open_in_new', action: 'open', disabled: !refs.length },
                 { label: 'Open in new window', icon: 'web_asset', action: 'open-window', disabled: !model },
@@ -405,6 +442,23 @@ function mountBacklogBoard(host, props, ctx) {
             const refs = menuRefs(cm);
             const model = cm.row ? byRef.get(cm.row[REF_COL]) : null;
             const cc = cellClause(cm);
+            if (model && String(action).startsWith('move:')) {
+                const [, to, ...rest] = String(action).split(':');
+                const label = rest.join(':');
+                const move = itemMovesFor(model).find((m) => m.to === to && m.label === label);
+                if (!move) return;
+                try {
+                    // A fresh copy: the flow reads the record, not the row.
+                    const full = await fetchItem(model.id);
+                    const patch = await planItemMove(full, move);
+                    if (!patch) { statusLine('Status unchanged.'); return; }
+                    await patchItem(model.id, patch);
+                    await loadBacklog();
+                    _eventBus?.emit?.(ev('backlog:changed'), { id: model.id });
+                    statusLine(`${model.ref} → ${humanizeItemStatus(patch.status || model.status)}.`);
+                } catch (err) { statusLine(`Could not move ${model.ref}: ${err?.message || err}`); }
+                return;
+            }
             switch (action) {
                 case 'filter-cell':
                     if (cc) {
@@ -943,10 +997,10 @@ function mountItem(host, props, ctx) {
         // every transition, so anything appended afterwards survives until the first time
         // the user moves the item and then silently disappears.
         const closed = isClosedItem(item);
-        $('[data-slot="stageactions"]').innerHTML = stageActions(item).map(([label, target], i) => {
+        $('[data-slot="stageactions"]').innerHTML = itemMovesFor(item).map(({ label, to: target }, i) => {
             const blocked = isGated(target) && gaps.length > 0;
             return `<button class="ea-btn td-stageaction ${i === 0 && !blocked ? 'ea-btn--primary td-stageaction--primary' : ''}"
-                        data-wf="${esc(target)}" ${blocked ? 'disabled' : ''}
+                        data-wf="${esc(target)}" data-wflabel="${esc(label)}" ${blocked ? 'disabled' : ''}
                         title="${blocked ? esc(`${gaps.length} thing${gaps.length === 1 ? '' : 's'} still missing — see Refinement`) : ''}">${esc(label)}</button>`;
         }).join('')
             + WORKFLOW_ACTIONS.filter((a) => a.when(closed)).map((a) =>
@@ -1484,9 +1538,16 @@ function mountItem(host, props, ctx) {
         } catch (err) { statusLine(`Save failed: ${err?.message || err}`); }
     };
 
-    const moveTo = async (status) => {
+    const moveTo = async (status, label = '') => {
         try {
-            apply(await patchItem(item.id, { status }));
+            // The configured move (Settings › Workflow), or the built-in one: its
+            // message and its flow run first, and the move is then ONE save.
+            const moves = itemMovesFor(item);
+            const move = moves.find((m) => m.to === status && (!label || m.label === label))
+                || { to: status, label, message: false, flow: null };
+            const patch = await planItemMove(item, move);
+            if (!patch) { statusLine('Status unchanged.'); return; }
+            apply(await patchItem(item.id, patch));
             await broadcast();
             statusLine(`${itemRef(item)} → ${humanizeItemStatus(item.status)}.`);
         } catch (err) { statusLine(`Transition failed: ${err?.message || err}`); }
@@ -1615,7 +1676,7 @@ function mountItem(host, props, ctx) {
             return;
         }
         const wf = e.target.closest('[data-wf]');
-        if (wf && !wf.disabled) { await moveTo(wf.dataset.wf); return; }
+        if (wf && !wf.disabled) { await moveTo(wf.dataset.wf, wf.dataset.wflabel || ''); return; }
 
         const act = e.target.closest('[data-a]')?.dataset.a;
         if (act === 'delete') { await removeThis(); return; }

@@ -1,0 +1,362 @@
+/**
+ * ticketdesk/workflow_editor.js — Settings › Workflow: the moves each status
+ * offers, what a move does on the side, and the custom actions.
+ *
+ * THE MOVES ARE A PLAIN TABLE — from status, label, target, whether it needs a
+ * message — because that is a state machine, not a step flow: one table for the
+ * bug store, one per backlog type. A store or type with no table moves exactly
+ * as it always has; "Customise" starts a table from those built-in moves, so
+ * changing one label does not mean retyping the rest.
+ *
+ * WHAT A MOVE DOES is a flow, opened from its row in FlexDesk's outline editor
+ * (`@flexdesk/flow`). The editor only edits: the steps, the checks and the
+ * runner are ./workflow.js's. A flow is checked as it is edited, and its
+ * problems are drawn on the step in the editor's findings strip with Go to it;
+ * the bridge checks again on save and refuses the whole workflow on any problem.
+ *
+ * Saved in `.bugdesk/project.json`'s `workflow`, committed and shared.
+ */
+
+import { ManagedWindow } from '@flexdesk/widgets';
+import {
+    createOutlineEditor, createStepCatalogue, createWidgetRegistry, TEMPLATE_REFERENCES,
+} from '@flexdesk/flow';
+
+import { esc } from './data.js';
+import { appName } from '../core/app_identity.js';
+import { CONFIG } from './instance.js';
+import { customFields, STORE_TYPES } from './schema.js';
+import { attachSelect } from './select_field.js';
+import {
+    BLOCKS, CATEGORIES, SETTABLE, builtinMoves, checkFlow, emptyFlow, saveWorkflow,
+    statusesOf, stepTypes, workflowConfig,
+} from './workflow.js';
+
+const icon = (name) => `<span class="material-symbols-outlined">${name}</span>`;
+let _seq = 1;
+
+/** The tables this page can configure: `[key, store, types, label]`. */
+function tablesHere() {
+    const store = CONFIG.store || {};
+    const out = [];
+    if (store.hasBugs !== false && CONFIG.mode !== 'tracker') out.push(['bugs', 'bugs', ['bug', 'regression', 'task'], 'Bugs']);
+    if (store.hasBacklog !== false) {
+        const offered = CONFIG.mode === 'tracker' ? ['project', 'epic', 'story', 'task'] : ['epic', 'story', 'task'];
+        for (const [t, label] of STORE_TYPES.backlog) if (offered.includes(t)) out.push([`backlog.${t}`, 'backlog', [t], label]);
+    }
+    return out;
+}
+
+const tableOf = (draft, key) => {
+    if (key === 'bugs') return draft.bugs?.moves || null;
+    const t = key.split('.')[1];
+    return draft.backlog?.[t]?.moves || null;
+};
+const setTable = (draft, key, moves) => {
+    if (key === 'bugs') {
+        if (moves) draft.bugs = { ...(draft.bugs || {}), moves }; else delete draft.bugs;
+        return;
+    }
+    const t = key.split('.')[1];
+    draft.backlog = draft.backlog || {};
+    if (moves) draft.backlog[t] = { ...(draft.backlog[t] || {}), moves }; else delete draft.backlog[t];
+    if (!Object.keys(draft.backlog).length) delete draft.backlog;
+};
+
+const statusLabel = (s) => (s === '*' ? 'Any status' : s);
+const stepCount = (flow) => (flow?.nodes || []).filter((n) => n.type !== 'start').length;
+
+/**
+ * Open the workflow editor. Resolves true once saved.
+ * @param {object} [o]
+ * @param {object} [o.eventBus]
+ */
+export function openWorkflowEditor({ eventBus = null } = {}) {
+    const tables = tablesHere();
+    const draft = workflowConfig();
+    let cur = tables[0]?.[0];
+    let problems = [];           // from the bridge: {where, message, node_id}
+    let selects = [];
+
+    const body = document.createElement('div');
+    body.className = 'bd-schema bd-workflow';
+
+    const curSpec = () => tables.find(([k]) => k === cur);
+
+    const nav = () => tables.map(([key, , , label], i) => `
+        ${i === 0 || (tables[i - 1][1] !== tables[i][1]) ? `<div class="bd-schema__group">${tables[i][1] === 'bugs' ? 'Bugs' : (CONFIG.mode === 'tracker' ? 'Tickets' : 'Backlog')}</div>` : ''}
+        <button type="button" class="bd-schema__type${key === cur ? ' bd-schema__type--on' : ''}" data-table="${key}">
+            ${esc(label)}${tableOf(draft, key) ? '<span class="bd-schema__count">custom</span>' : ''}
+        </button>`).join('');
+
+    const rows = () => {
+        const [, store, types] = curSpec();
+        const moves = tableOf(draft, cur);
+        if (!moves) {
+            return `<div class="bd-workflow__builtin">
+                <p class="td-dim">These records move the built-in way${store === 'bugs' ? '' : ' along their ladder'}.
+                   Customise to change what each status offers, rename a move, decide which need a message,
+                   or give a move a flow.</p>
+                <button type="button" class="ea-btn ea-btn--primary" data-act="customise">${icon('tune')} Customise the moves</button>
+            </div>`;
+        }
+        const statuses = [...new Set(types.flatMap((t) => statusesOf(store, t)))];
+        const head = `<div class="bd-workflow__hdr"><span></span><span>From</span><span>Move</span><span>To</span>
+                        <span title="A message is asked for, and saved as the comment on the move">Message</span><span>Flow</span><span></span></div>`;
+        return head + moves.map((m, i) => `
+            <div class="ea-modal__row bd-workflow__row" data-move="${i}">
+                <span class="bd-schema__move">
+                    <button type="button" data-up="${i}" title="Move up" ${i === 0 ? 'disabled' : ''}>${icon('arrow_upward')}</button>
+                    <button type="button" data-down="${i}" title="Move down" ${i === moves.length - 1 ? 'disabled' : ''}>${icon('arrow_downward')}</button>
+                </span>
+                <select data-k="from" data-sel="from:${i}">${['*', ...statuses].map((s) =>
+                    `<option value="${esc(s)}"${s === m.from ? ' selected' : ''}>${esc(statusLabel(s))}</option>`).join('')}</select>
+                <input type="text" data-k="label" value="${esc(m.label || '')}" placeholder="Hand to testing" aria-label="Label">
+                <select data-k="to" data-sel="to:${i}">${statuses.map((s) =>
+                    `<option value="${esc(s)}"${s === m.to ? ' selected' : ''}>${esc(s)}</option>`).join('')}</select>
+                <label class="bd-schema__req"><input type="checkbox" data-k="message" ${m.message ? 'checked' : ''}></label>
+                <button type="button" class="ea-btn bd-workflow__flow${m.flow ? ' bd-workflow__flow--on' : ''}" data-flow="${i}"
+                        title="What this move does on the side">${icon('account_tree')}${m.flow ? `${stepCount(m.flow)} step${stepCount(m.flow) === 1 ? '' : 's'}` : 'Add'}</button>
+                <button type="button" class="bd-schema__rm" data-rm="${i}" title="Remove this move">${icon('close')}</button>
+            </div>`).join('')
+            + `<div class="bd-workflow__foot">
+                <button type="button" class="ea-btn" data-act="add">${icon('add')} Add move</button>
+                <button type="button" class="ea-btn" data-act="builtin" title="Drop this table and move the built-in way again">${icon('restart_alt')} Back to the built-in moves</button>
+            </div>`;
+    };
+
+    const render = () => {
+        for (const s of selects) { try { s.destroy(); } catch { /* gone */ } }
+        selects = [];
+        const [, , , label] = curSpec() || [];
+        const mine = problems.filter((p) => p.where.startsWith(cur === 'bugs' ? 'workflow.bugs' : `workflow.backlog.${cur.split('.')[1]}`));
+        body.innerHTML = `
+            <nav class="bd-schema__nav" aria-label="Move tables">${nav()}</nav>
+            <div class="bd-schema__main">
+                <h3 class="bd-schema__h">Moves › ${esc(label || '')}</h3>
+                <div class="bd-workflow__moves">${rows()}</div>
+                ${problems.length ? `<div class="bd-schema__problems" role="alert">${icon('error')}<ul>${
+                    (mine.length ? mine : problems).map((p) => `<li>${esc(p.message)}</li>`).join('')}${
+                    mine.length && mine.length < problems.length ? `<li class="td-dim">… and ${problems.length - mine.length} on other tables</li>` : ''}</ul></div>` : ''}
+            </div>
+            <div class="ea-modal__actions bd-schema__actions">
+                <span class="td-dim bd-schema__path">Saved to .bugdesk/project.json — commit it to share it.</span>
+                <button type="button" class="ea-btn" data-act="cancel">Cancel</button>
+                <button type="button" class="ea-btn ea-btn--primary" data-act="save">Save</button>
+            </div>`;
+        for (const el of body.querySelectorAll('select[data-sel]')) {
+            const [k, idx] = el.dataset.sel.split(':');
+            selects.push(attachSelect(el, {
+                options: [...el.options].map((o) => ({ value: o.value, label: o.textContent })),
+                value: el.value,
+                onChange: (v) => { tableOf(draft, cur)[Number(idx)][k] = v; },
+            }));
+        }
+    };
+
+    body.addEventListener('input', (e) => {
+        const row = e.target.closest('[data-move]');
+        if (!row) return;
+        const m = tableOf(draft, cur)[Number(row.dataset.move)];
+        if (e.target.dataset.k === 'label') m.label = e.target.value;
+        if (e.target.dataset.k === 'message') m.message = e.target.checked;
+    });
+    body.addEventListener('change', (e) => {
+        const row = e.target.closest('[data-move]');
+        if (row && e.target.dataset.k === 'message') tableOf(draft, cur)[Number(row.dataset.move)].message = e.target.checked;
+    });
+
+    body.addEventListener('click', async (e) => {
+        const b = e.target.closest('button');
+        if (!b) return;
+        const moves = tableOf(draft, cur);
+        if (b.dataset.table) { cur = b.dataset.table; render(); return; }
+        if (b.dataset.act === 'customise') {
+            const [, store, types] = curSpec();
+            setTable(draft, cur, builtinMoves(store, types[0]));
+            render(); return;
+        }
+        if (b.dataset.act === 'builtin') { setTable(draft, cur, null); render(); return; }
+        if (b.dataset.act === 'add') {
+            const [, store, types] = curSpec();
+            const st = statusesOf(store, types[0]);
+            moves.push({ from: st[0], label: '', to: st[1] || st[0], message: false });
+            render();
+            body.querySelector(`[data-move="${moves.length - 1}"] [data-k="label"]`)?.focus();
+            return;
+        }
+        if (b.dataset.up || b.dataset.down) {
+            const i = Number(b.dataset.up ?? b.dataset.down), j = i + (b.dataset.up ? -1 : 1);
+            if (j >= 0 && j < moves.length) [moves[i], moves[j]] = [moves[j], moves[i]];
+            render(); return;
+        }
+        if (b.dataset.rm) { moves.splice(Number(b.dataset.rm), 1); render(); return; }
+        if (b.dataset.flow) {
+            const i = Number(b.dataset.flow);
+            const [, store, types] = curSpec();
+            const where = cur === 'bugs' ? `workflow.bugs.moves[${i}]` : `workflow.backlog.${types[0]}.moves[${i}]`;
+            const result = await openFlowEditor({
+                title: `${moves[i].label || 'Move'} — what it does`,
+                store, types, graph: moves[i].flow,
+                serverFindings: problems.filter((p) => p.where === where && p.node_id),
+            });
+            if (result === undefined) return;          // cancelled
+            if (result) moves[i].flow = result; else delete moves[i].flow;
+            render(); return;
+        }
+        if (b.dataset.act === 'cancel') { close(false); return; }
+        if (b.dataset.act === 'save') await save();
+    });
+
+    const save = async () => {
+        problems = [];
+        // An unlabelled row is one somebody added and never filled in.
+        for (const [key] of tables) {
+            const m = tableOf(draft, key);
+            if (m) setTable(draft, key, m.filter((x) => String(x.label || '').trim()));
+        }
+        try {
+            await saveWorkflow(draft);
+            eventBus?.emit?.('toast:show', { type: 'info', message: `Workflow saved to project.json. Reload ${appName()} for every page to use it.` });
+            close(true);
+        } catch (err) {
+            problems = err.problems?.length ? err.problems : [{ where: '', message: err.message || String(err) }];
+            render();
+        }
+    };
+
+    let settle;
+    const done = new Promise((r) => { settle = r; });
+    let closed = false;
+    const win = new ManagedWindow({
+        id: `bd-workflow-${_seq++}`, title: 'Workflow', icon: 'account_tree', content: body,
+        modal: true, canMinimize: false, canMaximize: true, canResize: true, canDrag: true,
+        defaultWidth: 920, defaultHeight: 600, onClose: () => close(false),
+    });
+    function close(saved) {
+        if (closed) return;
+        closed = true;
+        for (const s of selects) { try { s.destroy(); } catch { /* gone */ } }
+        try { win.close({ force: true }); } catch { /* closing */ }
+        settle(saved);
+    }
+    render();
+    win.show();
+    return done;
+}
+
+/**
+ * One flow in FlexDesk's outline editor, in a window of its own over the table.
+ * Resolves the edited graph, `null` when the flow was removed, or `undefined`
+ * when cancelled. Done is refused while the flow has problems.
+ *
+ * @param {object} o
+ * @param {string} o.title
+ * @param {'bugs'|'backlog'} o.store
+ * @param {string[]} o.types
+ * @param {object} [o.graph]
+ * @param {boolean} [o.actions]   a custom action's flow: "Move to a status" is offered
+ * @param {Array} [o.serverFindings]  the bridge's problems for this flow
+ */
+export function openFlowEditor({ title, store, types, graph = null, actions = false, serverFindings = [] }) {
+    const catalogue = createStepCatalogue(stepTypes(store, types, { actions }), { categories: CATEGORIES });
+    const body = document.createElement('div');
+    body.className = 'bd-flowedit';
+    body.innerHTML = `
+        <div class="bd-flowedit__host"></div>
+        <div class="ea-modal__actions bd-schema__actions">
+            <span class="td-dim bd-schema__path" data-slot="note">Runs in the page when the move is made; nothing is saved until it has finished.</span>
+            <button type="button" class="ea-btn ea-btn--danger" data-act="remove">Remove the flow</button>
+            <button type="button" class="ea-btn" data-act="cancel">Cancel</button>
+            <button type="button" class="ea-btn ea-btn--primary" data-act="done">Done</button>
+        </div>`;
+    const host = body.querySelector('.bd-flowedit__host');
+
+    // Insert a value: what earlier prompts answered, and the record's fields.
+    const fieldGroup = {
+        id: 'record', label: 'This record', sub: 'its value when the move is made',
+        items: [...SETTABLE[store], ['status', 'Status'], ['type', 'Type'], ['reporter', 'Reporter'], ['id', 'Id'],
+                ...types.flatMap((t) => customFields(store, t).map((f) => [f.name, f.label || f.name]))]
+            .filter(([n], i, a) => a.findIndex(([m]) => m === n) === i)
+            .map(([n, l]) => ({ label: l, type: 'field', ref: `\${record.${n}}` })),
+    };
+    let editor = null;
+    const values = async ({ before }) => {
+        const graphNow = editor?.getGraph() || {};
+        const byId = new Map((graphNow.nodes || []).map((n) => [n.id, n]));
+        const prompts = (before || []).map((b) => (typeof b === 'string' ? byId.get(b) : b))
+            .filter((n) => n && n.type === 'prompt');
+        return [
+            { id: 'input', label: 'Answers', sub: 'from the questions asked before this step',
+              empty: 'No question is asked before this step.',
+              items: prompts.map((n) => ({ label: n.label || n.config?.question || n.id, type: 'answer', ref: `\${input.${n.id}}` })) },
+            fieldGroup,
+        ];
+    };
+
+    const refresh = () => {
+        if (!editor) return;
+        const findings = [...checkFlow(editor.getGraph(), store, types, { actions }),
+            ...serverFindings.map((p) => ({ code: 'bridge', message: p.message, severity: 'error', node_id: p.node_id }))];
+        editor.setFindings(findings);
+        return findings;
+    };
+
+    editor = createOutlineEditor(host, {
+        catalogue, widgets: createWidgetRegistry(), references: { template: TEMPLATE_REFERENCES },
+        blocks: BLOCKS, values,
+        valuesNote: 'Only questions asked before this step, on every path, are listed.',
+        summarise: (node) => summariseStep(node),
+        onChange: () => { serverFindings = []; refresh(); },
+    });
+    editor.load({ graph: graph ? JSON.parse(JSON.stringify(graph)) : emptyFlow() });
+    refresh();
+
+    let settle;
+    const done = new Promise((r) => { settle = r; });
+    let closed = false;
+    const win = new ManagedWindow({
+        id: `bd-flow-${_seq++}`, title, icon: 'account_tree', content: body,
+        modal: true, canMinimize: false, canMaximize: true, canResize: true, canDrag: true,
+        defaultWidth: 860, defaultHeight: 600, onClose: () => close(undefined),
+    });
+    function close(value) {
+        if (closed) return;
+        closed = true;
+        try { editor?.destroy(); } catch { /* gone */ }
+        try { win.close({ force: true }); } catch { /* closing */ }
+        settle(value);
+    }
+    body.addEventListener('click', (e) => {
+        const act = e.target.closest('[data-act]')?.dataset.act;
+        if (act === 'cancel') close(undefined);
+        else if (act === 'remove') close(null);
+        else if (act === 'done') {
+            const findings = refresh();
+            if (findings.length) {
+                body.querySelector('[data-slot="note"]').textContent =
+                    `${findings.length} thing${findings.length === 1 ? '' : 's'} to fix first — see the list above the flow.`;
+                return;
+            }
+            const g = editor.getGraph();
+            close(stepCount(g) ? g : null);
+        }
+    });
+    win.show();
+    return done;
+}
+
+/** A step's one line in the outline. */
+function summariseStep(node) {
+    const c = node.config || {};
+    switch (node.type) {
+        case 'condition': return `${c.field || '?'} ${String(c.op || 'is').replace(/_/g, ' ')}${c.value ? ` ${c.value}` : ''}`;
+        case 'require-message': return c.prompt || 'Ask for the message';
+        case 'prompt': return c.question || 'Ask a question';
+        case 'set-field': return `${c.field || '?'} = ${c.value || '(empty)'}`;
+        case 'clear-field': return `clear ${c.field || '?'}`;
+        case 'add-comment': return String(c.body || '').split('\n')[0] || 'Add a comment';
+        case 'set-status': return `→ ${c.status || '?'}`;
+        default: return '';
+    }
+}

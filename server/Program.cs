@@ -501,9 +501,13 @@ app.MapPost("/api/bugs/{id:int}", async (int id, HttpRequest req) =>
     // smallest thing that works: a note in a header the format already had.
     var statusChange = changes.FirstOrDefault(c => c.Field == "status");
     var statusNote = statusChange is null ? null : $"status: {statusChange.From} -> {statusChange.To}";
+    // A comment with no move may still carry a note: a custom action tags its
+    // comment ("blocked") the way a move tags its message.
+    var commentNote = statusNote ?? (patch.TryGetValue("commentNote", out var cnv) && cnv.ValueKind == JsonValueKind.String
+        && !string.IsNullOrWhiteSpace(cnv.GetString()) ? cnv.GetString()!.Trim() : null);
     if (patch.TryGetValue("comment", out var cv) && cv.ValueKind == JsonValueKind.String
         && !string.IsNullOrWhiteSpace(cv.GetString()))
-        text = Md.AppendComment(text, actor, cv.GetString()!, statusNote);
+        text = Md.AppendComment(text, actor, cv.GetString()!, commentNote);
     else if (statusNote is not null && patch.TryGetValue("tagRecentComment", out var tv) && tv.ValueKind == JsonValueKind.True)
         text = Md.TagRecentComment(text, actor, statusNote, DateTime.UtcNow).Text;
     await Req.Store.WriteRecord(path, text);
@@ -999,6 +1003,17 @@ app.MapPost("/api/backlog/{id:int}", async (int id, HttpRequest req) =>
     if (ApplyFields(ref text, "backlog", retype ?? item.Type, patch, creating: false) is { } fieldError)
         return Results.Json(new { ok = false, error = fieldError }, json, statusCode: 400);
 
+    // A move's message, or a flow's comment, written in the SAME save as the
+    // move — as on a bug — so a configured move is one write, all or nothing.
+    if (patch.TryGetValue("comment", out var icv) && icv.ValueKind == JsonValueKind.String
+        && !string.IsNullOrWhiteSpace(icv.GetString()))
+    {
+        var moved = (Md.GetFrontmatter(text, "status") ?? "").Trim();
+        var note = moved != statusBefore ? $"status: {statusBefore} -> {moved}"
+            : patch.TryGetValue("commentNote", out var inv) && inv.ValueKind == JsonValueKind.String ? inv.GetString()?.Trim() : null;
+        text = Md.AppendComment(text, actor, icv.GetString()!, string.IsNullOrWhiteSpace(note) ? null : note);
+    }
+
     // Before the retype branch below, so the same `text` is what gets written to
     // whichever path the record ends up at.
     text = RecordHistory.Append(text, actor, changes);
@@ -1387,6 +1402,8 @@ object ConfigPayload(Store s, string? slug = null) => new
     // Custom fields, hidden built-ins and custom statuses per record type, and
     // what was wrong with them — read at module load, like the roster.
     schema = SchemaPayload(s.Project.Schema()),
+    // The move tables, their flows and the custom actions (RecordWorkflow.cs).
+    workflow = s.Project.Workflow(),
     // The store this page is on, and which of its two halves exist.
     store = new { kind = s.Kind, name = s.Name, hasBugs = s.HasBugs, hasBacklog = s.HasBacklog, @base = s.UrlBase },
     projects = ProjectList(),
@@ -1559,6 +1576,27 @@ app.MapPost("/api/project/schema", async (HttpRequest req) =>
 
     var saved = Req.Store.Project.SetSchema(next);
     return Results.Json(new { ok = true, schema = SchemaPayload(saved) }, json);
+});
+
+// The workflow, saved from Settings › Workflow. Checked against the schema and
+// refused whole on any problem, each with where it is and, for a flow step, the
+// step's id — the editor shows them in its findings strip with Go to it.
+app.MapPost("/api/project/workflow", async (HttpRequest req) =>
+{
+    var body = await JsonSerializer.DeserializeAsync<Dictionary<string, JsonElement>>(req.Body, json) ?? new();
+    if (!body.TryGetValue("workflow", out var wv) || wv.ValueKind is not (JsonValueKind.Object or JsonValueKind.Null))
+        return Results.Json(new { ok = false, error = "workflow object required" }, json, statusCode: 400);
+    var node = wv.ValueKind == JsonValueKind.Null ? null : JsonNode.Parse(wv.GetRawText());
+    var problems = RecordWorkflow.Check(node, Req.Store.Project.Schema());
+    if (problems.Count > 0)
+        return Results.Json(new
+        {
+            ok = false,
+            error = string.Join("\n", problems.Select(p => p.Message)),
+            problems = problems.Select(p => new { where = p.Where, message = p.Message, node_id = p.NodeId }),
+        }, json, statusCode: 400);
+    Req.Store.Project.SetWorkflow(node);
+    return Results.Json(new { ok = true, workflow = Req.Store.Project.Workflow() }, json);
 });
 
 // Add or update ONE person without having to send the whole roster — what an

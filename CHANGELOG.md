@@ -7,6 +7,23 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Configurable moves** (STORY-0018). Settings › Workflow turns the moves each
+  status offers into a table you can edit: one for bugs and one per backlog type
+  (from status, label, target, whether a message is required). "Customise" starts
+  the table from the built-in moves; with no table, records move as before. Each
+  move can have a **flow**, edited in FlexDesk's outline editor:
+  - steps: require a message, ask for input (text or a choice), set a field,
+    clear a field, add a comment, and *If … otherwise* on a field of the record;
+  - an answer is used later as `${input.<step>}`, and the record's fields as
+    `${record.<field>}`;
+  - problems are shown on the step, with *Go to it*, and the save refuses them.
+
+  A flow runs when the move is made, and the move is saved once with everything
+  it collected, so cancelling a prompt leaves the record as it was. The record
+  page's Action buttons, the bug queue's and the board's right-click menus all
+  offer the configured moves. A backlog move's message is now written in the
+  same save as the move, as a bug's already was.
+
 - **Record types: your own fields and statuses** (EPIC-0003). Settings ›
   Record types gives each record type — Bug, Regression, Chore, and each
   backlog or ticket type — its own fields (text, number, date, yes/no, choice;

@@ -1077,3 +1077,27 @@ tr[draggable="true"]:active,
 .td-chip--warn { color: #d7ba7d; border-color: rgb(215 186 125 / 40%); }
 /* A status value the schema does not know (schema.js statusKnown). */
 .ea-tin.td-unknown { color: #d7ba7d; text-decoration: underline wavy rgb(215 186 125 / 60%); }
+
+/* ── Workflow (workflow_editor.js) ───────────────────────────────────
+   The record types editor's layout, with a move table for a body. */
+.bd-workflow__hdr, .bd-schema .bd-workflow__row {
+    display: grid;
+    grid-template-columns: 44px 140px 1fr 140px 64px 92px 26px;
+    align-items: center;
+    gap: 6px;
+    margin: 0 0 4px;
+}
+.bd-workflow__hdr { font-size: 10.5px; color: var(--text-dim, #666); }
+.bd-workflow__builtin { padding: 10px 0; line-height: 1.6; }
+.bd-workflow__builtin p { margin: 0 0 10px; max-width: 60ch; }
+.bd-workflow__builtin .ea-btn, .bd-workflow__foot .ea-btn, .bd-workflow__flow { display: inline-flex; align-items: center; gap: 4px; }
+.bd-workflow__builtin .material-symbols-outlined, .bd-workflow__foot .material-symbols-outlined,
+.bd-workflow__flow .material-symbols-outlined { font-size: 15px; }
+.bd-workflow__flow { justify-content: center; font-size: 11px; }
+.bd-workflow__flow--on { color: #fff; background: var(--accent, #0e639c); border-color: var(--accent-hover, #1177bb); }
+.bd-workflow__foot { display: flex; gap: 8px; margin-top: 8px; }
+
+/* The outline editor's window: the editor fills it, the actions sit under it. */
+.bd-flowedit { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; background: var(--surface-1, #252526); }
+.bd-flowedit__host { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.bd-flowedit__host > * { flex: 1 1 auto; min-height: 0; }

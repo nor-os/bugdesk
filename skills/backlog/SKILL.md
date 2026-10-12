@@ -331,6 +331,11 @@ its value; a custom status is legal for its type, and one whose `category` is
 `finished` is terminal like `done`. When the type hides `points`, refinement
 does not ask for an estimate.
 
+A type may also have **configured moves with flows** (`workflow.backlog.<type>`).
+Flows run only for moves made in BugDesk. When you move an item by editing its
+file, apply the move's flow yourself; how is in [`/bugs`](../bugs/SKILL.md),
+*Configured moves and their flows*.
+
 ## Hierarchy
 
 ```

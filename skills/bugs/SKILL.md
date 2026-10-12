@@ -368,6 +368,32 @@ the backlog's `task`:
   is left in the file. The UI marks it; you mention it in your comment if it
   matters to the bug.
 
+### Configured moves and their flows
+
+A project may configure its moves in `project.json` under `workflow`
+(Settings › Workflow): which moves each status offers (`workflow.bugs.moves`,
+or `workflow.backlog.<type>.moves`, each `{from, label, to, message, flow}`),
+and a **flow** per move: steps such as "clear field: assignee", "ask for input",
+"add a comment".
+
+**Flows run only for moves made in BugDesk's UI.** When you move a record by
+editing its file, nothing runs them for you, so apply them yourself:
+
+1. Find the row whose `from` is the record's status (or `*`) and whose `to` is
+   where you are moving it.
+2. If it has `message: true`, the move's comment is required. That is already
+   the rule for every bug move but starting work.
+3. If it has a `flow`, walk its `nodes` from the `start` node along
+   `connections`. Then apply each `set-field` / `clear-field` to the
+   frontmatter, with a `## History` line for any status, assignee or reporter
+   change. Write each `add-comment` into your move's comment. For a
+   `condition`, take its `true` or `false` connection. A `prompt` is a question
+   for you to answer in the comment.
+
+Do this in the same edit and the same commit as the move. A configured table
+never changes the claim and handback in this skill: if it no longer offers one
+of their moves, follow this skill anyway and say so in your comment.
+
 ### Who you sign as
 
 Sign every comment with **the agent name you resolved in step 0** —
