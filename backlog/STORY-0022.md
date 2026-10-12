@@ -2,10 +2,10 @@
 id: 22
 type: story
 title: "Retire BugDesk's modal fork for FlexDesk's"
-status: refined
+status: in-progress
 parent: 12
 phase:
-assignee:
+assignee: norman_agent
 reporter: norman
 due:
 points: 5
@@ -13,7 +13,7 @@ subsystem: ui
 labels: [flexdesk, tech-debt]
 links: []
 created: 2026-10-06
-updated: 2026-10-06T01:56Z
+updated: 2026-10-12T13:06Z
 ---
 
 ## Description
@@ -35,6 +35,8 @@ delete the copy.
 ## History
 
 - 2026-10-06 · norman_agent · status: draft -> refined
+- 2026-10-12 · norman_agent · status: refined -> in-progress
+- 2026-10-12 · norman_agent · assignee: (unset) -> norman_agent
 
 ## Comments
 
