@@ -21,11 +21,13 @@
  * rather than being a hard constraint the user has to fight. The rules
  * themselves live in ./backlog_data.js, next to the store they describe.
  *
- * Its own overlay rather than a ManagedWindow: it opens ON TOP of the New item
- * dialog, which is itself a modal, and it stacks in the same z-tier the filter
- * editor already established for exactly this reason (11000, above the
- * 6000–6999 ManagedWindow band).
+ * A modal ManagedWindow, like every other dialog in the app: a title bar you can
+ * drag it by, a resize border, and the window stack's own z-order — so it opens
+ * on top of the New item dialog (itself a modal ManagedWindow) without a z-tier
+ * of its own. The search field is the first row of the body, not the title.
  */
+
+import { ManagedWindow } from '@flexdesk/widgets';
 
 import { esc } from './data.js';
 import {
@@ -39,6 +41,8 @@ import { attachSelect } from './select_field.js';
 const icon = (name) => `<span class="material-symbols-outlined">${name}</span>`;
 
 const STORE_LABEL = { bugs: 'Bugs', backlog: 'Backlog' };
+
+let _pickerSeq = 1;
 
 /* The hierarchy rules live in ./backlog_data.js — `parentTypesFor` and
  * `childTypesFor` — beside the store they describe, and are re-exported here
@@ -132,13 +136,10 @@ export function openRecordPicker({
         const overlay = document.createElement('div');
         overlay.className = 'bd-picker';
         overlay.innerHTML = `
-            <div class="bd-picker__dialog" role="dialog" aria-modal="true" aria-label="${esc(title)}">
                 <div class="bd-picker__head">
                     ${icon('search')}
                     <input class="bd-picker__input" type="text" autocomplete="off"
                            placeholder="Search by reference or title…" aria-label="Search">
-                    <button type="button" class="bd-picker__close" data-a="cancel"
-                            aria-label="Cancel">${icon('close')}</button>
                 </div>
                 <div class="bd-picker__filters" role="group"
                      aria-label="Filter by ${multiStore ? 'store' : 'type'}">
@@ -161,9 +162,23 @@ export function openRecordPicker({
                     <button type="button" class="ea-btn" data-a="clear">Leave empty</button>
                     <span class="td-spacer"></span>
                     <button type="button" class="ea-btn" data-a="cancel">Cancel</button>
-                </div>
-            </div>`;
-        document.body.appendChild(overlay);
+                </div>`;
+        const win = new ManagedWindow({
+            id: `bd-picker-${_pickerSeq++}`,
+            title,
+            icon: 'search',
+            content: overlay,
+            modal: true,
+            canMinimize: false,
+            canMaximize: false,
+            canResize: true,
+            canDrag: true,
+            defaultWidth: 640,
+            defaultHeight: 540,
+            // The title bar's X, and anything else that closes the window.
+            onClose: () => close(null),
+        });
+        win.show();
 
         const input = overlay.querySelector('.bd-picker__input');
         const listEl = overlay.querySelector('[data-slot="list"]');
@@ -176,7 +191,7 @@ export function openRecordPicker({
             settled = true;
             document.removeEventListener('keydown', onKey, true);
             for (const f of facetSelects) { try { f.destroy(); } catch { /* gone */ } }
-            overlay.remove();
+            try { win.close({ force: true }); } catch { /* already closing */ }
             try { returnFocus?.focus(); } catch { /* gone */ }
             resolve(value);
         };
@@ -300,8 +315,6 @@ export function openRecordPicker({
         input.addEventListener('input', () => { query = input.value; cursor = 0; render(); });
 
         overlay.addEventListener('click', (e) => {
-            // Clicking the backdrop cancels; clicking the dialog must not.
-            if (e.target === overlay) { close(null); return; }
             const closedChip = e.target.closest('[data-closed]');
             if (closedChip) {
                 includeClosed = !includeClosed;

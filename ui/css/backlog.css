@@ -539,31 +539,16 @@
 .td-field[hidden],
 .td-group[hidden] { display: none !important; }
 
-/* ── Search picker / collaborators editor ────────────────────────────
-   Own overlay rather than a ManagedWindow: both can open ON TOP of a modal
-   form, so they sit in the same z-tier the filter editor established (11000,
-   above the 6000-6999 ManagedWindow band). */
+/* ── Search picker ────────────────────────────────────────────────────
+   The body of a modal ManagedWindow (item_picker.js): the window owns the
+   chrome, the backdrop and the z-order, so this only lays out the content. */
 
 .bd-picker {
-    position: fixed;
-    inset: 0;
-    z-index: 11000;
-    display: flex;
-    align-items: flex-start;
-    justify-content: center;
-    padding: 8vh 16px 16px;
-    background: rgb(0 0 0 / 45%);
-}
-.bd-picker__dialog {
     display: flex;
     flex-direction: column;
-    width: min(620px, 100%);
-    max-height: 76vh;
+    flex: 1 1 auto;
+    min-height: 0;
     background: var(--surface-1, #252526);
-    border: 1px solid var(--border-strong, #383838);
-    border-radius: var(--radius-lg, 8px);
-    box-shadow: 0 18px 48px rgb(0 0 0 / 55%);
-    overflow: hidden;
 }
 .bd-picker__head {
     display: flex;
@@ -582,16 +567,6 @@
     border: none;
     outline: none;
 }
-.bd-picker__close {
-    background: none;
-    border: none;
-    padding: 0;
-    color: var(--text-muted, #888);
-    cursor: pointer;
-    display: inline-flex;
-}
-.bd-picker__close:hover { background: none; color: var(--text-primary, #e0e0e0); }
-
 .bd-picker__filters {
     display: flex;
     align-items: center;
@@ -777,7 +752,7 @@
 
 .bd-sel__panel {
     position: fixed;
-    z-index: 11500;         /* above the picker overlay, which can be beneath it */
+    z-index: 11500;         /* above every window and the filter editor overlay */
     max-height: 320px;
     display: flex;
     flex-direction: column;

@@ -2340,7 +2340,11 @@ await t('the picker offers both stores and finds a master by TITLE', async () =>
         .dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
     await tick();
     const picker = document.querySelector('.bd-picker');
-    assert.ok(picker, 'no picker overlay opened');
+    assert.ok(picker, 'no picker opened');
+    // BUG-0011: a modal ManagedWindow like every other dialog, not a bare overlay.
+    const win = picker.closest('.twm-managed-window');
+    assert.ok(win, 'the picker is not in a ManagedWindow');
+    assert.ok(win.classList.contains('twm-managed-window--modal'), 'the picker window is not modal');
     assert.ok(picker.querySelector('[data-store="bugs"]'), 'the Bugs store is not offered');
     assert.ok(picker.querySelector('[data-store="backlog"]'), 'the Backlog store is not offered');
     // Searching by title is the primary way a master is found: "what is #42 a

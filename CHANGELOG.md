@@ -11,7 +11,9 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   is the app's own dropdown, and typing in the target field lists matching
   records from both stores right under it (↑/↓, Enter or a click to pick;
   Enter again links). The magnifier's search dialog gains Type, Status and
-  Assignee filters beside the store and Closed chips.
+  Assignee filters beside the store and Closed chips, and is now a window like
+  every other dialog: a title bar to drag it by, a resizable border, the X to
+  close it, stacking over the New item dialog in the window order.
 - **Delete a record, close a bug from anywhere, edit a comment** (BUG-0012).
   A bug can be deleted from its page or the queue's right-click menu, and a
   backlog item in every mode, not only in tracker mode. Each asks first, and the
