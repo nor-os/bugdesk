@@ -2,10 +2,10 @@
 id: 15
 type: story
 title: "Hide optional built-in fields per record type"
-status: refined
+status: in-progress
 parent: 3
 phase:
-assignee:
+assignee: norman_agent
 reporter: norman
 due:
 points: 5
@@ -13,7 +13,7 @@ subsystem: unsorted
 labels: []
 links: []
 created: 2026-10-05
-updated: 2026-10-05T21:14Z
+updated: 2026-10-12T13:16Z
 ---
 
 ## Description
@@ -36,6 +36,8 @@ stay in the files untouched.
 ## History
 
 - 2026-10-05 · norman_agent · status: draft -> refined
+- 2026-10-12 · norman_agent · status: refined -> in-progress
+- 2026-10-12 · norman_agent · assignee: (unset) -> norman_agent
 
 ## Comments
 
