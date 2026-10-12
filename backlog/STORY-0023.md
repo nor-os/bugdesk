@@ -2,10 +2,10 @@
 id: 23
 type: story
 title: "Upgrade BugDesk to FlexDesk 0.7.0"
-status: refined
+status: in-progress
 parent: 12
 phase:
-assignee:
+assignee: norman_agent
 reporter: norman
 due:
 points: 5
@@ -13,7 +13,7 @@ subsystem: ui
 labels: [flexdesk]
 links: [blocks 8, blocks 18, blocks 7, blocks 9]
 created: 2026-10-11
-updated: 2026-10-11T13:39Z
+updated: 2026-10-12T12:56Z
 ---
 
 ## Description
@@ -39,6 +39,8 @@ upgrade forces.
 ## History
 
 - 2026-10-11 · norman_agent · status: draft -> refined
+- 2026-10-12 · norman_agent · status: refined -> in-progress
+- 2026-10-12 · norman_agent · assignee: (unset) -> norman_agent
 
 ## Comments
 
