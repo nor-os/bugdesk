@@ -96,6 +96,21 @@ static class Md
     }
 
     /// <summary>
+    /// Remove one frontmatter line, if it is there. Clearing a custom field takes
+    /// its line out rather than leaving a bare <c>key:</c>, so a record that never
+    /// had a value and one whose value was cleared read the same on disk.
+    /// </summary>
+    public static string RemoveFrontmatter(string text, string key)
+    {
+        if (!Split(text, out var front, out _)) return text;
+        var rx = new Regex($@"(?m)^{Regex.Escape(key)}:.*\n?");
+        var m = rx.Match(text);
+        // Only inside the frontmatter: a body line that happens to start with the
+        // same word is the user's text, not a field.
+        return m.Success && m.Index < front.Length + 4 ? text.Remove(m.Index, m.Length) : text;
+    }
+
+    /// <summary>
     /// Insert a frontmatter key immediately AFTER another one, so a value the server
     /// adds lands where a person would have typed it. Falls back to
     /// <see cref="SetFrontmatter"/> when the key already exists or the anchor does not

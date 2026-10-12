@@ -26,6 +26,7 @@
 import { AGENT_AUTHOR, HUMAN_AUTHOR, formatStamp } from './data.js';
 import { registerRecordHierarchy } from '../tiling/kind_taxonomy.js';
 import { apiUrl, CONFIG, KIND } from './instance.js';
+import { customStatus, customStatuses, isFinished, isHidden, storeStatuses } from './schema.js';
 
 /* ── mode ────────────────────────────────────────────────────────────
  *
@@ -66,7 +67,9 @@ export const TRACKER = MODE === 'tracker';
  * `dropped` is off every ladder: it is reachable from anywhere and returns to
  * `draft`.
  */
-export const STATUSES = ['draft', 'refined', 'in-progress', 'review', 'done', 'dropped'];
+export const STATUSES = ['draft', 'refined', 'in-progress', 'review', 'done', 'dropped',
+    // The project's own (Settings › Record types), after the built-in ones.
+    ...storeStatuses('backlog').map((s) => s.name)];
 
 export const LADDERS = {
     // A project is a container, not a unit of work: nothing about it is refined
@@ -98,9 +101,11 @@ export const STATUS_LABEL = {
 const STATUS_MACHINE = Object.fromEntries(
     Object.entries(STATUS_LABEL).map(([k, v]) => [v, k]));
 
-export const humanizeItemStatus = (s) => STATUS_LABEL[s]
+const customItemStatus = (s) => storeStatuses('backlog').find((x) => x.name === s);
+export const humanizeItemStatus = (s) => STATUS_LABEL[s] || customItemStatus(s)?.label
     || String(s || '').replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 export const machineItemStatus = (label) => STATUS_MACHINE[label]
+    || storeStatuses('backlog').find((x) => (x.label || x.name) === label)?.name
     || String(label || '').toLowerCase().replace(/\s+/g, '-');
 
 /**
@@ -114,11 +119,18 @@ export const machineItemStatus = (label) => STATUS_MACHINE[label]
  * `dropped` counts. It is off every ladder, but "decided against" is finished
  * with in exactly the sense that matters here: nobody is going to do it.
  */
-export const isClosedItem = (i) => i?.status === 'done' || i?.status === 'dropped';
+export const isClosedItem = (i) => !!i && isFinished('backlog', i.type, i.status);
 
 /** Index of a status within its OWN type's ladder, or -1 for anything off it
  *  (`dropped`, or a status the type never uses). */
-export const stageOf = (item) => ladderFor(item?.type).indexOf(item?.status);
+export const stageOf = (item) => {
+    const ladder = ladderFor(item?.type);
+    const i = ladder.indexOf(item?.status);
+    if (i >= 0) return i;
+    // A custom status stands on the chevrons where it was configured to sit after.
+    const after = customStatus('backlog', item?.type, item?.status)?.after;
+    return after ? ladder.indexOf(after) : -1;
+};
 
 /* Button text per TARGET status. Deriving the actions from the ladder means a
  * type that skips `review` simply never offers "Send to review" — there is no
@@ -145,6 +157,19 @@ export function stageActions(item) {
 
     const ladder = ladderFor(item?.type);
     const i = ladder.indexOf(item?.status);
+    // The project's own statuses (Settings › Record types) are places an item can
+    // be PUT, not rungs: each is offered after the ladder's moves, and an item in
+    // one is offered the way back to where it was configured to sit after.
+    const custom = customStatuses('backlog', item?.type);
+    const into = custom.filter((s) => s.name !== item?.status)
+        .map((s) => [`Move to ${s.label || s.name}`, s.name]);
+    const mine = customStatus('backlog', item?.type, item?.status);
+    if (mine) {
+        const back = ladder.includes(mine.after) ? mine.after
+            : ladder.includes('in-progress') ? 'in-progress' : ladder[0];
+        return [[`Back to ${humanizeItemStatus(back)}`, back],
+            ...(mine.category === 'finished' ? [] : into), ['Drop', 'dropped']];
+    }
     // A status this type does not use (left behind by a hand edit, or by a
     // retype the server could not clamp) — offer the way back onto the ladder.
     if (i < 0) return [[`Move to ${humanizeItemStatus(ladder[0])}`, ladder[0]], ['Drop', 'dropped']];
@@ -159,7 +184,7 @@ export function stageActions(item) {
         // From the terminal state this reads as reopening, not stepping back.
         out.push([i === ladder.length - 1 ? 'Reopen' : (BACK_LABEL[prev] || `Back to ${humanizeItemStatus(prev)}`), prev]);
     }
-    if (item?.status !== 'done') out.push(['Drop', 'dropped']);
+    if (item?.status !== 'done') out.push(...into, ['Drop', 'dropped']);
     return out;
 }
 
@@ -225,8 +250,10 @@ export const REFINEMENT_RULES = [
       test: (i) => String(i.description || '').replace(/_\(.*?\)_/g, '').trim().length > 0 },
     { key: 'criteria', label: 'Has at least one acceptance criterion',
       test: (i) => (i.criteria || []).length > 0 },
+    // Off for a type that hides its estimate (Settings › Record types): a rule
+    // nobody can satisfy from the page is a button that never enables.
     { key: 'points', label: 'Has an estimate',
-      test: (i) => String(i.points || '').trim().length > 0 },
+      test: (i) => isHidden('backlog', i.type, 'points') || String(i.points || '').trim().length > 0 },
     { key: 'parent', label: 'Sits under a parent (top-level items are exempt)',
       test: (i) => i.type === 'epic' || i.type === 'project' || Number(i.parent) > 0 },
 ];
@@ -289,7 +316,10 @@ export const dueOf = (item) =>
     String(item?.due || '').trim() || String(item?.effectiveDue || '').trim();
 
 export function dueState(item, today = todayISO()) {
-    if (item?.status === 'done' || item?.status === 'dropped') return 'done';
+    if (isClosedItem(item)) return 'done';
+    // A type that hides its target date (Settings › Record types) has no
+    // standing against one: no overdue highlighting, no "due soon".
+    if (item && isHidden('backlog', item.type, 'due')) return 'none';
     const due = dueOf(item);
     if (!due) return 'none';
     const days = daysBetween(today, due);

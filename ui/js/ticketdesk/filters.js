@@ -13,6 +13,7 @@
  * pages.js and filter_editor.js did not have to learn about the split.
  */
 
+import { customFilterFields, isFinished, markHiddenFilterFields, storeStatuses } from './schema.js';
 import { createFilterModel, FILTER_ICONS, emptyExpr } from './filter_engine.js';
 import {
     deleteFilter as storeDelete, duplicateFilter as storeDuplicate,
@@ -44,7 +45,8 @@ export const FILTER_FIELDS = [
     },
     {
         key: 'status', label: 'Status', type: 'enum',
-        options: ['open', 'investigation', 'testing', 'closed'],
+        // The project's own statuses (Settings › Record types) join the four.
+        options: ['open', 'investigation', 'testing', 'closed', ...storeStatuses('bugs').map((s) => s.name)],
         get: (t) => t.rawStatus || '',
     },
     {
@@ -56,6 +58,14 @@ export const FILTER_FIELDS = [
         key: 'type', label: 'Type', type: 'enum',
         options: ['BUG', 'REG', 'CHORE'],
         get: (t) => t.type || '',
+    },
+    {
+        // Closed, or in a custom status whose category is finished (Settings ›
+        // Record types). What the open views are built on, so a project's own
+        // `wontfix` leaves them the way `closed` does.
+        key: 'finished', label: 'Finished', type: 'enum',
+        options: [{ value: 'no', label: 'no' }, { value: 'yes', label: 'yes' }],
+        get: (t) => (isFinished('bugs', t.rawType || 'bug', t.rawStatus) ? 'yes' : 'no'),
     },
     { key: 'summary', label: 'Summary', type: 'text', get: (t) => t.summary || '' },
     { key: 'subsystem', label: 'Subsystem', type: 'text', get: (t) => t.subsystem || '' },
@@ -74,7 +84,10 @@ export const FILTER_FIELDS = [
         get: (t) => t.lastCommentAuthor || 'none',
     },
     { key: 'lastCommentDate', label: 'Last comment', type: 'date', get: (t) => t.lastCommentDate || '' },
+    // The project's own fields — see ./schema.js.
+    ...customFilterFields('bugs'),
 ];
+markHiddenFilterFields('bugs', FILTER_FIELDS);
 
 export const MODEL = createFilterModel({ fields: FILTER_FIELDS, noun: 'bug' });
 
@@ -93,7 +106,7 @@ export const BUILTIN_FILTERS = [
         expr: {
             kind: 'group', op: 'AND', children: [
                 { kind: 'clause', field: 'lastCommentAuthor', op: 'is', value: AGENT_AUTHOR },
-                { kind: 'clause', field: 'status', op: 'is_not', value: 'closed' },
+                { kind: 'clause', field: 'finished', op: 'is', value: 'no' },
             ],
         },
     },
@@ -102,7 +115,7 @@ export const BUILTIN_FILTERS = [
     // "All Bugs" below still means all, closed included.
     {
         key: 'active', label: 'Active', icon: 'pending', builtin: true,
-        expr: { kind: 'group', op: 'AND', children: [{ kind: 'clause', field: 'status', op: 'is_not', value: 'closed' }] },
+        expr: { kind: 'group', op: 'AND', children: [{ kind: 'clause', field: 'finished', op: 'is', value: 'no' }] },
     },
     { key: 'all', label: 'All Bugs', icon: 'inbox', builtin: true, expr: emptyExpr() },
     {
@@ -117,6 +130,12 @@ export const BUILTIN_FILTERS = [
         key: 'testing', label: 'Testing', icon: 'bug_report', builtin: true,
         expr: { kind: 'group', op: 'AND', children: [{ kind: 'clause', field: 'status', op: 'is', value: 'testing' }] },
     },
+    // One view per custom status (Settings › Record types), beside the built-in ones.
+    ...storeStatuses('bugs').map((st) => ({
+        key: `status-${st.name}`, label: st.label || st.name, builtin: true,
+        icon: { waiting: 'hourglass_top', finished: 'do_not_disturb_on' }[st.category] || 'radio_button_checked',
+        expr: { kind: 'group', op: 'AND', children: [{ kind: 'clause', field: 'status', op: 'is', value: st.name }] },
+    })),
     {
         key: 'closed', label: 'Closed', icon: 'check_circle', builtin: true,
         expr: { kind: 'group', op: 'AND', children: [{ kind: 'clause', field: 'status', op: 'is', value: 'closed' }] },
@@ -139,7 +158,7 @@ export const BUILTIN_FILTERS = [
  *  a name is only useful if clicking it shows you the work behind the number. */
 export const assigneeExpr = (name) => ({
     kind: 'group', op: 'AND', children: [
-        { kind: 'clause', field: 'status', op: 'none_of', value: ['closed'] },
+        { kind: 'clause', field: 'finished', op: 'is', value: 'no' },
         { kind: 'clause', field: 'assignee', op: 'is', value: name || '' },
     ],
 });

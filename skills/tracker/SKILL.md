@@ -212,6 +212,11 @@ seen all three. Here it earns its keep twice over: it is the only place that
 records when a date holder changed hands, and nothing else about this store is
 under version control.
 
+A tracker's `project.json` may also give its ticket types their own fields and
+statuses (`schema.backlog.<type>`). Read them the way [`/bugs`](../bugs/SKILL.md)
+describes, section *Custom fields and statuses*: a custom field is one more
+frontmatter line, and a status whose `category` is `finished` is terminal.
+
 ## Hierarchy
 
 ```

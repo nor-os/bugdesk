@@ -31,6 +31,7 @@
  */
 
 import { createFilterModel, emptyExpr } from './filter_engine.js';
+import { customFilterFields, markHiddenFilterFields } from './schema.js';
 import {
     deleteFilter as storeDelete, duplicateFilter as storeDuplicate,
     getFilter as storeGet, listFilters as storeList, saveFilter as storeSave,
@@ -128,7 +129,10 @@ export const FILTER_FIELDS = [
         options: [...ASSIGNEES, 'none'],
         get: (i) => i.lastCommentAuthor || 'none',
     },
+    // The project's own fields — see ./schema.js.
+    ...customFilterFields('backlog'),
 ];
+markHiddenFilterFields('backlog', FILTER_FIELDS);
 
 export const MODEL = createFilterModel({ fields: FILTER_FIELDS, noun: 'item' });
 

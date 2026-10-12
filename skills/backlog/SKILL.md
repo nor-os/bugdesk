@@ -319,6 +319,18 @@ of `## Comments`.
 
 History entries: same grammar, same placement — see [`/bugs`](../bugs/SKILL.md).
 
+### Custom fields and statuses
+
+A project can give each backlog type its own fields and statuses and hide
+optional built-in fields (`phase`, `due`, `points`, `subsystem`, `labels`,
+`links`), in `project.json` under `schema.backlog.<type>`. The rules are the
+bug store's, and they are written once, in [`/bugs`](../bugs/SKILL.md), section
+*Custom fields and statuses*. In short: a custom field is one more frontmatter
+line, only for the fields the schema names for that type; a hidden field keeps
+its value; a custom status is legal for its type, and one whose `category` is
+`finished` is terminal like `done`. When the type hides `points`, refinement
+does not ask for an estimate.
+
 ## Hierarchy
 
 ```

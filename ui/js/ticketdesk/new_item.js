@@ -29,6 +29,8 @@ import { attachMarkdownEditor } from './md_editor.js';
 import { attachTagInput } from './tag_input.js';
 import { attachSelect, setRowVisible } from './select_field.js';
 import { attachParentPicker } from './item_picker.js';
+import { mountCustomFields } from './custom_fields.js';
+import { isHidden } from './schema.js';
 import {
     HUMAN_AUTHOR, TICKETS, assigneeChoices, createBug, loadData, rememberAssignee,
 } from './data.js';
@@ -94,6 +96,8 @@ export const FIELDS_FOR = {
     task:       { points: true, due: true, acceptance: true },
 };
 const ADAPTIVE = ['severity', 'parent', 'phase', 'points', 'due', 'acceptance'];
+/** The built-ins a project may hide per type (server/RecordSchema.cs's `Hideable`). */
+const HIDEABLE = ['severity', 'phase', 'points', 'due', 'subsystem', 'labels'];
 
 /**
  * The fields one kind actually has, with `parent` resolved against the
@@ -167,12 +171,13 @@ export function mountNewItem(host, props, ctx) {
                         <input class="ea-tin" data-f="points" placeholder="e.g. 3"></div>
                     <div class="td-field" data-row="due"><label>Target date</label>
                         <input class="ea-tin" type="date" data-f="due"></div>
-                    <div class="td-field"><label>Subsystem</label>
+                    <div class="td-field" data-row="subsystem"><label>Subsystem</label>
                         <select class="ea-tin" data-f="subsystem"></select></div>
-                    <div class="td-field td-span2"><label>Labels</label>
+                    <div class="td-field td-span2" data-row="labels"><label>Labels</label>
                         <input class="ea-tin" data-f="labels"></div>
                 </div>
             </section>
+            <section class="td-group" data-slot="customfields"></section>
             <section class="td-group" data-row="acceptance">
                 <div class="td-group__title">Acceptance criteria
                     <span class="td-dim">— one checkable outcome per line</span>
@@ -249,9 +254,32 @@ export function mountNewItem(host, props, ctx) {
 
     /* ── field visibility ────────────────────────────────────────── */
 
+    /* ── custom fields ───────────────────────────────────────────────
+     * The chosen type's own fields (Settings › Record types). Remounted when
+     * the Type moves to the other store, whose fields are a different set. */
+
+    let cf = null;
+    let cfStore = '';
+    const mountCF = () => {
+        const kind = kindById(kindId);
+        if (cf && cfStore === kind.store) { cf.setType(kind.value); return; }
+        try { cf?.destroy(); } catch { /* gone */ }
+        cfStore = kind.store;
+        cf = mountCustomFields(host.querySelector('[data-slot="customfields"]'),
+            { store: kind.store, type: kind.value, creating: true });
+    };
+
     function syncFields() {
         const shown = fieldsFor(kindId);
         for (const f of ADAPTIVE) setRowVisible(row(f), !!shown[f]);
+        // A built-in the project hides on this type (Settings › Record types) is
+        // not drawn and not sent: the record gets the store's default for it.
+        const kind = kindById(kindId);
+        for (const f of HIDEABLE) {
+            if (isHidden(kind.store, kind.value, f)) setRowVisible(row(f), false);
+            else if (!ADAPTIVE.includes(f)) setRowVisible(row(f), true);
+        }
+        mountCF();
         const title = host.querySelector('[data-f="title"]');
         if (title) {
             title.placeholder = kindById(kindId).store === 'bugs'
@@ -280,6 +308,10 @@ export function mountNewItem(host, props, ctx) {
         }
         const chosen = kindById(kindId);
         const shown = fieldsFor(kindId);
+        const hidden = (f) => isHidden(chosen.store, chosen.value, f);
+        const fieldError = cf?.validate();
+        if (fieldError) { setStatus(`Create failed: ${fieldError}`); return; }
+        const fields = cf?.collect() || {};
         const btn = actionsEl?.querySelector('[data-a="create"]');
         if (btn) btn.disabled = true;
         try {
@@ -288,12 +320,13 @@ export function mountNewItem(host, props, ctx) {
                 const bug = await createBug({
                     title,
                     type: chosen.value,
-                    severity: selects.severity.value() || 'medium',
-                    subsystem: selects.subsystem.value() || 'unsorted',
+                    severity: (!hidden('severity') && selects.severity.value()) || 'medium',
+                    subsystem: (!hidden('subsystem') && selects.subsystem.value()) || 'unsorted',
                     assignee: selects.assignee.value() || HUMAN_AUTHOR,
-                    labels: toList(fval('labels')),
+                    labels: hidden('labels') ? [] : toList(fval('labels')),
                     links: [],
                     description: fval('description'),
+                    fields,
                 });
                 await loadData();
                 setStatus(`Bug #${bug.id} created.`);
@@ -306,17 +339,18 @@ export function mountNewItem(host, props, ctx) {
                     // Only ever send what this kind actually has: a hidden field
                     // must not reach the record.
                     parent: shown.parent ? parentId : 0,
-                    phase: shown.phase ? selects.phase.value() : '',
-                    points: shown.points ? fval('points') : '',
-                    due: shown.due ? fval('due') : '',
+                    phase: shown.phase && !hidden('phase') ? selects.phase.value() : '',
+                    points: shown.points && !hidden('points') ? fval('points') : '',
+                    due: shown.due && !hidden('due') ? fval('due') : '',
                     // Written at CREATION, so a story can be filed already
                     // refined rather than filed and then immediately reopened to
                     // say what "done" means — which is when it is freshest.
                     acceptance: shown.acceptance ? fval('acceptance') : '',
                     assignee: selects.assignee.value(),
-                    subsystem: selects.subsystem.value() || 'unsorted',
-                    labels: toList(fval('labels')),
+                    subsystem: (!hidden('subsystem') && selects.subsystem.value()) || 'unsorted',
+                    labels: hidden('labels') ? [] : toList(fval('labels')),
                     description: fval('description'),
+                    fields,
                 });
                 await loadBacklog();
                 setStatus(`${itemRef(item)} created.`);
@@ -363,6 +397,7 @@ export function mountNewItem(host, props, ctx) {
             try { parentPicker.destroy(); } catch { /* gone */ }
             try { tagInput?.destroy(); } catch { /* gone */ }
             try { descEditor?.destroy(); } catch { /* gone */ }
+            try { cf?.destroy(); } catch { /* gone */ }
         },
     };
 }

@@ -289,7 +289,11 @@ export function openFilterEditor({
     function fieldSelectHtml(selectedKey) {
         const groups = new Map();
         for (const f of _fields()) {
-            const cap = TYPE_GROUP[f.type] || 'Other';
+            // A built-in the project hides (Settings › Record types) is not
+            // offered — unless this clause already uses it.
+            if (f.hidden && f.key !== selectedKey) continue;
+            // The project's own fields get their own group, below the built-ins.
+            const cap = f.custom ? 'Custom fields' : (TYPE_GROUP[f.type] || 'Other');
             if (!groups.has(cap)) groups.set(cap, []);
             groups.get(cap).push(f);
         }
@@ -297,7 +301,7 @@ export function openFilterEditor({
         // option so the select never silently rewrites the AST; validateFilter
         // is what tells the user it is broken.
         const unknown = selectedKey && !fieldByKey(selectedKey)
-            ? `<option value="${esc(selectedKey)}" selected>${esc(selectedKey)} (unknown)</option>` : '';
+            ? `<option value="${esc(selectedKey)}" selected>⚠ unknown field “${esc(selectedKey.replace(/^cf\./, ''))}”</option>` : '';
         let html = unknown;
         for (const [cap, fields] of groups) {
             html += `<optgroup label="${esc(cap)}">`;

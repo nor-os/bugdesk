@@ -119,6 +119,7 @@ export const VISIBLE_SETTINGS = new Set([
     'bugdesk.humanName',
     'bugdesk.agentName',
     'bugdesk.collaborators',
+    'bugdesk.recordTypes',
     'bugdesk.modifierOpen',
     // Read by FlexDesk's managed windows, which BugDesk's floats are.
     'window.animateMinimize',
@@ -168,6 +169,7 @@ export const BUGDESK_SETTINGS_SLICE = {
             // It carries a default so the settings store has a shape for the
             // path and the row renders like every other one.
             collaborators: null,
+            recordTypes: null,
         },
     },
 
@@ -198,6 +200,21 @@ export const BUGDESK_SETTINGS_SLICE = {
             onClick: async () => {
                 const { openCollaborators } = await import('../ticketdesk/collaborators.js');
                 return openCollaborators({ eventBus: window.__ecoagent?.eventBus });
+            },
+        },
+
+        // Custom fields, hidden built-ins and custom statuses per record type —
+        // a schema, edited in its own window like the roster above.
+        'bugdesk.recordTypes': {
+            type: 'action', category: 'general', group: 'Project',
+            label: 'Record types',
+            description: 'Your own fields (text, number, date, yes/no, choice) and statuses per record type, and which optional built-in fields each type shows. Saved in the shared project.json beside the stores, so everyone who pulls the repo gets the same ones.',
+            buttonLabel: 'Edit record types…',
+            icon: 'schema',
+            defaultValue: null,
+            onClick: async () => {
+                const { openSchemaEditor } = await import('../ticketdesk/schema_editor.js');
+                return openSchemaEditor({ eventBus: window.__ecoagent?.eventBus });
             },
         },
 

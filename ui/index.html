@@ -152,6 +152,9 @@
             // bridge says what that store has, since a project may have only
             // bugs or only a backlog.
             store: cfg.store || null,
+            // Custom fields, hidden built-ins and custom statuses per record type
+            // (project.json's `schema`). Read at module load by ticketdesk/schema.js.
+            schema: cfg.schema || null,
             projects: Array.isArray(cfg.projects) ? cfg.projects : [],
             tracker: cfg.tracker || { available: false },
         };

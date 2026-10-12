@@ -42,6 +42,11 @@ class Bug
     /// </summary>
     public List<string> Links { get; set; } = new();
 
+    /// <summary>Custom fields: every frontmatter key a bug does not use for itself
+    /// (see RecordSchema), in file order — including ones the schema no longer names,
+    /// which are shown as such and never dropped.</summary>
+    public Dictionary<string, string> Fields { get; set; } = new();
+
     public string Created { get; set; } = "";
     public string Updated { get; set; } = "";
     public string Description { get; set; } = "";
@@ -65,7 +70,7 @@ class Bug
     {
         id = Id, title = Title, status = Status, severity = Severity, type = Type,
         subsystem = Subsystem, assignee = Assignee, reporter = Reporter,
-        labels = Labels, links = Links,
+        labels = Labels, links = Links, fields = Fields,
         created = Created, updated = Updated, stage = Stage, pri = Pri,
         comments = Comments.Count, history = History.Count,
         // Last comment's author/date (or null) so the UI can build a
@@ -79,7 +84,9 @@ class Bug
         if (!Md.Split(File.ReadAllText(path), out var front, out var rest)) return null;
 
         var bug = new Bug();
-        foreach (var (k, val) in Md.Fields(front))
+        var all = Md.Fields(front);
+        bug.Fields = RecordSchema.Extras("bugs", all);
+        foreach (var (k, val) in all)
         {
             switch (k)
             {

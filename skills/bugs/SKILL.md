@@ -325,6 +325,49 @@ Field notes:
   date; that still reads, but always write the full stamp. `created`, comment
   headers and history lines stay plain dates.
 
+### Custom fields and statuses
+
+A project can give each record type **its own fields** and **its own statuses**,
+and hide optional built-in fields. They are configured under `schema` in the
+same `project.json` as the roster (Settings › Record types in the UI), keyed by
+store and then type — the bug store's `task` is a Chore, a different type from
+the backlog's `task`:
+
+```json
+"schema": {
+  "bugs": {
+    "bug": {
+      "fields":   [{ "name": "env", "label": "Environment", "type": "choice", "required": true, "values": ["prod", "staging"] }],
+      "hidden":   ["subsystem"],
+      "statuses": [{ "name": "blocked", "label": "Blocked", "category": "waiting", "after": "investigation" }]
+    }
+  }
+}
+```
+
+- **A custom field is one more frontmatter line**, under its `name`:
+  `env: prod`. Set it the way you set `assignee`. A `text` value is written in
+  double quotes; `number`, `date` (`YYYY-MM-DD`), `bool` (`true` / `false`) and
+  `choice` (exactly one of its `values`) are written bare. Put new lines after
+  `links:`. Leave a field out rather than writing an empty `key:`; clearing a
+  value removes its line. **Never** add a key the schema does not name for that
+  type, and never rename or drop one somebody else's record holds.
+- **A required field** must be set when you file a record of that type. A
+  record written before the field existed is not wrong; fill it in when you
+  touch the record if you know the value, and don't guess one.
+- **A hidden field** is only hidden. Leave its value in the file as it is.
+- **A custom status** is legal for its type alongside the built-in ones, and
+  its `category` says what it means: `active` and `waiting` are still open work
+  — the record stays in the open queues — and **`finished` is terminal**, like
+  `closed`. Treat a record in a finished custom status as done: don't claim it,
+  don't hand it back, and don't move it unless asked. The built-in statuses
+  keep their meaning, so the claim and handback in this skill are unchanged.
+  Moving a bug into or out of a custom status follows the same rules as any
+  other move: a `## History` line, and a comment whose header note is the move.
+- **A value the schema does not know** — a status or a field removed from it —
+  is left in the file. The UI marks it; you mention it in your comment if it
+  matters to the bug.
+
 ### Who you sign as
 
 Sign every comment with **the agent name you resolved in step 0** —

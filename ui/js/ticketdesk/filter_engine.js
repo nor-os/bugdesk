@@ -312,7 +312,10 @@ export function createFilterModel({ fields, noun = 'row' }) {
         if (node.kind === 'clause') {
             const field = byKey[node.field];
             const op = field && opDef(field.type, node.op);
-            const label = field ? field.label : node.field;
+            // A field that has gone — a custom field removed from the schema —
+            // is SAID, so a filter matching nothing reads as broken, not empty.
+            if (!field) return `⚠ unknown field “${String(node.field || '').replace(/^cf\./, '')}”`;
+            const label = field.label;
             if (!op) return `${label} ${node.op}`.trim();
             const val = describeValue(op, node.value);
             return val ? `${label} ${op.label} ${val}` : `${label} ${op.label}`;
@@ -326,6 +329,19 @@ export function createFilterModel({ fields, noun = 'row' }) {
     }
 
     const describeFilter = (expr) => describeNode(expr, 0);
+
+    /** The field keys an expression names that this catalogue does not know —
+     *  for a visible marker wherever a saved filter is listed. */
+    const unknownFields = (expr) => {
+        const out = new Set();
+        const walk = (n) => {
+            if (!n) return;
+            if (n.kind === 'clause') { if (!byKey[n.field]) out.add(n.field); return; }
+            for (const c of Array.isArray(n.children) ? n.children : []) walk(c);
+        };
+        walk(expr);
+        return [...out];
+    };
 
     /* ── validation ──────────────────────────────────────────────────
      * Returns EVERY problem, not the first, so the editor can mark each broken
@@ -387,7 +403,7 @@ export function createFilterModel({ fields, noun = 'row' }) {
 
     return Object.freeze({
         id, fields, noun, fieldByKey,
-        matcherFor, describeFilter, validateFilter, evaluateFilter,
+        matcherFor, describeFilter, validateFilter, evaluateFilter, unknownFields,
         emptyExpr, cloneExpr,
     });
 }

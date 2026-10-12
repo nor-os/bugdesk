@@ -19,7 +19,8 @@
  * POST /api/bugs/{id}.
  */
 
-import { HUMAN_AUTHOR, fetchBug, patchBug } from './data.js';
+import { HUMAN_AUTHOR, fetchBug, humanizeStatus, patchBug } from './data.js';
+import { customStatus, customStatuses, isFinished } from './schema.js';
 
 /** Moves per status, primary (the usual next step) first: `[label, target]`. */
 //
@@ -37,6 +38,37 @@ export const BUG_TRANSITIONS = {
 };
 
 /** How long before a move a comment of yours still counts as its message. */
+/**
+ * The moves of one bug, built-in and custom (Settings › Record types).
+ *
+ * A custom status is not a rung on the chevron ladder: it is somewhere a bug can
+ * be PUT — `blocked`, `wontfix` — so every unfinished bug is offered a move into
+ * each one, after its built-in moves. A bug IN a custom status is offered the
+ * way back (to the status it was configured to sit after, else investigation),
+ * Close, and the other custom statuses; one in a finished custom status, the
+ * way back and Reopen.
+ *
+ * @param {string} status  the bug's raw status
+ * @param {string} [type]  the bug's raw type (`bug`, `regression`, `task`)
+ * @returns {Array<[label, target]>}
+ */
+export function bugMoves(status, type = 'bug') {
+    const custom = customStatuses('bugs', type);
+    const into = (except) => custom
+        .filter((s) => s.name !== except)
+        .map((s) => [`Move to ${s.label || s.name}`, s.name]);
+    if (BUG_TRANSITIONS[status]) {
+        return status === 'closed' ? BUG_TRANSITIONS.closed : [...BUG_TRANSITIONS[status], ...into(status)];
+    }
+    const me = customStatus('bugs', type, status);
+    const back = me?.after && BUG_TRANSITIONS[me.after] && me.after !== 'closed' ? me.after : 'investigation';
+    if (me && isFinished('bugs', type, status)) {
+        return [[`Back to ${humanizeStatus(back)}`, back], ['Reopen', 'open']];
+    }
+    // In a custom status, or one the schema no longer knows: the way back first.
+    return [[`Back to ${humanizeStatus(back)}`, back], ['Close', 'closed'], ...into(status)];
+}
+
 export const MESSAGE_WINDOW_MS = 5 * 60 * 1000;
 
 /** Whether moving `from` → `to` needs a message. Only starting work does not. */

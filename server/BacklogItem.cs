@@ -172,6 +172,10 @@ class BacklogItem
     public string Subsystem { get; set; } = "unsorted";
     public List<string> Labels { get; set; } = new();
     public List<string> Links { get; set; } = new();
+    /// <summary>Custom fields: every frontmatter key an item does not use for itself
+    /// (see RecordSchema), in file order — kept whether or not the schema names it.</summary>
+    public Dictionary<string, string> Fields { get; set; } = new();
+
     public string Created { get; set; } = "";
     public string Updated { get; set; } = "";
 
@@ -226,7 +230,7 @@ class BacklogItem
         parent = Parent, phase = Phase, effectivePhase = phase,
         assignee = Assignee, reporter = Reporter, due = Due, effectiveDue,
         points = Points, subsystem = Subsystem,
-        labels = Labels, links = Links, created = Created, updated = Updated,
+        labels = Labels, links = Links, fields = Fields, created = Created, updated = Updated,
         typeOrder = TypeOrder, children = childCount,
         criteria = Criteria(), comments = Comments.Count, history = History.Count,
         lastCommentAuthor = Comments.Count > 0 ? Comments[^1].Author : null,
@@ -238,7 +242,9 @@ class BacklogItem
         if (!Md.Split(File.ReadAllText(path), out var front, out var rest)) return null;
 
         var item = new BacklogItem();
-        foreach (var (k, val) in Md.Fields(front))
+        var all = Md.Fields(front);
+        item.Fields = RecordSchema.Extras("backlog", all);
+        foreach (var (k, val) in all)
         {
             switch (k)
             {
@@ -339,6 +345,7 @@ class BacklogItem
         Field("subsystem", Subsystem);
         Field("labels", Md.ListValue(Labels));
         Field("links", Md.ListValue(Links));
+        foreach (var (k, v) in Fields) Field(k, v);
         Field("created", Created);
         Field("updated", Updated);
         sb.Append("---\n\n## Description\n\n");

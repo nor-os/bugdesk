@@ -18,6 +18,7 @@
 
 import { getSetting } from '../core/settings.js';
 import { apiUrl, CONFIG } from './instance.js';
+import { isFinished, storeStatuses } from './schema.js';
 
 export const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -212,9 +213,12 @@ const STATUS_LABEL = {
 const STATUS_MACHINE = Object.fromEntries(
     Object.entries(STATUS_LABEL).map(([k, v]) => [v, k]));
 
-export const humanizeStatus = (s) => STATUS_LABEL[s]
+// A custom status (Settings › Record types) shows its configured label.
+const customStatusByName = (s) => storeStatuses('bugs').find((x) => x.name === s);
+const customStatusByLabel = (l) => storeStatuses('bugs').find((x) => (x.label || x.name) === l);
+export const humanizeStatus = (s) => STATUS_LABEL[s] || customStatusByName(s)?.label
     || String(s || '').replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-export const machineStatus = (label) => STATUS_MACHINE[label]
+export const machineStatus = (label) => STATUS_MACHINE[label] || customStatusByLabel(label)?.name
     || String(label || '').toLowerCase().replace(/\s+/g, '-');
 
 /* A bug's type. The stored value `task` DISPLAYS as "Chore".
@@ -237,7 +241,8 @@ export const typeLabelOf = (code) => TYPE_LABEL[code] || 'Chore';
 export const machineType = (label) => TYPE_MACHINE[label] || String(label || '').toLowerCase();
 
 /* A bug is "closed" only in the closed state. */
-export const isClosed = (t) => t.rawStatus === 'closed';
+/** Finished with: `closed`, or a custom status whose category is finished. */
+export const isClosed = (t) => isFinished('bugs', t.rawType || 'bug', t.rawStatus);
 
 export function initials(name) {
     const s = String(name || '').trim();
@@ -260,8 +265,11 @@ async function apiPost(path, body) {
         headers: { 'content-type': 'application/json', accept: 'application/json' },
         body: JSON.stringify(body),
     });
-    if (!res.ok) throw new Error(`POST ${path} → ${res.status}`);
-    return res.json();
+    const j = await res.json().catch(() => null);
+    // A refused edit names its problem ("Environment is required.") — surface
+    // that rather than a bare status code, as backlog_data.js's apiPost does.
+    if (!res.ok) throw new Error(j?.error || `POST ${path} → ${res.status}`);
+    return j;
 }
 
 /** Full bug (description markdown + comments thread). */
@@ -363,6 +371,7 @@ function mapBug(b) {
         summary: b.title,
         status: humanizeStatus(b.status),
         rawStatus: b.status,
+        rawType: b.type || 'bug',
         assignee: b.assignee || HUMAN_AUTHOR,
         reporter: b.reporter || '',   // '' = unrecorded; read it as HUMAN_AUTHOR, never as nobody
         history: b.history || 0,      // a COUNT in the summary; the full record carries the array
@@ -373,6 +382,8 @@ function mapBug(b) {
         // Relationships to other bugs ("blocks 47"). Only this bug's own side —
         // see links.js for why the inverse is derived rather than stored.
         links: Array.isArray(b.links) ? b.links : [],
+        // Custom fields (schema.js): name -> value, as strings.
+        fields: b.fields && typeof b.fields === 'object' ? b.fields : {},
         created: b.created || '',
         sla: formatStamp(b.updated),    // no SLA concept — show `updated`, in local time
         comments: b.comments || 0,

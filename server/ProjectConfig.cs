@@ -181,6 +181,29 @@ class ProjectConfig
         }
     }
 
+    /// <summary>The record schema — custom fields, hidden built-ins and custom
+    /// statuses per type (see <see cref="RecordSchema"/>). Read fresh every time,
+    /// so a pulled change shows on the next reload with no restart.</summary>
+    public RecordSchema.Schema Schema() => RecordSchema.Parse(Read()?["schema"]);
+
+    /// <summary>
+    /// Replace the schema. The caller has already validated it with
+    /// <see cref="RecordSchema.Parse"/>; what is written is the parsed form, so a
+    /// key the editor does not know about never round-trips into the file.
+    /// </summary>
+    public RecordSchema.Schema SetSchema(RecordSchema.Schema schema)
+    {
+        lock (_gate)
+        {
+            var doc = Read() ?? new JsonObject();
+            var node = schema.ToJson();
+            if (node.Count == 0) doc.Remove("schema");
+            else doc["schema"] = node;
+            Write(doc);
+            return Schema();
+        }
+    }
+
     /// <summary>The whole document, for the UI to render and for future keys.</summary>
     public JsonObject Document() => Read() ?? new JsonObject { ["collaborators"] = new JsonArray() };
 

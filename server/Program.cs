@@ -340,6 +340,73 @@ app.MapPost("/api/attachments", async (HttpRequest req) =>
     return Results.Json(new { ok = true, url = $"/attachments/{fileName}", name = fileName }, json);
 });
 
+// ---- Custom fields ----------------------------------------------------------
+// See RecordSchema.cs. A request carries custom values as `fields: {name: value}`;
+// each is checked against the record type's schema and written as its own
+// frontmatter line, or its line removed when the value is cleared.
+
+object SchemaPayload(RecordSchema.Schema schema) => new
+{
+    types = schema.ToJson(),
+    warnings = schema.Warnings,
+    hideable = RecordSchema.Hideable,
+    builtinStatuses = RecordSchema.BuiltinStatuses.ToDictionary(
+        kv => kv.Key, kv => kv.Value.Select(x => new { name = x.Name, category = x.Category })),
+    fieldTypes = RecordSchema.FieldTypes,
+    categories = RecordSchema.Categories,
+};
+
+/// <summary>
+/// Apply a request's <c>fields</c> object to a record's text. Returns an error
+/// naming the field, or null. <paramref name="creating"/> also requires every
+/// required field; an edit only refuses a required field it is CLEARING, so a
+/// record written before the field existed still saves.
+/// </summary>
+string? ApplyFields(ref string text, string store, string type, Dictionary<string, JsonElement> body, bool creating,
+                    string? anchor = null)
+{
+    var spec = Req.Store.Project.Schema().For(store, type);
+    var given = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    if (body.TryGetValue("fields", out var fv) && fv.ValueKind == JsonValueKind.Object)
+        foreach (var p in fv.EnumerateObject())
+            given[p.Name] = p.Value.ValueKind switch
+            {
+                JsonValueKind.String => p.Value.GetString() ?? "",
+                JsonValueKind.True => "true",
+                JsonValueKind.False => "false",
+                JsonValueKind.Null => "",
+                _ => p.Value.GetRawText(),
+            };
+
+    foreach (var f in spec.Fields)
+    {
+        var present = given.TryGetValue(f.Name, out var raw);
+        if (creating && f.Required && (!present || string.IsNullOrWhiteSpace(raw)))
+            return $"{f.Label} is required.";
+        if (!present) continue;
+        if (RecordSchema.Check(f, raw!, out var value) is { } error) return error;
+        if (value.Length == 0)
+        {
+            if (f.Required) return $"{f.Label} is required.";
+            text = Md.RemoveFrontmatter(text, f.Name);
+        }
+        else
+        {
+            var line = RecordSchema.Render(f, value);
+            text = anchor is not null && Md.GetFrontmatter(text, f.Name) is null
+                ? Md.SetFrontmatterAfter(text, f.Name, line, anchor)
+                : Md.SetFrontmatter(text, f.Name, line);
+        }
+    }
+    // A value for a field the schema does not name is refused, not written: the
+    // form only offers schema fields, so one arriving here is a typo or a stale
+    // client, and writing it would create a field nobody configured.
+    foreach (var name in given.Keys)
+        if (!spec.Fields.Any(f => f.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
+            return $"'{name}' is not a field of {type} records.";
+    return null;
+}
+
 // ---- Bugs -----------------------------------------------------------------
 
 app.MapGet("/api/bugs", () =>
@@ -412,6 +479,10 @@ app.MapPost("/api/bugs/{id:int}", async (int id, HttpRequest req) =>
         else if (key is "labels" or "links" && v.ValueKind == JsonValueKind.Array)
             text = Md.SetFrontmatter(text, key, Md.ListValue(v.EnumerateArray().Select(e => e.GetString() ?? "")));
     }
+
+    var bugType = (Md.GetFrontmatter(text, "type") ?? "bug").Trim();
+    if (ApplyFields(ref text, "bugs", bugType, patch, creating: false) is { } fieldError)
+        return Results.Json(new { ok = false, error = fieldError }, json, statusCode: 400);
 
     text = RecordHistory.Append(text, actor, changes);
     text = Md.SetFrontmatter(text, "updated", Md.Now());
@@ -637,7 +708,13 @@ app.MapPost("/api/bugs", async (HttpRequest req) =>
     sb.Append(string.IsNullOrWhiteSpace(description) ? "_(no description provided)_" : description);
     sb.Append('\n');
 
-    await Req.Store.WriteRecord(BugPath(Req.Store.BugsDir, nextId), sb.ToString());
+    // Custom fields go after `links`, where a person would type them, and before
+    // the dates that close every record's frontmatter.
+    var created = sb.ToString();
+    if (ApplyFields(ref created, "bugs", Get("type", "bug"), body, creating: true, anchor: "links") is { } fieldError)
+        return Results.Json(new { ok = false, error = fieldError }, json, statusCode: 400);
+
+    await Req.Store.WriteRecord(BugPath(Req.Store.BugsDir, nextId), created);
     return Results.Json(new { ok = true, bug = LoadOne(Req.Store.BugsDir, nextId) }, json);
 });
 
@@ -654,6 +731,11 @@ app.MapGet("/api/meta", () =>
         bySeverity = all.GroupBy(b => b.Severity).ToDictionary(g => g.Key, g => g.Count()),
     }, json);
 });
+
+// A backlog status is legal when the type's ladder has it, or the project added
+// it to that type (RecordSchema). The error message names both.
+bool ItemStatusAllowed(string type, string status) =>
+    BacklogItem.StatusAllowed(type, status) || Req.Store.Project.Schema().HasStatus("backlog", type, status);
 
 // ---- Backlog --------------------------------------------------------------
 // Epics → stories → tasks in one id space. See BacklogItem.cs for the record
@@ -727,7 +809,7 @@ app.MapPost("/api/backlog", async (HttpRequest req) =>
         return Results.Json(new { ok = false, error = $"no backlog item #{parent} to parent this to" }, json, statusCode: 400);
 
     var status = Get("status", "draft");
-    if (!BacklogItem.StatusAllowed(type, status))
+    if (!ItemStatusAllowed(type, status))
         return Results.Json(new { ok = false, error = $"{Article(type)} {type} cannot be '{status}' — its lifecycle is {string.Join(" → ", BacklogItem.LadderFor(type))}" }, json, statusCode: 400);
 
     var due = Get("due");
@@ -760,7 +842,10 @@ app.MapPost("/api/backlog", async (HttpRequest req) =>
         Description = Get("description"),
         Acceptance = Get("acceptance"),
     };
-    await Req.Store.WriteRecord(Path.Combine(Req.Store.BacklogDir, item.FileName), item.Render());
+    var rendered = item.Render();
+    if (ApplyFields(ref rendered, "backlog", type, body, creating: true, anchor: "links") is { } fieldError)
+        return Results.Json(new { ok = false, error = fieldError }, json, statusCode: 400);
+    await Req.Store.WriteRecord(Path.Combine(Req.Store.BacklogDir, item.FileName), rendered);
 
     var reloaded = LoadBacklog(Req.Store.BacklogDir);
     return Results.Json(new { ok = true, item = FullItem(reloaded, reloaded.First(i => i.Id == item.Id)) }, json);
@@ -805,7 +890,7 @@ app.MapPost("/api/backlog/{id:int}", async (int id, HttpRequest req) =>
                 // it had: a single request may legitimately carry both
                 // `{type: task, status: in-progress}`.
                 var forType = retype ?? item.Type;
-                if (!BacklogItem.StatusAllowed(forType, str))
+                if (!ItemStatusAllowed(forType, str))
                     return Results.Json(new { ok = false, error = $"{Article(forType)} {forType} cannot be '{str}' — its lifecycle is {string.Join(" → ", BacklogItem.LadderFor(forType))}" }, json, statusCode: 400);
                 // Read off the text we are about to change: a save that re-sends the
                 // status it already had is not a transition and writes no line.
@@ -910,6 +995,9 @@ app.MapPost("/api/backlog/{id:int}", async (int id, HttpRequest req) =>
         else changes.Add(new FieldChange("status", statusBefore, finalStatus));
     }
     else if (si >= 0) changes.RemoveAt(si);      // clamped straight back: nothing happened
+
+    if (ApplyFields(ref text, "backlog", retype ?? item.Type, patch, creating: false) is { } fieldError)
+        return Results.Json(new { ok = false, error = fieldError }, json, statusCode: 400);
 
     // Before the retype branch below, so the same `text` is what gets written to
     // whichever path the record ends up at.
@@ -1236,7 +1324,7 @@ app.MapGet("/api/search", (string? q, int? limit) =>
             Store: "bugs", Id: bug.Id, Ref: $"BUG-{bug.Id:D4}", Type: bug.Type,
             Title: bug.Title, Status: bug.Status, Assignee: bug.Assignee, Updated: bug.Updated,
             Description: bug.Description,
-            Extra: string.Join(' ', bug.Labels.Concat(new[] { bug.Subsystem, bug.Severity })),
+            Extra: string.Join(' ', bug.Labels.Concat(new[] { bug.Subsystem, bug.Severity }).Concat(bug.Fields.Values)),
             Comments: bug.Comments));
     }
 
@@ -1247,7 +1335,7 @@ app.MapGet("/api/search", (string? q, int? limit) =>
             Store: "backlog", Id: item.Id, Ref: $"{BacklogItem.Prefixes.GetValueOrDefault(item.Type, "TASK")}-{item.Id:D4}",
             Type: item.Type, Title: item.Title, Status: item.Status, Assignee: item.Assignee,
             Updated: item.Updated, Description: item.Description,
-            Extra: string.Join(' ', item.Labels.Concat(new[] { item.Subsystem, item.Phase, item.Points, item.Acceptance })),
+            Extra: string.Join(' ', item.Labels.Concat(new[] { item.Subsystem, item.Phase, item.Points, item.Acceptance }).Concat(item.Fields.Values)),
             Comments: item.Comments));
     }
 
@@ -1296,6 +1384,9 @@ object ConfigPayload(Store s, string? slug = null) => new
     configDir = s.Users.ConfigDir,
     collaborators = s.Project.Collaborators(),
     assignees = s.Project.Assignees(),
+    // Custom fields, hidden built-ins and custom statuses per record type, and
+    // what was wrong with them — read at module load, like the roster.
+    schema = SchemaPayload(s.Project.Schema()),
     // The store this page is on, and which of its two halves exist.
     store = new { kind = s.Kind, name = s.Name, hasBugs = s.HasBugs, hasBacklog = s.HasBacklog, @base = s.UrlBase },
     projects = ProjectList(),
@@ -1432,6 +1523,42 @@ app.MapPost("/api/project/collaborators", async (HttpRequest req) =>
         return Results.Json(new { ok = false, error = "collaborators array required" }, json, statusCode: 400);
     var saved = Req.Store.Project.SetCollaborators(JsonNode.Parse(list.GetRawText())!.AsArray());
     return Results.Json(new { ok = true, collaborators = saved, assignees = Req.Store.Project.Assignees() }, json);
+});
+
+// The record schema, saved from Settings. Checked strictly: any problem refuses
+// the whole save with every problem listed, so a half-applied schema never lands
+// in a committed file. Removing a custom status that records still hold is
+// refused with the count — those records would otherwise hold a status nothing
+// knows the category of.
+app.MapPost("/api/project/schema", async (HttpRequest req) =>
+{
+    var body = await JsonSerializer.DeserializeAsync<Dictionary<string, JsonElement>>(req.Body, json) ?? new();
+    if (!body.TryGetValue("schema", out var sv) || sv.ValueKind != JsonValueKind.Object)
+        return Results.Json(new { ok = false, error = "schema object required" }, json, statusCode: 400);
+    var next = RecordSchema.Parse(JsonNode.Parse(sv.GetRawText()));
+    if (next.Warnings.Count > 0)
+        return Results.Json(new { ok = false, error = string.Join("\n", next.Warnings), problems = next.Warnings }, json, statusCode: 400);
+
+    var before = Req.Store.Project.Schema();
+    var held = new List<string>();
+    foreach (var (store, types) in before.Types)
+    {
+        var records = store == "bugs"
+            ? (Req.Store.HasBugs ? LoadAll(Req.Store.BugsDir).Select(b => (b.Type, b.Status)).ToList() : new())
+            : (Req.Store.HasBacklog ? LoadBacklog(Req.Store.BacklogDir).Select(i => (i.Type, i.Status)).ToList() : new());
+        foreach (var (type, spec) in types)
+            foreach (var st in spec.Statuses)
+            {
+                if (next.HasStatus(store, type, st.Name)) continue;
+                var n = records.Count(r => r.Type == type && r.Status == st.Name);
+                if (n > 0) held.Add($"'{st.Name}' is held by {n} {type} record{(n == 1 ? "" : "s")}; move them to another status first.");
+            }
+    }
+    if (held.Count > 0)
+        return Results.Json(new { ok = false, error = string.Join("\n", held), problems = held }, json, statusCode: 409);
+
+    var saved = Req.Store.Project.SetSchema(next);
+    return Results.Json(new { ok = true, schema = SchemaPayload(saved) }, json);
 });
 
 // Add or update ONE person without having to send the whole roster — what an

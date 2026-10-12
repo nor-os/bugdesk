@@ -28,7 +28,9 @@ import { showContextMenu } from '@flexdesk/widgets';
 import { renderMarkdown } from './markdown.js';
 import { attachMarkdownEditor } from './md_editor.js';
 import { attachTagInput } from './tag_input.js';
-import { attachSelect } from './select_field.js';
+import { attachSelect, setRowVisible } from './select_field.js';
+import { mountCustomFields } from './custom_fields.js';
+import { hiddenForAll, isHidden, statusKnown, withCustomStatuses } from './schema.js';
 import { watchRecord } from './live.js';
 import { attachParentPicker, attachRecordTypeahead, childTypesFor, openItemPicker, openRecordPicker } from './item_picker.js';
 import { installRecordDragSource, markDragCell, openRecordAs } from './record_dnd.js';
@@ -54,7 +56,7 @@ import {
 import {
     ALL_TYPES, ITEMS, PHASES, TRACKER, TYPES, TYPE_ICON,
     DUE_LABEL, collapsibleIds, dueState, duePhrase, fetchItem, humanizeItemStatus,
-    dueOf, dueOverrun, duplicateItem, isClosedItem, isGated, itemLabel, itemRef, ladderFor,
+    dueOf, dueOverrun, duplicateItem, isClosedItem, isGated, itemLabel, itemRef, LADDER, ladderFor,
     loadBacklog, parentTypesFor,
     patchItem, postItemComment,
     REFINEMENT_RULES, refinementGaps, flatRows, stageActions, stageOf, treeRows,
@@ -160,7 +162,10 @@ const BOARD_COLS = [
     { key: 'ref', label: 'Item', get: (i) => i.ref, filter: 'ref', filterValue: (i) => i.ref },
     { key: 'title', label: 'Title', get: (i) => i.title },
     { key: 'type', label: 'Type', get: (i) => i.typeLabel, filter: 'type', filterValue: (i) => i.type },
-    { key: 'status', label: 'Status', get: (i) => i.statusLabel, filter: 'status', filterValue: (i) => i.status },
+    // Sorted by where a status stands on its type's ladder, custom statuses in
+    // their configured place (Settings › Record types) — not alphabetically.
+    { key: 'status', label: 'Status', get: (i) => i.statusLabel, filter: 'status', filterValue: (i) => i.status,
+      sortKey: (i) => statusRank(i) },
     { key: 'points', label: 'Pts', get: (i) => i.points || '', filter: 'points', filterValue: (i) => i.points },
     { key: 'criteria', label: 'Criteria',
       get: (i) => (i.criteriaTotal ? `${i.criteriaDone}/${i.criteriaTotal}` : '') },
@@ -173,8 +178,17 @@ const BOARD_COLS = [
     ...(TRACKER ? [{ key: 'due', label: 'Due', get: (i) => i.dueLabel || '', filter: 'due', filterValue: (i) => i.due }] : []),
     { key: 'phase', label: 'Phase', get: (i) => i.phaseLabel, filter: 'phase', filterValue: (i) => i.phaseLabel },
     { key: 'updated', label: 'Updated', get: (i) => i.updated, filter: 'updated', filterValue: (i) => i.updated },
-];
+// A built-in the project hides on every type (Settings › Record types) has no
+// column: a board column empty on every row by decision is only noise.
+].filter((c) => !(['points', 'due', 'phase'].includes(c.key) && hiddenForAll('backlog', c.key)));
 const BOARD_HEADERS = BOARD_COLS.map((c) => c.label);
+
+/** A status's place in the canonical order, custom statuses included. */
+function statusRank(item) {
+    const order = withCustomStatuses('backlog', item.type, [...LADDER, 'dropped']);
+    const i = order.indexOf(item.status);
+    return i < 0 ? order.length : i;
+}
 /** key → column index, so nothing reads a magic number. */
 const COL = Object.fromEntries(BOARD_COLS.map((c, i) => [c.key, i]));
 /* The column every "act on this row" command reads back. Reference, not id:
@@ -275,7 +289,8 @@ function mountBacklogBoard(host, props, ctx) {
         if (!col) return null;
         const dir = sort.ascending ? 1 : -1;
         return (a, b) => {
-            const va = col.get(a), vb = col.get(b);
+            const key = col.sortKey || col.get;
+            const va = key(a), vb = key(b);
             const ea = va == null || va === '', eb = vb == null || vb === '';
             if (ea || eb) return ea === eb ? 0 : ea ? 1 : -1;
             const na = Number(va), nb = Number(vb);
@@ -619,6 +634,7 @@ function mountItem(host, props, ctx) {
                 </div>
                 <div class="td-group__body td-grid2" data-slot="record"></div>
             </section>
+            <section class="td-group" data-slot="customfields" hidden></section>
             <section class="td-group">
                 <div class="td-group__title">Refinement</div>
                 <div class="td-group__body" data-slot="refinement"></div>
@@ -638,7 +654,7 @@ function mountItem(host, props, ctx) {
                 </div>
                 <div class="td-group__body bd-children" data-slot="children"></div>
             </section>
-            <section class="td-group">
+            <section class="td-group" data-row="links">
                 <div class="td-group__title">Links</div>
                 <div class="td-group__body">
                     <div data-slot="links"><span class="td-dim">Loading…</span></div>
@@ -701,13 +717,14 @@ function mountItem(host, props, ctx) {
     let descEditor = null;
     const fieldSelects = [];      // custom dropdowns replacing the bare <select>s
     let parentPicker = null;      // the shared search control (item_picker.js)
+    let customFieldsCtl = null;   // the type's own fields (custom_fields.js)
     const destroyWidgets = () => {
-        for (const w of [tagInput, composer, commentEditing, acceptanceEditor, descEditor, parentPicker, ...fieldSelects]) {
+        for (const w of [tagInput, composer, commentEditing, acceptanceEditor, descEditor, parentPicker, customFieldsCtl, ...fieldSelects]) {
             try { w?.destroy(); } catch { /* already gone */ }
         }
         fieldSelects.length = 0;
         parentPicker = null;
-        tagInput = composer = commentEditing = acceptanceEditor = descEditor = null;
+        tagInput = composer = commentEditing = acceptanceEditor = descEditor = customFieldsCtl = null;
     };
 
     /* ── record ─────────────────────────────────────────────────── */
@@ -782,27 +799,47 @@ function mountItem(host, props, ctx) {
             return null;
         };
 
+        // A built-in this project hides on this type (Settings › Record types) is
+        // not drawn, and `save` does not send it — its value stays in the file.
+        const shows = (f) => !isHidden('backlog', item.type, f);
         const authorsPhase = item.type === 'project' || item.type === 'epic';
         const hasParent = parentTypesFor(item.type).length > 0;
-        const hasPoints = item.type !== 'project';
+        const hasPoints = item.type !== 'project' && shows('points');
 
         $('[data-slot="record"]').innerHTML = `
             ${field('Reference', `<input class="ea-tin td-mono" value="${esc(itemRef(item))}" readonly>`)}
-            ${field('Status', `<input class="ea-tin td-mono" data-f="status" value="${esc(humanizeItemStatus(item.status))}" readonly>`)}
+            ${field('Status', statusKnown('backlog', item.type, item.status)
+                ? `<input class="ea-tin td-mono" data-f="status" value="${esc(humanizeItemStatus(item.status))}" readonly>`
+                // Kept as it is and marked — see the bug page's markStatus.
+                : `<input class="ea-tin td-mono td-unknown" data-f="status" value="${esc(item.status)}" readonly
+                          title="'${esc(item.status)}' is not a status this project knows for a ${esc(item.type)}. It is kept as it is; move the item to fix it.">`)}
             <div class="td-field td-span2"><label class="td-req">Title</label>${tin('title', item.title)}</div>
             ${field('Type', sel('type', TYPES.map((t) => ({ value: t, label: typeLabelOf(t) })), item.type))}
             ${hasPoints ? field('Estimate', tin('points', item.points)) : ''}
             ${hasParent ? field('Parent', tin('parent', item.parent || '')) : ''}
-            ${authorsPhase
+            ${!shows('phase') ? '' : authorsPhase
                 ? field('Phase', tin('phase', item.phase))
                 : field('Phase', `<input class="ea-tin" value="${esc(item.effectivePhase || '—')}" readonly title="Inherited from the owning project or epic">`)}
             ${field('Assignee', '<select class="ea-tin" data-f="assignee"></select>')}
-            ${field('Target date', dueField())}
-            ${field('Subsystem', tin('subsystem', item.subsystem))}
+            ${shows('due') ? field('Target date', dueField()) : ''}
+            ${shows('subsystem') ? field('Subsystem', tin('subsystem', item.subsystem)) : ''}
             ${field('Reporter', '<select class="ea-tin" data-f="reporter"></select>')}
-            <div class="td-field td-span2"><label>Labels</label>${tin('labels', (item.labels || []).join(', '))}</div>
+            ${shows('labels') ? `<div class="td-field td-span2"><label>Labels</label>${tin('labels', (item.labels || []).join(', '))}</div>` : ''}
             ${field('Created', `<input class="ea-tin td-mono" value="${esc(item.created || '—')}" readonly>`)}
             ${field('Updated', `<input class="ea-tin td-mono" value="${esc(formatStamp(item.updated) || '—')}" readonly>`)}`;
+
+        setRowVisible(host.querySelector('[data-row="links"]'), shows('links'));
+        // The type's own fields, redrawn with the record: what it now holds is
+        // the baseline a save compares against.
+        const cfSlot = host.querySelector('[data-slot="customfields"]');
+        if (!customFieldsCtl && cfSlot) {
+            customFieldsCtl = mountCustomFields(cfSlot, {
+                store: 'backlog', type: item.type, values: item.fields || {}, onChange: () => setDirty(true),
+            });
+        } else {
+            customFieldsCtl?.setType(item.type);
+            customFieldsCtl?.set(item.fields || {});
+        }
 
         try { tagInput?.destroy(); } catch { /* first render */ }
         const labelsEl = host.querySelector('[data-f="labels"]');
@@ -1386,17 +1423,24 @@ function mountItem(host, props, ctx) {
     };
 
     const save = async () => {
+        const fieldError = customFieldsCtl?.validate();
+        if (fieldError) { statusLine(`Not saved: ${fieldError}`); return; }
         try {
+            const shows = (f) => !isHidden('backlog', item.type, f);
             const patch = {
                 title: fval('title'),
                 type: fval('type'),
                 assignee: fval('assignee'),
-                // Untouched means "leave it as it was" — which for an inherited
-                // date means keep inheriting, not adopt the value on screen.
-                due: dueTouched ? fval('due') : (item.due || ''),
-                subsystem: fval('subsystem') || 'unsorted',
-                labels: fval('labels') ? fval('labels').split(',').map((s) => s.trim()).filter(Boolean) : [],
             };
+            // A hidden built-in is not on the form, so it is not sent: its value
+            // stays in the file exactly as it was (Settings › Record types).
+            // Untouched means "leave it as it was" — which for an inherited
+            // date means keep inheriting, not adopt the value on screen.
+            if (shows('due')) patch.due = dueTouched ? fval('due') : (item.due || '');
+            if (shows('subsystem')) patch.subsystem = fval('subsystem') || 'unsorted';
+            if (shows('labels')) patch.labels = fval('labels') ? fval('labels').split(',').map((s) => s.trim()).filter(Boolean) : [];
+            const fields = customFieldsCtl?.collect() || {};
+            if (Object.keys(fields).length) patch.fields = fields;
             // Sent only when it CHANGED, as on the ticket page. An ordinary save of a
             // record written before the field existed must not insert a `reporter:`
             // line nobody typed.
@@ -1404,9 +1448,9 @@ function mountItem(host, props, ctx) {
             // Only send what the rendered form actually had: a row that was not
             // drawn must not reach the record, or retyping a story to a project
             // would post the parent the form never showed.
-            if (item.type === 'project' || item.type === 'epic') patch.phase = fval('phase');
+            if ((item.type === 'project' || item.type === 'epic') && shows('phase')) patch.phase = fval('phase');
             if (parentTypesFor(item.type).length > 0) patch.parent = parentPicker ? parentPicker.value() : 0;
-            if (item.type !== 'project') patch.points = fval('points');
+            if (item.type !== 'project' && shows('points')) patch.points = fval('points');
             apply(await patchItem(item.id, patch));
             await broadcast();
             live.clear();
@@ -1754,6 +1798,9 @@ export function mountBacklogRail(host, ctx) {
              title="${esc(describeFilter(f.expr))}">
             ${icon(esc(f.icon || 'filter_alt'))}
             <span>${esc(f.label)}</span>
+            ${MODEL.unknownFields(f.expr).length
+                ? `<span class="td-nav__warn" title="Names a field this project no longer has: ${esc(MODEL.unknownFields(f.expr).join(', '))}">${icon('warning')}</span>`
+                : ''}
             <span class="td-nav__actions">
                 ${custom ? navAction('edit', 'edit', `Edit filter ${f.label}`) : ''}
                 ${navAction('duplicate', 'content_copy', custom ? `Duplicate filter ${f.label}` : `Duplicate ${f.label} as a filter of your own`)}

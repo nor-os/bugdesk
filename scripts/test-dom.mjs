@@ -2700,5 +2700,131 @@ console.log('\nUpdated, to the minute');
     });
 }
 
+/* ── record schema: custom fields, hidden built-ins, custom statuses ──
+ *
+ * EPIC-0003. The schema arrives with the config (project.json's `schema`); these
+ * set it directly, then check what each surface derives from it. */
+
+console.log('\nRecord schema');
+{
+    const schema = await import(join(UI, 'ticketdesk', 'schema.js'));
+    const moves = await import(join(UI, 'ticketdesk', 'bug_transitions.js'));
+    const { mountCustomFields } = await import(join(UI, 'ticketdesk', 'custom_fields.js'));
+    const { createFilterModel } = await import(join(UI, 'ticketdesk', 'filter_engine.js'));
+    const SCHEMA = {
+        types: {
+            bugs: {
+                bug: {
+                    fields: [
+                        { name: 'not_before', label: 'Not before', type: 'date', required: false, values: [] },
+                        { name: 'env', label: 'Environment', type: 'choice', required: true, values: ['prod', 'staging'] },
+                        { name: 'cost', label: 'Cost', type: 'number', required: false, values: [] },
+                        { name: 'paid', label: 'Paid', type: 'bool', required: false, values: [] },
+                    ],
+                    hidden: ['subsystem'],
+                    statuses: [
+                        { name: 'blocked', label: 'Blocked', category: 'waiting', after: 'investigation' },
+                        { name: 'wontfix', label: "Won't fix", category: 'finished', after: '' },
+                    ],
+                },
+                regression: { fields: [], hidden: ['subsystem'], statuses: [] },
+            },
+        },
+        warnings: [],
+    };
+    schema.setSchema(SCHEMA);
+
+    await t('a custom status sorts where it was put, a finished one at the end', () => {
+        assert.deepEqual(schema.withCustomStatuses('bugs', 'bug', ['open', 'investigation', 'testing', 'closed']),
+            ['open', 'investigation', 'blocked', 'testing', 'closed', 'wontfix']);
+    });
+
+    await t('a status counts as its category; an unknown one stays open', () => {
+        assert.equal(schema.statusCategory('bugs', 'bug', 'blocked'), 'waiting');
+        assert.equal(schema.isFinished('bugs', 'bug', 'wontfix'), true);
+        assert.equal(schema.isFinished('bugs', 'bug', 'closed'), true);
+        assert.equal(schema.isFinished('bugs', 'bug', 'gone-from-the-schema'), false);
+        // Custom statuses are per type: a regression has none.
+        assert.equal(schema.customStatus('bugs', 'regression', 'blocked'), null);
+    });
+
+    await t('an open bug is offered a move into each custom status, after its own', () => {
+        assert.deepEqual(moves.bugMoves('investigation', 'bug').map(([, to]) => to),
+            ['testing', 'closed', 'open', 'blocked', 'wontfix']);
+        assert.deepEqual(moves.bugMoves('closed', 'bug'), [['Reopen', 'open']]);
+    });
+
+    await t('a bug in a custom status goes back to where the status sits', () => {
+        assert.deepEqual(moves.bugMoves('blocked', 'bug').map(([, to]) => to), ['investigation', 'closed', 'wontfix']);
+        assert.deepEqual(moves.bugMoves('wontfix', 'bug').map(([, to]) => to), ['investigation', 'open']);
+    });
+
+    await t('a field is hidden for a list only when every type in it hides it', () => {
+        assert.equal(schema.isHidden('bugs', 'bug', 'subsystem'), true);
+        assert.equal(schema.hiddenForAll('bugs', 'subsystem'), false, 'chores still show it');
+        assert.equal(schema.hiddenForAll('bugs', 'subsystem', ['bug', 'regression']), true);
+    });
+
+    await t('custom fields filter with the operators of their type', () => {
+        const fields = schema.customFilterFields('bugs');
+        const byKey = Object.fromEntries(fields.map((f) => [f.key, f]));
+        assert.equal(byKey['cf.not_before'].type, 'date');
+        assert.equal(byKey['cf.env'].type, 'enum');
+        assert.deepEqual(byKey['cf.env'].options, ['prod', 'staging']);
+        assert.equal(byKey['cf.cost'].type, 'number');
+        assert.equal(byKey['cf.paid'].type, 'enum');
+        const model = createFilterModel({ fields });
+        const rows = [{ fields: { cost: '12', paid: 'yes', not_before: '2026-11-01' } }, { fields: { cost: '3' } }, { fields: {} }];
+        const q = (field, op, value) => rows.filter(model.matcherFor({ kind: 'group', op: 'AND', children: [{ kind: 'clause', field, op, value }] })).length;
+        assert.equal(q('cf.cost', 'gt', 5), 1, 'numbers compare as numbers');
+        assert.equal(q('cf.paid', 'is', 'true'), 1, 'a yes/no reads "yes" as true');
+        assert.equal(q('cf.not_before', 'after', '2026-10-01'), 1);
+    });
+
+    await t('a filter naming a removed field says so instead of quietly matching nothing', () => {
+        const model = createFilterModel({ fields: schema.customFilterFields('bugs') });
+        const expr = { kind: 'group', op: 'AND', children: [{ kind: 'clause', field: 'cf.gone', op: 'is', value: 'x' }] };
+        assert.deepEqual(model.unknownFields(expr), ['cf.gone']);
+        assert.match(model.describeFilter(expr), /unknown field “gone”/);
+    });
+
+    await t('the fields section sends only what changed, and refuses a cleared required field', () => {
+        const slot = document.createElement('section');
+        document.body.appendChild(slot);
+        const cf = mountCustomFields(slot, { store: 'bugs', type: 'bug', values: { env: 'prod', legacy: 'kept' } });
+        assert.ok(slot.querySelector('[data-cf="not_before"]'), 'no date control');
+        assert.equal(slot.querySelector('[data-cf="not_before"]').type, 'date');
+        assert.ok(slot.querySelector('.td-cf-orphan'), 'a value the schema does not name is not shown');
+        assert.deepEqual(cf.collect(), {}, 'an untouched record sends nothing');
+        const nb = slot.querySelector('[data-cf="not_before"]');
+        nb.value = '2026-12-24';
+        nb.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+        assert.deepEqual(cf.collect(), { not_before: '2026-12-24' });
+        assert.equal(cf.validate(), null);
+        cf.destroy();
+        slot.remove();
+    });
+
+    await t('a new record is asked for every required field; an old one is not', () => {
+        const slot = document.createElement('section');
+        const fresh = mountCustomFields(slot, { store: 'bugs', type: 'bug', creating: true });
+        assert.match(fresh.validate() || '', /Environment is required/);
+        fresh.destroy();
+        const old = mountCustomFields(slot, { store: 'bugs', type: 'bug', values: {} });
+        assert.equal(old.validate(), null, 'a record written before the field existed must still save');
+        old.destroy();
+    });
+
+    await t('a type with no fields and no stray values draws no section', () => {
+        const slot = document.createElement('section');
+        const cf = mountCustomFields(slot, { store: 'bugs', type: 'regression' });
+        assert.equal(slot.innerHTML, '');
+        assert.equal(slot.style.display, 'none');
+        cf.destroy();
+    });
+
+    schema.setSchema(null);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

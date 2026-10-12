@@ -59,17 +59,19 @@ import { allRows, canonRef, findRow, openRow, storesAvailable } from './records.
 import { renderHistory } from './history.js';
 import { CONFIG, ev, KIND, trackerModule } from './instance.js';
 import { attachRecordTypeahead, openRecordPicker } from './item_picker.js';
-import { attachSelect } from './select_field.js';
+import { attachSelect, setRowVisible } from './select_field.js';
+import { mountCustomFields } from './custom_fields.js';
+import { customStatus, isHidden, statusKnown } from './schema.js';
 import { attachTagInput } from './tag_input.js';
 import { ITEMS, isClosedItem, loadBacklog } from './backlog_data.js';
 import { watchRecord } from './live.js';
-import { BUG_TRANSITIONS, moveBug, resolveMoveMessage } from './bug_transitions.js';
+import { bugMoves, moveBug, resolveMoveMessage } from './bug_transitions.js';
 import { attachCommentEditing, editButtonHTML } from './comment_edit.js';
 import { paintRecordCount, publishRecordCount } from './record_count.js';
 import {
     esc, STAGES, TICKETS, TEAM, HUMAN_AUTHOR, AGENT_AUTHOR, assigneeOptions, formatStamp,
     fetchBug, patchBug, postComment, createBug, deleteBug, duplicateBug, loadData, initials, teamNames,
-    machineStatus, machineType, typeCode, typeLabelOf, humanizeStatus,
+    machineStatus, machineType, typeCode, typeLabelOf, humanizeStatus, isClosed,
 } from './data.js';
 
 /* Descriptions and comments render through the shared renderer in
@@ -507,8 +509,8 @@ function mountQueues(host, props, ctx) {
     publishRecordCount(host.querySelector('.td-tablehost'), () => {
         const byId = new Map(TICKETS.map((t) => [String(t.id), t]));
         const shown = table.getDisplayedRows()
-            .filter((r) => { const t = byId.get(String(r[QUEUE_ID_COL])); return t && t.rawStatus !== 'closed'; }).length;
-        return { shown, total: TICKETS.filter((t) => t.rawStatus !== 'closed').length, noun: 'bugs' };
+            .filter((r) => { const t = byId.get(String(r[QUEUE_ID_COL])); return t && !isClosed(t); }).length;
+        return { shown, total: TICKETS.filter((t) => !isClosed(t)).length, noun: 'bugs' };
     });
     table.render();
     requestAnimationFrame(() => { if (host.isConnected) table.focus(); });
@@ -560,11 +562,22 @@ function mountQueues(host, props, ctx) {
 /** Lifecycle stage actions, index === state.stage (0..3): the moves in
  *  bug_transitions.js, which the right-click menu offers too. */
 const STAGE_ORDER = ['open', 'investigation', 'testing', 'closed'];
-const STAGE_ACTIONS = STAGE_ORDER.map((status) => BUG_TRANSITIONS[status]);
+
+/** Where the chevrons stand for a status. A custom one stands where it was
+ *  configured to sit after, a finished one at Closed, any other at
+ *  Investigation — it is somewhere a bug waits while it is being worked. */
+function stageIndexOf(status, type = 'bug') {
+    const i = STAGE_ORDER.indexOf(status);
+    if (i >= 0) return i;
+    if (isClosed({ rawStatus: status, rawType: type })) return 3;
+    const after = customStatus('bugs', type, status)?.after;
+    const j = STAGE_ORDER.indexOf(after);
+    return j >= 0 && j < 3 ? j : 1;
+}
 
 /** The status moves of one bug as context-menu entries, then a separator. */
 function statusMenuItems(bug) {
-    const moves = bug ? (BUG_TRANSITIONS[bug.rawStatus] || []) : [];
+    const moves = bug ? bugMoves(bug.rawStatus, bug.rawType) : [];
     if (!moves.length) return [];
     return [
         ...moves.map(([label, target]) => ({
@@ -652,6 +665,9 @@ function maskSections(t, mode) {
         ${opts.map((o) => `<option ${!search && o === cur ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
     const tin = (id, val, cls = '') =>
         `<input class="ea-tin ${cls}" data-f="${id}" value="${esc(search ? '' : (val ?? ''))}">`;
+    // A row the project can hide per type (Settings › Record types). Marked, not
+    // left out, because the Type select can change which rows apply.
+    const hideRow = (name, html) => html.replace('<div class="td-field"', `<div class="td-field" data-row="${name}"`);
     // Status: a filter in search mode; read-only in edit/new — the lifecycle
     // stage buttons drive it.
     const statusCtrl = search
@@ -680,17 +696,18 @@ function maskSections(t, mode) {
             ${field('Status', statusCtrl)}
             <div class="td-field td-span2"><label class="${search ? '' : 'td-req'}">Title</label>${tin('summary', t.summary)}</div>
             ${field('Type', sel('type', ['Bug', 'Regression', 'Chore'], typeLabelOf(t.type)), true)}
-            ${field('Severity', sel('severity', ['crash', 'high', 'medium', 'low'], t.severity || 'medium'), true)}
-            ${field('Subsystem', tin('subsystem', t.subsystem))}
+            ${hideRow('severity', field('Severity', sel('severity', ['crash', 'high', 'medium', 'low'], t.severity || 'medium'), true))}
+            ${hideRow('subsystem', field('Subsystem', tin('subsystem', t.subsystem)))}
             ${mode === 'search' ? '' : field('Assignee', `<div class="td-assignee">${sel('assignee', assigneeOptions(true, t.assignee), t.assignee || '')}<button type="button" class="ea-btn td-reassign" data-a="reassign" title="Reassign this bug">${icon('person_search')}</button></div>`)}
             ${mode === 'edit' ? field('Reporter', `<div class="td-assignee">${sel('reporter', assigneeOptions(true, t.reporter), t.reporter || '')}<button type="button" class="ea-btn td-reassign" data-a="setreporter" title="Change who this bug goes back to">${icon('person_edit')}</button></div>`) : ''}
-            <div class="td-field td-span2"><label>Labels</label>${tin('labels', (t.labels || []).join(', '))}</div>
+            <div class="td-field td-span2" data-row="labels"><label>Labels</label>${tin('labels', (t.labels || []).join(', '))}</div>
             ${mode === 'edit' ? field('Created', `<input class="ea-tin td-mono" value="${esc(t.created || '—')}" readonly>`) : ''}
             ${mode === 'edit' ? field('Updated', `<input class="ea-tin td-mono" data-f="updated" value="${esc(t.sla || '—')}" readonly>`) : ''}
         </div>
     </section>
     ${mode !== 'search' ? `
-    <section class="td-group">
+    <section class="td-group" data-slot="customfields" hidden></section>
+    <section class="td-group" data-row="links">
         <div class="td-group__title">Links</div>
         <div class="td-group__body">
             <div data-slot="links"><span class="td-dim">Loading…</span></div>
@@ -725,7 +742,9 @@ function mountTicket(host, props, ctx) {
             <div class="tile-placeholder__hint">no bug matched ${esc(props?.id || '')}</div></div>`;
         return { title: 'Bug' };
     }
-    const state = { stage: t.stage ?? 0, dirty: false };
+    // `status` is the raw status, which may be a custom one (Settings › Record
+    // types); `stage` is only where the chevrons stand.
+    const state = { stage: t.stage ?? 0, status: t.rawStatus || 'open', dirty: false };
 
     const banner = mode === 'new'
         ? `<div class="td-banner">${icon('add_circle')} <b>New Bug</b> — fill in the mask and Create. The bug ID is assigned automatically on save.</div>`
@@ -966,6 +985,30 @@ function mountTicket(host, props, ctx) {
         }
     }
 
+    /* Custom fields (Settings › Record types) and the built-ins this type hides.
+     * Both follow the Type select, because a Regression may carry fields, or
+     * hide fields, that a Bug does not. */
+    let customFieldsCtl = null;
+    const syncTypeRows = () => {
+        const type = machineType(fval('type')) || 'bug';
+        for (const f of ['severity', 'subsystem', 'labels', 'links']) {
+            setRowVisible(host.querySelector(`[data-row="${f}"]`), !isHidden('bugs', type, f));
+        }
+        customFieldsCtl?.setType(type);
+    };
+    if (mode !== 'search') {
+        const slot = host.querySelector('[data-slot="customfields"]');
+        if (slot) {
+            customFieldsCtl = mountCustomFields(slot, {
+                store: 'bugs', type: machineType(typeLabelOf(t.type)) || 'bug',
+                values: t.fields || {}, creating: mode === 'new',
+                onChange: () => setDirty(true),
+            });
+        }
+        host.querySelector('[data-f="type"]')?.addEventListener('change', syncTypeRows);
+        syncTypeRows();
+    }
+
     /* The description box in NEW mode gets the full markdown editor. In edit
      * mode the description is rendered, not edited — changing it is a store
      * concern the mask does not own yet. */
@@ -1026,13 +1069,13 @@ function mountTicket(host, props, ctx) {
                 || (status && status !== '(any)' && status === 'closed');
             const bugs = TICKETS.filter((tk) => {
                 if (exact) return exact.store === 'bugs' && Number(tk.bugId) === exact.id;
-                if (!closedWanted && tk.rawStatus === 'closed') return false;
+                if (!closedWanted && isClosed(tk)) return false;
                 if (text && !tk.summary.toLowerCase().includes(text)) return false;
                 if (subsystem && !String(tk.subsystem || '').toLowerCase().includes(subsystem)) return false;
                 if (status && status !== '(any)' && tk.status !== status) return false;
                 if (type && type !== '(any)' && typeLabelOf(tk.type) !== type) return false;
                 return true;
-            }).map((tk) => ({ ...tk, store: 'bugs', ref: tk.id, closed: tk.rawStatus === 'closed' }));
+            }).map((tk) => ({ ...tk, store: 'bugs', ref: tk.id, closed: isClosed(tk) }));
 
             // BOTH stores. A search that only knows about bugs is a search that
             // cannot find the story you filed ten minutes ago, and there is no
@@ -1055,7 +1098,7 @@ function mountTicket(host, props, ctx) {
 
             const matches = [...bugs, ...items];
             disposeResults();
-            const heldBugs = closedWanted ? 0 : TICKETS.filter((tk) => tk.rawStatus === 'closed').length;
+            const heldBugs = closedWanted ? 0 : TICKETS.filter((tk) => isClosed(tk)).length;
             const heldItems = closedWanted ? 0 : ITEMS.filter(isClosedItem).length;
             const held = heldBugs + heldItems;
             resultsEl.innerHTML = `<section class="td-group"><div class="td-group__title">Results — ${bugs.length} bug${bugs.length === 1 ? '' : 's'}${items.length ? `, ${items.length} backlog item${items.length === 1 ? '' : 's'}` : ''}${held ? ` <span class="td-dim">· ${held} closed not searched</span>` : ''}</div><div class="td-tablehost"></div></section>`;
@@ -1134,7 +1177,7 @@ function mountTicket(host, props, ctx) {
             const table = resultsTable;
             publishRecordCount(resultsEl.querySelector('.td-tablehost'), () => ({
                 shown: table.getDisplayedRows().filter((r) => byRef.get(r[0]) && !byRef.get(r[0]).closed).length,
-                total: TICKETS.filter((t) => t.rawStatus !== 'closed').length + ITEMS.filter((i) => !isClosedItem(i)).length,
+                total: TICKETS.filter((t) => !isClosed(t)).length + ITEMS.filter((i) => !isClosedItem(i)).length,
                 noun: 'records',
             }));
             resultsTable.render();
@@ -1158,6 +1201,8 @@ function mountTicket(host, props, ctx) {
         $('[data-a="create"]').addEventListener('click', async () => {
             const summary = fval('summary');
             if (!summary) { statusLine('Create failed: Title is required.'); host.querySelector('[data-f="summary"]')?.focus(); return; }
+            const fieldError = customFieldsCtl?.validate();
+            if (fieldError) { statusLine(`Create failed: ${fieldError}`); return; }
             const btn = $('[data-a="create"]');
             if (btn) btn.disabled = true;
             try {
@@ -1171,6 +1216,7 @@ function mountTicket(host, props, ctx) {
                     // Relationships staged in the Links section while filing.
                     links: t.links || [],
                     description: fval('desc') || '',
+                    fields: customFieldsCtl?.collect() || {},
                 });
                 await loadData(); // refresh the store so the new bug shows up in the queue
                 statusLine(`Bug #${bug.id} created.`);
@@ -1198,11 +1244,12 @@ function mountTicket(host, props, ctx) {
         });
         const strip = $('[data-slot="stageactions"]');
         if (!strip) return;
-        const closed = state.stage >= 3;
+        const type = machineType(fval('type')) || t.rawType || 'bug';
+        const closed = isClosed({ rawStatus: state.status, rawType: type });
         // The workflow buttons are written in this SAME innerHTML: the strip is
         // repainted on every stage change, so anything appended afterwards survives
         // until the first time the user moves the bug and then silently disappears.
-        strip.innerHTML = STAGE_ACTIONS[state.stage]
+        strip.innerHTML = bugMoves(state.status, type)
             .map(([label, target], i) => `<button class="ea-btn td-stageaction ${i === 0 ? 'ea-btn--primary td-stageaction--primary' : ''}" data-wf="${esc(target)}">${esc(label)}</button>`).join('')
             + WORKFLOW_ACTIONS.filter((a) => a.when(closed)).map((a) =>
                 `<button class="ea-btn td-stageaction td-stageaction--alt" data-wfa="${esc(a.id)}"
@@ -1210,18 +1257,29 @@ function mountTicket(host, props, ctx) {
     };
 
     // Move to a stage: reflect it in the read-only Status + chevrons, mark dirty.
-    const gotoStage = (i) => {
-        state.stage = Math.max(0, Math.min(STAGE_STATUS.length - 1, i));
+    const gotoStatus = (target) => {
+        state.status = target;
+        state.stage = stageIndexOf(target, machineType(fval('type')) || t.rawType);
         renderStages();
-        setV('status', STAGE_STATUS[state.stage]);
+        setV('status', humanizeStatus(target));
+        markStatus();
         setDirty(true);
+    };
+    // A status the schema does not know — removed from Settings › Record types,
+    // or typed into the file by hand — is shown as it is and marked, never fixed up.
+    const markStatus = () => {
+        const el = host.querySelector('[data-f="status"]');
+        if (!el || mode === 'search') return;
+        const known = statusKnown('bugs', machineType(fval('type')) || t.rawType || 'bug', state.status);
+        el.classList.toggle('td-unknown', !known);
+        el.title = known ? '' : `'${state.status}' is not a status this project knows. It is kept as it is; move the bug to fix it.`;
     };
 
     // assignee is EXPLICIT — sent to the bridge like any other field (the reassign picker sets it).
     const collectPatch = () => {
         const patch = {
             title: fval('summary'),
-            status: machineStatus(fval('status')),
+            status: state.status,
             type: machineType(fval('type')),
             severity: fval('severity'),
             subsystem: fval('subsystem') || 'unsorted',
@@ -1239,6 +1297,9 @@ function mountTicket(host, props, ctx) {
         if (fval('reporter') !== (t.reporter || '')) patch.reporter = fval('reporter');
         // A status move's message (bug_transitions.js), saved with the move.
         if (state.moveMessage) Object.assign(patch, state.moveMessage);
+        // Only the custom fields that changed — see custom_fields.js.
+        const fields = customFieldsCtl?.collect() || {};
+        if (Object.keys(fields).length) patch.fields = fields;
         return patch;
     };
 
@@ -1252,8 +1313,12 @@ function mountTicket(host, props, ctx) {
         setV('assignee', bug.assignee || '');
         setV('reporter', bug.reporter || '');
         setV('updated', formatStamp(bug.updated) || '—');
-        state.stage = bug.stage ?? 0;
+        customFieldsCtl?.set(bug.fields || {});
+        syncTypeRows();
+        state.status = bug.status || 'open';
+        state.stage = stageIndexOf(state.status, bug.type);
         renderStages();
+        markStatus();
         Object.assign(t, {
             summary: bug.title, status: humanizeStatus(bug.status), rawStatus: bug.status,
             assignee: bug.assignee || HUMAN_AUTHOR, reporter: bug.reporter || '',
@@ -1378,6 +1443,8 @@ function mountTicket(host, props, ctx) {
 
     const save = async () => {
         if (!t.bugId) { statusLine('Local bug — nothing to persist.'); return; }
+        const fieldError = customFieldsCtl?.validate();
+        if (fieldError) { statusLine(`Not saved: ${fieldError}`); return; }
         try {
             const patch = collectPatch();
             state.moveMessage = null;
@@ -1417,21 +1484,20 @@ function mountTicket(host, props, ctx) {
     // A move that needs a message asks for it first (or reuses a comment you
     // posted in the last five minutes); cancelling the dialog cancels the move.
     const applyStage = async (target, label) => {
-        const i = STAGE_ORDER.indexOf(target);
-        if (i < 0) return;
+        if (!target) return;
         if (t.bugId) {
             const extra = await resolveMoveMessage({
-                bugId: t.bugId, from: STAGE_ORDER[state.stage], to: target, label, title: t.summary || '',
+                bugId: t.bugId, from: state.status, to: target, label, title: t.summary || '',
             });
             if (!extra) { statusLine('Status unchanged.'); return; }
             state.moveMessage = Object.keys(extra).length ? extra : null;
         }
-        gotoStage(i);
+        gotoStatus(target);
         await save();
     };
 
     // Chevrons are display-only — the lifecycle is driven exclusively by the
-    // Action buttons below, so only the moves in BUG_TRANSITIONS are reachable
+    // Action buttons below, so only the moves bugMoves() offers are reachable
     // from the UI.
     host.addEventListener('click', (e) => {
         const wf = e.target.closest('[data-wf]');
@@ -1554,6 +1620,7 @@ function mountTicket(host, props, ctx) {
             actionsEl?.removeEventListener('click', onAction);
             try { composer?.destroy(); } catch { /* already gone */ }
             try { commentEditing?.destroy(); } catch { /* already gone */ }
+            try { customFieldsCtl?.destroy(); } catch { /* already gone */ }
         },
     };
 }
@@ -1588,6 +1655,9 @@ function navFilterRow(f, custom) {
              title="${esc(describeFilter(f.expr))}">
             ${icon(esc(f.icon || 'filter_alt'))}
             <span>${esc(f.label)}</span>
+            ${MODEL.unknownFields(f.expr).length
+                ? `<span class="td-nav__warn" title="Names a field this project no longer has: ${esc(MODEL.unknownFields(f.expr).join(', '))}">${icon('warning')}</span>`
+                : ''}
             <span class="td-nav__actions">
                 ${custom ? navAction('edit', 'edit', `Edit filter ${f.label}`) : ''}
                 ${navAction('duplicate', 'content_copy', custom ? `Duplicate filter ${f.label}` : `Duplicate ${f.label} as a custom filter`)}

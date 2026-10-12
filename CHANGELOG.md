@@ -7,6 +7,33 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Record types: your own fields and statuses** (EPIC-0003). Settings ›
+  Record types gives each record type — Bug, Regression, Chore, and each
+  backlog or ticket type — its own fields (text, number, date, yes/no, choice;
+  any of them required), hides the optional built-in fields a type does not use,
+  and adds statuses, each counting as active, waiting or finished. It is saved
+  in the committed `.bugdesk/project.json` (`schema`), so everyone who pulls the
+  repo gets it; a save with a problem (a name that clashes with a built-in
+  field, a choice without values, a status still held by records) is refused
+  with every problem listed.
+  - A custom field is one more frontmatter line in the record (`env: prod`), so
+    an agent sets it the way it sets `assignee`. The bug page, the item page and
+    New item show a type's fields in controls that suit them, send only what
+    changed, and refuse a required field left empty; a record written before a
+    field existed still saves. A value the schema no longer names is shown,
+    marked and kept.
+  - Custom fields are conditions in the filter editor (with the operators of
+    their type), and full-text search finds their values. A saved filter naming
+    a field that was removed is marked in the rail and reads "unknown field".
+  - A hidden built-in leaves the forms, the record page, the board's columns
+    and the filter editor, and its values stay in the files. Hiding `due` turns
+    off overdue highlighting; hiding `points` drops the estimate check from
+    refinement.
+  - A custom status is offered as a move on the record page and in the
+    right-click menu, gets its own view in the rail, and sorts in its place in
+    the tree. A finished one leaves the open views like `closed` / `done`. A
+    status no longer configured is shown as it is and marked.
+
 - **Linking searches as you type** (BUG-0011). In the link adder, the link type
   is the app's own dropdown, and typing in the target field lists matching
   records from both stores right under it (↑/↓, Enter or a click to pick;

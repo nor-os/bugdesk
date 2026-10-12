@@ -345,6 +345,22 @@ export async function installTilingShell({ eventBus, logger } = {}) {
     // browser's own. See auto_scrollbars.js.
     installAutoScrollbars(document.body);
 
+    // A schema in project.json with problems is in effect without the broken
+    // entries — said once here, at the bottom, and in full in Settings ›
+    // Record types, rather than leaving a field to be quietly missing.
+    try {
+        const [{ schemaWarnings }, { statusLine }] = await Promise.all([
+            import('../ticketdesk/schema.js'), import('../ticketdesk/pages.js'),
+        ]);
+        const warnings = schemaWarnings();
+        if (warnings.length) {
+            statusLine(`project.json: ${warnings.length} schema problem${warnings.length === 1 ? '' : 's'} — those entries are ignored. See Settings › Record types.`);
+            log.warn?.('schema problems', { warnings });
+        }
+    } catch (err) {
+        log.warn?.('schema check failed', { err });
+    }
+
     log.info?.('tiling shell installed');
     window.__bugdesk = { eventBus, wm, palette };
     return { wm, palette };
@@ -519,6 +535,7 @@ async function _loadTrackerCopy({ eventBus }) {
         collaborators: Array.isArray(cfg.collaborators) ? cfg.collaborators : [],
         assignees: Array.isArray(cfg.assignees) ? cfg.assignees : [],
         store: cfg.store || { kind: 'tracker', hasBugs: false, hasBacklog: true },
+        schema: cfg.schema || null,
         tracker: cfg.tracker || { available: true },
     };
     const T = '../ticketdesk@t/';

@@ -939,3 +939,141 @@ tr[draggable="true"]:active,
    panel's look, with a finished record dimmed rather than hidden. */
 .bd-typeahead .bd-sel__optlabel b { margin-right: 6px; }
 .bd-typeahead .bd-typeahead__closed { opacity: 0.55; }
+
+/* ── Record types (schema_editor.js) ─────────────────────────────────
+   Types down the left, the chosen type's fields, hidden built-ins and
+   statuses on the right, the actions pinned to the bottom. */
+
+.bd-schema {
+    display: grid;
+    grid-template-columns: 170px 1fr;
+    grid-template-rows: 1fr auto;
+    flex: 1 1 auto;
+    min-height: 0;
+    background: var(--surface-1, #252526);
+}
+.bd-schema__nav {
+    grid-row: 1;
+    overflow-y: auto;
+    padding: 8px 6px;
+    border-right: 1px solid var(--border-subtle, #2a2a2a);
+}
+.bd-schema__group {
+    margin: 8px 6px 4px;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-dim, #666);
+}
+.bd-schema__type {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding: 4px 8px;
+    font: inherit;
+    color: var(--text-secondary, #9a9a9a);
+    text-align: left;
+    background: none;
+    border: none;
+    border-radius: var(--radius-sm, 4px);
+    cursor: pointer;
+}
+.bd-schema__type:hover { background: var(--surface-2, #2d2d2d); color: var(--text-primary, #e0e0e0); }
+.bd-schema__type--on { background: var(--surface-2, #2d2d2d); color: var(--text-primary, #e0e0e0); }
+.bd-schema__count {
+    margin-left: auto;
+    padding: 0 6px;
+    font-size: 10px;
+    color: #fff;
+    background: var(--accent, #0e639c);
+    border-radius: var(--radius-pill, 999px);
+}
+.bd-schema__main { grid-row: 1; overflow-y: auto; padding: 10px 16px 16px; min-width: 0; }
+.bd-schema__h { margin: 2px 0 10px; font-size: 13px; color: var(--text-primary, #e0e0e0); }
+.bd-schema__main section { margin-bottom: 16px; }
+.bd-schema__shead { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.bd-schema__shead h4 {
+    margin: 0;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-secondary, #9a9a9a);
+}
+.bd-schema__shead .ea-btn { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; }
+.bd-schema__shead .material-symbols-outlined { font-size: 15px; }
+.bd-schema__hint, .bd-schema__builtin { margin: 0 0 6px; line-height: 1.5; }
+.bd-schema__builtin code { font-size: 10.5px; margin-right: 4px; }
+.bd-schema__empty { padding: 4px 0 2px; font-style: italic; }
+
+/* The rows reuse `ea-modal__row` for the modal stylesheet's input styling, as
+   the roster does, with the grid put back for the columns. */
+.bd-schema__fhdr, .bd-schema .bd-schema__frow,
+.bd-schema__shdr, .bd-schema .bd-schema__srow {
+    display: grid;
+    align-items: center;
+    gap: 6px;
+    margin: 0 0 4px;
+}
+.bd-schema__fhdr, .bd-schema .bd-schema__frow { grid-template-columns: 44px 1fr 1.2fr 120px 64px 26px; }
+.bd-schema__shdr, .bd-schema .bd-schema__srow { grid-template-columns: 44px 1fr 1.2fr 120px 1fr 26px; }
+.bd-schema__fhdr, .bd-schema__shdr { font-size: 10.5px; color: var(--text-dim, #666); }
+.bd-schema__values {
+    grid-column: 2 / -2;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    gap: 6px;
+}
+.bd-schema__move { display: inline-flex; gap: 2px; }
+.bd-schema__move button, .bd-schema__rm {
+    display: inline-flex;
+    padding: 1px;
+    color: var(--text-muted, #888);
+    background: none;
+    border: none;
+    cursor: pointer;
+}
+.bd-schema__move button:disabled { opacity: 0.3; cursor: default; }
+.bd-schema__move .material-symbols-outlined, .bd-schema__rm .material-symbols-outlined { font-size: 15px; }
+.bd-schema__move button:not(:disabled):hover, .bd-schema__rm:hover { color: var(--text-primary, #e0e0e0); }
+.bd-schema input[readonly] { opacity: 0.75; cursor: default; }
+.bd-schema__req { display: flex; justify-content: center; }
+.bd-schema__hide { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
+.bd-schema__confirm {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 4px;
+    padding: 6px 8px;
+    background: var(--surface-2, #2d2d2d);
+    border-radius: var(--radius-sm, 4px);
+}
+.bd-schema__confirm .ea-btn:first-of-type { margin-left: auto; }
+.bd-schema__warn, .bd-schema__problems {
+    display: flex;
+    gap: 8px;
+    margin: 0 0 12px;
+    padding: 8px 10px;
+    line-height: 1.5;
+    border-radius: var(--radius-sm, 4px);
+}
+.bd-schema__warn { background: rgb(204 167 0 / 12%); color: #d7ba7d; }
+.bd-schema__problems { background: rgb(241 76 76 / 12%); color: #f48771; }
+.bd-schema__warn ul, .bd-schema__problems ul { margin: 2px 0 0; padding-left: 16px; }
+.bd-schema__actions {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 9px 12px;
+    border-top: 1px solid var(--border-subtle, #2a2a2a);
+}
+.bd-schema__path { margin-right: auto; font-size: 10.5px; }
+
+/* A saved filter naming a field the schema no longer has (schema.js). */
+.td-nav__warn { display: inline-flex; color: #d7ba7d; }
+.td-nav__warn .material-symbols-outlined { font-size: 13px; }
+/* A record value for a field the schema no longer has (custom_fields.js). */
+.td-chip--warn { color: #d7ba7d; border-color: rgb(215 186 125 / 40%); }
+/* A status value the schema does not know (schema.js statusKnown). */
+.ea-tin.td-unknown { color: #d7ba7d; text-decoration: underline wavy rgb(215 186 125 / 60%); }
