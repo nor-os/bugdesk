@@ -1101,3 +1101,13 @@ tr[draggable="true"]:active,
 .bd-flowedit { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; background: var(--surface-1, #252526); }
 .bd-flowedit__host { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .bd-flowedit__host > * { flex: 1 1 auto; min-height: 0; }
+.bd-workflow__ahdr, .bd-schema .bd-workflow__arow {
+    display: grid;
+    grid-template-columns: 44px 1fr 1fr 92px 26px;
+    align-items: center;
+    gap: 6px;
+    margin: 0 0 4px;
+}
+.bd-workflow__ahdr { font-size: 10.5px; color: var(--text-dim, #666); }
+.bd-workflow__lede { margin: 0 0 10px; line-height: 1.6; max-width: 70ch; }
+.bd-workflow__lede code { font-size: 10.5px; }

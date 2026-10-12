@@ -62,6 +62,7 @@ import { attachRecordTypeahead, openRecordPicker } from './item_picker.js';
 import { attachSelect, setRowVisible } from './select_field.js';
 import { mountCustomFields } from './custom_fields.js';
 import { customStatus, isHidden, statusKnown } from './schema.js';
+import { actionsFor } from './workflow.js';
 import { attachTagInput } from './tag_input.js';
 import { ITEMS, isClosedItem, loadBacklog } from './backlog_data.js';
 import { watchRecord } from './live.js';
@@ -390,7 +391,7 @@ function mountQueues(host, props, ctx) {
         const ids = menuIds(cm);
         const one = cm.row?.[QUEUE_ID_COL] || ids[0];
         const cc = cellClause(cm);
-        if (String(action).startsWith('move:')) {
+        if (/^(move|act):/.test(String(action))) {
             runStatusMenuAction(action, cm.row ? TICKETS.find((x) => x.id === cm.row[QUEUE_ID_COL]) : null);
             return;
         }
@@ -578,12 +579,15 @@ function stageIndexOf(status, type = 'bug') {
 /** The status moves of one bug as context-menu entries, then a separator. */
 function statusMenuItems(bug) {
     const moves = bug ? bugMovesFor(bug.rawStatus, bug.rawType) : [];
-    if (!moves.length) return [];
+    // The project's own actions (Settings › Workflow), beside the moves.
+    const acts = bug ? actionsFor('bugs', bug.rawType || 'bug', bug.rawStatus) : [];
+    if (!moves.length && !acts.length) return [];
     return [
         ...moves.map(({ label, to: target }) => ({
             label, icon: target === 'closed' ? 'task_alt' : target === 'open' ? 'undo' : 'swap_horiz',
             action: `move:${target}:${label}`,
         })),
+        ...acts.map((a) => ({ label: a.label, icon: 'bolt', action: `act:${a.id}` })),
         { separator: true },
     ];
 }
@@ -591,6 +595,7 @@ function statusMenuItems(bug) {
 /** Carry out a `move:<target>:<label>` menu entry on `bug`, with its message. */
 async function runStatusMenuAction(action, bug) {
     if (!bug) return;
+    if (String(action).startsWith('act:')) { await runBugAction(bug, String(action).slice(4)); return; }
     const [, target, ...rest] = String(action).split(':');
     const label = rest.join(':');
     try {
@@ -601,6 +606,28 @@ async function runStatusMenuAction(action, bug) {
         _eventBus?.emit?.('bugs:changed', { store: 'bugs', id: bug.bugId });
     } catch (err) {
         statusLine(`Could not move bug ${bug.id}: ${err?.message || err}`);
+    }
+}
+
+/** Run one of the project's actions (Settings › Workflow) on a bug from a list:
+ *  its flow, then ONE save — or nothing, when a question was cancelled. */
+async function runBugAction(bug, id) {
+    const act = actionsFor('bugs', bug.rawType || 'bug', bug.rawStatus).find((a) => a.id === id);
+    if (!act) return;
+    try {
+        const full = await fetchBug(bug.bugId);
+        const patch = await planBugMove({
+            bugId: bug.bugId, bug: full, move: { label: act.label, message: false, flow: act.flow || null },
+            from: bug.rawStatus, title: bug.summary,
+        });
+        if (!patch) { statusLine(`${act.label}: cancelled, nothing changed.`); return; }
+        if (!Object.keys(patch).length) { statusLine(`${act.label}: nothing to do.`); return; }
+        await patchBug(bug.bugId, patch);
+        statusLine(`Bug ${bug.id}: ${act.label}.`);
+        await loadData();
+        _eventBus?.emit?.('bugs:changed', { store: 'bugs', id: bug.bugId });
+    } catch (err) {
+        statusLine(`${act.label} failed on bug ${bug.id}: ${err?.message || err}`);
     }
 }
 
@@ -1148,7 +1175,7 @@ function mountTicket(host, props, ctx) {
                 },
                 onContextMenuAction: (action, cm) => {
                     const refs = resultIds(cm);
-                    if (String(action).startsWith('move:')) {
+                    if (/^(move|act):/.test(String(action))) {
                         const m = cm.row ? byRef.get(cm.row[0]) : null;
                         runStatusMenuAction(action, m?.store === 'bugs' ? TICKETS.find((x) => x.id === m.id) : null)
                             .then(() => doSearch());
@@ -1251,6 +1278,8 @@ function mountTicket(host, props, ctx) {
         // until the first time the user moves the bug and then silently disappears.
         strip.innerHTML = bugMovesFor(state.status, type)
             .map(({ label, to: target }, i) => `<button class="ea-btn td-stageaction ${i === 0 ? 'ea-btn--primary td-stageaction--primary' : ''}" data-wf="${esc(target)}">${esc(label)}</button>`).join('')
+            + actionsFor('bugs', type, state.status).map((a) =>
+                `<button class="ea-btn td-stageaction td-stageaction--custom" data-wact="${esc(a.id)}">${icon('bolt')} ${esc(a.label)}</button>`).join('')
             + WORKFLOW_ACTIONS.filter((a) => a.when(closed)).map((a) =>
                 `<button class="ea-btn td-stageaction td-stageaction--alt" data-wfa="${esc(a.id)}"
                          title="${esc(a.title)}">${icon(a.icon)} ${esc(a.label)}</button>`).join('');
@@ -1522,9 +1551,32 @@ function mountTicket(host, props, ctx) {
     // from the UI.
     host.addEventListener('click', (e) => {
         const wf = e.target.closest('[data-wf]');
-        if (!wf) return;
-        applyStage(wf.dataset.wf, wf.textContent.trim());
+        if (wf) { applyStage(wf.dataset.wf, wf.textContent.trim()); return; }
+        const wact = e.target.closest('[data-wact]');
+        if (wact) applyAction(wact.dataset.wact);
     });
+
+    // One of the project's actions (Settings › Workflow): its flow, then this
+    // page's ONE save, as a move is — and a cancelled question saves nothing.
+    const applyAction = async (id) => {
+        const type = machineType(fval('type')) || t.rawType || 'bug';
+        const act = actionsFor('bugs', type, state.status).find((a) => a.id === id);
+        if (!act || !t.bugId) return;
+        let bug = null;
+        try { bug = await fetchBug(t.bugId); } catch { /* the plan asks rather than guesses */ }
+        let patch;
+        try {
+            patch = await planBugMove({
+                bugId: t.bugId, bug: bug || { id: t.bugId, status: state.status, comments: [] },
+                move: { label: act.label, message: false, flow: act.flow || null }, from: state.status, title: t.summary || '',
+            });
+        } catch (err) { statusLine(`${act.label}: ${err?.message || err}`); return; }
+        if (!patch) { statusLine(`${act.label}: cancelled, nothing changed.`); return; }
+        const { status: next, ...extra } = patch;
+        state.moveMessage = Object.keys(extra).length ? extra : null;
+        if (next) gotoStatus(next); else setDirty(true);
+        await save();
+    };
 
     const actions = { save, cancel };
     const onAction = (e) => {

@@ -31,7 +31,7 @@ import { attachTagInput } from './tag_input.js';
 import { attachSelect, setRowVisible } from './select_field.js';
 import { mountCustomFields } from './custom_fields.js';
 import { hiddenForAll, isHidden, statusKnown, withCustomStatuses } from './schema.js';
-import { movesFor, planMove } from './workflow.js';
+import { actionsFor, movesFor, planMove } from './workflow.js';
 import { watchRecord } from './live.js';
 import { attachParentPicker, attachRecordTypeahead, childTypesFor, openItemPicker, openRecordPicker } from './item_picker.js';
 import { installRecordDragSource, markDragCell, openRecordAs } from './record_dnd.js';
@@ -180,6 +180,24 @@ export async function planItemMove(it, move) {
             return text ? { comment: text } : null;
         },
     });
+}
+
+/** Run one of the project's actions on an item: its flow, then ONE save.
+ *  Resolves the saved item, or null when nothing was saved. */
+export async function runItemAction(it, id) {
+    const act = actionsFor('backlog', it.type, it.status).find((a) => a.id === id);
+    if (!act) return null;
+    try {
+        const patch = await planItemMove(it, { label: act.label, message: false, flow: act.flow || null });
+        if (!patch) { statusLine(`${act.label}: cancelled, nothing changed.`); return null; }
+        if (!Object.keys(patch).length) { statusLine(`${act.label}: nothing to do.`); return null; }
+        const saved = await patchItem(it.id, patch);
+        statusLine(`${itemRef(it)}: ${act.label}.`);
+        return saved;
+    } catch (err) {
+        statusLine(`${act.label} failed on ${itemRef(it)}: ${err?.message || err}`);
+        return null;
+    }
 }
 
 const BOARD_COLS = [
@@ -408,8 +426,10 @@ function mountBacklogBoard(host, props, ctx) {
                 action: `move:${m.to}:${m.label}`,
                 disabled: isGated(m.to) && refinementGaps(model).length > 0,
             })) : [];
+            const acts = model && refs.length <= 1 ? actionsFor('backlog', model.type, model.status)
+                .map((a) => ({ label: a.label, icon: 'bolt', action: `act:${a.id}` })) : [];
             return [
-                ...(moves.length ? [...moves, { separator: true }] : []),
+                ...(moves.length || acts.length ? [...moves, ...acts, { separator: true }] : []),
                 { label: refs.length > 1 ? `Open ${refs.length} items in tabs` : 'Open',
                   icon: 'open_in_new', action: 'open', disabled: !refs.length },
                 { label: 'Open in new window', icon: 'web_asset', action: 'open-window', disabled: !model },
@@ -442,6 +462,14 @@ function mountBacklogBoard(host, props, ctx) {
             const refs = menuRefs(cm);
             const model = cm.row ? byRef.get(cm.row[REF_COL]) : null;
             const cc = cellClause(cm);
+            if (model && String(action).startsWith('act:')) {
+                const full = await fetchItem(model.id).catch(() => null);
+                if (full && await runItemAction(full, String(action).slice(4))) {
+                    await loadBacklog();
+                    _eventBus?.emit?.(ev('backlog:changed'), { id: model.id });
+                }
+                return;
+            }
             if (model && String(action).startsWith('move:')) {
                 const [, to, ...rest] = String(action).split(':');
                 const label = rest.join(':');
@@ -1003,6 +1031,9 @@ function mountItem(host, props, ctx) {
                         data-wf="${esc(target)}" data-wflabel="${esc(label)}" ${blocked ? 'disabled' : ''}
                         title="${blocked ? esc(`${gaps.length} thing${gaps.length === 1 ? '' : 's'} still missing — see Refinement`) : ''}">${esc(label)}</button>`;
         }).join('')
+            // The project's own actions (Settings › Workflow), after the moves.
+            + actionsFor('backlog', item.type, item.status).map((a) =>
+                `<button class="ea-btn td-stageaction td-stageaction--custom" data-wact="${esc(a.id)}">${icon('bolt')} ${esc(a.label)}</button>`).join('')
             + WORKFLOW_ACTIONS.filter((a) => a.when(closed)).map((a) =>
                 `<button class="ea-btn td-stageaction td-stageaction--alt" data-wfa="${esc(a.id)}"
                          title="${esc(a.title)}">${icon(a.icon)} ${esc(a.label)}</button>`).join('');
@@ -1677,6 +1708,12 @@ function mountItem(host, props, ctx) {
         }
         const wf = e.target.closest('[data-wf]');
         if (wf && !wf.disabled) { await moveTo(wf.dataset.wf, wf.dataset.wflabel || ''); return; }
+        const wact = e.target.closest('[data-wact]');
+        if (wact) {
+            const r = await runItemAction(item, wact.dataset.wact);
+            if (r) { apply(r); await broadcast(); }
+            return;
+        }
 
         const act = e.target.closest('[data-a]')?.dataset.a;
         if (act === 'delete') { await removeThis(); return; }

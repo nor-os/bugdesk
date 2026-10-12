@@ -2896,6 +2896,24 @@ console.log('\nWorkflow');
             [['unknown_field', 'bad'], ['unknown_reference', 'bad'], ['unknown_step', 'loop']].sort());
     });
 
+    await t('an action is offered only where it says, and moves the record itself', async () => {
+        wf.setWorkflow({ actions: { bugs: { bug: [{ id: 'blocked', label: 'Blocked', when: ['open', 'investigation'], flow: flow([
+            { id: 'why', type: 'prompt', config: { question: 'Blocked on?' } },
+            { id: 'note', type: 'add-comment', config: { body: 'Blocked: ${input.why}', tag: 'blocked' } },
+            { id: 'go', type: 'set-status', config: { status: 'blocked' } },
+        ], [['start', 'why'], ['why', 'note'], ['note', 'go']]) }] } } });
+        assert.deepEqual(wf.actionsFor('bugs', 'bug', 'open').map((a) => a.id), ['blocked']);
+        assert.deepEqual(wf.actionsFor('bugs', 'bug', 'closed'), []);
+        assert.deepEqual(wf.actionsFor('bugs', 'regression', 'open'), [], 'actions are per record type');
+        const act = wf.actionsFor('bugs', 'bug', 'open')[0];
+        const patch = await wf.planMove({ store: 'bugs', record: { status: 'open' }, move: { label: act.label, flow: act.flow },
+            ask: async () => ({ answer: 'the vendor' }), askMessage: async () => null });
+        assert.deepEqual(patch, { status: 'blocked', comment: 'Blocked: the vendor', commentNote: 'blocked' });
+        assert.equal(wf.checkFlow(act.flow, 'bugs', ['bug']).some((f) => f.code === 'unknown_step'), true,
+            'a move\'s flow cannot change the status itself');
+        wf.setWorkflow(null);
+    });
+
     await t('the built-in table is what an unconfigured store already does', () => {
         const story = wf.builtinMoves('backlog', 'story');
         assert.ok(story.some((m) => m.from === 'refined' && m.to === 'in-progress' && m.label === 'Start work'));

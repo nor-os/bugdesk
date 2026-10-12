@@ -35,17 +35,43 @@ import {
 const icon = (name) => `<span class="material-symbols-outlined">${name}</span>`;
 let _seq = 1;
 
-/** The tables this page can configure: `[key, store, types, label]`. */
+/** The tables this page can configure: `[key, store, types, label, group]` —
+ *  the move tables first, then one action list per record type. */
 function tablesHere() {
     const store = CONFIG.store || {};
-    const out = [];
-    if (store.hasBugs !== false && CONFIG.mode !== 'tracker') out.push(['bugs', 'bugs', ['bug', 'regression', 'task'], 'Bugs']);
-    if (store.hasBacklog !== false) {
-        const offered = CONFIG.mode === 'tracker' ? ['project', 'epic', 'story', 'task'] : ['epic', 'story', 'task'];
-        for (const [t, label] of STORE_TYPES.backlog) if (offered.includes(t)) out.push([`backlog.${t}`, 'backlog', [t], label]);
+    const moves = [], actions = [];
+    const bugs = store.hasBugs !== false && CONFIG.mode !== 'tracker';
+    const backlog = store.hasBacklog !== false;
+    const offered = CONFIG.mode === 'tracker' ? ['project', 'epic', 'story', 'task'] : ['epic', 'story', 'task'];
+    const itemsWord = CONFIG.mode === 'tracker' ? 'Tickets' : 'Backlog';
+    if (bugs) moves.push(['bugs', 'bugs', ['bug', 'regression', 'task'], 'Bugs', 'Moves']);
+    if (backlog) {
+        for (const [t, label] of STORE_TYPES.backlog) {
+            if (offered.includes(t)) moves.push([`backlog.${t}`, 'backlog', [t], `${itemsWord} › ${label}`, 'Moves']);
+        }
     }
-    return out;
+    if (bugs) for (const [t, label] of STORE_TYPES.bugs) actions.push([`actions.bugs.${t}`, 'bugs', [t], label, 'Actions']);
+    if (backlog) {
+        for (const [t, label] of STORE_TYPES.backlog) {
+            if (offered.includes(t)) actions.push([`actions.backlog.${t}`, 'backlog', [t], label, 'Actions']);
+        }
+    }
+    return [...moves, ...actions];
 }
+
+const isActions = (key) => key.startsWith('actions.');
+const actionsOf = (draft, key) => {
+    const [, store, type] = key.split('.');
+    return draft.actions?.[store]?.[type] || [];
+};
+const setActions = (draft, key, list) => {
+    const [, store, type] = key.split('.');
+    draft.actions = draft.actions || {};
+    draft.actions[store] = draft.actions[store] || {};
+    if (list.length) draft.actions[store][type] = list; else delete draft.actions[store][type];
+    if (!Object.keys(draft.actions[store]).length) delete draft.actions[store];
+    if (!Object.keys(draft.actions).length) delete draft.actions;
+};
 
 const tableOf = (draft, key) => {
     if (key === 'bugs') return draft.bugs?.moves || null;
@@ -74,6 +100,9 @@ const stepCount = (flow) => (flow?.nodes || []).filter((n) => n.type !== 'start'
 export function openWorkflowEditor({ eventBus = null } = {}) {
     const tables = tablesHere();
     const draft = workflowConfig();
+    for (const byType of Object.values(draft.actions || {})) {
+        for (const list of Object.values(byType || {})) for (const a of list || []) a.saved = true;
+    }
     let cur = tables[0]?.[0];
     let problems = [];           // from the bridge: {where, message, node_id}
     let selects = [];
@@ -83,11 +112,38 @@ export function openWorkflowEditor({ eventBus = null } = {}) {
 
     const curSpec = () => tables.find(([k]) => k === cur);
 
-    const nav = () => tables.map(([key, , , label], i) => `
-        ${i === 0 || (tables[i - 1][1] !== tables[i][1]) ? `<div class="bd-schema__group">${tables[i][1] === 'bugs' ? 'Bugs' : (CONFIG.mode === 'tracker' ? 'Tickets' : 'Backlog')}</div>` : ''}
+    const nav = () => tables.map(([key, , , label, group], i) => {
+        const n = isActions(key) ? actionsOf(draft, key).length : 0;
+        const badge = isActions(key) ? (n ? `<span class="bd-schema__count">${n}</span>` : '')
+            : (tableOf(draft, key) ? '<span class="bd-schema__count">custom</span>' : '');
+        return `${i === 0 || tables[i - 1][4] !== group ? `<div class="bd-schema__group">${esc(group)}</div>` : ''}
         <button type="button" class="bd-schema__type${key === cur ? ' bd-schema__type--on' : ''}" data-table="${key}">
-            ${esc(label)}${tableOf(draft, key) ? '<span class="bd-schema__count">custom</span>' : ''}
-        </button>`).join('');
+            ${esc(label)}${badge}
+        </button>`;
+    }).join('');
+
+    /** One record type's custom actions: a name, where it is offered, a flow. */
+    const actionRows = () => {
+        const [, store, types] = curSpec();
+        const list = actionsOf(draft, cur);
+        const head = list.length ? `<div class="bd-workflow__ahdr"><span></span><span>Action</span>
+            <span title="The statuses it is offered in, comma-separated; empty means every status">Offered in</span><span>Flow</span><span></span></div>` : '';
+        return `<p class="td-dim bd-workflow__lede">An action is a button beside the moves — <i>Blocked</i>, say — that runs
+                a flow: ask why, add it as a comment, move to a status. Like a move, it is saved once, and
+                cancelling a question saves nothing. Statuses here: ${statusesOf(store, types[0]).map((x) => `<code>${esc(x)}</code>`).join(' ')}</p>`
+            + head + list.map((a, i) => `
+            <div class="ea-modal__row bd-workflow__arow" data-action="${i}">
+                <span class="bd-schema__move">
+                    <button type="button" data-aup="${i}" title="Move up" ${i === 0 ? 'disabled' : ''}>${icon('arrow_upward')}</button>
+                    <button type="button" data-adown="${i}" title="Move down" ${i === list.length - 1 ? 'disabled' : ''}>${icon('arrow_downward')}</button>
+                </span>
+                <input type="text" data-k="label" value="${esc(a.label || '')}" placeholder="Blocked" aria-label="Action name">
+                <input type="text" class="td-mono" data-k="when" value="${esc((a.when || []).join(', '))}" placeholder="every status" aria-label="Offered in">
+                <button type="button" class="ea-btn bd-workflow__flow${a.flow ? ' bd-workflow__flow--on' : ''}" data-aflow="${i}">${icon('account_tree')}${a.flow ? `${stepCount(a.flow)} step${stepCount(a.flow) === 1 ? '' : 's'}` : 'Add'}</button>
+                <button type="button" class="bd-schema__rm" data-arm="${i}" title="Remove this action">${icon('close')}</button>
+            </div>`).join('')
+            + `<div class="bd-workflow__foot"><button type="button" class="ea-btn" data-act="addaction">${icon('add')} Add action</button></div>`;
+    };
 
     const rows = () => {
         const [, store, types] = curSpec();
@@ -129,12 +185,13 @@ export function openWorkflowEditor({ eventBus = null } = {}) {
         for (const s of selects) { try { s.destroy(); } catch { /* gone */ } }
         selects = [];
         const [, , , label] = curSpec() || [];
-        const mine = problems.filter((p) => p.where.startsWith(cur === 'bugs' ? 'workflow.bugs' : `workflow.backlog.${cur.split('.')[1]}`));
+        const prefix = isActions(cur) ? `workflow.${cur}` : (cur === 'bugs' ? 'workflow.bugs' : `workflow.backlog.${cur.split('.')[1]}`);
+        const mine = problems.filter((p) => p.where.startsWith(prefix));
         body.innerHTML = `
             <nav class="bd-schema__nav" aria-label="Move tables">${nav()}</nav>
             <div class="bd-schema__main">
-                <h3 class="bd-schema__h">Moves › ${esc(label || '')}</h3>
-                <div class="bd-workflow__moves">${rows()}</div>
+                <h3 class="bd-schema__h">${isActions(cur) ? 'Actions' : 'Moves'} › ${esc(label || '')}</h3>
+                <div class="bd-workflow__moves">${isActions(cur) ? actionRows() : rows()}</div>
                 ${problems.length ? `<div class="bd-schema__problems" role="alert">${icon('error')}<ul>${
                     (mine.length ? mine : problems).map((p) => `<li>${esc(p.message)}</li>`).join('')}${
                     mine.length && mine.length < problems.length ? `<li class="td-dim">… and ${problems.length - mine.length} on other tables</li>` : ''}</ul></div>` : ''}
@@ -155,6 +212,16 @@ export function openWorkflowEditor({ eventBus = null } = {}) {
     };
 
     body.addEventListener('input', (e) => {
+        const arow = e.target.closest('[data-action]');
+        if (arow) {
+            const a = actionsOf(draft, cur)[Number(arow.dataset.action)];
+            if (e.target.dataset.k === 'label') {
+                a.label = e.target.value;
+                if (!a.saved) a.id = e.target.value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+            }
+            if (e.target.dataset.k === 'when') a.when = e.target.value.split(',').map((x) => x.trim()).filter(Boolean);
+            return;
+        }
         const row = e.target.closest('[data-move]');
         if (!row) return;
         const m = tableOf(draft, cur)[Number(row.dataset.move)];
@@ -171,6 +238,33 @@ export function openWorkflowEditor({ eventBus = null } = {}) {
         if (!b) return;
         const moves = tableOf(draft, cur);
         if (b.dataset.table) { cur = b.dataset.table; render(); return; }
+        if (isActions(cur)) {
+            const list = actionsOf(draft, cur);
+            if (b.dataset.act === 'addaction') {
+                list.push({ id: '', label: '', when: [] });
+                setActions(draft, cur, list);
+                render();
+                body.querySelector(`[data-action="${list.length - 1}"] [data-k="label"]`)?.focus();
+                return;
+            }
+            if (b.dataset.aup || b.dataset.adown) {
+                const i = Number(b.dataset.aup ?? b.dataset.adown), j = i + (b.dataset.aup ? -1 : 1);
+                if (j >= 0 && j < list.length) [list[i], list[j]] = [list[j], list[i]];
+                render(); return;
+            }
+            if (b.dataset.arm) { list.splice(Number(b.dataset.arm), 1); setActions(draft, cur, list); render(); return; }
+            if (b.dataset.aflow) {
+                const i = Number(b.dataset.aflow);
+                const [, store, types] = curSpec();
+                const result = await openFlowEditor({
+                    title: `${list[i].label || 'Action'} — what it does`, store, types, graph: list[i].flow, actions: true,
+                    serverFindings: problems.filter((p) => p.where === `workflow.${cur}[${i}]` && p.node_id),
+                });
+                if (result === undefined) return;
+                if (result) list[i].flow = result; else delete list[i].flow;
+                render(); return;
+            }
+        }
         if (b.dataset.act === 'customise') {
             const [, store, types] = curSpec();
             setTable(draft, cur, builtinMoves(store, types[0]));
@@ -212,6 +306,12 @@ export function openWorkflowEditor({ eventBus = null } = {}) {
         problems = [];
         // An unlabelled row is one somebody added and never filled in.
         for (const [key] of tables) {
+            if (isActions(key)) {
+                setActions(draft, key, actionsOf(draft, key)
+                    .filter((a) => String(a.label || '').trim())
+                    .map(({ saved, ...a }) => ({ ...a, id: a.id || a.label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-') })));
+                continue;
+            }
             const m = tableOf(draft, key);
             if (m) setTable(draft, key, m.filter((x) => String(x.label || '').trim()));
         }

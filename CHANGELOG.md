@@ -23,6 +23,11 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   page's Action buttons, the bug queue's and the board's right-click menus all
   offer the configured moves. A backlog move's message is now written in the
   same save as the move, as a bug's already was.
+- **Custom actions** (STORY-0007). Settings › Workflow › Actions gives each
+  record type its own buttons beside the moves — *Blocked*, say — offered in the
+  statuses you list, each a flow over the same steps plus *Move to a status*.
+  They show on the record page and in the right-click menus, and, like a move,
+  are saved once or not at all.
 
 - **Record types: your own fields and statuses** (EPIC-0003). Settings ›
   Record types gives each record type — Bug, Regression, Chore, and each
