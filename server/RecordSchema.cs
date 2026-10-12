@@ -54,12 +54,12 @@ static class RecordSchema
         ["bugs"] = new(StringComparer.OrdinalIgnoreCase)
         {
             "id", "title", "status", "severity", "type", "subsystem", "assignee", "reporter",
-            "labels", "links", "created", "updated",
+            "labels", "links", "created", "updated", "converted_to", "converted_from",
         },
         ["backlog"] = new(StringComparer.OrdinalIgnoreCase)
         {
             "id", "type", "title", "status", "parent", "phase", "assignee", "reporter", "due",
-            "points", "subsystem", "labels", "links", "created", "updated",
+            "points", "subsystem", "labels", "links", "created", "updated", "converted_to", "converted_from",
         },
     };
 

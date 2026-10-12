@@ -2922,5 +2922,24 @@ console.log('\nWorkflow');
     });
 }
 
+/* ── conversion between the stores (STORY-0001) ─────────────────────── */
+
+console.log('\nConversion');
+{
+    const { convertedBanner } = await import(join(UI, 'ticketdesk', 'convert.js'));
+    await t('a converted record says where it went, as a link the app opens', () => {
+        const box = document.createElement('div');
+        box.innerHTML = convertedBanner({ convertedTo: 'STORY-0031' });
+        const a = box.querySelector('a.td-reflink');
+        assert.ok(a, 'no record link');
+        assert.equal(a.dataset.ref, 'STORY-0031');
+        assert.match(box.textContent, /Converted to/);
+    });
+    await t('the new record says where it came from; an ordinary one says nothing', () => {
+        assert.match(convertedBanner({ convertedFrom: 'BUG-0042' }), /Converted from/);
+        assert.equal(convertedBanner({}), '');
+    });
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

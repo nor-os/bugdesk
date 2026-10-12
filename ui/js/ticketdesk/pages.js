@@ -63,6 +63,7 @@ import { attachSelect, setRowVisible } from './select_field.js';
 import { mountCustomFields } from './custom_fields.js';
 import { customStatus, isHidden, statusKnown } from './schema.js';
 import { actionsFor } from './workflow.js';
+import { convertRecord, convertedBanner } from './convert.js';
 import { attachTagInput } from './tag_input.js';
 import { ITEMS, isClosedItem, loadBacklog } from './backlog_data.js';
 import { watchRecord } from './live.js';
@@ -648,6 +649,9 @@ const WORKFLOW_ACTIONS = [
     { id: 'duplicate', label: 'Mark as duplicate and close', icon: 'content_copy',
       title: 'Pick the record this duplicates, link it, and close this one',
       when: (closed) => !closed },
+    { id: 'convert', label: 'Convert to backlog item…', icon: 'swap_horiz',
+      title: 'It is feature work: move it to the backlog, with its comments and history',
+      when: (closed) => !closed && storesAvailable().includes('backlog') },
     { id: 'delete', label: 'Delete…', icon: 'delete',
       title: 'Delete this bug — it is moved to the store\'s trash',
       when: () => true },
@@ -792,6 +796,7 @@ function mountTicket(host, props, ctx) {
             <span class="td-stageactions__title">${icon('bolt')} Actions</span>
             <span data-slot="stageactions"></span>
         </div>` : ''}
+        ${mode === 'edit' ? '<div data-slot="converted"></div>' : ''}
         <div class="td-mask">${maskSections(t, mode)}
             ${mode === 'edit' ? `
             <section class="td-group">
@@ -1350,6 +1355,8 @@ function mountTicket(host, props, ctx) {
         setV('updated', formatStamp(bug.updated) || '—');
         customFieldsCtl?.set(bug.fields || {});
         syncTypeRows();
+        const conv = host.querySelector('[data-slot="converted"]');
+        if (conv) conv.innerHTML = convertedBanner(bug);
         state.status = bug.status || 'open';
         state.stage = stageIndexOf(state.status, bug.type);
         renderStages();
@@ -1649,7 +1656,22 @@ function mountTicket(host, props, ctx) {
         // list it was opened from.
         ctx.wm?.navigateBack?.();
     };
-    const WF_ACTIONS = { duplicate: markDuplicate, delete: deleteThis };
+    // Feature work filed as a bug: it moves to the backlog, and this page follows it.
+    const convertThis = async () => {
+        if (state.dirty) { statusLine('Save or cancel your edits first — the conversion copies what is on disk.'); return; }
+        try {
+            const made = await convertRecord({ from: `BUG-${String(t.bugId).padStart(4, '0')}`, store: 'bugs', title: t.summary || '' });
+            if (!made) { statusLine('Not converted.'); return; }
+            await loadData();
+            await loadBacklog();
+            _eventBus?.emit?.('bugs:changed', { store: 'bugs', id: t.bugId });
+            _eventBus?.emit?.(ev('backlog:changed'), { id: made.id });
+            live.clear();
+            statusLine(`#${t.bugId} converted to ${made.ref}.`);
+            openRow(ctx.wm, ctx, { store: 'backlog', id: made.id });
+        } catch (err) { statusLine(`Could not convert: ${err?.message || err}`); }
+    };
+    const WF_ACTIONS = { duplicate: markDuplicate, delete: deleteThis, convert: convertThis };
     host.addEventListener('click', (e) => {
         const a = e.target.closest('[data-wfa]');
         if (a) { WF_ACTIONS[a.dataset.wfa]?.(); }

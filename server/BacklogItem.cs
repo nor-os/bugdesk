@@ -176,6 +176,11 @@ class BacklogItem
     /// (see RecordSchema), in file order — kept whether or not the schema names it.</summary>
     public Dictionary<string, string> Fields { get; set; } = new();
 
+    /// <summary>Where this record was converted to, or from (the other store's
+    /// reference) — written by POST /api/convert, read by the record page.</summary>
+    public string ConvertedTo { get; set; } = "";
+    public string ConvertedFrom { get; set; } = "";
+
     public string Created { get; set; } = "";
     public string Updated { get; set; } = "";
 
@@ -230,7 +235,7 @@ class BacklogItem
         parent = Parent, phase = Phase, effectivePhase = phase,
         assignee = Assignee, reporter = Reporter, due = Due, effectiveDue,
         points = Points, subsystem = Subsystem,
-        labels = Labels, links = Links, fields = Fields, created = Created, updated = Updated,
+        labels = Labels, links = Links, fields = Fields, convertedTo = ConvertedTo, convertedFrom = ConvertedFrom, created = Created, updated = Updated,
         typeOrder = TypeOrder, children = childCount,
         criteria = Criteria(), comments = Comments.Count, history = History.Count,
         lastCommentAuthor = Comments.Count > 0 ? Comments[^1].Author : null,
@@ -260,6 +265,8 @@ class BacklogItem
                 case "points": item.Points = val; break;
                 case "subsystem": item.Subsystem = val; break;
                 case "created": item.Created = val; break;
+                case "converted_to": item.ConvertedTo = val; break;
+                case "converted_from": item.ConvertedFrom = val; break;
                 case "updated": item.Updated = val; break;
                 case "labels": item.Labels = Md.List(val); break;
                 case "links": item.Links = Md.List(val); break;

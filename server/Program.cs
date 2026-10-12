@@ -407,6 +407,156 @@ string? ApplyFields(ref string text, string store, string type, Dictionary<strin
     return null;
 }
 
+// ---- Conversion ------------------------------------------------------------
+// A bug that turns out to be feature work becomes a backlog item, and the other
+// way round. ONE act: the new record is written FIRST — a failure there leaves
+// the original exactly as it was — then the original is closed (a bug) or
+// dropped (an item) with a `duplicates <new>` link, a `converted_to` line its
+// page reads, a history line and a comment naming the new home. The new record
+// carries the title, description, reporter, assignee, labels, subsystem, the
+// comment thread and the history, and a conversion comment listing every value
+// the other store has no field for, so nothing is lost silently.
+app.MapPost("/api/convert", async (HttpRequest req) =>
+{
+    var body = await JsonSerializer.DeserializeAsync<Dictionary<string, JsonElement>>(req.Body, json) ?? new();
+    string Get(string k) => body.TryGetValue(k, out var v) && v.ValueKind == JsonValueKind.String ? (v.GetString() ?? "").Trim() : "";
+    var actor = CleanActor(Get("actor"));
+    if (actor.Length == 0) actor = Req.Store.Users.HumanAuthor;
+    var r = Refs.Parse(Get("from"), "bugs");
+    if (!r.Ok) return Results.Json(new { ok = false, error = "from: a record reference is required" }, json, statusCode: 400);
+    var toType = Get("type").ToLowerInvariant();
+    var store = Req.Store;
+    if (!store.HasBugs || !store.HasBacklog)
+        return Results.Json(new { ok = false, error = "this project has only one store, so there is nothing to convert to" }, json, statusCode: 400);
+
+    // The parts both stores share, read off the original.
+    string srcPath, srcText, title, description, assignee, reporter, subsystem, srcRef, srcStatus;
+    List<string> labels;
+    var leftover = new List<string>();     // "severity: high" — values with no field on the other side
+    Dictionary<string, string> extras;
+    if (r.Store == "bugs")
+    {
+        var bug = LoadOne(store.BugsDir, r.Id);
+        if (bug is null) return Results.Json(new { ok = false, error = $"no bug #{r.Id}" }, json, statusCode: 404);
+        if (!BacklogItem.Prefixes.ContainsKey(toType))
+            return Results.Json(new { ok = false, error = "type must be epic, story or task" }, json, statusCode: 400);
+        srcPath = BugPath(store.BugsDir, r.Id); srcText = await File.ReadAllTextAsync(srcPath);
+        (title, description, assignee, reporter, subsystem, labels, extras, srcStatus) =
+            (bug.Title, bug.Description, bug.Assignee, bug.Reporter, bug.Subsystem, bug.Labels, bug.Fields, bug.Status);
+        srcRef = Refs.Display(new RecordRef("bugs", r.Id));
+        leftover.Add($"severity: {bug.Severity}");
+        leftover.Add($"type: {bug.Type}");
+        leftover.Add($"status: {bug.Status}");
+    }
+    else
+    {
+        var all = LoadBacklog(store.BacklogDir);
+        var item = all.FirstOrDefault(i => i.Id == r.Id);
+        if (item is null) return Results.Json(new { ok = false, error = $"no backlog item #{r.Id}" }, json, statusCode: 404);
+        if (toType is not ("bug" or "regression" or "task"))
+            return Results.Json(new { ok = false, error = "type must be bug, regression or task" }, json, statusCode: 400);
+        srcPath = Path.Combine(store.BacklogDir, item.FileName); srcText = await File.ReadAllTextAsync(srcPath);
+        (title, description, assignee, reporter, subsystem, labels, extras, srcStatus) =
+            (item.Title, item.Description, item.Assignee, item.Reporter, item.Subsystem, item.Labels, item.Fields, item.Status);
+        srcRef = Refs.Display(r, item.Type);
+        foreach (var (k, v) in new[] { ("type", item.Type), ("status", item.Status), ("points", item.Points),
+                                       ("phase", item.Phase), ("due", item.Due),
+                                       // A bare number would read as a BUG in the bug store.
+                                       ("parent", all.FirstOrDefault(i => i.Id == item.Parent) is { } par
+                                           ? Refs.Display(new RecordRef("backlog", par.Id), par.Type) : "") })
+            if (v.Length > 0) leftover.Add($"{k}: {v}");
+        if (!string.IsNullOrWhiteSpace(item.Acceptance) && !item.Acceptance.Contains("_(not refined yet)_"))
+            description = description.TrimEnd() + "\n\n### Acceptance criteria (from " + srcRef + ")\n\n" + item.Acceptance.Trim();
+    }
+
+    // Custom fields cross over when the target type has a field of that name;
+    // the rest are listed with the other leftovers.
+    var toStore = r.Store == "bugs" ? "backlog" : "bugs";
+    var targetSpec = store.Project.Schema().For(toStore, toType);
+    var carried = new Dictionary<string, string>();
+    foreach (var (k, v) in extras)
+    {
+        if (targetSpec.Fields.Any(f => f.Name == k)) carried[k] = v;
+        else if (v.Length > 0) leftover.Add($"{k}: {v}");
+    }
+
+    // The thread and the audit trail move with it, as written.
+    var content = Md.CarveSection(Md.ContentBlock(Md.Split(srcText, out _, out var srcBody) ? srcBody : ""), RecordHistory.Heading, out var history);
+    var ci = srcText.IndexOf("\n## Comments", StringComparison.Ordinal);
+    var thread = ci >= 0 ? srcText[(ci + "\n## Comments".Length)..].Trim() : "";
+
+    // ── the new record ──
+    string newPath, newRef, newText;
+    int newId;
+    if (toStore == "backlog")
+    {
+        var all = LoadBacklog(store.BacklogDir);
+        newId = RecordIds.Next(store.BacklogDir, BacklogItem.Prefixes.Values, Path.Combine(store.ConfigDir, "trash"), all.Select(i => i.Id));
+        var item = new BacklogItem
+        {
+            Id = newId, Type = toType, Title = title, Status = "draft", Assignee = assignee,
+            Reporter = reporter.Length > 0 ? reporter : store.Users.HumanAuthor, Subsystem = subsystem,
+            Labels = labels, Links = new(), Created = Md.Today(), Updated = Md.Now(),
+            Description = description, Fields = carried,
+        };
+        newPath = Path.Combine(store.BacklogDir, item.FileName);
+        newRef = Refs.Display(new RecordRef("backlog", newId), toType);
+        newText = item.Render();
+    }
+    else
+    {
+        newId = RecordIds.Next(store.BugsDir, new[] { "BUG" }, Path.Combine(store.ConfigDir, "trash"), LoadAll(store.BugsDir).Select(b => b.Id));
+        var severity = Get("severity");
+        if (severity is not ("crash" or "high" or "medium" or "low")) severity = "medium";
+        var sb = new StringBuilder();
+        sb.Append("---\n");
+        sb.Append($"id: {newId}\n");
+        sb.Append($"title: \"{Md.Quote(title)}\"\n");
+        sb.Append("status: open\n");
+        sb.Append($"severity: {severity}\n");
+        sb.Append($"type: {toType}\n");
+        sb.Append($"subsystem: {(subsystem.Length > 0 ? subsystem : "unsorted")}\n");
+        sb.Append(Md.Line("assignee", assignee)).Append('\n');
+        sb.Append($"reporter: {(reporter.Length > 0 ? reporter : store.Users.HumanAuthor)}\n");
+        sb.Append($"labels: {Md.ListValue(labels)}\n");
+        sb.Append("links: []\n");
+        foreach (var (k, v) in carried) sb.Append(Md.Line(k, v)).Append('\n');
+        sb.Append($"created: {Md.Today()}\n");
+        sb.Append($"updated: {Md.Now()}\n");
+        sb.Append("---\n\n## Description\n\n");
+        sb.Append(string.IsNullOrWhiteSpace(description) ? "_(no description provided)_" : description.Trim());
+        sb.Append('\n');
+        newPath = BugPath(store.BugsDir, newId);
+        newRef = Refs.Display(new RecordRef("bugs", newId));
+        newText = sb.ToString();
+    }
+    newText = Md.SetFrontmatter(newText, "converted_from", srcRef);
+    if (history.Trim().Length > 0) newText = newText.TrimEnd() + "\n\n" + RecordHistory.Heading + "\n\n" + history.Trim() + "\n";
+    if (thread.Length > 0) newText = newText.TrimEnd() + "\n\n## Comments\n\n" + thread + "\n";
+    var note = $"Converted from {srcRef}, which is now {(r.Store == "bugs" ? "closed" : "dropped")}. Its comments and history are carried over above."
+        + (leftover.Count > 0 ? "\n\nValues with no field here:\n\n" + string.Join("\n", leftover.Select(l => $"- {l}")) : "");
+    newText = Md.AppendComment(newText, actor, note);
+    await store.WriteRecord(newPath, newText);
+
+    // ── the original, only once the new record exists ──
+    var token = $"duplicates {(toStore == "backlog" ? Refs.Format(new RecordRef("backlog", newId), r.Store, toType) : Refs.Format(new RecordRef("bugs", newId), r.Store))}";
+    var links = Md.List(Md.GetFrontmatter(srcText, "links"));
+    if (!links.Contains(token)) links.Add(token);
+    var text = Md.SetFrontmatter(srcText, "links", Md.ListValue(links));
+    text = Md.SetFrontmatter(text, "converted_to", newRef);
+    var final = r.Store == "bugs" ? "closed" : "dropped";
+    if (srcStatus != final)
+    {
+        text = Md.SetFrontmatter(text, "status", final);
+        text = RecordHistory.Append(text, actor, new[] { new FieldChange("status", srcStatus, final) });
+    }
+    text = Md.AppendComment(text, actor, $"Converted to {newRef} — {title}. Carry on there; this record stays for its links.",
+        srcStatus != final ? $"status: {srcStatus} -> {final}" : null);
+    await store.WriteRecord(srcPath, text);
+
+    return Results.Json(new { ok = true, created = new { store = toStore, id = newId, @ref = newRef, type = toType, title } }, json);
+});
+
 // ---- Bugs -----------------------------------------------------------------
 
 app.MapGet("/api/bugs", () =>
@@ -2293,6 +2443,7 @@ static object FullItem(IReadOnlyList<BacklogItem> all, BacklogItem item)
         due = item.Due, effectiveDue = EffectiveDue(all, item),
         points = item.Points, subsystem = item.Subsystem,
         labels = item.Labels, links = item.Links, created = item.Created, updated = item.Updated,
+        fields = item.Fields, convertedTo = item.ConvertedTo, convertedFrom = item.ConvertedFrom,
         description = item.Description, acceptance = item.Acceptance, criteria = item.Criteria(),
         comments = item.Comments, history = item.History, children = childCount,
         ancestors = Ancestors(all, item.Id)

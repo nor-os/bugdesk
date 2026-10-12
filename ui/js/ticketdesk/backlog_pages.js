@@ -32,6 +32,7 @@ import { attachSelect, setRowVisible } from './select_field.js';
 import { mountCustomFields } from './custom_fields.js';
 import { hiddenForAll, isHidden, statusKnown, withCustomStatuses } from './schema.js';
 import { actionsFor, movesFor, planMove } from './workflow.js';
+import { convertRecord, convertedBanner } from './convert.js';
 import { watchRecord } from './live.js';
 import { attachParentPicker, attachRecordTypeahead, childTypesFor, openItemPicker, openRecordPicker } from './item_picker.js';
 import { installRecordDragSource, markDragCell, openRecordAs } from './record_dnd.js';
@@ -95,6 +96,9 @@ const WORKFLOW_ACTIONS = [
     { id: 'duplicate', label: 'Mark as duplicate and drop', icon: 'content_copy',
       title: 'Pick the record this duplicates, link it, and drop this one',
       when: (closed) => !closed },
+    { id: 'convert', label: 'Convert to bug…', icon: 'swap_horiz',
+      title: 'It is a defect: move it to the bug store, with its comments and history',
+      when: (closed) => !closed && storesAvailable().includes('bugs') },
 ];
 
 /** "2/3" with a bar, or an italic "none" — an unrefined item having no
@@ -699,6 +703,7 @@ function mountItem(host, props, ctx) {
     host.innerHTML = `
     <div class="td-page td-ticket">
         <div class="bd-ancestors" data-slot="ancestors"></div>
+        <div data-slot="converted"></div>
         <div class="td-stagebar">
             <ol class="td-stages" data-slot="stages"></ol>
         </div>
@@ -1486,6 +1491,8 @@ function mountItem(host, props, ctx) {
         // previous text would silently save it back over the new one.
         descRaw = false;
         renderAncestors();
+        const conv = host.querySelector('[data-slot="converted"]');
+        if (conv) conv.innerHTML = convertedBanner(item);
         renderRecord();
         renderStages();
         renderRefinement();
@@ -1740,7 +1747,22 @@ function mountItem(host, props, ctx) {
 
     // [data-wfa], not [data-wf]: a `data-wf` value is a target STATUS, and these are not
     // statuses, so they get their own attribute rather than a lookalike one.
-    const WF_ACTIONS = { duplicate: markDuplicate };
+    // A defect filed as feature work: it moves to the bug store, and this page follows.
+    const convertThis = async () => {
+        if (dirty) { statusLine('Save or cancel your edits first — the conversion copies what is on disk.'); return; }
+        try {
+            const made = await convertRecord({ from: itemRef(item), store: 'backlog', title: item.title || '' });
+            if (!made) { statusLine('Not converted.'); return; }
+            const { loadData } = await import('./data.js');
+            await loadData();
+            await broadcast();
+            _eventBus?.emit?.('bugs:changed', { store: 'bugs', id: made.id });
+            live.clear();
+            statusLine(`${itemRef(item)} converted to ${made.ref}.`);
+            openRow(ctx.wm, ctx, { store: 'bugs', id: made.id });
+        } catch (err) { statusLine(`Could not convert: ${err?.message || err}`); }
+    };
+    const WF_ACTIONS = { duplicate: markDuplicate, convert: convertThis };
     host.addEventListener('click', (e) => {
         const a = e.target.closest('[data-wfa]');
         if (a) { WF_ACTIONS[a.dataset.wfa]?.(); }

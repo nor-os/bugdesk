@@ -7,6 +7,16 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Convert a bug to a backlog item, and back** (STORY-0001). A bug offers
+  *Convert to backlog item…* (as an epic, story or task), and an item *Convert to
+  bug…* (with its type and severity). The new record gets a fresh id in its own
+  store, with the title, description, reporter, assignee, labels, comments and
+  history. A conversion comment lists every value the other store has no field
+  for (severity, points, phase, due, …). The original is then closed (a bug) or
+  dropped (an item), linked `duplicates <new>`, and both pages say where the
+  record went or came from. If writing the new record fails, the original is
+  left as it was.
+
 - **Configurable moves** (STORY-0018). Settings › Workflow turns the moves each
   status offers into a table you can edit: one for bugs and one per backlog type
   (from status, label, target, whether a message is required). "Customise" starts

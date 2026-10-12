@@ -47,6 +47,11 @@ class Bug
     /// which are shown as such and never dropped.</summary>
     public Dictionary<string, string> Fields { get; set; } = new();
 
+    /// <summary>Where this record was converted to, or from (the other store's
+    /// reference) — written by POST /api/convert, read by the record page.</summary>
+    public string ConvertedTo { get; set; } = "";
+    public string ConvertedFrom { get; set; } = "";
+
     public string Created { get; set; } = "";
     public string Updated { get; set; } = "";
     public string Description { get; set; } = "";
@@ -70,7 +75,7 @@ class Bug
     {
         id = Id, title = Title, status = Status, severity = Severity, type = Type,
         subsystem = Subsystem, assignee = Assignee, reporter = Reporter,
-        labels = Labels, links = Links, fields = Fields,
+        labels = Labels, links = Links, fields = Fields, convertedTo = ConvertedTo, convertedFrom = ConvertedFrom,
         created = Created, updated = Updated, stage = Stage, pri = Pri,
         comments = Comments.Count, history = History.Count,
         // Last comment's author/date (or null) so the UI can build a
@@ -99,6 +104,8 @@ class Bug
                 case "assignee": bug.Assignee = val; break;
                 case "reporter": bug.Reporter = val; break;
                 case "created": bug.Created = val; break;
+                case "converted_to": bug.ConvertedTo = val; break;
+                case "converted_from": bug.ConvertedFrom = val; break;
                 case "updated": bug.Updated = val; break;
                 case "labels": bug.Labels = Md.List(val); break;
                 case "links": bug.Links = Md.List(val); break;
