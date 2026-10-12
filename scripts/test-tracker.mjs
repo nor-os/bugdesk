@@ -27,7 +27,7 @@ const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const UI = join(ROOT, 'ui', 'js', 'ticketdesk') + '/';
 const TILING = join(ROOT, 'ui', 'js', 'tiling') + '/';
 
-for (const name of ['core', 'wm', 'widgets']) {
+for (const name of ['canvas', 'core', 'flow', 'host', 'wm', 'widgets']) {
     const dir = join(ROOT, 'node_modules', '@flexdesk', name);
     if (existsSync(join(dir, 'index.js'))) continue;
     mkdirSync(dir, { recursive: true });
@@ -289,14 +289,16 @@ const stubNode = () => ({
 });
 
 const openPickerHeadless = (opts) => {
-    const overlay = stubNode();
+    // The picker's body is the FIRST element it creates; the ManagedWindow it
+    // opens in creates its chrome after, from fresh nodes of its own.
+    const made = [];
     const saved = {
         document: globalThis.document,
         HTMLElement: globalThis.HTMLElement,
         requestAnimationFrame: globalThis.requestAnimationFrame,
     };
     globalThis.document = {
-        createElement: () => overlay,
+        createElement: () => { const n = stubNode(); made.push(n); return n; },
         body: stubNode(),
         activeElement: null,
         addEventListener() {}, removeEventListener() {},
@@ -306,7 +308,7 @@ const openPickerHeadless = (opts) => {
     // The promise stays pending — nothing here picks or cancels — which is what
     // we want: the dialog is inspected exactly as it opens.
     picker.openRecordPicker(opts);
-    return { overlay, close: () => Object.assign(globalThis, saved) };
+    return { overlay: made[0], close: () => Object.assign(globalThis, saved) };
 };
 
 /* ── records across a store line that is not there ───────────────────

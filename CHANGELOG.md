@@ -70,6 +70,13 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **FlexDesk 0.9.1** (STORY-0023), up from 0.4.5. `@flexdesk/flow` and
+  `@flexdesk/canvas` join the import map beside `@flexdesk/host`, ready for the
+  configurable moves and custom actions. Nothing in 0.4.6–0.9.1 changed a
+  default BugDesk relies on: the DataTable, palette and tab-layout additions are
+  all opt-in, BugDesk's Ctrl+K palette is its own, and no BugDesk page answers
+  0.4.7's content-first `navigateBack`, so Backspace walks the tile history as
+  before.
 - The UI's API calls are relative to the page, so they reach the project it
   was opened on. An unprefixed `/api/…` call reaches the default project.
 

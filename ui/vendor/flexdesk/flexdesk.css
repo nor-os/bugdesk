@@ -504,7 +504,9 @@
 .twm-preview-table th,
 .twm-preview-table td {
     border-bottom: 1px solid #2a2a2a;
-    padding: var(--space-sm) 8px;
+    /* 0.5.0: the row-geometry tokens (tokens.css). Unset, these fall back to
+     * exactly the 0.4 padding. */
+    padding: var(--twm-dt-cell-pad-block, var(--space-sm)) var(--twm-dt-cell-pad-inline, 8px);
     white-space: nowrap;
     /* Never spill text past the column. Once columns are locked to fixed
      * widths, over-long content is clipped with an ellipsis; the full
@@ -552,6 +554,37 @@ body.twm-dt-col-resizing {
 }
 .twm-preview-table.twm-dt-measuring .twm-data-table__filter-row {
     display: none !important;
+}
+/* 0.7.0 `filterKinds`: a filter row holding a CONTROL stays in the measure,
+ * its text boxes out of it, and each control at its NARROWEST (the widest
+ * chip) — so a column is never narrower than one of its chips. */
+.twm-preview-table.twm-dt-measuring .twm-data-table__filter-row.twm-data-table__filter-row--controls {
+    display: table-row !important;
+}
+.twm-preview-table.twm-dt-measuring .twm-data-table__filter-row--controls .twm-data-table__filter-wrapper {
+    display: none !important;
+}
+.twm-preview-table.twm-dt-measuring th.data-table__filter-cell--control > * {
+    width: min-content !important;
+}
+/* ── C10. The virtual window (`DataTable` with `virtualize`) ─────────────
+ * The column track is a `<colgroup>` (see `_createTable`), so it is the
+ * `<col>` widths the measuring pass has to lift — the same `!important` it
+ * already uses on the cells. The floors on body cells (100px on the first,
+ * 80px on the rest) are off: a full render lifts them with inline styles on
+ * its first row, and a virtual one has no fixed first row to write them on.
+ * The spacers carry their geometry inline; this only keeps a hover or a
+ * stripe from painting them. */
+.twm-preview-table.twm-dt-measuring col {
+    width: auto !important;
+}
+.twm-preview-table.twm-dt--virtual tbody td {
+    min-width: 0;
+    max-width: none;
+}
+.twm-preview-table tbody tr.twm-dt-spacer,
+.twm-preview-table tbody tr.twm-dt-spacer > td {
+    background: transparent !important;
 }
 .twm-preview-table th {
     position: sticky;
@@ -605,6 +638,297 @@ body.twm-dt-col-resizing {
 .twm-preview-table:not(.twm-preview-table--readonly) tbody tr.selected td,
 .twm-preview-table tbody tr.selected td {
     background: var(--state-selected, rgba(0, 122, 204, 0.15));
+}
+/* ── 0.5.0 DataTable options. Each rule below matches only a class or an
+ * attribute a 0.5.0 option sets, so a table that asks for none of them is
+ * styled exactly as in 0.4. ───────────────────────────────────────────── */
+
+/* The row-geometry tokens for the NORMAL density's line height. Compact
+ * declares its own on the cells (with the token in front), as 0.4 did; normal
+ * never declared one, so this one is NOT on the cells. It is on the ROW GROUPS,
+ * which only this component creates, and the cells inherit it. Unset, it
+ * computes to `unset` — inheritance from the table, which is exactly what no
+ * declaration gives. A declaration on the cells themselves, however weak
+ * (`:where()`), would beat any consumer rule for the cells that sits in a
+ * cascade LAYER (unlayered author styles outrank every layer, whatever their
+ * specificity) and any zero-specificity one loaded before this sheet; on the
+ * row groups, a consumer's rule for the cells, the rows or the table still
+ * wins, as it did in 0.4. */
+:where(.twm-preview-table) > :where(thead, tbody, tfoot) {
+    line-height: var(--twm-dt-cell-line-height);
+}
+/* `firstColumn: 'plain'` — the first column is a column like the others, not
+ * the time column this component was built around (120–150px, grey, 500).
+ * One class more than both time rules, so the order of the two sheets cannot
+ * matter. The header keeps the header's weight and colour. */
+.twm-preview-table.twm-dt--first-plain th:first-child,
+.twm-preview-table.twm-dt--first-plain td:first-child {
+    width: auto;
+    min-width: 80px;
+    max-width: none;
+}
+.twm-preview-table.twm-dt--first-plain td:first-child {
+    font-weight: inherit;
+    color: inherit;
+}
+.twm-preview-table.twm-dt--first-plain th:first-child {
+    font-weight: 600;
+    color: #aaa;
+}
+/* `onRowActivate` / `clickable` — a row that opens looks like it: a pointer,
+ * and a hover even on a readonly table. Never over a selected row, whose
+ * colour has to survive the pointer (see the selection rule's note), and never
+ * over the empty or failed state's row, which opens nothing. */
+.twm-preview-table.twm-dt--clickable tbody tr:not(.twm-dt-spacer):not(.data-table__empty-row) {
+    cursor: pointer;
+}
+.twm-preview-table.twm-dt--clickable tbody tr:not(.twm-dt-spacer):not(.data-table__empty-row):not(.selected):hover td {
+    background: var(--state-hover, rgba(255, 255, 255, 0.05));
+}
+/* `activeRow` — the row that is OPEN. A left edge, not a background: hover
+ * and selection keep theirs. */
+.twm-preview-table tbody tr.twm-dt-row--active > td:first-child {
+    box-shadow: inset 2px 0 0 0 var(--accent-bright, #007acc);
+}
+/* `rowIcon` — drawn from `data-twm-icon` so the icon's NAME is not cell
+ * text (not in a copy, not in the clipped-cell tooltip). The span carries the
+ * icon font's class; the pseudo-element inherits its font and ligatures. Top
+ * aligned on a line height of 1, so it cannot make its row taller. */
+.twm-preview-table td .twm-dt-row-icon {
+    display: inline-block;
+    font-size: 1.15em;
+    line-height: 1;
+    vertical-align: top;
+    margin-right: 4px;
+    opacity: 0.85;
+}
+.twm-preview-table td .twm-dt-row-icon::before {
+    content: attr(data-twm-icon);
+}
+.twm-preview-table td .twm-dt-row-icon--muted   { color: var(--text-muted, #888); }
+.twm-preview-table td .twm-dt-row-icon--info    { color: var(--color-info, #2196f3); }
+.twm-preview-table td .twm-dt-row-icon--success { color: var(--color-success, #3fb950); }
+.twm-preview-table td .twm-dt-row-icon--warn    { color: var(--color-warning, #ff9800); }
+.twm-preview-table td .twm-dt-row-icon--danger  { color: var(--color-danger, #c74e4e); }
+/* THESE CELLS ARE OFTEN A ROW'S FIRST CELL, and the first cell is the time
+ * column's: `.twm-preview-table td:first-child` (0,2,1, grey and weight 500,
+ * declared twice, the second copy far below), `firstColumn: 'plain'` (0,3,1,
+ * `color: inherit`) and the compact density's cell padding (0,2,1, in
+ * overrides.css) all reach them. A rule of the same weight LOSES to whichever
+ * comes later — which drew a failure in an empty list grey, exactly like an
+ * empty state, and gave both 2px of padding under compact. So each rule below
+ * is (0,3,2) or more: the wrapper and `tbody` in front of the cell's class,
+ * which no first-column or density rule matches, and the order of the sheets
+ * cannot matter. */
+/* `nullDisplay` — a NULL reads as one, not as the text "NULL". */
+.twm-data-table-component .twm-preview-table tbody td.twm-dt-cell--null {
+    color: var(--text-dim, #666);
+    font-style: italic;
+}
+/* 0.6.1 `diff` — one side of a comparison. A row that is NEW on this side is
+ * green, one that is GONE on this side red, a changed row carries an amber
+ * left edge and its changed cells an amber fill, and a GAP — the place a row
+ * holds on the other side — is hatched, so the eye reads it as "nothing here"
+ * rather than as an empty row. (0,3,2) and up, for `twm-dt-cell--null`'s
+ * reason above; a selected row keeps its own colour (`:not(.selected)`). */
+.twm-data-table-component .twm-preview-table tbody tr.twm-dt-diff--added:not(.selected) > td {
+    background: color-mix(in srgb, var(--color-success, #3fb950) 16%, transparent);
+}
+.twm-data-table-component .twm-preview-table tbody tr.twm-dt-diff--removed:not(.selected) > td {
+    background: color-mix(in srgb, var(--color-danger, #c74e4e) 18%, transparent);
+}
+.twm-data-table-component .twm-preview-table tbody tr.twm-dt-diff--removed > td {
+    text-decoration: line-through;
+    text-decoration-color: color-mix(in srgb, var(--color-danger, #c74e4e) 70%, transparent);
+}
+.twm-data-table-component .twm-preview-table tbody tr.twm-dt-diff--added > td:first-child {
+    box-shadow: inset 3px 0 0 0 var(--color-success, #3fb950);
+}
+.twm-data-table-component .twm-preview-table tbody tr.twm-dt-diff--removed > td:first-child {
+    box-shadow: inset 3px 0 0 0 var(--color-danger, #c74e4e);
+}
+.twm-data-table-component .twm-preview-table tbody tr.twm-dt-diff--changed > td:first-child {
+    box-shadow: inset 3px 0 0 0 var(--color-warning, #ff9800);
+}
+.twm-data-table-component .twm-preview-table tbody tr.twm-dt-diff:not(.selected) > td.twm-dt-diff__cell--changed {
+    background: color-mix(in srgb, var(--color-warning, #ff9800) 22%, transparent);
+}
+.twm-data-table-component .twm-preview-table tbody tr.twm-dt-diff--gap > td.twm-dt-diff__gap {
+    background: repeating-linear-gradient(135deg,
+        transparent 0 6px,
+        color-mix(in srgb, var(--text-muted, #888) 14%, transparent) 6px 7px);
+}
+/* `emptyState` and `setError` with no rows: the box's own words, which may
+ * wrap — muted for an empty state, red for a failure, in both densities. Quiet
+ * while loading — an empty table that is still loading is not empty. */
+.twm-data-table-component .twm-preview-table tbody td.twm-data-table__empty-cell.twm-data-table__empty-cell--state,
+.twm-data-table-component .twm-preview-table tbody td.twm-data-table__empty-cell.twm-data-table__empty-cell--error {
+    text-align: center;
+    padding: 16px;
+    white-space: normal;
+    font-weight: normal;
+    color: var(--text-muted, #888);
+}
+.twm-data-table-component .twm-preview-table tbody td.twm-data-table__empty-cell.twm-data-table__empty-cell--error {
+    color: var(--color-danger, #c74e4e);
+}
+.twm-data-table-component--loading .twm-preview-table td.twm-data-table__empty-cell--state {
+    visibility: hidden;
+}
+/* `setError` with rows: a banner over the rows that are KEPT. */
+.twm-data-table__error {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    font-size: var(--font-size-sm, 12px);
+    color: var(--color-danger, #c74e4e);
+    background: rgba(199, 78, 78, 0.12);
+    border-bottom: 1px solid rgba(199, 78, 78, 0.4);
+}
+.twm-data-table__error .twm-data-table__error-icon {
+    font-size: 16px;
+    line-height: 1;
+}
+/* ── 0.7.0 DataTable options. Each rule below matches only a class a 0.7.0
+ * option sets, so a table that asks for none of them is styled exactly as in
+ * 0.6. ─────────────────────────────────────────────────────────────────── */
+/* `rowDetail` — the toggle. Its chevron is drawn by CSS from the icon font
+ * (the button carries its class), so the cell's text, its clipped-cell
+ * tooltip and a copy stay the cell's own; turned down while open. Negative
+ * block margins on a line height of 1: it cannot make its row taller. */
+.twm-preview-table td .twm-dt-detail-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    margin: -2px 4px -2px -2px;
+    padding: 0;
+    border: 0;
+    border-radius: 3px;
+    background: transparent;
+    color: inherit;
+    font-size: 16px;
+    line-height: 1;
+    vertical-align: top;
+    cursor: pointer;
+    opacity: 0.75;
+}
+.twm-preview-table td .twm-dt-detail-toggle-gap {
+    display: inline-block;
+    width: 18px;
+    margin: 0 4px 0 -2px;
+    vertical-align: top;
+}
+.twm-preview-table td .twm-dt-detail-toggle::before {
+    content: 'chevron_right';
+    transition: transform 0.12s ease;
+}
+.twm-preview-table td .twm-dt-detail-toggle[aria-expanded="true"]::before {
+    transform: rotate(90deg);
+}
+.twm-preview-table td .twm-dt-detail-toggle:hover {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.08);
+}
+.twm-preview-table td .twm-dt-detail-toggle:focus-visible {
+    opacity: 1;
+    outline: 1px solid var(--accent-bright, #007acc);
+}
+/* The detail's row: one cell across every column. It is often the body's
+ * FIRST cell of its row, so the time column's rules reach it (see the note
+ * above the NULL rule) — hence (0,4,3): the wrapper and `tbody` in front. It
+ * wraps, it is not clipped, it is not a thing to press (a clickable table's
+ * pointer and hover stop at it), and its content does not set the columns'
+ * widths (`contain: inline-size`, and it is out of the measuring pass). */
+.twm-data-table-component .twm-preview-table tbody tr.twm-dt-detail-row > td.twm-dt-detail-cell,
+.twm-data-table-component .twm-preview-table tbody tr.twm-dt-detail-row:not(.twm-dt-spacer):not(.data-table__empty-row):hover > td.twm-dt-detail-cell {
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    padding: 6px 10px 8px 28px;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    font-family: inherit;
+    font-weight: normal;
+    color: inherit;
+    cursor: auto;
+    background: var(--twm-dt-detail-bg, rgba(255, 255, 255, 0.025));
+}
+.twm-dt-detail {
+    contain: inline-size;
+    overflow: auto;
+    user-select: text;
+}
+.twm-preview-table.twm-dt-measuring tr.twm-dt-detail-row {
+    display: none !important;
+}
+/* `follow` / `refresh()` — a row the last answer did not have, for a moment. */
+@keyframes twm-dt-row-new {
+    from { background: var(--twm-dt-new-bg, rgba(0, 122, 204, 0.22)); }
+    to { background: transparent; }
+}
+.twm-preview-table tbody tr.twm-dt-row--new > td {
+    animation: twm-dt-row-new 1.6s ease-out;
+}
+/* `pagerLabels` — a pager button with its word beside its glyph. */
+.twm-pagination-btn .twm-pagination-btn__label {
+    margin-left: 2px;
+    font-size: 10px;
+    white-space: nowrap;
+}
+/* `filterKinds` — a filter cell holding a control rather than the text box,
+ * and the built-in chips. Wraps rather than clipping its control. */
+.twm-preview-table th.data-table__filter-cell--control {
+    white-space: normal;
+    overflow: visible;
+}
+.twm-dt-filter-chips {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 3px;
+}
+.twm-dt-filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    height: 20px;
+    padding: 0 7px 0 5px;
+    border: 1px solid var(--border-default, #3a3a3a);
+    border-radius: 10px;
+    background: transparent;
+    color: #aaa;
+    font: inherit;
+    font-size: 11px;
+    font-weight: normal;
+    line-height: 1;
+    cursor: pointer;
+}
+.twm-dt-filter-chip:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+.twm-dt-filter-chip:focus-visible {
+    outline: 1px solid var(--accent-bright, #007acc);
+}
+.twm-dt-filter-chip.twm-dt-filter-chip--on {
+    border-color: var(--accent-bright, #007acc);
+    background: rgba(0, 122, 204, 0.18);
+    color: #ddd;
+}
+.twm-dt-filter-chip.twm-dt-filter-chip--empty {
+    opacity: 0.5;
+}
+.twm-dt-filter-chip .twm-dt-filter-chip__icon {
+    font-size: 14px;
+    line-height: 1;
+}
+.twm-dt-filter-chip .twm-dt-filter-chip__count {
+    color: #888;
+    font-variant-numeric: tabular-nums;
 }
 /* Wizard mode: uniform column widths, no selection */
 .twm-preview-table-wrap--wizard .twm-preview-table {
@@ -984,7 +1308,9 @@ body.twm-dt-col-resizing {
     outline-offset: -2px;
 }
 /* Unified collapsible arrow system */
-.twm-collapsible-arrow {
+/* Compounded for the Material Symbols tie — see `.twm-leaf__icon`. */
+.twm-collapsible-arrow,
+.twm-collapsible-arrow.material-symbols-outlined {
     transition: transform 0.2s ease;
     transform: rotate(0deg); /* Default: pointing down (expanded) */
     font-size: 10px;
@@ -1045,7 +1371,12 @@ body.twm-dt-col-resizing {
     margin: 0 1px;
     user-select: none;
 }
-.twm-topbar-breadcrumb__icon {
+/* Written twice for `.twm-leaf__icon`'s reason: the icon also carries
+ * `.material-symbols-outlined`, and Google's stylesheet — loaded after this
+ * one — sets that class to 24px. A single-class rule ties and loses on source
+ * order, so every crumb drew a 24px glyph beside 12px text (Tables BUG-0024). */
+.twm-topbar-breadcrumb__icon,
+.twm-topbar-breadcrumb__icon.material-symbols-outlined {
     font-size: var(--font-size-lg);
 }
 .twm-topbar-breadcrumb__item--current {
@@ -1343,7 +1674,9 @@ body.twm-dt-col-resizing {
 .twm-autocomplete-field__item:hover {
     background-color: #3a3a3a;
 }
-.twm-autocomplete-field__icon {
+/* Compounded for the Material Symbols tie — see `.twm-leaf__icon`. */
+.twm-autocomplete-field__icon,
+.twm-autocomplete-field__icon.material-symbols-outlined {
     font-size: var(--font-size-2xl);
     color: var(--text-muted);
     flex-shrink: 0;
@@ -1564,6 +1897,49 @@ body.twm-window-maximized .twm-resize-handle {
     opacity: 0.3;
     cursor: not-allowed;
 }
+/* `paging` — the strip UNDER a paged or scrolling DataTable's body: which rows
+ * are held, the page buttons or Load all, why a large source is paged, and the
+ * Pages / Scroll switch. */
+.twm-dt-paging {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    flex: 0 0 auto;
+    min-width: 0;
+    padding: var(--space-xs) var(--space-md);
+    border-top: 1px solid var(--border-subtle);
+    font-size: var(--font-size-sm);
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+}
+.twm-dt-paging__info { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.twm-dt-paging__spacer { flex: 1 1 auto; }
+.twm-dt-paging__nav { display: inline-flex; align-items: center; gap: var(--space-xs); }
+.twm-dt-paging__page { min-width: 72px; text-align: center; }
+.twm-dt-paging .twm-pagination-btn { height: 20px; min-width: 22px; }
+.twm-dt-paging__note { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; }
+.twm-dt-paging__all,
+.twm-dt-paging__mode {
+    height: 20px;
+    padding: 0 var(--space-md);
+    background: transparent;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
+    color: var(--text-body);
+    font: inherit;
+    cursor: pointer;
+}
+.twm-dt-paging__all:hover:not(:disabled),
+.twm-dt-paging__mode:hover:not(:disabled) { border-color: var(--accent); color: var(--text-bright); }
+.twm-dt-paging__modes { display: inline-flex; }
+.twm-dt-paging__mode { border-radius: 0; }
+.twm-dt-paging__mode:first-child { border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
+.twm-dt-paging__mode:last-child { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; margin-left: -1px; }
+.twm-dt-paging__mode[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--text-bright); }
+.twm-dt-paging__all:disabled,
+.twm-dt-paging__mode:disabled { opacity: 0.45; cursor: not-allowed; }
+.twm-dt-paging__mode[aria-pressed="true"]:disabled { opacity: 1; cursor: default; }
 /* Preview Table Styles - Essential for data view */
 .twm-preview-table-wrap { 
     overflow: auto; 
@@ -1578,7 +1954,7 @@ body.twm-window-maximized .twm-resize-handle {
 }
 .twm-preview-table th, .twm-preview-table td { 
     border-bottom: 1px solid #2a2a2a; 
-    padding: var(--space-sm) 8px; 
+    padding: var(--twm-dt-cell-pad-block, var(--space-sm)) var(--twm-dt-cell-pad-inline, 8px); 
     white-space: nowrap;
 }
 .twm-preview-table th {
@@ -3356,7 +3732,9 @@ body.twm-window-maximized .twm-resize-handle {
 .twm-managed-window--no-drag .twm-managed-window__topbar {
     cursor: default;
 }
-.twm-managed-window__icon {
+/* Compounded for the Material Symbols tie — see `.twm-leaf__icon`. */
+.twm-managed-window__icon,
+.twm-managed-window__icon.material-symbols-outlined {
     font-size: var(--font-size-lg);
     color: var(--text-muted);
     flex-shrink: 0;
@@ -3518,7 +3896,9 @@ button.twm-managed-window__btn svg rect {
 .twm-bar-windows__item:active {
     background: #1a6aa5;
 }
-.twm-bar-windows__item-icon {
+/* Compounded for the Material Symbols tie — see `.twm-leaf__icon`. */
+.twm-bar-windows__item-icon,
+.twm-bar-windows__item-icon.material-symbols-outlined {
     font-size: var(--font-size-sm);
     flex-shrink: 0;
 }
@@ -3569,7 +3949,9 @@ button.twm-managed-window__btn svg rect {
     align-items: flex-start;
     gap: var(--space-lg);
 }
-.twm-confirm-dialog__icon {
+/* Compounded for the Material Symbols tie — see `.twm-leaf__icon`. */
+.twm-confirm-dialog__icon,
+.twm-confirm-dialog__icon.material-symbols-outlined {
     font-size: 32px;
     color: var(--text-muted);
     flex-shrink: 0;
@@ -3638,7 +4020,9 @@ button.twm-confirm-dialog__btn:focus {
     border-bottom: 1px solid #333;
     flex-shrink: 0;
 }
-.twm-about-dialog__logo {
+/* Compounded for the Material Symbols tie — see `.twm-leaf__icon`. */
+.twm-about-dialog__logo,
+.twm-about-dialog__logo.material-symbols-outlined {
     font-size: 40px;
     color: var(--accent-bright);
 }
@@ -3788,7 +4172,9 @@ button.twm-about-dialog__btn--close:focus {
     gap: 10px;
     min-width: 0;
 }
-.twm-detail-header__icon {
+/* Compounded for the Material Symbols tie — see `.twm-leaf__icon`. */
+.twm-detail-header__icon,
+.twm-detail-header__icon.material-symbols-outlined {
     font-size: 20px;
     color: var(--text-muted, var(--text-muted));
     flex-shrink: 0;
@@ -4041,7 +4427,9 @@ button.twm-about-dialog__btn--close:focus {
     background-color: var(--ea-input-bg, #1e1e1e);
     border-color: rgba(96, 192, 96, 0.50);
 }
-.twm-attr-editor__attention {
+/* Compounded for the Material Symbols tie — see `.twm-leaf__icon`. */
+.twm-attr-editor__attention,
+.twm-attr-editor__attention.material-symbols-outlined {
     /* Positioned in the row's left gutter so it doesn't push the
      * cells. The row already has `position: relative`. */
     position: absolute;
@@ -4052,7 +4440,9 @@ button.twm-about-dialog__btn--close:focus {
     font-size: 0.85em;
     pointer-events: none;
 }
-.twm-attr-editor__revert {
+/* Compounded for the Material Symbols tie — see `.twm-leaf__icon`. */
+.twm-attr-editor__revert,
+.twm-attr-editor__revert.material-symbols-outlined {
     /* Floats over the right edge of the row, outside the column grid.
      * Sits ABOVE the trailing remove-button gutter that sortable_list
      * draws, so it stays visible. */
@@ -5581,6 +5971,81 @@ body.twm-dragging * { user-select: none; }
  * strip is pushed off the bottom edge. */
 .twm-window-body { flex: 1 1 auto; min-height: 0; min-width: 0; }
 
+
+/* ══ C38. THE TABS ARE THE TITLE ═════════════════════════════════════
+ *
+ * `tabLayout: 'header'` mounts the same strip INSIDE the chrome, in place of
+ * the title, on every content tile (`tile_renderer.js`, C38). The renderer
+ * marks such a leaf `twm-leaf--tabs-in-header`; a panel, which has no tabs,
+ * is not marked and keeps its title.
+ *
+ * Every selector here is two classes or more, so none of it depends on
+ * whether this sheet or the one holding `.twm-leaf__chrome` loads first.
+ *
+ * The chrome grows to the editor strip's 26px rather than the strip shrinking
+ * to 22: one 26px row replaces a 22px row plus a 26px one. */
+.twm-leaf--tabs-in-header > .twm-leaf__chrome {
+    height: 26px;
+    padding-left: 0;
+    gap: var(--space-sm);
+}
+.twm-leaf--tabs-in-header > .twm-leaf__chrome > .twm-leaf__title,
+.twm-leaf--tabs-in-header > .twm-leaf__chrome > .twm-leaf__icon.material-symbols-outlined {
+    display: none;
+}
+
+/* The strip takes the room the title had, and the actions keep the right. */
+.twm-leaf__tabbar.twm-leaf__tabbar--header {
+    flex: 1 1 auto;
+    align-self: stretch;
+    min-width: 0;
+    height: auto;
+    padding: 0;
+    border: none;
+    background: transparent;
+    overflow: hidden;
+}
+
+/* `0 1 auto`, not the top strip's `1 1 auto`: the list is only as wide as
+ * its tabs, so the `+` sits right after the last one rather than at the far
+ * end of the chrome. It still shrinks, and scrolls, when the tabs outgrow it. */
+.twm-leaf__tabbar--header > .tabs.notebook-tabs {
+    flex: 0 1 auto;
+    min-width: 0;
+    background: transparent;
+}
+
+/* An inactive tab is the chrome's colour, focused or not, so the active one —
+ * the body's colour — is the only box in the row. */
+.twm-leaf__tabbar--header .notebook-tabs > .tab:not(.active) { background: transparent; }
+.twm-leaf__tabbar--header .notebook-tabs > .tab:not(.active):hover {
+    background: var(--state-hover);
+    color: var(--text-primary);
+}
+
+.twm-leaf__tabbar--header > .twm-leaf__tab-new {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+.twm-leaf__tabbar--header > .twm-leaf__tab-new:hover {
+    background: var(--state-hover);
+    color: var(--text-primary);
+}
+/* Two classes, for the Material Symbols tie — see `.twm-leaf__icon`. */
+.twm-leaf__tab-new .material-symbols-outlined {
+    font-size: 16px;
+    line-height: 1;
+}
+
 /* ══ NotebookTabBar ══════════════════════════════════════════════════
  *
  * A CLASS ONE SIDE KNOWS AND THE OTHER HAD NEVER HEARD OF — the fifth in this
@@ -5609,8 +6074,11 @@ body.twm-dragging * { user-select: none; }
      * scrolls under them — a tab that shrinks to nothing as you open the tenth
      * one is a tab you cannot read or aim at. The scrollbar itself is hidden:
      * it is a 26px strip, and a horizontal bar in it would eat a third of the
-     * label. Wheel and drag still scroll it, and DragReorder auto-scrolls the
-     * edges while a tab is being dragged (`drag_reorder.js:_autoScrollEdge`). */
+     * label. What replaces it is in `notebook_tab_bar.js` (1.5): a plain
+     * vertical wheel scrolls the strip sideways (`#onWheel`), the tab that has
+     * just become active is scrolled into view (`#revealActive`), and the edges
+     * auto-scroll while a tab is dragged toward them
+     * (`drag_reorder.js:_autoScrollEdge`). */
     overflow-x: auto;
     overflow-y: hidden;
     scrollbar-width: none;
@@ -5862,7 +6330,9 @@ body.twm-dragging * { user-select: none; }
     letter-spacing: 0.04em;
     color: var(--text-secondary);
 }
-.twm-tile-tabmenu__head-icon { font-size: 14px; }
+/* Compounded for the Material Symbols tie — see `.twm-leaf__icon`. */
+.twm-tile-tabmenu__head-icon,
+.twm-tile-tabmenu__head-icon.material-symbols-outlined { font-size: 14px; }
 .twm-tile-tabmenu__head-label { flex: 1 1 auto; }
 .twm-tile-tabmenu__close {
     background: transparent;
@@ -6038,7 +6508,9 @@ body.twm-dragging * { user-select: none; }
     outline-offset: -1px;
 }
 .twm-tile-tabswitch__item--on { color: var(--text-bright); }
-.twm-tile-tabswitch__check { font-size: 14px; color: var(--accent-bright, #1683c4); }
+/* Compounded for the Material Symbols tie — see `.twm-leaf__icon`. */
+.twm-tile-tabswitch__check,
+.twm-tile-tabswitch__check.material-symbols-outlined { font-size: 14px; color: var(--accent-bright, #1683c4); }
 .twm-tile-tabswitch__label {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -6098,7 +6570,9 @@ body.twm-dragging * { user-select: none; }
     white-space: nowrap;
     user-select: none;
 }
-.twm-cmdpal__type-chip-icon {
+/* Compounded for the Material Symbols tie — see `.twm-leaf__icon`. */
+.twm-cmdpal__type-chip-icon,
+.twm-cmdpal__type-chip-icon.material-symbols-outlined {
     font-size: 14px;
 }
 .twm-cmdpal__type-chip-label {
@@ -6181,7 +6655,9 @@ body.twm-dragging * { user-select: none; }
     background: var(--state-selected);
     color: var(--text-bright);
 }
-.twm-cmdpal__icon { color: var(--text-muted); font-size: 16px; }
+/* Compounded for the Material Symbols tie — see `.twm-leaf__icon`. */
+.twm-cmdpal__icon,
+.twm-cmdpal__icon.material-symbols-outlined { color: var(--text-muted); font-size: 16px; }
 .twm-cmdpal__label { font-weight: var(--font-weight-medium); }
 .twm-cmdpal__kind,
 .twm-cmdpal__hint {
@@ -6206,6 +6682,133 @@ body.twm-dragging * { user-select: none; }
     font-family: var(--font-family-mono);
     font-size: 10px;
     margin: 0 1px;
+}
+
+/* ── C39: the grouped layout (`layout: 'grouped'`) ───────────────────────
+ * Everything here is under `--grouped`, so the flat palette above draws
+ * exactly as it did. Rows are three columns: icon, the label with its
+ * context, and a right side that shows the kind — or, on the active row,
+ * the keys that act on it. */
+.twm-cmdpal--grouped {
+    width: min(680px, calc(100vw - 32px));
+    max-height: 76vh;
+    border-color: var(--border-strong);
+}
+.twm-cmdpal-overlay--grouped { padding-top: 11vh; }
+.twm-cmdpal--grouped .twm-cmdpal__inputrow {
+    padding: var(--space-md) var(--space-lg);
+    border-bottom-color: var(--border-default);
+}
+.twm-cmdpal__search-icon,
+.twm-cmdpal__search-icon.material-symbols-outlined { color: var(--text-muted); font-size: 20px; }
+.twm-cmdpal--grouped .twm-cmdpal__input { font-size: var(--font-size-xl); color: var(--text-bright); }
+.twm-cmdpal--grouped .twm-cmdpal__input::placeholder { color: var(--text-muted); }
+.twm-cmdpal--grouped .twm-cmdpal__type-chip-label--scope { text-transform: none; letter-spacing: 0; }
+.twm-cmdpal__esc,
+.twm-cmdpal--grouped kbd {
+    display: inline-block;
+    padding: 1px 4px;
+    background: var(--surface-2);
+    border: 1px solid var(--border-default);
+    border-radius: 0;
+    color: var(--text-secondary);
+    font-family: var(--font-family-mono);
+    font-size: 10px;
+    line-height: 1.3;
+}
+.twm-cmdpal--grouped .twm-cmdpal__list {
+    flex: 1 1 auto;
+    max-height: none;
+    min-height: 0;
+    padding: var(--space-xs) 0;
+}
+.twm-cmdpal__group {
+    padding: 10px var(--space-lg) 4px;
+    color: var(--text-muted);
+    font-size: var(--font-size-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+.twm-cmdpal--grouped .twm-cmdpal__item {
+    grid-template-columns: 20px minmax(0, 1fr) auto;
+    gap: 10px;
+    padding: 5px var(--space-lg);
+    font-size: var(--font-size-md);
+}
+/* The flat layout highlights on :hover; here the pointer MOVES the active
+ * row instead, so a hover tint would be a second, disagreeing highlight. */
+.twm-cmdpal--grouped .twm-cmdpal__item:hover:not(.twm-cmdpal__item--active) { background: transparent; color: var(--text-secondary); }
+.twm-cmdpal--grouped .twm-cmdpal__item--active {
+    background: var(--state-selected);
+    color: var(--text-bright);
+    box-shadow: inset 2px 0 0 var(--accent-bright);
+}
+.twm-cmdpal--grouped .twm-cmdpal__item--active .twm-cmdpal__icon { color: var(--text-bright); }
+.twm-cmdpal__main {
+    min-width: 0;
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-sm);
+}
+.twm-cmdpal--grouped .twm-cmdpal__label {
+    font-weight: 400;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 0 1 auto;
+    min-width: 0;
+}
+.twm-cmdpal__label mark {
+    background: none;
+    color: var(--twm-cmdpal-match);
+    font-weight: var(--font-weight-semibold);
+}
+.twm-cmdpal__context,
+.twm-cmdpal__cells {
+    color: var(--text-muted);
+    font-size: var(--font-size-xs);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+    flex: 0 10 auto;
+}
+.twm-cmdpal__cells { font-family: var(--font-family-mono); }
+.twm-cmdpal__side {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text-muted);
+    font-size: var(--font-size-xs);
+    white-space: nowrap;
+}
+.twm-cmdpal__acts { display: none; gap: 10px; }
+.twm-cmdpal__item--active .twm-cmdpal__acts { display: flex; }
+.twm-cmdpal__item--active .twm-cmdpal__kind,
+.twm-cmdpal__item--active .twm-cmdpal__shortcut { display: none; }
+.twm-cmdpal__item--more { color: var(--text-muted); font-size: var(--font-size-sm); }
+.twm-cmdpal__empty {
+    padding: 24px var(--space-lg);
+    color: var(--text-muted);
+    text-align: center;
+}
+.twm-cmdpal__empty--quiet { padding: 6px var(--space-lg); text-align: left; font-size: var(--font-size-xs); }
+.twm-cmdpal__tips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    margin-top: var(--space-xs);
+    padding: 10px var(--space-lg) var(--space-sm);
+    border-top: 1px solid var(--border-subtle);
+    color: var(--text-muted);
+    font-size: var(--font-size-xs);
+}
+.twm-cmdpal--grouped .twm-cmdpal__footer { flex-wrap: wrap; row-gap: 2px; }
+.twm-cmdpal__footnote { margin-left: auto; color: var(--text-muted); }
+@media (max-width: 560px) {
+    .twm-cmdpal__context { display: none; }
+    .twm-cmdpal__acts > span:not(:first-child) { display: none; }
+    .twm-cmdpal__footnote { display: none; }
 }
 
 /* ── from tiling/nav.css ───────────────────────── */
@@ -6564,8 +7167,10 @@ tr:hover .twm-row-action { opacity: 1; }
 }
 .twm-data-table-component--compact .twm-preview-table th,
 .twm-data-table-component--compact .twm-preview-table td {
-    padding: 2px 6px;
-    line-height: 1.35;
+    /* 0.5.0: the row-geometry tokens (tokens.css), falling back to exactly
+     * the 0.4 compact values. */
+    padding: var(--twm-dt-cell-pad-block, 2px) var(--twm-dt-cell-pad-inline, 6px);
+    line-height: var(--twm-dt-cell-line-height, 1.35);
 }
 .twm-data-table-component--compact .twm-pagination-controls {
     padding: 1px 6px !important;
@@ -7002,7 +7607,9 @@ tr:hover .twm-row-action { opacity: 1; }
     color: var(--text-muted);
     text-align: center;
 }
-.twm-window-placeholder__icon {
+/* Compounded for the Material Symbols tie — see `.twm-leaf__icon`. */
+.twm-window-placeholder__icon,
+.twm-window-placeholder__icon.material-symbols-outlined {
     font-size: 32px;
     opacity: 0.5;
 }
@@ -7081,7 +7688,9 @@ tr:hover .twm-row-action { opacity: 1; }
     background: #000;
     color: var(--text-bright);
 }
-.twm-top-nav__icon {
+/* Compounded for the Material Symbols tie — see `.twm-leaf__icon`. */
+.twm-top-nav__icon,
+.twm-top-nav__icon.material-symbols-outlined {
     font-size: 16px;
     font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
 }
@@ -7201,3 +7810,3020 @@ tr:hover .twm-row-action { opacity: 1; }
 .twm-autoscroll-bar--active .twm-autoscroll-thumb {
     background: rgba(255, 255, 255, 0.45);
 }
+
+
+/* ══ RECORD LIST & FACT SHEET (0.7.0) ══════════════════════════════════
+ * `createRecordList` (src/ui/components/record_list.js) and
+ * `createFactTable` (src/ui/components/fact_table.js). Neither has a height
+ * of its own: each is exactly as tall as its records, in any parent. */
+
+/* ── the record list ── */
+.twm-record-list { display: block; min-width: 0; }
+.twm-record-list__items {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+}
+/* A record is one flex row that WRAPS: on a narrow host the pills and verbs
+ * go under the name rather than squeezing it to nothing. */
+.twm-record {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 10px;
+    padding: 7px 6px;
+    border-bottom: 1px solid var(--border-subtle, #2a2a2a);
+    min-width: 0;
+}
+.twm-record:last-child { border-bottom: none; }
+.twm-record__main {
+    flex: 1 1 14em;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.twm-record__name {
+    color: var(--text-primary, #e0e0e0);
+    overflow-wrap: anywhere;
+}
+.twm-record__name--mono { font-family: var(--font-family-mono, monospace); font-size: 0.95em; }
+/* The quiet line. It wraps by default; `facts: 'ellipsis'` keeps it to one
+ * line and puts the whole of it on the line's title. */
+.twm-record__facts {
+    color: var(--text-muted, #888);
+    font-size: var(--ea-font-body, 11px);
+    overflow-wrap: anywhere;
+}
+.twm-record-list--clip .twm-record__facts {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.twm-record__error {
+    color: var(--color-danger, #c74e4e);
+    font-size: var(--ea-font-body, 11px);
+    overflow-wrap: anywhere;
+}
+/* A refused verb's reason, ON the screen — never only on a tooltip. */
+.twm-record__refusals { display: flex; flex-direction: column; gap: 1px; }
+.twm-record__refusal {
+    color: var(--color-warning, #ff9800);
+    font-size: var(--ea-font-small, 10px);
+    overflow-wrap: anywhere;
+}
+.twm-record__pills,
+.twm-record__verbs {
+    flex: 0 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px 6px;
+    margin-left: auto;
+}
+.twm-record__pill {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: var(--radius-pill, 999px);
+    background: var(--surface-3, #3c3c3c);
+    color: var(--text-muted, #888);
+    font-size: var(--ea-font-small, 10px);
+    line-height: 16px;
+    white-space: nowrap;
+}
+.twm-record__pill--info    { background: rgba(33, 150, 243, 0.16); color: var(--color-info, #2196f3); }
+.twm-record__pill--success { background: rgba(63, 185, 80, 0.16);  color: var(--color-success, #3fb950); }
+.twm-record__pill--warn    { background: rgba(255, 152, 0, 0.16);  color: var(--color-warning, #ff9800); }
+.twm-record__pill--danger  { background: rgba(199, 78, 78, 0.18);  color: var(--color-danger, #c74e4e); }
+.twm-record__pill--muted   { background: transparent; color: var(--text-dim, #666); box-shadow: inset 0 0 0 1px var(--border-strong, #383838); }
+.twm-record__verb-icon.material-symbols-outlined { font-size: 14px; line-height: 1; }
+/* States. A paused or switched-off record dims its words and pills and NOT
+ * its verbs: the verb that brings it back has to stay readable. A dead or
+ * failing one carries the danger colour on its left edge. */
+.twm-record--state-paused > .twm-record__main,
+.twm-record--state-paused > .twm-record__pills,
+.twm-record--state-off > .twm-record__main,
+.twm-record--state-off > .twm-record__pills,
+.twm-record--state-dead > .twm-record__main,
+.twm-record--state-dead > .twm-record__pills { opacity: 0.55; }
+.twm-record--state-dead,
+.twm-record--state-error { box-shadow: inset 2px 0 0 0 var(--color-danger, #c74e4e); }
+/* `activeKey` — the record that is OPEN: the accent on the left edge, as
+ * DataTable's `twm-dt-row--active`. It wins over a state's edge. */
+.twm-record.twm-record--active { box-shadow: inset 2px 0 0 0 var(--accent-bright, #007acc); }
+.twm-record-list--clickable .twm-record { cursor: pointer; }
+.twm-record-list--clickable .twm-record:hover { background: var(--state-hover, rgba(255, 255, 255, 0.05)); }
+.twm-record:focus { outline: none; }
+.twm-record:focus-visible {
+    outline: 1px solid var(--accent-bright, #007acc);
+    outline-offset: -1px;
+}
+.twm-record-list__empty {
+    margin: 0;
+    padding: 12px 6px;
+    color: var(--text-muted, #888);
+    font-size: var(--ea-font-body, 11px);
+}
+
+/* ── the fact sheet ── */
+.twm-facts {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: auto;
+    font-size: var(--font-size-sm, 12px);
+}
+.twm-facts thead th {
+    text-align: left;
+    font-size: var(--ea-font-small, 10px);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-dim, #666);
+    white-space: nowrap;
+    border-bottom: 1px solid var(--border-default, #303030);
+    padding: 0 12px 6px 0;
+}
+/* Every value WRAPS and keeps its own line breaks: nothing is cut off. */
+.twm-facts tbody td,
+.twm-facts tbody th {
+    text-align: left;
+    font-weight: normal;
+    border-bottom: 1px solid var(--border-subtle, #2a2a2a);
+    padding: 6px 12px 6px 0;
+    color: var(--text-primary, #e0e0e0);
+    vertical-align: top;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+.twm-facts tbody tr:last-child > td,
+.twm-facts tbody tr:last-child > th { border-bottom: 0; }
+.twm-facts tbody th.twm-facts__label {
+    color: var(--text-muted, #888);
+    white-space: nowrap;
+}
+.twm-facts.twm-facts--wrap-labels tbody th.twm-facts__label { white-space: normal; }
+/* `wrap: 'words'` — a value wraps at spaces only, and a long word stays
+ * whole: the sheet grows wider and a sideways scroller around it scrolls.
+ * `wrap: 'none'` — a value keeps its own line breaks and no others. */
+.twm-facts.twm-facts--wrap-words tbody td,
+.twm-facts.twm-facts--wrap-words tbody th { overflow-wrap: normal; word-break: normal; }
+.twm-facts.twm-facts--wrap-none tbody td,
+.twm-facts.twm-facts--wrap-none tbody th { white-space: pre; overflow-wrap: normal; word-break: normal; }
+.twm-facts.twm-facts--mono tbody td.twm-facts__value,
+.twm-facts tbody td.twm-facts__mono { font-family: var(--font-family-mono, monospace); font-size: 0.95em; }
+.twm-facts .twm-facts__num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.twm-facts tbody td.twm-facts__null,
+.twm-facts tbody td.twm-facts__missing { color: var(--text-dim, #666); font-style: italic; }
+.twm-facts tbody td.twm-facts__arrow {
+    color: var(--text-dim, #666);
+    white-space: nowrap;
+    width: 1%;
+}
+.twm-facts tbody tr.twm-facts__row--changed > td.twm-facts__before { color: var(--text-muted, #888); }
+.twm-facts tbody tr.twm-facts__row--changed > td.twm-facts__arrow { color: var(--color-warning, #ff9800); }
+.twm-facts tbody tr.twm-facts__row--same > td { color: var(--text-muted, #888); }
+.twm-facts tbody tr.twm-facts__row--added > td.twm-facts__after { color: var(--color-success, #3fb950); }
+.twm-facts tbody tr.twm-facts__row--removed > td.twm-facts__before { color: var(--color-danger, #c74e4e); }
+.twm-facts tbody td.twm-facts__empty {
+    padding: 12px 0;
+    color: var(--text-muted, #888);
+    white-space: normal;
+}
+/* ══ end RECORD LIST & FACT SHEET ══ */
+
+/* ══ FLOW · KIT ═══════════════════════════════════════════════════════ */
+/* The shared flow-editor kit (36 §3, §3.12): the settings panel and its
+ * fields, the generic widgets, reference chips and the chip input, the two
+ * pickers and the findings strip. Every colour is a token (`tokens.css`'s
+ * `--twm-flow-*` and the canonical ones); a category's TONE picks a pair.
+ * Every class here is set by a module under src/flow/kit/, and every class
+ * those modules set has a rule here — tests/flow_kit_css.test.mjs holds both
+ * directions, because jsdom applies no stylesheet. */
+
+/* `hidden` must win over the `display: flex` these blocks use. */
+.twm-flow-panel[hidden],
+.twm-flow-panel [hidden],
+.twm-flow-popover [hidden],
+.twm-flow-strip[hidden],
+.twm-flow-strip [hidden] {
+    display: none !important;
+}
+
+/* ── the settings panel ─────────────────────────────────────────────── */
+.twm-flow-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-width: 0;
+    box-sizing: border-box;
+    padding: 16px 20px 28px;
+    background: var(--surface-1);
+    color: var(--text-body);
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-sm);
+    line-height: 1.4;
+}
+.twm-flow-panel .twm-btn {
+    min-height: 26px;
+    padding: 0 9px;
+    font-size: var(--font-size-sm);
+    border-radius: 3px;
+}
+.twm-flow-panel__readonly {
+    margin: 0;
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    background: var(--twm-flow-warning-bg);
+    border: 1px solid var(--twm-flow-warning-line);
+    color: var(--twm-flow-warning-text);
+}
+.twm-flow-panel__head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: flex-start;
+}
+.twm-flow-panel__icon {
+    flex: 0 0 34px;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 7px;
+}
+.twm-flow-panel__icon .material-symbols-outlined { font-size: 20px; }
+.twm-flow-panel__icon--violet { background: var(--twm-flow-violet-bg); color: var(--twm-flow-violet-fg); }
+.twm-flow-panel__icon--teal   { background: var(--twm-flow-teal-bg);   color: var(--twm-flow-teal-fg); }
+.twm-flow-panel__icon--amber  { background: var(--twm-flow-amber-bg);  color: var(--twm-flow-amber-fg); }
+.twm-flow-panel__icon--grey   { background: var(--twm-flow-grey-bg);   color: var(--twm-flow-grey-fg); }
+.twm-flow-panel__icon--blue   { background: var(--twm-flow-blue-bg);   color: var(--twm-flow-blue-fg); }
+.twm-flow-panel__icon--indigo { background: var(--twm-flow-indigo-bg); color: var(--twm-flow-indigo-fg); }
+.twm-flow-panel__titles {
+    flex: 1 1 240px;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.twm-flow-panel__type {
+    font-size: var(--font-size-xs);
+    color: var(--twm-flow-muted);
+    text-transform: uppercase;
+    letter-spacing: .05em;
+}
+.twm-flow-panel__title {
+    margin: 0;
+    font-size: 17px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+}
+.twm-flow-panel__title-input {
+    box-sizing: border-box;
+    width: 100%;
+    margin-left: -5px;
+    padding: 1px 4px;
+    font: inherit;
+    font-size: 17px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    user-select: text;
+}
+.twm-flow-panel__title-input:hover { border-color: var(--twm-flow-control-border); }
+.twm-flow-panel__title-input:focus {
+    outline: none;
+    border-color: var(--twm-flow-focus);
+    background: var(--twm-flow-control-bg);
+}
+.twm-flow-panel__where { color: var(--twm-flow-muted); }
+.twm-flow-panel__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: flex-start;
+}
+.twm-flow-panel__action { white-space: nowrap; }
+.twm-flow-panel__action-wrap {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 2px;
+    max-width: 240px;
+}
+.twm-flow-panel__refusal {
+    font-size: var(--font-size-xs);
+    color: var(--twm-flow-warning);
+}
+.twm-flow-panel__description { margin: 0; color: var(--text-secondary); }
+.twm-flow-panel__id {
+    padding: 6px 9px;
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-xs);
+    color: var(--text-secondary);
+    background: var(--surface-0);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
+    overflow-wrap: anywhere;
+}
+.twm-flow-panel__findings {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.twm-flow-panel__finding {
+    display: flex;
+    gap: 6px;
+    align-items: flex-start;
+    color: var(--twm-flow-error);
+}
+.twm-flow-panel__finding--warning { color: var(--twm-flow-warning); }
+.twm-flow-panel__finding-icon.material-symbols-outlined { font-size: 15px; line-height: 18px; }
+.twm-flow-panel__finding-text { min-width: 0; overflow-wrap: anywhere; }
+.twm-flow-panel__slot {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+}
+.twm-flow-panel__fields {
+    display: flex;
+    flex-direction: column;
+    gap: 13px;
+}
+.twm-flow-panel__note {
+    margin: 0;
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    background: var(--state-hover);
+    color: var(--text-secondary);
+}
+.twm-flow-panel__note--info { border-left: 2px solid var(--twm-flow-blue-line); }
+.twm-flow-panel__note--warning {
+    background: var(--twm-flow-warning-bg);
+    color: var(--twm-flow-warning-text);
+}
+
+/* ── a field: its label, its control, its finding, its help ─────────── */
+.twm-flow-field {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 16px;
+    align-items: flex-start;
+    min-width: 0;
+}
+.twm-flow-field__label {
+    flex: 0 0 150px;
+    min-width: 0;
+    padding-top: 5px;
+    color: var(--text-secondary);
+}
+.twm-flow-field__name { overflow-wrap: anywhere; }
+.twm-flow-field__required { color: var(--twm-flow-error); }
+.twm-flow-field__body {
+    flex: 1 1 280px;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+.twm-flow-field__error {
+    margin: 0;
+    display: flex;
+    gap: 5px;
+    align-items: flex-start;
+    color: var(--twm-flow-error);
+}
+.twm-flow-field__error-icon.material-symbols-outlined { font-size: 15px; line-height: 17px; }
+.twm-flow-field__error-text { min-width: 0; overflow-wrap: anywhere; }
+.twm-flow-field--warning .twm-flow-field__error { color: var(--twm-flow-warning); }
+.twm-flow-field--error > .twm-flow-field__body > .twm-flow-input,
+.twm-flow-field--error > .twm-flow-field__body > .twm-flow-refbox,
+.twm-flow-field--error > .twm-flow-field__body > .twm-flow-togglechips {
+    border-color: var(--twm-flow-error);
+}
+.twm-flow-field__help {
+    margin: 0;
+    font-size: var(--font-size-xs);
+    color: var(--twm-flow-muted);
+}
+.twm-flow-field__note {
+    margin: 0;
+    padding-top: 5px;
+    font-size: var(--font-size-xs);
+    color: var(--twm-flow-muted);
+}
+.twm-flow-field__kept {
+    font-family: var(--font-family-mono);
+    color: var(--text-secondary);
+}
+.twm-flow-field__refusal {
+    margin: 0;
+    padding: 6px 8px;
+    border-radius: var(--radius-sm);
+    background: var(--twm-flow-warning-bg);
+    border: 1px solid var(--twm-flow-warning-line);
+    color: var(--twm-flow-warning-text);
+}
+.twm-flow-field--group > .twm-flow-field__body { gap: 8px; }
+.twm-flow-field__group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+}
+.twm-flow-field__group > .twm-flow-field__summary {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 26px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    list-style: none;
+}
+.twm-flow-field__group > .twm-flow-field__summary::-webkit-details-marker { display: none; }
+.twm-flow-field__group > .twm-flow-field__summary::before {
+    content: '▸';
+    flex: 0 0 auto;
+    color: var(--twm-flow-muted);
+}
+.twm-flow-field__group[open] > .twm-flow-field__summary::before { content: '▾'; }
+.twm-flow-field__group > .twm-flow-field__summary:focus-visible {
+    outline: 2px solid var(--twm-flow-focus);
+    outline-offset: 1px;
+}
+.twm-flow-field__summary-text {
+    min-width: 0;
+    color: var(--twm-flow-muted);
+    overflow-wrap: anywhere;
+}
+.twm-flow-field__group > .twm-flow-field > .twm-flow-field__label { flex-basis: 120px; }
+.twm-flow-field__rows {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 0;
+}
+.twm-flow-field__row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    min-width: 0;
+}
+.twm-flow-field__row > .twm-flow-input { flex: 0 0 34%; min-width: 0; }
+.twm-flow-field__row > .twm-flow-input--select { flex: 0 0 auto; width: auto; }
+.twm-flow-field__row > .twm-flow-refbox { flex: 1 1 auto; }
+.twm-flow-field__slot {
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.twm-flow-field__slot > .twm-flow-refbox { flex: 1 1 auto; }
+.twm-flow-field__add { align-self: flex-start; border-style: dashed; }
+.twm-flow-field__remove { flex: 0 0 26px; padding: 0; }
+.twm-flow-field__remove .twm-btn__glyph.material-symbols-outlined { font-size: 15px; }
+
+/* ── controls ───────────────────────────────────────────────────────── */
+.twm-flow-input {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    height: 26px;
+    padding: 0 8px;
+    font: inherit;
+    font-size: var(--font-size-sm);
+    color: var(--text-primary);
+    background: var(--twm-flow-control-bg);
+    border: 1px solid var(--twm-flow-control-border);
+    border-radius: 3px;
+    user-select: text;
+}
+.twm-flow-input:focus {
+    outline: none;
+    border-color: var(--twm-flow-focus);
+    box-shadow: 0 0 0 1px var(--twm-flow-focus);
+}
+.twm-flow-input:disabled { opacity: 0.6; cursor: not-allowed; }
+.twm-flow-input--select { padding-right: 4px; cursor: pointer; }
+.twm-flow-input--area {
+    height: auto;
+    min-height: 52px;
+    padding: 5px 8px;
+    line-height: 1.4;
+    resize: vertical;
+}
+.twm-flow-checkbox {
+    margin: 6px 0 0;
+    accent-color: var(--twm-flow-focus);
+}
+
+/* ── a chip input, and the box with its Insert a value ──────────────── */
+.twm-flow-refbox {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    min-width: 0;
+    min-height: 26px;
+    box-sizing: border-box;
+    padding: 3px 4px 3px 8px;
+    background: var(--twm-flow-control-bg);
+    border: 1px solid var(--twm-flow-control-border);
+    border-radius: 3px;
+}
+.twm-flow-refbox:focus-within {
+    border-color: var(--twm-flow-focus);
+    box-shadow: 0 0 0 1px var(--twm-flow-focus);
+}
+.twm-flow-refbox--mono { background: var(--surface-0); }
+.twm-flow-refbox__insert {
+    flex: 0 0 auto;
+    height: 20px;
+    padding: 0 6px;
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-xs);
+    color: var(--twm-flow-blue-fg);
+    background: var(--surface-2);
+    border: 1px solid var(--twm-flow-control-border);
+    border-radius: 3px;
+    cursor: pointer;
+}
+.twm-flow-refbox__insert:hover { border-color: var(--twm-flow-focus); }
+.twm-flow-refbox__insert:focus-visible {
+    outline: 2px solid var(--twm-flow-focus);
+    outline-offset: 1px;
+}
+.twm-flow-chipinput {
+    position: relative;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 18px;
+    line-height: 18px;
+    color: var(--text-primary);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    outline: none;
+    cursor: text;
+    -webkit-user-select: text;
+    user-select: text;
+}
+.twm-flow-chipinput--mono {
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-sm);
+    line-height: 21px;
+}
+.twm-flow-chipinput--multiline { min-height: 36px; }
+.twm-flow-chipinput--empty::before {
+    content: attr(data-placeholder);
+    position: absolute;
+    left: 0;
+    top: 0;
+    color: var(--text-muted);
+    pointer-events: none;
+}
+.twm-flow-chipinput[contenteditable="false"] { cursor: default; }
+.twm-flow-chip {
+    display: inline-flex;
+    align-items: center;
+    height: 18px;
+    padding: 0 6px;
+    margin: 0 1px;
+    box-sizing: border-box;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-xs);
+    line-height: 16px;
+    white-space: nowrap;
+    vertical-align: baseline;
+    cursor: default;
+}
+.twm-flow-chip--violet { background: var(--twm-flow-violet-bg); border-color: var(--twm-flow-violet-line); color: var(--twm-flow-violet-fg); }
+.twm-flow-chip--teal   { background: var(--twm-flow-teal-bg);   border-color: var(--twm-flow-teal-line);   color: var(--twm-flow-teal-fg); }
+.twm-flow-chip--amber  { background: var(--twm-flow-amber-bg);  border-color: var(--twm-flow-amber-line);  color: var(--twm-flow-amber-fg); }
+.twm-flow-chip--grey   { background: var(--twm-flow-grey-bg);   border-color: var(--twm-flow-grey-line);   color: var(--twm-flow-grey-fg); }
+.twm-flow-chip--blue   { background: var(--twm-flow-blue-bg);   border-color: var(--twm-flow-blue-line);   color: var(--twm-flow-blue-fg); }
+.twm-flow-chip--indigo { background: var(--twm-flow-indigo-bg); border-color: var(--twm-flow-indigo-line); color: var(--twm-flow-indigo-fg); }
+.twm-flow-chip.twm-flow-chip--unknown {
+    border-style: dashed;
+    border-color: var(--twm-flow-error);
+    color: var(--twm-flow-error);
+}
+
+/* ── chips that toggle: enum-chips, upstream-columns ────────────────── */
+.twm-flow-togglechips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+    min-height: 26px;
+    box-sizing: border-box;
+    padding: 3px 6px;
+    background: var(--twm-flow-control-bg);
+    border: 1px solid var(--twm-flow-control-border);
+    border-radius: 3px;
+}
+.twm-flow-togglechip {
+    height: 18px;
+    padding: 0 8px;
+    font: inherit;
+    font-size: var(--font-size-xs);
+    color: var(--twm-flow-muted);
+    background: transparent;
+    border: 1px solid var(--border-strong);
+    border-radius: 9px;
+    cursor: pointer;
+}
+.twm-flow-togglechip[aria-pressed="true"] {
+    color: var(--text-primary);
+    background: var(--surface-3);
+    border-color: var(--surface-3);
+}
+.twm-flow-togglechip.twm-flow-togglechip--missing {
+    border-style: dashed;
+    border-color: var(--twm-flow-warning);
+    color: var(--twm-flow-warning);
+}
+.twm-flow-togglechip:disabled { cursor: default; opacity: 0.7; }
+.twm-flow-togglechip:focus-visible {
+    outline: 2px solid var(--twm-flow-focus);
+    outline-offset: 1px;
+}
+
+/* ── choice-cards ───────────────────────────────────────────────────── */
+.twm-flow-choices {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-top: 4px;
+}
+.twm-flow-choice {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    color: var(--text-primary);
+    cursor: pointer;
+}
+.twm-flow-choice__radio {
+    flex: 0 0 auto;
+    margin: 2px 0 0;
+    accent-color: var(--twm-flow-focus);
+}
+.twm-flow-choice__words {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+}
+.twm-flow-choice__label { overflow-wrap: anywhere; }
+.twm-flow-choice__sub {
+    font-size: var(--font-size-xs);
+    color: var(--twm-flow-muted);
+}
+
+/* ── the popover both pickers are drawn in ──────────────────────────── */
+.twm-flow-popover {
+    position: fixed;
+    z-index: var(--z-popover);
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    max-width: calc(100vw - 16px);
+    max-height: calc(100vh - 16px);
+    background: var(--surface-1);
+    color: var(--text-body);
+    border: 1px solid var(--twm-flow-control-border);
+    border-radius: var(--radius-md);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-sm);
+    line-height: 1.4;
+    outline: none;
+}
+.twm-flow-popover--picker { width: 420px; }
+.twm-flow-popover--values { width: 430px; }
+
+/* ── the step picker ────────────────────────────────────────────────── */
+.twm-flow-picker {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+.twm-flow-picker__head {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 12px 14px 8px;
+}
+.twm-flow-picker__title {
+    font-size: var(--font-size-md);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+}
+.twm-flow-picker__where { color: var(--twm-flow-muted); }
+.twm-flow-picker__search,
+.twm-flow-values__search {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    box-sizing: border-box;
+    padding: 0 8px;
+    background: var(--surface-0);
+    border: 1px solid var(--twm-flow-control-border);
+    border-radius: 3px;
+}
+.twm-flow-picker__search { margin: 0 14px 8px; }
+.twm-flow-picker__search:focus-within,
+.twm-flow-values__search:focus-within { border-color: var(--twm-flow-focus); }
+.twm-flow-picker__search-icon.material-symbols-outlined,
+.twm-flow-values__search-icon.material-symbols-outlined {
+    font-size: 15px;
+    color: var(--twm-flow-muted);
+}
+.twm-flow-picker__input,
+.twm-flow-values__input {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 24px;
+    padding: 0;
+    font: inherit;
+    color: var(--text-primary);
+    background: transparent;
+    border: 0;
+    outline: none;
+    user-select: text;
+}
+.twm-flow-picker__list {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 0 6px 6px;
+}
+.twm-flow-picker__group { display: flex; flex-direction: column; }
+.twm-flow-picker__group-label {
+    padding: 6px 8px 3px;
+    font-size: 10px;
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--twm-flow-muted);
+}
+.twm-flow-picker__items { display: flex; flex-direction: column; }
+.twm-flow-picker__items--grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 4px;
+}
+.twm-flow-picker__option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 5px 8px;
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    cursor: pointer;
+}
+.twm-flow-picker__option:hover { background: var(--state-hover); }
+.twm-flow-picker__option.twm-flow-picker__option--active { background: var(--state-selected); }
+.twm-flow-picker__option.twm-flow-picker__option--refused { cursor: not-allowed; }
+.twm-flow-picker__option--refused .twm-flow-picker__label { color: var(--twm-flow-muted); }
+.twm-flow-picker__option--refused .twm-flow-picker__chip { opacity: 0.5; }
+.twm-flow-picker__chip {
+    flex: 0 0 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 5px;
+}
+.twm-flow-picker__chip .material-symbols-outlined { font-size: 15px; }
+.twm-flow-picker__chip--violet { background: var(--twm-flow-violet-bg); color: var(--twm-flow-violet-fg); }
+.twm-flow-picker__chip--teal   { background: var(--twm-flow-teal-bg);   color: var(--twm-flow-teal-fg); }
+.twm-flow-picker__chip--amber  { background: var(--twm-flow-amber-bg);  color: var(--twm-flow-amber-fg); }
+.twm-flow-picker__chip--grey   { background: var(--twm-flow-grey-bg);   color: var(--twm-flow-grey-fg); }
+.twm-flow-picker__chip--blue   { background: var(--twm-flow-blue-bg);   color: var(--twm-flow-blue-fg); }
+.twm-flow-picker__chip--indigo { background: var(--twm-flow-indigo-bg); color: var(--twm-flow-indigo-fg); }
+.twm-flow-picker__words {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+.twm-flow-picker__label { overflow-wrap: anywhere; }
+.twm-flow-picker__sub,
+.twm-flow-picker__description {
+    font-size: var(--font-size-xs);
+    color: var(--twm-flow-muted);
+}
+.twm-flow-picker__refusal {
+    font-size: var(--font-size-xs);
+    color: var(--twm-flow-warning);
+}
+.twm-flow-picker__empty {
+    margin: 0;
+    padding: 4px 14px 10px;
+    color: var(--twm-flow-muted);
+}
+.twm-flow-picker__foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 14px;
+    padding: 8px 14px;
+    border-top: 1px solid var(--border-strong);
+    font-size: var(--font-size-xs);
+    color: var(--twm-flow-muted);
+}
+.twm-flow-picker__keys { flex: 1 1 auto; }
+.twm-flow-picker__paste {
+    padding: 0;
+    font: inherit;
+    font-size: var(--font-size-xs);
+    color: var(--twm-flow-blue-fg);
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+}
+.twm-flow-picker__paste:hover { text-decoration: underline; }
+.twm-flow-picker__paste:focus-visible {
+    outline: 2px solid var(--twm-flow-focus);
+    outline-offset: 1px;
+}
+
+/* ── Insert a value ─────────────────────────────────────────────────── */
+.twm-flow-values {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+.twm-flow-values__head {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 14px 8px;
+}
+.twm-flow-values__title {
+    font-size: var(--font-size-md);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+}
+.twm-flow-values__crumb {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 14px 6px;
+}
+.twm-flow-values__back {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    height: 22px;
+    padding: 0 6px 0 2px;
+    font: inherit;
+    color: var(--text-secondary);
+    background: transparent;
+    border: 1px solid var(--twm-flow-control-border);
+    border-radius: 3px;
+    cursor: pointer;
+}
+.twm-flow-values__back .material-symbols-outlined { font-size: 16px; }
+.twm-flow-values__back:focus-visible {
+    outline: 2px solid var(--twm-flow-focus);
+    outline-offset: 1px;
+}
+.twm-flow-values__path { color: var(--twm-flow-muted); }
+.twm-flow-values__list {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 0 6px 6px;
+}
+.twm-flow-values__group { display: flex; flex-direction: column; }
+.twm-flow-values__group-label {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px;
+    padding: 8px 8px 3px;
+}
+.twm-flow-values__group-name {
+    font-size: 10px;
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--twm-flow-muted);
+}
+.twm-flow-values__group-sub,
+.twm-flow-values__group-empty {
+    font-size: var(--font-size-xs);
+    color: var(--twm-flow-muted);
+}
+.twm-flow-values__grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 4px;
+}
+.twm-flow-values__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 2px 8px;
+}
+.twm-flow-values__option {
+    color: var(--text-primary);
+    cursor: pointer;
+}
+.twm-flow-values__option--row {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+}
+.twm-flow-values__option--chip {
+    display: inline-flex;
+    align-items: center;
+    height: 22px;
+    box-sizing: border-box;
+    padding: 0 8px;
+    border: 1px solid var(--border-strong);
+    border-radius: 11px;
+}
+.twm-flow-values__option:hover { background: var(--state-hover); }
+.twm-flow-values__option.twm-flow-values__option--active {
+    background: var(--state-selected);
+    box-shadow: inset 0 0 0 1px var(--twm-flow-focus);
+}
+.twm-flow-values__label { min-width: 0; overflow-wrap: anywhere; }
+.twm-flow-values__type {
+    flex: 0 0 auto;
+    font-size: var(--font-size-xs);
+    color: var(--twm-flow-muted);
+}
+.twm-flow-values__empty {
+    margin: 0;
+    padding: 8px;
+    color: var(--twm-flow-muted);
+}
+.twm-flow-values__foot {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 8px 14px 10px;
+    border-top: 1px solid var(--border-strong);
+    font-size: var(--font-size-xs);
+    color: var(--twm-flow-muted);
+}
+.twm-flow-values__note { overflow-wrap: anywhere; }
+.twm-flow-values__inserts {
+    min-height: 15px;
+    overflow-wrap: anywhere;
+}
+
+/* ── the findings strip ─────────────────────────────────────────────── */
+.twm-flow-strip {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 6px 12px;
+    background: var(--twm-flow-error-bg);
+    border-bottom: 1px solid var(--twm-flow-error-line);
+    color: var(--twm-flow-error-text);
+    font-size: var(--font-size-sm);
+}
+.twm-flow-strip.twm-flow-strip--warning {
+    background: var(--twm-flow-warning-bg);
+    border-bottom-color: var(--twm-flow-warning-line);
+    color: var(--twm-flow-warning-text);
+}
+.twm-flow-strip__head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.twm-flow-strip__icon.material-symbols-outlined { font-size: 16px; }
+.twm-flow-strip__title { font-weight: var(--font-weight-semibold); }
+.twm-flow-strip__list {
+    margin: 0;
+    padding: 0 0 0 24px;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.twm-flow-strip__line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+}
+.twm-flow-strip__line--warning { color: var(--twm-flow-warning); }
+.twm-flow-strip__text { min-width: 0; overflow-wrap: anywhere; }
+.twm-flow-strip .twm-flow-strip__go {
+    min-height: 22px;
+    padding: 0 8px;
+    color: inherit;
+    background: transparent;
+    border-color: var(--twm-flow-error-line);
+    border-radius: 3px;
+}
+/* ══ end FLOW · KIT ══ */
+
+
+/* ══ FLOW · CANVAS ════════════════════════════════════════════════════ */
+/* Owned by the canvas agent (B) (36 §2): the canvas kernel (twm-canvas,
+ * twm-edge) and the canvas editor (twm-flow-graph). Every class here is set by
+ * a module under src/canvas/ or src/flow/canvas_editor/, and every class those
+ * modules set has a rule here — tests/flow_canvas_css.test.mjs holds both
+ * directions, and holds the node box (208 × 34 + 22 a row) to the editor's
+ * CANVAS_NODE, because the edges are anchored by arithmetic, not measured. */
+
+/* ── the kernel: the surface ────────────────────────────────────────── */
+/* The ground is SEVEN background layers, in this order, because
+ * `CanvasAdapter._apply` writes seven sizes and positions: 1. a grain, 2. a
+ * soft light from the upper left, 3–4. a coarse rule every fifth cell, 5–6. a
+ * fine grid — the unit a drag snaps to — and 7. under it all, a gradient. Only
+ * the four GRID layers follow the pan and the zoom. An embedder restyling the
+ * ground keeps seven layers, or the browser cycles a short list and layer 5
+ * takes layer 1's size. */
+.twm-canvas {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    cursor: default;
+    outline: none;
+    background-color: var(--surface-0);
+    background-image:
+        url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27160%27%20height%3D%27160%27%3E%3Cfilter%20id%3D%27n%27%3E%3CfeTurbulence%20type%3D%27fractalNoise%27%20baseFrequency%3D%270.85%27%20numOctaves%3D%273%27%20stitchTiles%3D%27stitch%27%2F%3E%3CfeColorMatrix%20type%3D%27saturate%27%20values%3D%270%27%2F%3E%3C%2Ffilter%3E%3Crect%20width%3D%27160%27%20height%3D%27160%27%20filter%3D%27url%28%23n%29%27%20opacity%3D%270.5%27%2F%3E%3C%2Fsvg%3E"),
+        radial-gradient(120% 90% at 22% 0%, rgba(255, 255, 255, 0.055) 0%, rgba(255, 255, 255, 0) 55%),
+        linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+        linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+        linear-gradient(160deg, #2b2e33 0%, #212327 55%, #1b1d20 100%);
+    background-blend-mode: overlay, screen, normal, normal, normal, normal, normal;
+    box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.55), inset 0 0 120px rgba(0, 0, 0, 0.35);
+}
+.twm-canvas:focus-visible {
+    box-shadow: inset 0 0 0 1px var(--twm-flow-focus), inset 0 0 120px rgba(0, 0, 0, 0.35);
+}
+.twm-canvas__surface { position: absolute; transform-origin: 0 0; }
+/* The edge layer takes no pointer: a line that wants one (a hit path) opts
+ * back in with `pointer-events: stroke`. */
+.twm-canvas__edges { position: absolute; overflow: visible; pointer-events: none; }
+.twm-canvas__nodes { position: absolute; }
+.twm-canvas__marquee {
+    position: absolute;
+    pointer-events: none;
+    border: 1px solid var(--accent-bright);
+    background: rgba(0, 122, 204, 0.12);
+}
+.twm-canvas__marquee[hidden] { display: none; }
+
+/* ── the kernel: a crow's foot ──────────────────────────────────────── */
+.twm-edge__marker line { stroke: #5a7f96; stroke-width: 1.4; }
+.twm-edge__marker circle { fill: none; stroke: #5a7f96; stroke-width: 1.4; }
+
+/* ── the canvas editor ──────────────────────────────────────────────── */
+.twm-flow-graph [hidden] { display: none !important; }
+
+/* The editor fills its host: a flex column in any parent that gives it a
+ * height. `container-type: inline-size` is for the narrow layouts below, and
+ * safe here: the editor's width comes from its parent, never its contents. */
+.twm-flow-graph {
+    flex: 1 1 auto;
+    height: 100%;
+    min-height: 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    background: var(--surface-0);
+    color: var(--text-body);
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-sm);
+    container-type: inline-size;
+    container-name: twm-flow-graph;
+}
+.twm-flow-graph__toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    background: var(--surface-1);
+    border-bottom: 1px solid var(--border-default);
+}
+.twm-flow-graph .twm-flow-graph__tool {
+    min-height: 26px;
+    padding: 0 9px;
+    font-size: var(--font-size-sm);
+    border-radius: 3px;
+}
+.twm-flow-graph__tool .twm-btn__glyph.material-symbols-outlined { font-size: 16px; }
+.twm-flow-graph__tool--busy { cursor: progress; }
+.twm-flow-graph__status {
+    margin-left: auto;
+    color: var(--twm-flow-muted);
+    font-size: var(--font-size-xs);
+}
+.twm-flow-graph__toolbar-end { display: inline-flex; align-items: center; gap: 6px; }
+.twm-flow-graph__toolbar-end:empty { display: none; }
+.twm-flow-graph__why,
+.twm-flow-graph__message,
+.twm-flow-graph__readonly,
+.twm-flow-graph__banner {
+    margin: 0;
+    padding: 4px 10px;
+    font-size: var(--font-size-xs);
+    line-height: 1.4;
+}
+.twm-flow-graph__why { color: var(--twm-flow-muted); border-bottom: 1px solid var(--border-subtle); }
+.twm-flow-graph__message:empty { display: none; }
+.twm-flow-graph__message--warning { color: var(--twm-flow-warning); }
+.twm-flow-graph__message--ok { color: var(--twm-flow-ok); }
+.twm-flow-graph__readonly {
+    background: var(--twm-flow-warning-bg);
+    color: var(--twm-flow-warning-text);
+    border-bottom: 1px solid var(--twm-flow-warning-line);
+}
+.twm-flow-graph__banner {
+    background: var(--twm-flow-blue-bg);
+    color: var(--twm-flow-blue-fg);
+    border-bottom: 1px solid var(--twm-flow-blue-line);
+}
+
+/* Three columns; the CANVAS is the one that flexes — `flex: 1 1 0px` AND
+ * `min-width: 0`, or an open settings panel squeezes the palette instead. */
+.twm-flow-graph__body { flex: 1 1 0px; min-height: 0; display: flex; flex-direction: row; }
+.twm-flow-graph__palette {
+    flex: 0 0 176px;
+    min-width: 0;
+    overflow-y: auto;
+    box-sizing: border-box;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    background: var(--surface-1);
+    border-right: 1px solid var(--border-default);
+}
+.twm-flow-graph__palette-title { margin: 2px 0 6px; font-size: var(--font-size-sm); font-weight: 600; }
+.twm-flow-graph__palette-group {
+    margin: 10px 0 2px;
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--twm-flow-muted);
+}
+/* A press must not select the label's text, and a touch press must not pan the
+ * page instead of dragging. */
+.twm-flow-graph__palette-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    min-height: 26px;
+    padding: 3px 6px;
+    text-align: left;
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    user-select: none;
+    touch-action: none;
+}
+.twm-flow-graph__palette-item:hover:not(:disabled) { background: var(--state-hover); border-color: var(--border-default); }
+.twm-flow-graph__palette-item:focus-visible { outline: none; border-color: var(--twm-flow-focus); }
+.twm-flow-graph__palette-item:disabled { opacity: 0.45; cursor: not-allowed; }
+.twm-flow-graph__palette-icon {
+    flex: 0 0 20px;
+    height: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+}
+.twm-flow-graph__palette-icon .material-symbols-outlined,
+.twm-flow-graph__node-icon .material-symbols-outlined { font-size: 15px; }
+.twm-flow-graph__palette-icon--violet, .twm-flow-graph__node-icon--violet { background: var(--twm-flow-violet-bg); color: var(--twm-flow-violet-fg); }
+.twm-flow-graph__palette-icon--teal, .twm-flow-graph__node-icon--teal { background: var(--twm-flow-teal-bg); color: var(--twm-flow-teal-fg); }
+.twm-flow-graph__palette-icon--amber, .twm-flow-graph__node-icon--amber { background: var(--twm-flow-amber-bg); color: var(--twm-flow-amber-fg); }
+.twm-flow-graph__palette-icon--grey, .twm-flow-graph__node-icon--grey { background: var(--twm-flow-grey-bg); color: var(--twm-flow-grey-fg); }
+.twm-flow-graph__palette-icon--blue, .twm-flow-graph__node-icon--blue { background: var(--twm-flow-blue-bg); color: var(--twm-flow-blue-fg); }
+.twm-flow-graph__palette-icon--indigo, .twm-flow-graph__node-icon--indigo { background: var(--twm-flow-indigo-bg); color: var(--twm-flow-indigo-fg); }
+.twm-flow-graph__palette-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.twm-flow-graph__palette-why {
+    margin: 0 0 4px 32px;
+    font-size: var(--font-size-xs);
+    color: var(--twm-flow-muted);
+}
+.twm-flow-graph__canvas { position: relative; flex: 1 1 0px; min-width: 0; min-height: 0; }
+.twm-flow-graph__canvas--drop { outline: 2px dashed var(--twm-flow-focus); outline-offset: -2px; }
+.twm-flow-graph__aside {
+    flex: 0 0 300px;
+    min-width: 0;
+    min-height: 0;
+    overflow-y: auto;
+    background: var(--surface-1);
+    border-left: 1px solid var(--border-default);
+}
+.twm-flow-graph__connection {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 16px 20px;
+}
+.twm-flow-graph__connection-title { margin: 0; font-size: var(--font-size-md); font-weight: 600; }
+.twm-flow-graph__connection-line { margin: 0; color: var(--twm-flow-muted); overflow-wrap: anywhere; }
+.twm-flow-graph .twm-flow-graph__connection-remove { min-height: 26px; padding: 0 9px; font-size: var(--font-size-sm); }
+
+/* A narrow editor: under 900px the side columns take less, and under 740px the
+ * canvas takes the whole width on top with the palette and the settings side
+ * by side under it — a container query, on the editor's own width. */
+@container twm-flow-graph (max-width: 900px) {
+    .twm-flow-graph__palette { flex: 0 0 150px; }
+    .twm-flow-graph__aside { flex: 0 0 232px; }
+}
+@container twm-flow-graph (max-width: 740px) {
+    .twm-flow-graph__body {
+        display: grid;
+        grid-template-columns: minmax(132px, 2fr) minmax(0, 3fr);
+        grid-template-rows: minmax(220px, 11fr) minmax(0, 9fr);
+    }
+    .twm-flow-graph__canvas { grid-column: 1 / -1; grid-row: 1; min-width: 0; }
+    .twm-flow-graph__palette { grid-column: 1; grid-row: 2; min-height: 0; border-right: 0; border-top: 1px solid var(--border-default); }
+    .twm-flow-graph__aside { grid-column: 2; grid-row: 2; border-left: 0; border-top: 1px solid var(--border-default); }
+}
+
+/* ── a node ─────────────────────────────────────────────────────────── */
+/* THE BOX IS ARITHMETIC: a line meets a port at `header + row × i + row / 2`
+ * (layout.js's portAnchor), so the header and a row are exactly these heights.
+ * A consumer that passes `node: {width, header, row}` sets the three custom
+ * properties on the editor's root. */
+.twm-flow-graph__node {
+    position: absolute;
+    box-sizing: border-box;
+    width: var(--twm-canvas-node-width, 208px);
+    background: var(--surface-2);
+    border: 1px solid var(--border-strong);
+    border-radius: 4px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.55);
+    color: var(--text-body);
+    font-size: var(--font-size-xs);
+    outline: none;
+}
+.twm-flow-graph__node:focus-visible { box-shadow: 0 0 0 2px var(--twm-flow-focus), 0 2px 12px rgba(0, 0, 0, 0.55); }
+.twm-flow-graph__node--picked {
+    border-color: var(--twm-flow-focus);
+    box-shadow: 0 0 0 1px var(--twm-flow-focus), 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+.twm-flow-graph__node--connect-source { outline: 2px solid var(--twm-flow-focus); outline-offset: 1px; }
+.twm-flow-graph__node--error { border-color: var(--twm-flow-error); }
+.twm-flow-graph__node--warning { border-color: var(--twm-flow-warning); }
+.twm-flow-graph__node--skipped { opacity: 0.55; }
+.twm-flow-graph__node-head {
+    box-sizing: border-box;
+    height: var(--twm-canvas-node-header, 34px);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 8px;
+    background: var(--surface-3);
+    border-bottom: 1px solid var(--border-strong);
+    border-radius: 3px 3px 0 0;
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    user-select: none;
+    cursor: move;
+}
+.twm-flow-graph--readonly .twm-flow-graph__node-head { cursor: default; }
+.twm-flow-graph__node-icon {
+    flex: 0 0 20px;
+    height: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+}
+.twm-flow-graph__node-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* ONE LINE, and never more than half the header: a tag that wrapped squeezed
+ * the title beside it to a few letters. */
+.twm-flow-graph__node-tag {
+    margin-left: auto;
+    flex: none;
+    max-width: 50%;
+    padding: 1px 5px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--font-size-xs);
+    font-weight: 500;
+    color: #b8cbe0;
+    background: rgba(127, 154, 198, 0.18);
+    border-radius: 2px;
+}
+.twm-flow-graph__node-row {
+    box-sizing: border-box;
+    height: var(--twm-canvas-node-row, 22px);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.twm-flow-graph__node-gap { flex: 1 1 auto; }
+.twm-flow-graph__node-summary,
+.twm-flow-graph__node-run {
+    margin: 0;
+    padding: 2px 8px 4px;
+    color: var(--twm-flow-muted);
+    overflow-wrap: anywhere;
+}
+.twm-flow-graph__node-summary:empty,
+.twm-flow-graph__node-run:empty { display: none; }
+.twm-flow-graph__node-findings { padding: 0 8px; }
+.twm-flow-graph__node-finding { margin: 4px 0; color: var(--twm-flow-error); overflow-wrap: anywhere; }
+.twm-flow-graph__node-finding--warning { color: var(--twm-flow-warning); }
+.twm-flow-graph__node-run[data-state="completed"], .twm-flow-graph__node-run[data-tone="ok"] { color: var(--twm-flow-ok); }
+.twm-flow-graph__node-run[data-state="failed"], .twm-flow-graph__node-run[data-tone="error"] { color: var(--twm-flow-error); }
+.twm-flow-graph__node-run[data-tone="warning"] { color: var(--twm-flow-warning); }
+.twm-flow-graph__node-run[data-state="running"] { color: var(--twm-flow-focus); }
+.twm-flow-graph__node-run[data-state="skipped"],
+.twm-flow-graph__node-run[data-state="cancelled"],
+.twm-flow-graph__node-run[data-state="not-reached"] { font-style: italic; }
+
+/* ── a port ─────────────────────────────────────────────────────────── */
+.twm-flow-graph__port {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: var(--twm-canvas-node-row, 22px);
+    padding: 0 6px;
+    background: none;
+    border: 0;
+    color: inherit;
+    font: inherit;
+    font-size: var(--font-size-xs);
+    cursor: crosshair;
+}
+.twm-flow-graph__port:disabled { cursor: default; }
+.twm-flow-graph__port:focus-visible { outline: 1px solid var(--twm-flow-focus); outline-offset: -1px; }
+.twm-flow-graph__port--in { margin-left: -6px; }
+.twm-flow-graph__port--out { flex-direction: row-reverse; margin-right: -6px; }
+.twm-flow-graph__port-dot {
+    flex: 0 0 10px;
+    width: 10px;
+    height: 10px;
+    box-sizing: border-box;
+    border-radius: 50%;
+    background: var(--surface-3);
+    border: 2px solid var(--twm-flow-focus);
+}
+.twm-flow-graph__port-label { white-space: nowrap; }
+.twm-flow-graph__port-count { color: var(--twm-flow-muted); white-space: nowrap; }
+.twm-flow-graph__port-count:empty { display: none; }
+.twm-flow-graph__port:hover:not(:disabled) .twm-flow-graph__port-dot { background: var(--twm-flow-focus); }
+.twm-flow-graph__port--data { opacity: 0.7; }
+.twm-flow-graph__port--data .twm-flow-graph__port-dot { border-color: #8a8f98; border-radius: 2px; }
+.twm-flow-graph--connecting .twm-flow-graph__port--in:not(:disabled) .twm-flow-graph__port-dot {
+    background: var(--twm-flow-focus);
+    box-shadow: 0 0 0 3px rgba(0, 122, 204, 0.35);
+}
+.twm-flow-graph__port--taken .twm-flow-graph__port-dot { border-color: var(--twm-flow-ok); background: var(--twm-flow-ok); }
+.twm-flow-graph__port--taken .twm-flow-graph__port-count { color: var(--twm-flow-ok); }
+.twm-flow-graph__port--untaken { opacity: 0.5; }
+
+/* ── a line ─────────────────────────────────────────────────────────── */
+.twm-flow-graph__edge { fill: none; stroke: #8fb4d8; stroke-width: 1.6; }
+.twm-flow-graph__edge--picked { stroke: var(--twm-flow-focus); stroke-width: 2.4; }
+/* A loop's body handing back to the loop: DASHED, and routed under both steps
+ * by the kernel's `returnEdge`, so it reads as "round again", not as one more
+ * step forward. */
+.twm-flow-graph__edge--back { stroke-dasharray: 6 4; }
+.twm-flow-graph__edge--taken { stroke: var(--twm-flow-ok); }
+.twm-flow-graph__edge--untaken { opacity: 0.35; }
+/* The 14px target a 1.6px line cannot be. It opts back into the pointer the
+ * edge layer turns off. */
+.twm-flow-graph__edge-hit { fill: none; stroke: transparent; stroke-width: 14; pointer-events: stroke; cursor: pointer; }
+
+/* ── the palette drag's ghost ───────────────────────────────────────── */
+/* It lives on <body>, follows the pointer and never takes it — `pointer-events:
+ * none`, or the release lands on the ghost rather than on the canvas. */
+.twm-flow-graph__ghost {
+    position: fixed;
+    z-index: var(--z-toast);
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    background: var(--surface-2);
+    border: 1px solid var(--twm-flow-focus);
+    border-radius: 3px;
+    color: var(--text-body);
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-sm);
+    opacity: 0.92;
+    box-shadow: var(--shadow-md);
+}
+.twm-flow-graph__ghost .material-symbols-outlined { font-size: 16px; }
+.twm-flow-graph__ghost-label { white-space: nowrap; }
+/* ══ end FLOW · CANVAS ══ */
+
+
+/* ══ FLOW · OUTLINE ═══════════════════════════════════════════════════ */
+/* The outline editor (36 §6, the Main, AddStep, StepMenu and Run mocks): a
+ * logic flow drawn as a list of blocks. A row is indented 22px a level
+ * (`--twm-outline-depth`, set by src/flow/outline/editor.js, whose
+ * OUTLINE_INDENT is the same number); its guides are the lines at 14px +
+ * 22px a level. Every class here is set by a module under src/flow/outline/,
+ * and every class those modules set has a rule here —
+ * tests/flow_outline_css.test.mjs holds both directions. */
+
+.twm-flow-outline[hidden],
+.twm-flow-outline [hidden],
+.twm-flow-popover--menu [hidden] {
+    display: none !important;
+}
+
+.twm-flow-outline {
+    container: twm-flow-outline / inline-size;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    box-sizing: border-box;
+    background: var(--surface-0);
+    color: var(--text-body);
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-sm);
+    line-height: 1.4;
+    outline: none;
+}
+.twm-flow-outline--dragging,
+.twm-flow-outline--dragging * {
+    cursor: grabbing !important;
+    user-select: none;
+}
+.twm-flow-outline--readonly .twm-flow-outline__keys { display: none; }
+.twm-flow-outline--run .twm-flow-outline__type { display: none; }
+
+/* ── the toolbar ────────────────────────────────────────────────────── */
+.twm-flow-outline__toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    background: var(--surface-1);
+    border-bottom: 1px solid var(--border-default);
+}
+.twm-flow-outline__toolbar .twm-btn {
+    min-height: 26px;
+    padding: 0 9px;
+    font-size: var(--font-size-sm);
+    border-radius: 3px;
+}
+.twm-flow-outline__tool { white-space: nowrap; }
+.twm-flow-outline__tool--busy { cursor: progress; opacity: .7; }
+.twm-flow-outline__sep {
+    width: 1px;
+    height: 18px;
+    margin: 0 4px;
+    background: var(--border-default);
+}
+.twm-flow-outline__tool-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.twm-flow-outline__refusal {
+    max-width: 260px;
+    font-size: var(--font-size-xs);
+    color: var(--twm-flow-warning);
+}
+.twm-flow-outline__status {
+    margin-left: 8px;
+    color: var(--twm-flow-muted);
+}
+.twm-flow-outline__spacer { flex: 1 1 auto; }
+.twm-flow-outline__toolbar-end {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* ── the banners: read only, and the run drawn ─────────────────────── */
+.twm-flow-outline__readonly {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 6px 12px;
+    background: var(--twm-flow-warning-bg);
+    border-bottom: 1px solid var(--twm-flow-warning-line);
+    color: var(--twm-flow-warning-text);
+}
+.twm-flow-outline__readonly-icon {
+    flex: 0 0 auto;
+    font-size: 16px;
+    color: var(--twm-flow-warning);
+}
+.twm-flow-outline__readonly-text { min-width: 0; }
+.twm-flow-outline__banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    background: var(--twm-flow-blue-bg);
+    border-bottom: 1px solid var(--twm-flow-blue-line);
+    color: var(--twm-flow-blue-fg);
+}
+.twm-flow-outline__banner-icon {
+    flex: 0 0 auto;
+    font-size: 16px;
+    color: var(--twm-flow-blue-dot);
+}
+.twm-flow-outline__banner-text { min-width: 0; }
+
+/* ── the three columns ──────────────────────────────────────────────── */
+/* Side by side, each column scrolling on its own inside the editor's height —
+ * the list's keys line stays at its foot and a long panel scrolls past a
+ * short outline; in a narrow editor they wrap, one under the other, and the
+ * body scrolls as one. */
+.twm-flow-outline__body {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+}
+.twm-flow-outline__list {
+    flex: 0 1 440px;
+    min-width: 300px;
+    max-width: 100%;
+    min-height: 0;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--border-default);
+}
+@container twm-flow-outline (max-width: 1000px) {
+    .twm-flow-outline__body {
+        flex-wrap: wrap;
+        overflow: auto;
+    }
+    .twm-flow-outline__list { flex: 1 1 100%; border-right: 0; }
+    .twm-flow-outline__settings,
+    .twm-flow-outline__aside { overflow: visible; }
+}
+.twm-flow-outline__settings {
+    flex: 3 1 460px;
+    min-width: 0;
+    box-sizing: border-box;
+    overflow: auto;
+    background: var(--surface-1);
+    border-right: 1px solid var(--border-default);
+}
+.twm-flow-outline__aside {
+    flex: 1 1 300px;
+    min-width: 260px;
+    box-sizing: border-box;
+    padding: 16px;
+    overflow: auto;
+}
+
+/* ── the list's head, find, the status line ─────────────────────────── */
+.twm-flow-outline__list-head {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px 8px;
+}
+.twm-flow-outline__heading {
+    margin: 0;
+    font-size: 11px;
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+}
+.twm-flow-outline__count { color: var(--twm-flow-muted); }
+.twm-flow-outline__fold-all {
+    height: 22px;
+    padding: 0 7px;
+    border: 0;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--text-secondary);
+    font: inherit;
+    cursor: pointer;
+}
+.twm-flow-outline__fold-all:hover:not(:disabled) { background: var(--state-hover); }
+.twm-flow-outline__fold-all:disabled { cursor: default; opacity: .45; }
+.twm-flow-outline__find {
+    flex: 0 0 auto;
+    box-sizing: border-box;
+    width: calc(100% - 24px);
+    height: 26px;
+    margin: 0 12px 8px;
+    padding: 0 8px;
+    background: var(--twm-flow-control-bg);
+    border: 1px solid var(--twm-flow-control-border);
+    border-radius: 3px;
+    color: var(--text-primary);
+    font: inherit;
+}
+.twm-flow-outline__find:focus {
+    outline: none;
+    border-color: var(--twm-flow-focus);
+}
+.twm-flow-outline__scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    padding: 0 8px 12px;
+}
+.twm-flow-outline__message {
+    flex: 0 0 auto;
+    margin: 0 12px 6px;
+    font-size: 11px;
+    color: var(--twm-flow-warning-text);
+}
+.twm-flow-outline__keys {
+    flex: 0 0 auto;
+    margin: 0;
+    padding: 10px 12px;
+    border-top: 1px solid var(--border-subtle);
+    font-size: 11px;
+    color: var(--twm-flow-muted);
+}
+
+/* ── the tree and its rows ──────────────────────────────────────────── */
+.twm-flow-outline__tree {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+.twm-flow-outline__item,
+.twm-flow-outline__inside,
+.twm-flow-outline__arm {
+    display: flex;
+    flex-direction: column;
+}
+.twm-flow-outline__item { outline: none; }
+.twm-flow-outline__item:focus-visible > .twm-flow-outline__row {
+    outline: 2px solid var(--twm-flow-focus);
+    outline-offset: -2px;
+}
+.twm-flow-outline__item--flow { margin-bottom: 6px; }
+.twm-flow-outline__item--context > .twm-flow-outline__row { opacity: .55; }
+.twm-flow-outline__row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    box-sizing: border-box;
+    padding-left: calc(8px + var(--twm-outline-depth, 0) * 22px);
+    border-radius: 4px;
+}
+.twm-flow-outline__row--step { min-height: 42px; }
+.twm-flow-outline__row--step:hover,
+.twm-flow-outline__row--flow:hover { background-color: var(--state-hover); }
+.twm-flow-outline__row--flow {
+    gap: 10px;
+    padding: 8px 10px;
+    background: var(--surface-1);
+    border: 1px solid var(--border-subtle);
+}
+.twm-flow-outline__row--selected,
+.twm-flow-outline__row--selected:hover {
+    background: var(--twm-flow-blue-bg);
+    box-shadow: inset 0 0 0 1px var(--twm-flow-focus);
+}
+.twm-flow-outline__row--off .twm-flow-outline__title {
+    font-style: italic;
+    color: var(--text-dim);
+}
+.twm-flow-outline__row--off .twm-flow-outline__chip { opacity: .45; }
+.twm-flow-outline__row--dragging { opacity: .45; }
+.twm-flow-outline__guide {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: calc(14px + var(--twm-outline-guide, 0) * 22px);
+    width: 1px;
+    background: var(--border-default);
+    pointer-events: none;
+}
+
+/* an arm: its words in its tone — Then green, Otherwise grey, a failure amber */
+.twm-flow-outline__row--arm {
+    height: 24px;
+    gap: 6px;
+    padding-left: calc(24px + var(--twm-outline-depth, 0) * 22px);
+    font-size: 11px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--twm-flow-muted);
+}
+.twm-flow-outline__row--then { color: var(--twm-flow-ok); }
+.twm-flow-outline__row--else { color: var(--text-secondary); }
+.twm-flow-outline__row--fail { color: var(--twm-flow-warning); }
+.twm-flow-outline__row--arm.twm-flow-outline__row--off { color: var(--text-dim); }
+.twm-flow-outline__arm-icon { font-size: 13px; }
+.twm-flow-outline__arm-label { white-space: nowrap; }
+.twm-flow-outline__arm-note {
+    margin-left: auto;
+    padding-right: 8px;
+    font-weight: var(--font-weight-regular);
+    color: var(--text-muted);
+}
+.twm-flow-outline__arm-remove {
+    width: 20px;
+    height: 20px;
+    margin-left: auto;
+    margin-right: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--text-secondary);
+    opacity: .6;
+    cursor: pointer;
+}
+.twm-flow-outline__arm-note + .twm-flow-outline__arm-remove { margin-left: 0; }
+.twm-flow-outline__arm-remove .material-symbols-outlined { font-size: 14px; }
+.twm-flow-outline__row:hover > .twm-flow-outline__arm-remove,
+.twm-flow-outline__arm-remove:focus-visible { opacity: 1; }
+.twm-flow-outline__arm-remove:hover { background: var(--state-hover); }
+
+/* a foot: Next row, Go on with the next row, Then wait for every branch */
+.twm-flow-outline__row--foot {
+    height: 26px;
+    gap: 6px;
+    padding-left: calc(24px + var(--twm-outline-depth, 0) * 22px);
+    font-size: 11px;
+    color: var(--twm-flow-muted);
+}
+.twm-flow-outline__foot-icon { font-size: 13px; }
+.twm-flow-outline__foot-label { white-space: nowrap; }
+.twm-flow-outline__foot-note {
+    margin-left: auto;
+    padding-right: 8px;
+    color: var(--text-muted);
+}
+
+/* an add row: Add a step, Add a step to the loop, Add a branch */
+.twm-flow-outline__row--add { padding: 2px 8px 6px calc(24px + var(--twm-outline-depth, 0) * 22px); }
+.twm-flow-outline__row--add-top { padding-left: 8px; }
+.twm-flow-outline__row--add-top .twm-flow-outline__add { width: 100%; }
+.twm-flow-outline__add {
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 26px;
+    padding: 0 9px;
+    border: 1px dashed var(--border-strong);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 11px;
+    cursor: pointer;
+}
+.twm-flow-outline__add .material-symbols-outlined { font-size: 14px; }
+.twm-flow-outline__add:hover,
+.twm-flow-outline__add:focus-visible {
+    color: var(--twm-flow-blue-fg);
+    border-color: var(--twm-flow-focus);
+    outline: none;
+}
+.twm-flow-outline__add-label { white-space: nowrap; }
+
+/* a step row's parts */
+.twm-flow-outline__grip {
+    flex: 0 0 12px;
+    display: flex;
+    color: var(--text-muted);
+    opacity: 0;
+    cursor: grab;
+    touch-action: none;
+}
+.twm-flow-outline__grip .material-symbols-outlined { font-size: 14px; }
+.twm-flow-outline__row:hover > .twm-flow-outline__grip,
+.twm-flow-outline__row--selected > .twm-flow-outline__grip { opacity: 1; }
+.twm-flow-outline__grip--off { visibility: hidden; }
+.twm-flow-outline__fold {
+    flex: 0 0 18px;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+.twm-flow-outline__fold:hover { background: var(--state-hover); }
+.twm-flow-outline__fold .material-symbols-outlined { font-size: 16px; }
+.twm-flow-outline__fold-space { flex: 0 0 18px; }
+.twm-flow-outline__chip {
+    flex: 0 0 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 5px;
+    border-radius: 5px;
+}
+.twm-flow-outline__row--flow > .twm-flow-outline__chip { margin-left: 0; }
+.twm-flow-outline__chip .material-symbols-outlined { font-size: 15px; }
+.twm-flow-outline__chip--violet { background: var(--twm-flow-violet-bg); color: var(--twm-flow-violet-fg); }
+.twm-flow-outline__chip--teal   { background: var(--twm-flow-teal-bg);   color: var(--twm-flow-teal-fg); }
+.twm-flow-outline__chip--amber  { background: var(--twm-flow-amber-bg);  color: var(--twm-flow-amber-fg); }
+.twm-flow-outline__chip--grey   { background: var(--twm-flow-grey-bg);   color: var(--twm-flow-grey-fg); }
+.twm-flow-outline__chip--blue   { background: var(--twm-flow-blue-bg);   color: var(--twm-flow-blue-fg); }
+.twm-flow-outline__chip--indigo { background: var(--twm-flow-indigo-bg); color: var(--twm-flow-indigo-fg); }
+.twm-flow-outline__words {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 5px 4px;
+}
+.twm-flow-outline__line {
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
+    min-width: 0;
+}
+.twm-flow-outline__title {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+}
+.twm-flow-outline__row--flow .twm-flow-outline__title { font-weight: var(--font-weight-semibold); }
+.twm-flow-outline__type {
+    font-size: 11px;
+    white-space: nowrap;
+    color: var(--text-muted);
+}
+.twm-flow-outline__summary {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+.twm-flow-outline__summary--mono {
+    font-family: var(--font-family-mono);
+    font-size: 11px;
+}
+.twm-flow-outline__summary--error { color: var(--twm-flow-error); }
+.twm-flow-outline__summary--warning { color: var(--twm-flow-warning); }
+.twm-flow-outline__note {
+    flex: 0 0 auto;
+    padding: 1px 6px;
+    border-radius: 8px;
+    background: var(--surface-2);
+    font-size: 11px;
+    white-space: nowrap;
+    color: var(--text-secondary);
+}
+.twm-flow-outline__run {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    height: 20px;
+    padding: 0 7px;
+    border-radius: 10px;
+    font-size: 11px;
+    white-space: nowrap;
+}
+.twm-flow-outline__run--ok      { background: color-mix(in srgb, var(--twm-flow-ok) 14%, transparent); color: var(--twm-flow-ok); }
+.twm-flow-outline__run--warn    { background: var(--twm-flow-warning-bg); color: var(--twm-flow-warning); }
+.twm-flow-outline__run--fail    { background: var(--twm-flow-error-bg); color: var(--twm-flow-error); }
+.twm-flow-outline__run--skip    { background: var(--twm-flow-grey-bg); color: var(--text-muted); }
+.twm-flow-outline__run--running { background: var(--twm-flow-blue-bg); color: var(--twm-flow-blue-fg); }
+.twm-flow-outline__badge {
+    flex: 0 0 auto;
+    display: flex;
+    color: var(--twm-flow-error);
+}
+.twm-flow-outline__badge--warning { color: var(--twm-flow-warning); }
+.twm-flow-outline__badge .material-symbols-outlined { font-size: 15px; }
+.twm-flow-outline__menu {
+    flex: 0 0 24px;
+    width: 24px;
+    height: 24px;
+    margin-right: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--text-secondary);
+    opacity: .6;
+    cursor: pointer;
+}
+.twm-flow-outline__menu .material-symbols-outlined { font-size: 16px; }
+.twm-flow-outline__row:hover > .twm-flow-outline__menu,
+.twm-flow-outline__row--selected > .twm-flow-outline__menu,
+.twm-flow-outline__menu:focus-visible { opacity: 1; }
+.twm-flow-outline__menu:hover { background: var(--state-hover); }
+
+/* "+" between two rows: drawn on a row's bottom edge at the indent of the
+ * list it adds to, shown on the row's hover AND on its own focus; only its
+ * circle takes the pointer, so it never covers the row below */
+.twm-flow-outline__gap {
+    position: absolute;
+    z-index: 2;
+    left: calc(8px + var(--twm-outline-depth, 0) * 22px);
+    right: 8px;
+    bottom: -7px;
+    height: 14px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    opacity: 0;
+    pointer-events: none;
+}
+.twm-flow-outline__row:hover > .twm-flow-outline__gap,
+.twm-flow-outline__gap:hover,
+.twm-flow-outline__gap:focus-visible {
+    opacity: 1;
+    outline: none;
+}
+.twm-flow-outline__gap-line {
+    position: absolute;
+    left: 10px;
+    right: 0;
+    top: 6px;
+    height: 2px;
+    border-radius: 1px;
+    background: var(--twm-flow-focus);
+}
+.twm-flow-outline__gap-plus {
+    position: absolute;
+    left: 0;
+    top: -2px;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9px;
+    background: var(--twm-flow-focus);
+    color: #ffffff;
+    font-size: 13px;
+    pointer-events: none;
+    cursor: pointer;
+}
+/* the circle takes the pointer only while it is drawn: an invisible "+" must
+ * not catch a press meant for the top-left corner of the row below */
+.twm-flow-outline__row:hover > .twm-flow-outline__gap .twm-flow-outline__gap-plus,
+.twm-flow-outline__gap:focus-visible .twm-flow-outline__gap-plus { pointer-events: auto; }
+.twm-flow-outline__gap:focus-visible .twm-flow-outline__gap-plus { box-shadow: 0 0 0 2px var(--surface-0), 0 0 0 4px var(--twm-flow-focus); }
+
+/* the grip drag: a ghost under the pointer, and a drop line naming the place */
+.twm-flow-outline__ghost {
+    position: fixed;
+    z-index: var(--z-popover);
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-width: 200px;
+    max-width: 320px;
+    height: 40px;
+    padding: 0 10px;
+    background: var(--surface-2);
+    border: 1px solid var(--twm-flow-focus);
+    border-radius: 4px;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.6);
+    color: var(--text-primary);
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-sm);
+    pointer-events: none;
+    transform: rotate(-1.5deg);
+}
+.twm-flow-outline__ghost .twm-flow-outline__chip { margin-left: 0; }
+.twm-flow-outline__ghost-grip { font-size: 14px; color: var(--text-secondary); }
+.twm-flow-outline__ghost-title {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-weight: var(--font-weight-medium);
+}
+.twm-flow-outline__drop {
+    position: absolute;
+    z-index: 3;
+    left: calc(8px + var(--twm-outline-depth, 0) * 22px);
+    right: 8px;
+    height: 2px;
+    margin-top: -1px;
+    border-radius: 1px;
+    background: var(--twm-flow-focus);
+    pointer-events: none;
+}
+.twm-flow-outline__drop-label {
+    position: absolute;
+    right: 8px;
+    top: -9px;
+    box-sizing: border-box;
+    max-width: calc(100% - 16px);
+    min-height: 18px;
+    display: flex;
+    align-items: center;
+    padding: 1px 7px;
+    border-radius: 3px;
+    background: var(--twm-flow-focus);
+    color: #ffffff;
+    font-size: 11px;
+    line-height: 1.35;
+}
+.twm-flow-outline__drop--refused { background: var(--twm-flow-warning); }
+.twm-flow-outline__drop--refused .twm-flow-outline__drop-label {
+    background: var(--surface-2);
+    border: 1px solid var(--twm-flow-warning-line);
+    color: var(--twm-flow-warning-text);
+}
+
+/* the step menu (StepMenu mock), in the kit's popover */
+.twm-flow-popover--menu { width: 260px; }
+.twm-flow-outline__menu-list {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    padding: 5px;
+}
+.twm-flow-outline__menu-sub {
+    position: absolute;
+    left: calc(100% - 4px);
+    z-index: 1;
+    width: 190px;
+    background: var(--surface-1);
+    border: 1px solid var(--twm-flow-control-border);
+    border-radius: var(--radius-md);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+}
+.twm-flow-outline__menu-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 26px;
+    padding: 3px 8px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-primary);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.twm-flow-outline__menu-item:hover:not(:disabled),
+.twm-flow-outline__menu-item:focus-visible,
+.twm-flow-outline__menu-item--open {
+    outline: none;
+    background: var(--twm-flow-blue-bg);
+}
+.twm-flow-outline__menu-item:disabled {
+    color: var(--text-dim);
+    cursor: not-allowed;
+}
+.twm-flow-outline__menu-item--danger { color: var(--twm-flow-error); }
+.twm-flow-outline__menu-item--danger:disabled { color: var(--text-dim); }
+.twm-flow-outline__menu-words {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+.twm-flow-outline__menu-label { overflow-wrap: anywhere; }
+.twm-flow-outline__menu-key {
+    flex: 0 0 auto;
+    font-size: 11px;
+    color: var(--text-muted);
+}
+.twm-flow-outline__menu-sep {
+    height: 1px;
+    margin: 4px 6px;
+    background: var(--border-default);
+}
+.twm-flow-outline__menu-chip {
+    flex: 0 0 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+}
+.twm-flow-outline__menu-chip .material-symbols-outlined { font-size: 14px; }
+.twm-flow-outline__menu-chip--violet { background: var(--twm-flow-violet-bg); color: var(--twm-flow-violet-fg); }
+.twm-flow-outline__menu-chip--teal   { background: var(--twm-flow-teal-bg);   color: var(--twm-flow-teal-fg); }
+.twm-flow-outline__menu-chip--amber  { background: var(--twm-flow-amber-bg);  color: var(--twm-flow-amber-fg); }
+.twm-flow-outline__menu-chip--grey   { background: var(--twm-flow-grey-bg);   color: var(--twm-flow-grey-fg); }
+.twm-flow-outline__menu-chip--blue   { background: var(--twm-flow-blue-bg);   color: var(--twm-flow-blue-fg); }
+.twm-flow-outline__menu-chip--indigo { background: var(--twm-flow-indigo-bg); color: var(--twm-flow-indigo-fg); }
+/* ══ end FLOW · OUTLINE ══ */
+
+
+/* ══ FLOW · LANES ═════════════════════════════════════════════════════ */
+/* Owned by the lanes agent (D) (36 §2): the lane editor (twm-flow-lanes). */
+/*
+ * The lane editor: a data flow drawn as lanes, left to right. Every class is
+ * set by src/flow/lanes/editor.js, and every one it sets has a rule here
+ * (tests/flow_lanes_css.test.mjs).
+ *
+ * THE CARD SIZES BELOW MUST MATCH `LANE_GEOMETRY` in src/flow/lanes/layout.js
+ * — the layout places cards and draws wires from those numbers, the sheet
+ * sizes and clips the cards, and the suite holds the two equal.
+ */
+.twm-flow-lanes [hidden] {
+    display: none !important;
+}
+.twm-flow-lanes {
+    --twm-lanes-wire: #5b9bd5;
+    --twm-lanes-surface: #1b1b1c;
+    --twm-lanes-ring: #1683c4;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    height: 100%;
+    min-height: 0;
+    min-width: 0;
+    background: var(--surface-0);
+    color: var(--text-body);
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-sm);
+    line-height: 1.4;
+}
+.twm-flow-lanes--regular {
+    --twm-lanes-card-w: 200px;
+    --twm-lanes-card-h: 62px;
+    --twm-lanes-notch: 12px;
+    --twm-lanes-icon-w: 50px;
+    --twm-lanes-icon-w-source: 40px;
+}
+.twm-flow-lanes--small {
+    --twm-lanes-card-w: 160px;
+    --twm-lanes-card-h: 50px;
+    --twm-lanes-notch: 10px;
+    --twm-lanes-icon-w: 42px;
+    --twm-lanes-icon-w-source: 34px;
+}
+.twm-flow-lanes--strip {
+    --twm-lanes-card-w: 92px;
+    --twm-lanes-card-h: 26px;
+    --twm-lanes-notch: 8px;
+}
+.twm-flow-lanes--auto {
+    height: auto;
+}
+.twm-flow-lanes--compact {
+    height: auto;
+    background: transparent;
+}
+.twm-flow-lanes--readonly .twm-flow-lanes__flow {
+    background: #1a1a1b;
+}
+
+/* ── read only ──────────────────────────────────────────────────────── */
+.twm-flow-lanes__readonly {
+    flex: 0 0 auto;
+    padding: 7px 12px;
+    background: var(--twm-flow-warning-bg);
+    border-bottom: 1px solid var(--twm-flow-warning-line);
+    color: var(--twm-flow-warning-text);
+}
+.twm-flow-lanes__readonly-line {
+    margin: 0;
+}
+
+/* ── the toolbar ────────────────────────────────────────────────────── */
+.twm-flow-lanes__toolbar {
+    flex: 0 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    background: var(--surface-1);
+    border-bottom: 1px solid var(--border-default);
+}
+.twm-flow-lanes__toolbar .twm-btn,
+.twm-flow-lanes__form .twm-btn {
+    min-height: 26px;
+    padding: 0 9px;
+    font-size: var(--font-size-sm);
+    border-radius: 3px;
+}
+.twm-flow-lanes__toolbar-slot,
+.twm-flow-lanes__actions,
+.twm-flow-lanes__action {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+.twm-flow-lanes__toolbar-sep {
+    width: 1px;
+    height: 18px;
+    margin: 0 4px;
+    background: var(--surface-3);
+}
+.twm-flow-lanes__action--busy .twm-btn {
+    cursor: progress;
+}
+.twm-flow-lanes__refusal {
+    color: var(--twm-flow-warning);
+    font-size: var(--font-size-xs);
+}
+.twm-flow-lanes__status {
+    margin-left: 8px;
+    color: #a0a0a0;
+}
+.twm-flow-lanes__spacer {
+    flex: 1 1 auto;
+}
+.twm-flow-lanes__show-label {
+    color: var(--twm-flow-muted);
+}
+.twm-flow-lanes__show {
+    display: flex;
+    border: 1px solid var(--surface-3);
+    border-radius: 3px;
+    overflow: hidden;
+}
+.twm-flow-lanes__show-btn {
+    height: 24px;
+    padding: 0 10px;
+    border: 0;
+    background: var(--surface-2);
+    color: #c8c8c8;
+    font: inherit;
+    cursor: pointer;
+}
+.twm-flow-lanes__show-btn + .twm-flow-lanes__show-btn {
+    border-left: 1px solid var(--surface-3);
+}
+.twm-flow-lanes__show-btn[aria-pressed="true"] {
+    background: #0f6fa8;
+    color: var(--text-bright);
+}
+.twm-flow-lanes__show-btn:focus-visible,
+.twm-flow-lanes__param:focus-visible,
+.twm-flow-lanes__param-add:focus-visible,
+.twm-flow-lanes__add-source:focus-visible,
+.twm-flow-lanes__tab:focus-visible,
+.twm-flow-lanes__datatab:focus-visible,
+.twm-flow-lanes__menu-item:focus-visible {
+    outline: 2px solid var(--twm-lanes-ring);
+    outline-offset: -2px;
+}
+
+/* ── parameters ─────────────────────────────────────────────────────── */
+.twm-flow-lanes__params {
+    flex: 0 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+    padding: 7px 12px;
+    background: #222223;
+    border-bottom: 1px solid var(--border-default);
+}
+.twm-flow-lanes__params-title {
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: #c4c4c4;
+}
+.twm-flow-lanes__param {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 24px;
+    padding: 0 9px;
+    border: 1px solid var(--surface-3);
+    border-radius: 12px;
+    background: var(--twm-flow-control-bg);
+    color: var(--text-primary);
+    font: inherit;
+    cursor: pointer;
+}
+.twm-flow-lanes__param:hover,
+.twm-flow-lanes__param-add:hover,
+.twm-flow-lanes__add-source:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+.twm-flow-lanes__param-name {
+    font-family: var(--font-family-mono);
+    color: var(--twm-flow-violet-fg);
+}
+.twm-flow-lanes__param-line {
+    color: var(--twm-flow-muted);
+}
+.twm-flow-lanes__param-add {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    height: 24px;
+    padding: 0 8px;
+    border: 1px dashed #4a4a4a;
+    border-radius: 12px;
+    background: transparent;
+    color: #b0b0b0;
+    font: inherit;
+    font-size: var(--font-size-xs);
+    cursor: pointer;
+}
+.twm-flow-lanes__param-add .material-symbols-outlined,
+.twm-flow-lanes__add-source .material-symbols-outlined {
+    font-size: 14px;
+}
+.twm-flow-lanes__params-help {
+    color: #a0a0a0;
+    font-size: var(--font-size-xs);
+}
+
+/* ── the lanes ──────────────────────────────────────────────────────── */
+.twm-flow-lanes__flow {
+    flex: 0 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    background: var(--twm-lanes-surface);
+    border-bottom: 1px solid var(--border-default);
+}
+.twm-flow-lanes__banner {
+    margin: 8px 16px 0;
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    background: var(--twm-flow-blue-bg);
+    color: var(--twm-flow-blue-fg);
+}
+.twm-flow-lanes__scroller {
+    overflow-x: auto;
+    padding: 14px 0 6px;
+}
+/* The page's own scrollbars may be light; these sit on dark surfaces. */
+.twm-flow-lanes__scroller,
+.twm-flow-lanes__flow,
+.twm-flow-lanes__settings,
+.twm-flow-lanes__databody {
+    scrollbar-color: #4a4a4a transparent;
+}
+.twm-flow-lanes__surface {
+    position: relative;
+    z-index: 0;
+    margin: 0 16px;
+}
+.twm-flow-lanes__empty {
+    margin: 0;
+    padding: 18px 16px 4px;
+    color: var(--twm-flow-muted);
+}
+/* A lane: its band is a pseudo-element, so the lane itself has no border and
+ * a card's `left`/`top` inside it are exactly the layout's numbers. */
+.twm-flow-lanes__lane {
+    position: absolute;
+    left: 0;
+    right: 0;
+}
+.twm-flow-lanes__lane::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    box-sizing: border-box;
+    border: 1px dashed #2c2c2c;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.018);
+}
+.twm-flow-lanes__lane--unconnected::before {
+    border-color: var(--twm-flow-warning-line);
+}
+.twm-flow-lanes__flag {
+    position: absolute;
+    top: -8px;
+    left: 12px;
+    padding: 0 6px;
+    font-size: 10px;
+    line-height: 16px;
+    color: var(--twm-flow-warning);
+    background: var(--twm-lanes-surface);
+}
+.twm-flow-lanes__wires {
+    position: absolute;
+    left: 0;
+    top: 0;
+    z-index: 1;
+    overflow: visible;
+    pointer-events: none;
+}
+.twm-flow-lanes__wire {
+    fill: none;
+    stroke: var(--twm-lanes-wire);
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+.twm-flow-lanes__wire--cycle {
+    stroke: var(--twm-flow-error);
+    stroke-dasharray: 4 3;
+}
+.twm-flow-lanes__port {
+    fill: var(--twm-lanes-wire);
+    stroke: var(--twm-lanes-surface);
+    stroke-width: 3;
+}
+
+/* ── a card: an unclipped holder (focus, selection, "+") round a clipped body ── */
+.twm-flow-lanes__node {
+    position: absolute;
+    z-index: 2;
+    width: var(--twm-lanes-card-w);
+    height: var(--twm-lanes-card-h);
+}
+.twm-flow-lanes__node--teal,
+.twm-flow-lanes__tab--teal {
+    --twm-lanes-icon-bg: var(--twm-flow-teal-icon-bg);
+    --twm-lanes-text-bg: var(--twm-flow-teal-text-bg);
+    --twm-lanes-fg: var(--twm-flow-teal-fg);
+    --twm-lanes-dot: var(--twm-flow-teal-dot);
+}
+.twm-flow-lanes__node--indigo,
+.twm-flow-lanes__tab--indigo {
+    --twm-lanes-icon-bg: var(--twm-flow-indigo-icon-bg);
+    --twm-lanes-text-bg: var(--twm-flow-indigo-text-bg);
+    --twm-lanes-fg: var(--twm-flow-indigo-fg);
+    --twm-lanes-dot: var(--twm-flow-indigo-dot);
+}
+.twm-flow-lanes__node--violet,
+.twm-flow-lanes__tab--violet {
+    --twm-lanes-icon-bg: var(--twm-flow-violet-icon-bg);
+    --twm-lanes-text-bg: var(--twm-flow-violet-text-bg);
+    --twm-lanes-fg: var(--twm-flow-violet-fg);
+    --twm-lanes-dot: var(--twm-flow-violet-dot);
+}
+.twm-flow-lanes__node--amber,
+.twm-flow-lanes__tab--amber {
+    --twm-lanes-icon-bg: var(--twm-flow-amber-icon-bg);
+    --twm-lanes-text-bg: var(--twm-flow-amber-text-bg);
+    --twm-lanes-fg: var(--twm-flow-amber-fg);
+    --twm-lanes-dot: var(--twm-flow-amber-dot);
+}
+.twm-flow-lanes__node--blue,
+.twm-flow-lanes__tab--blue {
+    --twm-lanes-icon-bg: var(--twm-flow-blue-icon-bg);
+    --twm-lanes-text-bg: var(--twm-flow-blue-text-bg);
+    --twm-lanes-fg: var(--twm-flow-blue-fg);
+    --twm-lanes-dot: var(--twm-flow-blue-dot);
+}
+.twm-flow-lanes__node--grey,
+.twm-flow-lanes__tab--grey {
+    --twm-lanes-icon-bg: var(--twm-flow-grey-icon-bg);
+    --twm-lanes-text-bg: var(--twm-flow-grey-text-bg);
+    --twm-lanes-fg: var(--twm-flow-grey-fg);
+    --twm-lanes-dot: var(--twm-flow-grey-dot);
+}
+.twm-flow-lanes__card {
+    display: block;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    outline: none;
+}
+/* The ring is a `drop-shadow` on the unclipped holder: a clip-path cuts a
+ * box-shadow off, a filter on its parent follows the clipped shape. */
+.twm-flow-lanes__node--warning .twm-flow-lanes__card {
+    filter: drop-shadow(0 0 1px var(--twm-flow-warning)) drop-shadow(0 0 1px var(--twm-flow-warning));
+}
+.twm-flow-lanes__node--error .twm-flow-lanes__card {
+    filter: drop-shadow(0 0 1px var(--twm-flow-error)) drop-shadow(0 0 1px var(--twm-flow-error));
+}
+.twm-flow-lanes__node--selected .twm-flow-lanes__card,
+.twm-flow-lanes__card:focus-visible {
+    filter: drop-shadow(0 0 1px var(--twm-lanes-ring)) drop-shadow(0 0 1px var(--twm-lanes-ring))
+            drop-shadow(0 0 5px rgba(22, 131, 196, 0.8));
+}
+.twm-flow-lanes__card:hover .twm-flow-lanes__body {
+    filter: brightness(1.12);
+}
+.twm-flow-lanes__body {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    background: var(--twm-lanes-text-bg);
+}
+/* Three shapes: a source flat on the left, a step notched, a sink flat on the right. */
+.twm-flow-lanes__node--source .twm-flow-lanes__body {
+    clip-path: polygon(0 0, calc(100% - var(--twm-lanes-notch)) 0, 100% 50%,
+                       calc(100% - var(--twm-lanes-notch)) 100%, 0 100%);
+}
+.twm-flow-lanes__node--transform .twm-flow-lanes__body,
+.twm-flow-lanes__node--operation .twm-flow-lanes__body {
+    clip-path: polygon(0 0, calc(100% - var(--twm-lanes-notch)) 0, 100% 50%,
+                       calc(100% - var(--twm-lanes-notch)) 100%, 0 100%, var(--twm-lanes-notch) 50%);
+}
+.twm-flow-lanes__node--sink .twm-flow-lanes__body {
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, var(--twm-lanes-notch) 50%);
+}
+.twm-flow-lanes__icon {
+    flex: 0 0 var(--twm-lanes-icon-w);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    padding-left: calc(var(--twm-lanes-notch) - 2px);
+    background: var(--twm-lanes-icon-bg);
+    color: var(--twm-lanes-fg);
+    overflow: hidden;
+}
+.twm-flow-lanes__node--source .twm-flow-lanes__icon {
+    flex-basis: var(--twm-lanes-icon-w-source);
+    padding-left: 0;
+}
+.twm-flow-lanes__icon .material-symbols-outlined {
+    font-size: 18px;
+    line-height: 1;
+}
+.twm-flow-lanes__sep {
+    flex: 0 0 1px;
+    background: rgba(255, 255, 255, 0.08);
+}
+.twm-flow-lanes__text {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 1px;
+    padding: 0 18px 0 9px;
+}
+.twm-flow-lanes__title,
+.twm-flow-lanes__sub,
+.twm-flow-lanes__line {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.twm-flow-lanes__title {
+    color: #ececec;
+    font-weight: 600;
+}
+.twm-flow-lanes__sub {
+    color: #b0b0b0;
+    font-size: var(--font-size-xs);
+}
+.twm-flow-lanes__line {
+    font-size: 10px;
+}
+.twm-flow-lanes__line--ok { color: var(--twm-flow-ok); }
+.twm-flow-lanes__line--warning { color: var(--twm-flow-warning); }
+.twm-flow-lanes__line--error { color: var(--twm-flow-error); }
+.twm-flow-lanes__line--muted { color: #b0b0b0; }
+.twm-flow-lanes__line--info { color: var(--twm-flow-blue-fg); }
+/* "+" on the card's right tip: on hover, on focus and on the chosen card —
+ * never on hover alone. */
+.twm-flow-lanes__add {
+    position: absolute;
+    right: -14px;
+    top: -9px;
+    z-index: 3;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 1px solid #4a4a4a;
+    border-radius: 9px;
+    background: var(--surface-1);
+    color: #d0d0d0;
+    cursor: pointer;
+    opacity: 0;
+}
+.twm-flow-lanes__node:hover .twm-flow-lanes__add,
+.twm-flow-lanes__node:focus-within .twm-flow-lanes__add,
+.twm-flow-lanes__node--selected .twm-flow-lanes__add {
+    opacity: 1;
+}
+.twm-flow-lanes__add:hover,
+.twm-flow-lanes__add:focus-visible {
+    background: var(--twm-lanes-ring);
+    border-color: var(--twm-lanes-ring);
+    color: var(--text-bright);
+    outline: none;
+}
+.twm-flow-lanes__add .material-symbols-outlined {
+    font-size: 14px;
+    line-height: 1;
+}
+
+/* the small cards: a title and one line */
+.twm-flow-lanes--small .twm-flow-lanes__sub {
+    display: none;
+}
+.twm-flow-lanes--small .twm-flow-lanes__text {
+    padding: 0 16px 0 8px;
+}
+.twm-flow-lanes--small .twm-flow-lanes__line {
+    font-size: 10.5px;
+}
+.twm-flow-lanes--small .twm-flow-lanes__icon .material-symbols-outlined {
+    font-size: 14px;
+}
+
+/* the compact strip: a title a card, and nothing to press */
+.twm-flow-lanes--compact .twm-flow-lanes__flow {
+    background: transparent;
+    border-bottom: 0;
+    overflow: visible;
+}
+.twm-flow-lanes--compact .twm-flow-lanes__scroller {
+    padding: 0;
+}
+.twm-flow-lanes--compact .twm-flow-lanes__surface {
+    margin: 0;
+}
+.twm-flow-lanes--strip .twm-flow-lanes__lane::before {
+    display: none;
+}
+.twm-flow-lanes--strip .twm-flow-lanes__body {
+    background: var(--twm-lanes-icon-bg);
+}
+.twm-flow-lanes--strip .twm-flow-lanes__text {
+    padding: 0 12px 0 13px;
+}
+.twm-flow-lanes--strip .twm-flow-lanes__node--source .twm-flow-lanes__text {
+    padding: 0 12px 0 8px;
+}
+.twm-flow-lanes--strip .twm-flow-lanes__node--sink .twm-flow-lanes__text {
+    padding: 0 6px 0 13px;
+}
+.twm-flow-lanes--strip .twm-flow-lanes__title {
+    color: #e6e6e6;
+    font-size: 10.5px;
+    font-weight: 400;
+}
+
+/* ── under the lanes: Add a source ──────────────────────────────────── */
+.twm-flow-lanes__foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 16px;
+    padding: 4px 16px 12px;
+}
+.twm-flow-lanes__add-source {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 12px;
+    border: 1px dashed #4a4a4a;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: #b8b8b8;
+    font: inherit;
+    cursor: pointer;
+}
+.twm-flow-lanes__hint {
+    color: #9a9a9a;
+    font-size: var(--font-size-xs);
+}
+
+/* ── a tab per step ─────────────────────────────────────────────────── */
+.twm-flow-lanes__tabs {
+    flex: 0 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 0 2px;
+    padding: 0 12px;
+    background: var(--surface-1);
+    border-bottom: 1px solid var(--border-default);
+}
+.twm-flow-lanes__tab,
+.twm-flow-lanes__datatab {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    height: 32px;
+    padding: 0 11px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    color: #b4b4b4;
+    font: inherit;
+    cursor: pointer;
+}
+.twm-flow-lanes__tab:hover,
+.twm-flow-lanes__datatab:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+.twm-flow-lanes__tab[aria-selected="true"],
+.twm-flow-lanes__datatab[aria-pressed="true"] {
+    border-bottom-color: var(--twm-lanes-ring);
+    color: var(--text-bright);
+}
+.twm-flow-lanes__tab-dot {
+    flex: 0 0 7px;
+    height: 7px;
+    border-radius: 4px;
+    background: var(--twm-lanes-dot);
+}
+.twm-flow-lanes__tab-label {
+    max-width: 220px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ── the dock: the settings beside what the step gives ──────────────── */
+.twm-flow-lanes__dock {
+    flex: 1 1 0;
+    min-height: 240px;
+    display: flex;
+    align-items: stretch;
+}
+.twm-flow-lanes--auto .twm-flow-lanes__dock {
+    flex: 0 0 auto;
+}
+.twm-flow-lanes__settings {
+    flex: 1 1 400px;
+    min-width: 260px;
+    min-height: 0;
+    overflow-y: auto;
+    background: #232324;
+    border-right: 1px solid var(--border-default);
+}
+.twm-flow-lanes__settings .twm-flow-panel {
+    background: transparent;
+}
+.twm-flow-lanes__settings-hint {
+    margin: 0;
+    padding: 16px 20px;
+    color: var(--twm-flow-muted);
+}
+.twm-flow-lanes__data {
+    flex: 1.2 1 440px;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+.twm-flow-lanes__datatabs {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: stretch;
+    gap: 0 2px;
+    padding: 0 12px;
+    border-bottom: 1px solid var(--border-default);
+}
+.twm-flow-lanes__datastate {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    color: #a0a0a0;
+    font-size: var(--font-size-xs);
+    white-space: nowrap;
+}
+.twm-flow-lanes__datastate-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.twm-flow-lanes__datastate-dot {
+    flex: 0 0 7px;
+    height: 7px;
+    border-radius: 4px;
+}
+.twm-flow-lanes__datastate--ok .twm-flow-lanes__datastate-dot { background: var(--twm-flow-ok); }
+.twm-flow-lanes__datastate--busy .twm-flow-lanes__datastate-dot { background: var(--twm-flow-warning); }
+.twm-flow-lanes__datastate--error .twm-flow-lanes__datastate-dot { background: var(--twm-flow-error); }
+.twm-flow-lanes__databody {
+    flex: 1 1 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 0 14px 12px;
+    overflow: auto;
+}
+.twm-flow-lanes__caption {
+    flex: 0 0 auto;
+    margin: 0;
+    padding: 8px 0 6px;
+    color: #b4b4b4;
+}
+/* A DataTable fills this box, so the box has a size: one with none draws a
+ * header and no rows. */
+.twm-flow-lanes__table {
+    flex: 1 1 0;
+    min-height: 120px;
+    border: 1px solid #333;
+    border-radius: 3px;
+    overflow: hidden;
+}
+.twm-flow-lanes__cell--new,
+.twm-flow-lanes__cell--changed {
+    background: rgba(22, 131, 196, 0.07);
+}
+.twm-flow-lanes__error {
+    flex: 0 0 auto;
+    margin: 8px 0 0;
+    padding: 7px 10px;
+    border-radius: var(--radius-sm);
+    background: var(--twm-flow-error-bg);
+    border: 1px solid var(--twm-flow-error-line);
+    color: var(--twm-flow-error-text);
+}
+.twm-flow-lanes__nodata {
+    margin: 0;
+    padding: 12px 0;
+    color: var(--twm-flow-muted);
+}
+.twm-flow-lanes__columns {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px 12px;
+}
+.twm-flow-lanes__column {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+    padding: 5px 8px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+.twm-flow-lanes__column--new,
+.twm-flow-lanes__column--changed {
+    background: rgba(22, 131, 196, 0.14);
+}
+.twm-flow-lanes__column-name {
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-xs);
+    color: #e6e6e6;
+}
+.twm-flow-lanes__column-type {
+    color: #9a9a9a;
+    font-size: var(--font-size-xs);
+}
+.twm-flow-lanes__column--new .twm-flow-lanes__column-type,
+.twm-flow-lanes__column--changed .twm-flow-lanes__column-type {
+    color: #9fd0f0;
+}
+.twm-flow-lanes__column-origin {
+    margin-left: auto;
+    color: #a0a0a0;
+    font-size: var(--font-size-xs);
+    text-align: right;
+}
+.twm-flow-lanes__rejects {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.twm-flow-lanes__reject {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 12px;
+    padding: 7px 10px;
+    background: var(--twm-flow-warning-bg);
+    border: 1px solid var(--twm-flow-warning-line);
+    border-radius: var(--radius-sm);
+}
+.twm-flow-lanes__reject-key {
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-xs);
+    color: #ecc788;
+}
+.twm-flow-lanes__reject-value {
+    color: var(--text-primary);
+}
+.twm-flow-lanes__reject-reason {
+    flex: 1 1 260px;
+    color: #d0c0a4;
+}
+
+/* ── a parameter's form and a card's menu, in the kit's popover ─────── */
+.twm-flow-lanes__popover {
+    min-width: 220px;
+}
+.twm-flow-lanes__form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    box-sizing: border-box;
+    width: 320px;
+    max-width: 100%;
+    padding: 12px;
+}
+.twm-flow-lanes__form-title {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.twm-flow-lanes__form-row {
+    display: grid;
+    grid-template-columns: 90px minmax(0, 1fr);
+    align-items: center;
+    gap: 8px;
+}
+.twm-flow-lanes__form-label {
+    color: #c8c8c8;
+}
+.twm-flow-lanes__form-control {
+    display: block;
+    min-width: 0;
+}
+.twm-flow-lanes__form-refusal {
+    margin: 0;
+    color: var(--twm-flow-error);
+}
+.twm-flow-lanes__form-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+}
+.twm-flow-lanes__menu {
+    display: flex;
+    flex-direction: column;
+    min-width: 200px;
+    padding: 4px;
+}
+.twm-flow-lanes__menu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 28px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--text-body);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.twm-flow-lanes__menu-item:hover,
+.twm-flow-lanes__menu-item:focus-visible {
+    background: var(--state-active);
+}
+.twm-flow-lanes__menu-item:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+.twm-flow-lanes__menu-item--danger {
+    color: var(--twm-flow-error);
+}
+.twm-flow-lanes__menu-item .material-symbols-outlined {
+    font-size: 16px;
+    line-height: 1;
+}
+/* ══ end FLOW · LANES ══ */

@@ -24,7 +24,7 @@ const UI = join(ROOT, 'ui', 'js');
 
 // Node has no import map; write the equivalent as alias packages. Same files
 // ui/index.html maps `@flexdesk/*` to.
-for (const name of ['core', 'wm', 'widgets']) {
+for (const name of ['canvas', 'core', 'flow', 'host', 'wm', 'widgets']) {
     const dir = join(ROOT, 'node_modules', '@flexdesk', name);
     if (existsSync(join(dir, 'index.js'))) continue;
     mkdirSync(dir, { recursive: true });

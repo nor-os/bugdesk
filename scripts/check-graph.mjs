@@ -21,7 +21,9 @@ const UI = join(ROOT, 'ui');
 
 // Mirrors ui/index.html's import map.
 const IMPORT_MAP = {
+    '@flexdesk/canvas': `${UI}/vendor/flexdesk/canvas.js`,
     '@flexdesk/core': `${UI}/vendor/flexdesk/core.js`,
+    '@flexdesk/flow': `${UI}/vendor/flexdesk/flow.js`,
     '@flexdesk/host': `${UI}/vendor/flexdesk/host.js`,
     '@flexdesk/wm': `${UI}/vendor/flexdesk/wm.js`,
     '@flexdesk/widgets': `${UI}/vendor/flexdesk/widgets.js`,
