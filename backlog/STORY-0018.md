@@ -2,10 +2,10 @@
 id: 18
 type: story
 title: "Make the built-in workflow moves configurable"
-status: refined
+status: in-progress
 parent: 17
 phase:
-assignee:
+assignee: norman_agent
 reporter: norman
 due:
 points: 5
@@ -13,7 +13,7 @@ subsystem: unsorted
 labels: []
 links: [requires 23]
 created: 2026-10-05
-updated: 2026-10-11T13:39Z
+updated: 2026-10-12T13:42Z
 ---
 
 ## Description
@@ -50,6 +50,8 @@ state machine, not a step flow._
 ## History
 
 - 2026-10-05 · norman_agent · status: draft -> refined
+- 2026-10-12 · norman_agent · status: refined -> in-progress
+- 2026-10-12 · norman_agent · assignee: (unset) -> norman_agent
 
 ## Comments
 
