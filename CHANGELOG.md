@@ -73,6 +73,13 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Stopping BugDesk no longer hangs on "Application is shutting down...".**
+  Every open browser holds a live-update stream, and the server waited for each
+  to be closed by the browser — which never happens — until the host's 30
+  second timeout ran out. The streams now end when shutdown starts (about a
+  tenth of a second with several open), the timeout is down to 5 seconds as a
+  backstop, and the record caches are written out on the way.
+
 - A new record's id is one above every id the checkout has ever seen for that
   store — the folder, any record added on any branch git knows (including
   deleted ones) and the store's trash — not just the folder's highest plus one.

@@ -87,9 +87,17 @@ if (mode == "tracker" && string.IsNullOrEmpty(Env("ASPNETCORE_URLS")))
     if (port > 0) builder.WebHost.UseUrls($"http://127.0.0.1:{port}");
 }
 
+// Nothing here needs a long drain: requests are short, and the live-update
+// streams are ended explicitly when the app stops (see /api/events). This is
+// only the backstop for something that does not listen.
+builder.Services.Configure<HostOptions>(o => o.ShutdownTimeout = TimeSpan.FromSeconds(5));
+
 var app = builder.Build();
 
 var stores = new StoreRegistry(projectsFile, app.Logger, ResolveStateDir(app.Environment.ContentRootPath));
+// Close the stores on the way out, so a record cache's pending write is flushed
+// rather than dropped with the process.
+app.Lifetime.ApplicationStopped.Register(() => { foreach (var s in stores.Open()) s.Dispose(); });
 if (mode == "tracker")
 {
     stores.Standalone = true;
@@ -1500,8 +1508,16 @@ app.MapPost("/api/workspace_state_write", async (HttpRequest req) =>
 
 // ---- Live updates: the stream ---------------------------------------------
 // One long-lived response per open browser.
-app.MapGet("/api/events", async (HttpContext http, CancellationToken ct) =>
+//
+// The stream ends when the browser goes away OR when the app is stopping.
+// Without the second, Kestrel waits for every open stream to finish on its own
+// — which only happens when the browser closes — and the host gives up only
+// after its whole ShutdownTimeout: Ctrl+C sat on "Application is shutting
+// down..." for 30 seconds per stalled wait.
+app.MapGet("/api/events", async (HttpContext http, IHostApplicationLifetime life, CancellationToken aborted) =>
 {
+    using var linked = CancellationTokenSource.CreateLinkedTokenSource(aborted, life.ApplicationStopping);
+    var ct = linked.Token;
     http.Response.Headers.ContentType = "text/event-stream";
     http.Response.Headers.CacheControl = "no-cache, no-transform";
     // Tells nginx and friends not to buffer; without it the stream is invisible
