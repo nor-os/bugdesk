@@ -1111,3 +1111,31 @@ tr[draggable="true"]:active,
 .bd-workflow__ahdr { font-size: 10.5px; color: var(--text-dim, #666); }
 .bd-workflow__lede { margin: 0 0 10px; line-height: 1.6; max-width: 70ch; }
 .bd-workflow__lede code { font-size: 10.5px; }
+
+/* ── Changes pane (changes_pane.js) ─────────────────────────────── */
+.twm-bp__body[hidden] { display: none !important; }
+.bd-changes { display: flex; flex-direction: column; height: 100%; min-height: 0; gap: 6px; font-size: 11.5px; }
+.bd-changes--off { padding: 10px; gap: 4px; }
+.bd-changes__bar, .bd-changes__commit { display: flex; align-items: center; gap: 8px; }
+.bd-changes__bar .material-symbols-outlined, .bd-changes__commit .material-symbols-outlined,
+.bd-changes__file .material-symbols-outlined, .bd-changes__msg .material-symbols-outlined { font-size: 14px; vertical-align: -2px; }
+.bd-changes__commit .ea-tin { flex: 1; }
+.bd-changes__commit .ea-btn { display: inline-flex; align-items: center; gap: 4px; }
+.bd-changes__body { display: grid; grid-template-columns: minmax(180px, 30%) 1fr; gap: 8px; flex: 1 1 auto; min-height: 60px; }
+.bd-changes__files { overflow-y: auto; border-right: 1px solid var(--border-subtle, #2a2a2a); }
+.bd-changes__file {
+    display: grid; grid-template-columns: 18px 1fr auto; align-items: center; gap: 4px; width: 100%;
+    padding: 3px 6px; font: inherit; color: var(--text-secondary, #9a9a9a); text-align: left;
+    background: none; border: none; border-radius: var(--radius-sm, 4px); cursor: pointer;
+}
+.bd-changes__file:hover, .bd-changes__file--on { background: var(--surface-2, #2d2d2d); color: var(--text-primary, #e0e0e0); }
+.bd-changes__diff { overflow: auto; min-width: 0; }
+.bd-changes__empty { padding: 6px; font-style: italic; }
+.bd-diff { font-family: var(--font-family-mono, ui-monospace, monospace); font-size: 11px; white-space: pre; }
+.bd-diff__line--add { color: #89d185; background: rgb(137 209 133 / 8%); }
+.bd-diff__line--del { color: #f48771; background: rgb(244 135 113 / 8%); }
+.bd-diff__line--hunk { color: #4fc1ff; }
+.bd-changes__msg { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px; padding: 6px 8px; border-radius: var(--radius-sm, 4px); }
+.bd-changes__msg pre { flex-basis: 100%; margin: 0; white-space: pre-wrap; font-size: 10.5px; }
+.bd-changes__msg--ok { background: rgb(137 209 133 / 10%); color: #89d185; }
+.bd-changes__msg--err { background: rgb(244 135 113 / 12%); color: #f48771; }

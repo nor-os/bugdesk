@@ -2161,9 +2161,11 @@ function mountTicketBottomPanel(host, props, ctx) {
     host.innerHTML = `
         <div class="twm-bp">
             <div class="twm-bp__tabs" role="tablist">
-                <button class="twm-bp__tab twm-bp__tab--on" role="tab">Console</button>
+                <button class="twm-bp__tab twm-bp__tab--on" role="tab" data-bptab="console" aria-selected="true">Console</button>
+                <button class="twm-bp__tab" role="tab" data-bptab="changes" aria-selected="false">Changes</button>
             </div>
-            <div class="twm-bp__body" role="tabpanel">
+            <div class="twm-bp__body" role="tabpanel" data-bppanel="changes" hidden></div>
+            <div class="twm-bp__body" role="tabpanel" data-bppanel="console">
                 <div class="td-audit">
                     <div><span class="td-dim td-mono">—</span> <span class="td-link">bugdesk</span> — markdown bug store is the source of truth (BUGDESK_BUGS)</div>
                     <div><span class="td-dim td-mono">—</span> <span class="td-link">store</span> — ${esc(line)}</div>
@@ -2171,7 +2173,25 @@ function mountTicketBottomPanel(host, props, ctx) {
                 </div>
             </div>
         </div>`;
-    return { title: 'Console' };
+    // Changes: the store's uncommitted records, mounted when first shown.
+    let changes = null;
+    host.addEventListener('click', async (e) => {
+        const tab = e.target.closest('[data-bptab]');
+        if (!tab) return;
+        for (const t of host.querySelectorAll('[data-bptab]')) {
+            const on = t === tab;
+            t.classList.toggle('twm-bp__tab--on', on);
+            t.setAttribute('aria-selected', String(on));
+        }
+        for (const p of host.querySelectorAll('[data-bppanel]')) p.hidden = p.dataset.bppanel !== tab.dataset.bptab;
+        if (tab.dataset.bptab === 'changes') {
+            if (!changes) {
+                const { mountChangesPane } = await import('./changes_pane.js');
+                changes = mountChangesPane(host.querySelector('[data-bppanel="changes"]'), { eventBus: _eventBus });
+            } else changes.refresh();
+        }
+    });
+    return { title: 'Console', destroy: () => changes?.destroy() };
 }
 
 /* ── the Tracker section, inside a project page ──────────────────── */

@@ -1758,6 +1758,64 @@ app.MapPost("/api/project/numbering", async (HttpRequest req) =>
     return Results.Json(new { ok = true, numbering = saved.ToJson() }, json);
 });
 
+// ---- Git: the Changes pane and "commit after save" (GitService.cs) ---------
+
+object GitPayload(Store s) => new
+{
+    ok = true,
+    enabled = s.Git.Enabled,
+    reason = s.Git.Enabled ? null : "This store is not in a git repository, so there is nothing to commit or push.",
+    root = s.Git.Root,
+    branch = s.Git.Branch(),
+    ahead = s.Git.Ahead(),
+    settings = GitSettings.Parse(s.Project.Document()["git"]).ToJson(),
+    files = s.Git.Changes().Select(c => new { path = c.Path, status = c.Status }),
+    pushing = s.Git.Pushing,
+    lastPush = s.Git.LastPush is { } lp ? new { at = lp.At.ToString("O"), ok = lp.Ok, message = lp.Message } : null,
+};
+
+app.MapGet("/api/git", () => Results.Json(GitPayload(Req.Store), json));
+
+app.MapGet("/api/git/diff", (string? path) =>
+    Results.Json(new { ok = true, path, diff = Req.Store.Git.Diff(path ?? "") }, json));
+
+// Commit the files the pane lists (or the ones named), with the message typed.
+app.MapPost("/api/git/commit", async (HttpRequest req) =>
+{
+    var body = await JsonSerializer.DeserializeAsync<Dictionary<string, JsonElement>>(req.Body, json) ?? new();
+    var git = Req.Store.Git;
+    if (!git.Enabled) return Results.Json(new { ok = false, error = "this store is not in a git repository" }, json, statusCode: 409);
+    var message = body.TryGetValue("message", out var mv) && mv.ValueKind == JsonValueKind.String ? (mv.GetString() ?? "").Trim() : "";
+    var files = body.TryGetValue("files", out var fv) && fv.ValueKind == JsonValueKind.Array
+        ? fv.EnumerateArray().Select(e => e.GetString() ?? "").Where(f => f.Length > 0).ToList()
+        : git.Changes().Select(c => c.Path).ToList();
+    if (files.Count == 0) return Results.Json(new { ok = false, error = "nothing to commit" }, json, statusCode: 400);
+    if (message.Length == 0)
+        message = files.Count == 1 ? $"{Path.GetFileNameWithoutExtension(files[0])}: record edits from the UI" : "Record edits from the UI";
+    var error = git.Commit(files, message);
+    if (error is not null) return Results.Json(new { ok = false, error }, json, statusCode: 409);
+    Req.Store.Watcher.Broadcast("git", "{}");
+    return Results.Json(GitPayload(Req.Store), json);
+});
+
+// Push in the background; the pane asks again (or hears the `git` event) for the result.
+app.MapPost("/api/git/push", () =>
+{
+    var store = Req.Store;
+    if (!store.Git.Enabled) return Results.Json(new { ok = false, error = "this store is not in a git repository" }, json, statusCode: 409);
+    store.Git.PushInBackground(() => store.Watcher.Broadcast("git", "{}"));
+    return Results.Json(GitPayload(store), json);
+});
+
+app.MapPost("/api/project/git", async (HttpRequest req) =>
+{
+    var body = await JsonSerializer.DeserializeAsync<Dictionary<string, JsonElement>>(req.Body, json) ?? new();
+    bool B(string k) => body.TryGetValue(k, out var v) && v.ValueKind == JsonValueKind.True;
+    var next = new GitSettings(B("commitAfterSave"), B("pushAfterCommit") && B("commitAfterSave"));
+    Req.Store.Project.SetKey("git", next.ToJson());
+    return Results.Json(GitPayload(Req.Store), json);
+});
+
 // The workflow, saved from Settings › Workflow. Checked against the schema and
 // refused whole on any problem, each with where it is and, for a flow step, the
 // step's id — the editor shows them in its findings strip with Go to it.

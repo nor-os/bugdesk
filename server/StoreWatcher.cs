@@ -242,7 +242,7 @@ sealed class StoreWatcher : IDisposable
 
     public int SubscriberCount { get { lock (_gate) return _subscribers.Count; } }
 
-    void Broadcast(string eventName, string json)
+    public void Broadcast(string eventName, string json)
     {
         var frame = $"event: {eventName}\ndata: {json}\n\n";
         Channel<string>[] subs;

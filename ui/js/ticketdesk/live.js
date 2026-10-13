@@ -78,6 +78,9 @@ export function installLiveUpdates({ eventBus, logger } = {}) {
         }
     });
 
+    // A commit or a push finished (GitService.cs) — the Changes pane redraws.
+    _source.addEventListener('git', () => { _bus?.emit?.(ev('git:changed'), {}); });
+
     // EventSource reconnects on its own; this is only so a persistent failure is
     // visible in the console rather than looking like a store that never changes.
     _source.addEventListener('error', () => {

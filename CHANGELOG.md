@@ -7,6 +7,16 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Commit, push and a Changes pane** (STORY-0006). The bottom panel's new
+  *Changes* tab lists the store's uncommitted record files with their diffs,
+  and has a commit message, *Commit* and *Push*. Its two switches, *Commit after
+  save* and *Push after commit* (off by default, as before), make every save in
+  BugDesk commit the record it wrote as `BUG-0042: record edits from the UI`,
+  and push it. BugDesk only ever stages record files in its stores, by path, so
+  code and other files in the repo are never swept in. A failed push (rejected,
+  no remote, no credentials) is shown with git's message; the commit stays
+  local. A store outside a git repository says so, and the switches are off.
+
 - **Your own prefixes and numbering** (STORY-0002). Settings › Numbering sets,
   per store, the prefix of new records (one for bugs, one per backlog type), how
   far their number is zero-padded (0 for none), the first number and the

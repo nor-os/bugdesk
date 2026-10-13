@@ -247,6 +247,17 @@ class ProjectConfig
         }
     }
 
+    /// <summary>Set one top-level key of the document (a settings block).</summary>
+    public void SetKey(string key, JsonNode value)
+    {
+        lock (_gate)
+        {
+            var doc = Read() ?? new JsonObject();
+            doc[key] = value.DeepClone();
+            Write(doc);
+        }
+    }
+
     /// <summary>The whole document, for the UI to render and for future keys.</summary>
     public JsonObject Document() => Read() ?? new JsonObject { ["collaborators"] = new JsonArray() };
 

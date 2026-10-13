@@ -38,12 +38,39 @@ sealed class Store : IDisposable
     /// <summary>Where this store's pages and API live, with a trailing slash.</summary>
     public string UrlBase => IsTracker ? "/t/" : $"/p/{Uri.EscapeDataString(Name)}/";
 
-    /// <summary>Every record write goes through here, so the watcher can tell our
-    /// own echo from a change somebody else made.</summary>
-    public async Task WriteRecord(string path, string text)
+    /// <summary>Git for this store's record files (GitService.cs), found once.</summary>
+    public GitService Git => _git ??= new GitService(BugsDir, BacklogDir);
+    GitService? _git;
+
+    /// <summary>
+    /// Every record write goes through here, so the watcher can tell our own echo
+    /// from a change somebody else made — and so "commit after save" (Settings ›
+    /// Saving and git) has one place to happen: the record file, by path, as
+    /// <c>BUG-0042: record edits from the UI</c>, the skills' format. A write that
+    /// should not commit yet (an auto-save between edits) passes
+    /// <paramref name="commit"/> false. A failed commit never fails the save:
+    /// the file is written, and the Changes pane shows what is left.
+    /// </summary>
+    public async Task WriteRecord(string path, string text, bool commit = true)
     {
         await File.WriteAllTextAsync(path, text);
         Watcher.Note(path, text);
+        if (commit) CommitAfterSave(new[] { path });
+    }
+
+    /// <summary>Commit these record files if the project asks for it, and push
+    /// after if it asks for that too. Returns git's message on failure, else null.</summary>
+    public string? CommitAfterSave(IEnumerable<string> paths)
+    {
+        var settings = GitSettings.Parse(Project.Document()["git"]);
+        if (!settings.CommitAfterSave || !Git.Enabled) return null;
+        var files = paths.Where(Git.IsRecord).ToList();
+        if (files.Count == 0) return null;
+        var refs = string.Join(", ", files.Select(f => Path.GetFileNameWithoutExtension(f)));
+        var error = Git.Commit(files, $"{refs}: record edits from the UI");
+        if (error is null && settings.PushAfterCommit) Git.PushInBackground(() => Watcher.Broadcast("git", "{}"));
+        Watcher.Broadcast("git", "{}");
+        return error;
     }
 
     public void Dispose()
