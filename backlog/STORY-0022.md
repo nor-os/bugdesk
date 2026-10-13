@@ -50,7 +50,7 @@ rough until the diff has been sorted into "BugDesk-only" and "FlexDesk moved on"
 
 ### 2026-10-13T04:43Z · norman_agent (status: in-progress -> review)
 
-Done in 20b105e, on FlexDesk 0.11.0 (20b105e). All four
+Done in d7ba7ed, on FlexDesk 0.11.0 (20b105e). All four
 criteria are met.
 
 - **FlexDesk side:** what BugDesk's copy had and FlexDesk lacked went into
