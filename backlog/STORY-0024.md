@@ -2,10 +2,10 @@
 id: 24
 type: story
 title: "Custom statuses per record type"
-status: in-progress
+status: review
 parent: 3
 phase:
-assignee: norman_agent
+assignee: norman
 reporter: norman
 due:
 points: 8
@@ -13,7 +13,7 @@ subsystem: unsorted
 labels: []
 links: [blocks 7]
 created: 2026-10-12
-updated: 2026-10-12T13:40Z
+updated: 2026-10-13T05:00Z
 ---
 
 ## Description
@@ -34,19 +34,21 @@ alongside them. Settings are stored in `.bugdesk/project.json`.
 
 - [x] In settings, per record type, a project can add, rename, reorder and remove custom statuses, each with a category: active, waiting or finished
 - [x] Built-in statuses cannot be removed, and a custom status cannot take a built-in's name
-- [ ] A custom status shows wherever statuses do: the record page, the status filter, the status column, sorting (by its position in the list) and the backlog board
+- [x] A custom status shows wherever statuses do: the record page, the status filter, the status column, sorting (by its position in the list) and the backlog board
 - [x] Its category decides what it counts as: a finished status leaves the default open queues and stops overdue highlighting, and a waiting one stays in them
 - [x] A record can be set to a custom status from its page, and once STORY-0018 is in, configured moves can target it
 - [x] Removing a custom status that records still hold is refused, with the number of records holding it
 - [x] A record file holding a status that is no longer configured opens normally, with the value marked unknown and left in the file unchanged
 - [x] The /bugs and /backlog skills tell agents to read custom statuses from `project.json` and to treat a finished one as terminal
-- [ ] Example: bugs get `blocked` (category waiting), and STORY-0007's "Blocked" action moves a bug into it
+- [x] Example: bugs get `blocked` (category waiting), and STORY-0007's "Blocked" action moves a bug into it
 
 ## History
 
 - 2026-10-12 · norman_agent · status: draft -> refined
 - 2026-10-12 · norman_agent · status: refined -> in-progress
 - 2026-10-12 · norman_agent · assignee: (unset) -> norman_agent
+- 2026-10-13 · norman_agent · status: in-progress -> review
+- 2026-10-13 · norman_agent · assignee: norman_agent -> norman
 
 ## Comments
 
@@ -89,3 +91,26 @@ Open:
   needs FlexDesk's DataTable `sortValue`, which comes with STORY-0008.
 - **Criterion 9, the example.** `blocked` on bugs together with STORY-0007's
   Blocked action.
+
+### 2026-10-13T05:00Z · norman_agent (status: in-progress -> review)
+
+The two open criteria are done. All nine are met.
+
+- **Criterion 3, sorting by position.** The bug queue, the flat board and
+  search results sort Status by its place in the order, with custom statuses
+  where they were configured (FlexDesk 0.11.0's `sortValue`, 293734b). Checked
+  in Edge: Open, Open, Open, Blocked, Blocked, Testing…, Closed. The tree
+  already sorted this way.
+- **Criterion 9, the example.** This project's `.bugdesk/project.json` now
+  gives every bug type the custom status `blocked` (waiting, after
+  investigation) and a **Blocked** action from STORY-0007, offered in open,
+  investigation and testing. It asks what the bug is blocked on, adds that as
+  a comment, and moves the bug to `blocked`. The bridge checked and accepted
+  both.
+  - In this repo `.bugdesk/` is git-ignored, so that file is your checkout's
+    local config, not a commit. It is live in your BugDesk after a reload.
+  - Remove the `schema` and `workflow` keys from it to take the example out.
+
+Also fixed along the way: the backlog's "open" views tested `status none of
+done, dropped`, which missed a project's own finished statuses. They now ask
+whether the record's own status counts as finished (00b777a).
