@@ -2,10 +2,10 @@
 id: 9
 type: story
 title: "Spike: desktop app via webview"
-status: refined
+status: in-progress
 parent: 21
 phase:
-assignee:
+assignee: norman_agent
 reporter: norman
 due:
 points: 3
@@ -13,7 +13,7 @@ subsystem: unsorted
 labels: []
 links: [requires 23]
 created: 2026-10-05
-updated: 2026-10-11T13:39Z
+updated: 2026-10-13T05:08Z
 ---
 
 ## Description
@@ -35,6 +35,8 @@ _Host decided: Photino.NET, as in ../SixShare (SixShare.Desktop)._
 ## History
 
 - 2026-10-06 · norman_agent · status: draft -> refined
+- 2026-10-13 · norman_agent · status: refined -> in-progress
+- 2026-10-13 · norman_agent · assignee: (unset) -> norman_agent
 
 ## Comments
 
