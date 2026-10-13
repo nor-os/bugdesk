@@ -275,10 +275,10 @@
    are listed explicitly so this out-specifies the `.preview-table X.num`
    rules regardless of stylesheet order. DataTable renders the header in
    its own <table>, hence the plain :first-child selectors too. */
-.td-tablehost .preview-table th:first-child,
-.td-tablehost .preview-table td:first-child,
-.td-tablehost .preview-table th.num:first-child,
-.td-tablehost .preview-table td.num:first-child { text-align: left; }
+.td-tablehost .twm-preview-table th:first-child,
+.td-tablehost .twm-preview-table td:first-child,
+.td-tablehost .twm-preview-table th.num:first-child,
+.td-tablehost .twm-preview-table td.num:first-child { text-align: left; }
 
 .td-chip {
     font-size: 10.5px;
@@ -624,7 +624,7 @@
 
 /* DataTable host: let the component size itself inside the group */
 .td-tablehost { min-height: 0; }
-.td-tablehost .data-table-component { border: none; }
+.td-tablehost .twm-data-table-component, .td-tablehost .data-table-component { border: none; }
 
 /* Top-bar Search / New Ticket actions */
 .td-topbar-actions {
@@ -917,8 +917,8 @@
 /* Kill the app-wide `body:not(.in-data) .preview-table-wrap
    { max-height: 300px }` clamp inside TicketDesk table hosts — the
    DataTable body must fill the tile. */
-.td-tablehost .preview-table-wrap,
-.td-slatab .preview-table-wrap { max-height: none !important; }
+.td-tablehost .twm-preview-table-wrap,
+.td-slatab .twm-preview-table-wrap { max-height: none !important; }
 
 /* ── BugDesk: rendered markdown (bug description + comment bodies) ─── */
 .td-md { font-size: var(--font-size-md, 13px); line-height: 1.55; color: var(--ea-text, #d4d4d4); }

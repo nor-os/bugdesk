@@ -23,7 +23,7 @@
  * never answers. skills/backlog/SKILL.md applies the same rules.
  */
 
-import { DataTable } from '../ui/components/data_table.js';
+import { createTable } from './bd_table.js';
 import { showContextMenu } from '@flexdesk/widgets';
 import { renderMarkdown } from './markdown.js';
 import { attachMarkdownEditor } from './md_editor.js';
@@ -399,7 +399,9 @@ function mountBacklogBoard(host, props, ctx) {
     // and the tree are the same columns laid out for different reading, and a
     // sort chosen for one should not rearrange the other.
     const persistKey = `backlog:board:${view.key || 'adhoc'}${flat ? ':flat' : ''}`;
-    const table = new DataTable(host.querySelector('.td-tablehost'), {
+    const table = createTable(host.querySelector('.td-tablehost'), {
+        // Status sorts by position, custom statuses in their configured place.
+        sortValue: { [COL.status]: (_v, _c, row) => { const m = byRef.get(row[REF_COL]); return m ? statusRank(m) : 999; } },
         ...(ctx?.tableStore ? { stateStore: ctx.tableStore, persistKey } : {}),
         // Ad-hoc views share one slot; see the bug queue.
         persistPage: !!view.key,

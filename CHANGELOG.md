@@ -160,6 +160,15 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **BugDesk's copy of FlexDesk's table is gone** (STORY-0008). The bug queue,
+  the backlog board and search results are FlexDesk's DataTable, through one
+  small adapter (`bd_table.js`). The right-click menus, the record count, Enter,
+  Ctrl+Enter and the Alt chords, the selection kept through a sort, a refresh
+  and a return to the view, the remembered page, and BUG-0013's "a sort starts
+  on page 1" all carry over. What the copy had that FlexDesk lacked went into
+  FlexDesk 0.11.0. One difference: double-clicking a column's edge now fits the
+  column to its content (FlexDesk's rule) rather than un-pinning its width.
+  Sorting by Status follows the status order, custom statuses in their place.
 - **BugDesk's copy of FlexDesk's dialogs is gone** (STORY-0022). Every prompt,
   confirm and form (settings, collaborators, first run, the project switcher,
   move messages, conversions, numbering) is FlexDesk's `openForm` /

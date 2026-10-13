@@ -41,7 +41,7 @@
 import { mountTileBreadcrumb } from '@flexdesk/wm';
 import { activeTopNavKind, taxonomy } from '../tiling/kind_taxonomy.js';
 import { installRecordDragSource, markDragCell, openRecordAs } from './record_dnd.js';
-import { DataTable } from '../ui/components/data_table.js';
+import { createTable } from './bd_table.js';
 import { openConfirm, showContextMenu } from '@flexdesk/widgets';
 import {
     BUILTIN_FILTERS, FILTER_FIELDS, MODEL, SCOPE,
@@ -61,7 +61,7 @@ import { CONFIG, ev, KIND, trackerModule } from './instance.js';
 import { attachRecordTypeahead, openRecordPicker } from './item_picker.js';
 import { attachSelect, setRowVisible } from './select_field.js';
 import { mountCustomFields } from './custom_fields.js';
-import { customStatus, isHidden, statusKnown } from './schema.js';
+import { customStatus, isHidden, statusKnown, withCustomStatuses } from './schema.js';
 import { actionsFor } from './workflow.js';
 import { convertRecord, convertedBanner } from './convert.js';
 import { attachAutosave, autosaveMode } from './autosave.js';
@@ -207,6 +207,16 @@ const QUEUE_COLUMNS = [
     { header: 'Assignee', field: 'assignee',  cell: (t) => t.assignee,  toFilterValue: (v) => v },
 ];
 const QUEUE_HEADERS = QUEUE_COLUMNS.map((c) => c.header);
+
+/** A bug's status as a position: the built-in order with custom statuses in
+ *  their configured place (schema.js), for a sort by Status. */
+function bugStatusRank(id) {
+    const t = TICKETS.find((x) => x.id === id);
+    if (!t) return 999;
+    const order = withCustomStatuses('bugs', t.rawType || 'bug', ['open', 'investigation', 'testing', 'closed']);
+    const i = order.indexOf(t.rawStatus);
+    return i < 0 ? order.length : i;
+}
 const queueRow = (t) => QUEUE_COLUMNS.map((c) => c.cell(t));
 /* The column every "act on this bug" command reads — derived, so reordering
    QUEUE_COLUMNS moves the row click, the menu and the seeding together. */
@@ -270,10 +280,8 @@ function clauseFromColumnFilter(fieldKey, text) {
  * Returns { expr, skipped } — `skipped` names the column boxes that had no
  * faithful clause so the caller can say so out loud.
  *
- * NOTE: `table._state.filters` is DataTable-private (a Map colIdx→text).
- * There is no public accessor for the live filter row — `_saveState()`
- * serialises the same Map — so this reads it directly and is the one place
- * that knows the field is private.
+ * The live filter row comes from FlexDesk's `getFilters()` — `[{column,
+ * header, value}]`, empty boxes left out.
  */
 function seedExprFromQueue(table, resolved) {
     const skipped = [];
@@ -288,7 +296,7 @@ function seedExprFromQueue(table, resolved) {
     // The active expression goes in as ONE child, not spread: an OR filter
     // spread into an AND root would change its meaning.
     if (!isEmptyGroup(resolved.expr)) children.push(clone(resolved.expr));
-    for (const [colIdx, text] of table._state.filters) {
+    for (const { column: colIdx, value: text } of table.getFilters()) {
         const col = QUEUE_COLUMNS[colIdx];
         if (!col || !String(text ?? '').trim()) continue;
         const c = clauseFromColumnFilter(col.field, text);
@@ -440,8 +448,14 @@ function mountQueues(host, props, ctx) {
     // one slot rather than each minting a key that is never seen again. Only set
     // when a store was handed in — a table given a persistKey and no store throws.
     const persistKey = `bugs:queue:${resolved.key || 'adhoc'}`;
-    const table = new DataTable(host.querySelector('.td-tablehost'), {
+    const table = createTable(host.querySelector('.td-tablehost'), {
         ...(ctx?.tableStore ? { stateStore: ctx.tableStore, persistKey } : {}),
+        // Priority is a short-badge column (an 8px swatch + "P3"): pinned narrow
+        // until somebody drags it wider, when the remembered width wins.
+        seedColWidths: { 0: 48 },
+        // Status sorts by where a status stands — custom ones in their
+        // configured place (Settings › Record types) — not alphabetically.
+        sortValue: { [QUEUE_COLUMNS.findIndex((c) => c.field === 'status')]: (_v, _c, row) => bugStatusRank(row[QUEUE_ID_COL]) },
         // Every ad-hoc view shares the 'adhoc' slot, so its page would land a
         // new filter's results on whatever page the last one was left on.
         persistPage: !!resolved.key,
@@ -494,20 +508,6 @@ function mountQueues(host, props, ctx) {
         const model = TICKETS.find((x) => String(x.id) === String(id));
         return { kind: 'ticket', props: { id, label: ticketLabel(model) || id }, label: `#${id}` };
     });
-    // Priority is a short-badge column (an 8px swatch + "P3"), so pin it
-    // narrow. colWidths overrides are honored verbatim by the fit pass
-    // (never grown to fill), and _restorePersisted stamps the column
-    // signature so the width survives the first render. Column 0 = Pri
-    // (showRowNumbers is off, so there is no leading row-number column).
-    //
-    // ONLY WHEN NOTHING IS REMEMBERED. `_restorePersisted` replaces the width
-    // map wholesale, so pinning unconditionally threw away every width the user
-    // had dragged, on every mount — the column widths half of "my table forgot
-    // how I left it". A remembered map wins; the pin is the default for a table
-    // nobody has resized yet.
-    if (!ctx?.tableStore?.get(persistKey)?.colWidths) {
-        table._restorePersisted?.({ colWidths: { 0: 48 } });
-    }
     // "12 of 40 open bugs shown" in the bottom bar while this queue is in front.
     publishRecordCount(host.querySelector('.td-tablehost'), () => {
         const byId = new Map(TICKETS.map((t) => [String(t.id), t]));
@@ -1165,7 +1165,7 @@ function mountTicket(host, props, ctx) {
                 if (ctx.wm?.navigate) ctx.wm.navigate(target.kind, target.props, { ctx, ...opts });
                 else ctx.wm?.openInTabFromContext?.(ctx, target.kind, target.props);
             };
-            resultsTable = new DataTable(resultsEl.querySelector('.td-tablehost'), {
+            resultsTable = createTable(resultsEl.querySelector('.td-tablehost'), {
                 // The results are rebuilt on every search, so this is how a sort
                 // you chose survives running the next one.
                 ...(ctx?.tableStore ? { stateStore: ctx.tableStore, persistKey: 'bugs:search' } : {}),

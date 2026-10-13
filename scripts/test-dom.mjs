@@ -881,7 +881,9 @@ await t('the keys that open a row, for lists that are not a table', () => {
 /* ── a table remembers the keyboard highlight, and opens rows by key ── */
 
 {
-    const { DataTable: KeyTable } = await import(join(UI, 'ui', 'components', 'data_table.js'));
+    // BugDesk's lists on FlexDesk's DataTable since STORY-0008 — the adapter
+    // that keeps these behaviours (bd_table.js).
+    const { createTable } = await import(join(UI, 'ticketdesk', 'bd_table.js'));
     const rows = [['#1', 'b'], ['#2', 'c'], ['#3', 'a']];
     const saved = new Map();
     const stateStore = { ready: async () => {}, get: (key) => saved.get(key), set: (key, v) => saved.set(key, v) };
@@ -889,28 +891,32 @@ await t('the keys that open a row, for lists that are not a table', () => {
         const host = document.createElement('div');
         document.body.appendChild(host);
         const opened = [];
-        const table = new KeyTable(host, {
-            headers: ['Id', 'Summary'], rows: opts.rows || rows, sortable: true, stateStore, persistKey: 'keys',
+        const table = createTable(host, {
+            headers: ['Id', 'Summary'], rows: opts.rows || rows, sortable: true, selectable: true,
+            stateStore, persistKey: 'keys',
             rowKey: (row) => row[0],
             onRowOpen: (idx, row, how) => opened.push([row[0], how]),
         });
         table.render();
+        // The remembered highlight is put back once the rows are in (a microtask).
+        const settle = () => new Promise((r) => setTimeout(r, 0));
         const press = (key, mods = {}) => {
             const ev = new dom.window.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...mods });
             table._tableEl.dispatchEvent(ev);
             return ev;
         };
         const highlighted = () => [...host.querySelectorAll('tbody tr.selected')].map((tr) => tr.children[0].textContent);
-        return { host, table, opened, press, highlighted, done: () => { table.dispose(); host.remove(); } };
+        return { host, table, opened, press, highlighted, settle, done: () => { table.dispose(); host.remove(); } };
     };
 
-    await t('the row you moved to with the keyboard is highlighted again when you come back', () => {
+    await t('the row you moved to with the keyboard is highlighted again when you come back', async () => {
         saved.clear();
         const a = mountKeys();
         a.press('ArrowDown'); a.press('ArrowDown');
         assert.deepEqual(a.highlighted(), ['#2']);
         a.done();
         const b = mountKeys();
+        await b.settle();
         assert.deepEqual(b.highlighted(), ['#2'], 'the highlight was forgotten');
         b.press('Enter');
         assert.deepEqual(b.opened, [['#2', 'default']], 'Enter did not open the remembered row');
@@ -929,14 +935,16 @@ await t('the keys that open a row, for lists that are not a table', () => {
         a.done();
     });
 
-    await t('a click opens a row and leaves the remembered highlight alone', () => {
+    await t('a click opens a row and leaves the remembered highlight alone', async () => {
         saved.clear();
         const a = mountKeys();
         a.press('ArrowDown');                       // #1 remembered
         a.host.querySelectorAll('tbody tr')[2].dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
         assert.deepEqual(a.opened, [['#3', 'default']]);
+        await a.settle();
         a.done();
         const b = mountKeys();
+        await b.settle();
         assert.deepEqual(b.highlighted(), ['#1'], 'a click moved what is remembered');
         b.done();
     });
@@ -976,15 +984,22 @@ await t('the keys that open a row, for lists that are not a table', () => {
         saved.clear();
         const a = mountKeys();
         a.table._syncHeaderWidths?.();
-        const grip = a.host.querySelector('.dt-col-resizer');
+        const grip = a.host.querySelector('.twm-dt-col-resizer');
         if (grip) {
             grip.dispatchEvent(new dom.window.MouseEvent('mousedown', { bubbles: true, button: 0, clientX: 100 }));
             document.dispatchEvent(new dom.window.MouseEvent('mouseup', { bubbles: true, clientX: 100 }));
             assert.deepEqual(a.table._colWidths, {}, 'a click pinned widths');
         }
-        a.table._colWidths[1] = 222;
-        a.table.autoSizeColumn(1);
-        assert.equal(a.table._colWidths[1], undefined, 'double-click did not unpin the column');
+        // FlexDesk's rule since STORY-0008: a double-click FITS the column to its
+        // content (Tables' rule too), where BugDesk's copy dropped the pin. Both
+        // undo a dragged width; jsdom has no layout to measure, so the gesture
+        // is asserted to reach the fit.
+        let fitted = null;
+        a.table.autoSizeColumn = (i) => { fitted = i; return true; };
+        const g = a.host.querySelectorAll('.twm-dt-col-resizer')[1];
+        assert.ok(g, 'no grip on the second column');
+        g.dispatchEvent(new dom.window.MouseEvent('dblclick', { bubbles: true }));
+        assert.equal(fitted, 1, 'a double-click on the column edge did not fit the column');
         a.done();
     });
 }
@@ -1707,7 +1722,7 @@ await t('right-click a board cell and filter the board by it', async () => {
         .backlog(host, { filter: 'all', flat: true }, { wm });
     await tick(); await tick();
 
-    const headers = [...host.querySelectorAll('.preview-table-header-wrap thead tr:first-child th')]
+    const headers = [...host.querySelectorAll('.twm-preview-table-header-wrap thead tr:first-child th')]
         .map((th) => th.textContent.trim());
     const statusCol = headers.findIndex((h) => h.startsWith('Status'));
     const titleCol = headers.findIndex((h) => h.startsWith('Title'));
@@ -1718,14 +1733,14 @@ await t('right-click a board cell and filter the board by it', async () => {
     const menuFor = async (col) => {
         row.children[col].dispatchEvent(new dom.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 }));
         await new Promise((r) => setTimeout(r, 5));
-        return [...document.querySelectorAll('.data-context-menu .context-menu-item')];
+        return [...document.querySelectorAll('.data-context-menu .twm-context-menu-item')];
     };
 
     const onStatus = await menuFor(statusCol);
     const filterItem = onStatus.find((el) => /Filter by/.test(el.textContent));
     assert.ok(filterItem, `no Filter by entry: ${onStatus.map((e) => e.textContent.trim())}`);
     assert.match(filterItem.textContent, /Filter by Status/);
-    assert.ok(!filterItem.classList.contains('disabled'), 'filter by a status cell is greyed out');
+    assert.ok(!filterItem.classList.contains('disabled') && !filterItem.classList.contains('twm-disabled'), 'filter by a status cell is greyed out');
     assert.ok(onStatus.some((el) => /Save as filter/.test(el.textContent)), 'no Save as filter entry');
     filterItem.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
     assert.equal(navigated.length, 1, 'the board did not navigate');
@@ -1779,7 +1794,12 @@ await t('a board\'s sort survives being unmounted and mounted again', async () =
 /* "Too many bugs and I cannot see them all": the table cut every view to its
  * first hundred rows even with the page controls switched off, so the rest of
  * the store was unreachable and nothing said so. */
-const { DataTable: PagedTable } = await import(join(UI, 'ui', 'components', 'data_table.js'));
+// FlexDesk's DataTable since STORY-0008, through BugDesk's adapter.
+const { createTable: createPaged } = await import(join(UI, 'ticketdesk', 'bd_table.js'));
+const PagedTable = function PagedTable(host, opts) { return createPaged(host, opts); };
+// The first row DRAWN — FlexDesk's getDisplayedRows() is every page's rows (in
+// order), so "which page am I on" is read off the body itself.
+const firstShown = (host) => host.querySelector('tbody tr')?.children[0]?.textContent.trim();
 const manyRows = Array.from({ length: 250 }, (_, i) => [`#${i + 1}`, `row ${i + 1}`]);
 
 await t('a table with pagination off shows every row, not the first hundred', () => {
@@ -1800,15 +1820,15 @@ await t('a table with more rows than a page offers the page controls, and they m
     const table = new PagedTable(host, { headers: ['Id', 'Summary'], rows: manyRows, pagination: true,
                                          onRender: () => { renders++; } });
     table.render();
-    const strip = host.querySelector('.pagination-controls');
+    const strip = host.querySelector('.twm-pagination-controls');
     assert.ok(strip, 'no pagination strip for 250 rows');
     assert.match(strip.textContent, /1–100 of 250/);
     assert.equal(host.querySelectorAll('tbody tr').length, 100);
     const next = [...strip.querySelectorAll('button')].find((b) => /Next page/.test(b.getAttribute('aria-label') || b.title || b.dataset.tooltip || ''));
     assert.ok(next, 'no Next page button');
     next.click();
-    assert.match(host.querySelector('.pagination-controls').textContent, /101–200 of 250/);
-    assert.equal(table.getDisplayedRows()[0][0], '#101');
+    assert.match(host.querySelector('.twm-pagination-controls').textContent, /101–200 of 250/);
+    assert.equal(firstShown(host), '#101');
     assert.ok(renders >= 2, 'onRender was not called on each render');
     table.dispose();
     host.remove();
@@ -1821,21 +1841,20 @@ await t('the page you were on survives a remount, and a page past the end lands 
         const host = document.createElement('div');
         document.body.appendChild(host);
         const table = new PagedTable(host, { headers: ['Id', 'Summary'], rows, pagination: true,
-                                             stateStore, persistKey: 'paged' });
+                                             stateStore, persistKey: 'paged', persistPage: true });
         table.render();
         return { host, table };
     };
     const a = mount(manyRows);
     a.table.goToPage(2);
-    a.table._savePersisted();
     a.table.dispose(); a.host.remove();
 
     const b = mount(manyRows);
-    assert.equal(b.table.getDisplayedRows()[0][0], '#201', 'came back on page 1');
+    assert.equal(firstShown(b.host), '#201', 'came back on page 1');
     b.table.dispose(); b.host.remove();
 
     const c = mount(manyRows.slice(0, 150));
-    assert.equal(c.table.getDisplayedRows()[0][0], '#101', 'a stale page past the end showed nothing');
+    assert.equal(firstShown(c.host), '#101', 'a stale page past the end showed nothing');
     c.table.dispose(); c.host.remove();
 });
 
@@ -1853,7 +1872,7 @@ await t('a sort starts at the first page of the new order', () => {
     table.goToPage(2);
     table.sortBy(0, false);
     assert.equal(table.getDisplayedRows()[0][0], 250, 'the sort kept the old page');
-    assert.match(host.querySelector('.pagination-controls').textContent, /1–100 of 250/);
+    assert.match(host.querySelector('.twm-pagination-controls').textContent, /1–100 of 250/);
     table.dispose();
     host.remove();
 });
