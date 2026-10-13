@@ -1584,6 +1584,8 @@ object ConfigPayload(Store s, string? slug = null) => new
     numbering = s.Project.Numbering().ToJson(),
     // Auto-save, commit after save, push after commit (GitService.cs).
     saving = GitSettings.Parse(s.Project.Document()["git"]).ToJson(),
+    // Alert rules (STORY-0005): evaluated in the page, on every store change.
+    alerts = s.Project.Document()["alerts"]?.DeepClone() ?? new JsonArray(),
     // The store this page is on, and which of its two halves exist.
     store = new { kind = s.Kind, name = s.Name, hasBugs = s.HasBugs, hasBacklog = s.HasBacklog, @base = s.UrlBase },
     projects = ProjectList(),
@@ -1859,6 +1861,45 @@ app.MapPost("/api/project/git", async (HttpRequest req) =>
     var next = new GitSettings(B("commitAfterSave"), B("pushAfterCommit") && B("commitAfterSave"), mode, secs).Normalised();
     Req.Store.Project.SetKey("git", next.ToJson());
     return Results.Json(GitPayload(Req.Store), json);
+});
+
+// Alert rules, saved from Settings › Alerts. A rule is a name, a store, a
+// condition (the filter editor's expression), a level and how it is shown. The
+// rules are checked here for shape; the page evaluates them (alerts.js).
+app.MapPost("/api/project/alerts", async (HttpRequest req) =>
+{
+    var body = await JsonSerializer.DeserializeAsync<Dictionary<string, JsonElement>>(req.Body, json) ?? new();
+    if (!body.TryGetValue("alerts", out var av) || av.ValueKind != JsonValueKind.Array)
+        return Results.Json(new { ok = false, error = "alerts array required" }, json, statusCode: 400);
+    var problems = new List<string>();
+    var cleaned = new JsonArray();
+    var ids = new HashSet<string>();
+    var n = 0;
+    foreach (var r in av.EnumerateArray())
+    {
+        n++;
+        string S(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? (v.GetString() ?? "").Trim() : "";
+        bool B(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.True;
+        var name = S("name");
+        var store = S("store");
+        var level = S("level");
+        var id = S("id").Length > 0 ? S("id") : $"rule-{n}";
+        if (name.Length == 0) { problems.Add($"rule {n}: it needs a name."); continue; }
+        if (store is not ("bugs" or "backlog")) problems.Add($"'{name}': store must be bugs or backlog.");
+        if (level is not ("info" or "warning" or "alert")) problems.Add($"'{name}': level must be info, warning or alert.");
+        if (!r.TryGetProperty("expr", out var ex) || ex.ValueKind != JsonValueKind.Object || !ex.TryGetProperty("kind", out _))
+            problems.Add($"'{name}': it needs a condition.");
+        if (!ids.Add(id)) problems.Add($"two rules have the id '{id}'.");
+        cleaned.Add(new JsonObject
+        {
+            ["id"] = id, ["name"] = name, ["store"] = store, ["level"] = level,
+            ["toast"] = B("toast"), ["sticky"] = B("sticky"), ["enabled"] = !r.TryGetProperty("enabled", out var en) || en.ValueKind != JsonValueKind.False,
+            ["expr"] = r.TryGetProperty("expr", out var e2) ? JsonNode.Parse(e2.GetRawText()) : null,
+        });
+    }
+    if (problems.Count > 0) return Results.Json(new { ok = false, error = string.Join("\n", problems), problems }, json, statusCode: 400);
+    Req.Store.Project.SetKey("alerts", cleaned);
+    return Results.Json(new { ok = true, alerts = cleaned }, json);
 });
 
 // The workflow, saved from Settings › Workflow. Checked against the schema and

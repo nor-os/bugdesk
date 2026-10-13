@@ -117,12 +117,14 @@ function buildTopBar() {
  */
 function buildBottomBar() {
     const bar = document.createElement('div');
-    bar.className = 'global-bottom-bar';
+    // FlexDesk's names too: its NotificationHistory puts the bell in
+    // `.twm-global-bottom-bar .twm-bar-right`.
+    bar.className = 'global-bottom-bar twm-global-bottom-bar';
     bar.innerHTML = `
         <div class="bar-left">
             <div class="sim-status is-info" id="sim-status">${appName()} ready.</div>
         </div>
         <div class="bar-center"></div>
-        <div class="bar-right"></div>`;
+        <div class="bar-right twm-bar-right"></div>`;
     document.body.appendChild(bar);
 }

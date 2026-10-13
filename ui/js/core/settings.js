@@ -123,6 +123,7 @@ export const VISIBLE_SETTINGS = new Set([
     'bugdesk.workflow',
     'bugdesk.numbering',
     'bugdesk.git',
+    'bugdesk.alerts',
     'bugdesk.modifierOpen',
     // Read by FlexDesk's managed windows, which BugDesk's floats are.
     'window.animateMinimize',
@@ -176,6 +177,7 @@ export const BUGDESK_SETTINGS_SLICE = {
             workflow: null,
             numbering: null,
             git: null,
+            alerts: null,
         },
     },
 
@@ -263,6 +265,20 @@ export const BUGDESK_SETTINGS_SLICE = {
             onClick: async () => {
                 const { openGitSettings } = await import('../ticketdesk/changes_pane.js');
                 return openGitSettings({ eventBus: window.__ecoagent?.eventBus });
+            },
+        },
+
+        // Alert rules: a condition, a level, and how it is shown.
+        'bugdesk.alerts': {
+            type: 'action', category: 'general', group: 'Project',
+            label: 'Alerts',
+            description: 'Rules that raise an alert when a record starts matching a condition — any filter, custom fields included — as info, a warning or an alert, in the bottom panel and optionally as a toast. Alerts only fire while BugDesk is open; changes made while it was closed are not reported.',
+            buttonLabel: 'Edit alerts…',
+            icon: 'notifications',
+            defaultValue: null,
+            onClick: async () => {
+                const { openAlertsEditor } = await import('../ticketdesk/alerts.js');
+                return openAlertsEditor({ eventBus: window.__ecoagent?.eventBus });
             },
         },
 

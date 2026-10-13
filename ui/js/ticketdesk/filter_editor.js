@@ -176,6 +176,9 @@ function normaliseRoot(expr) {
 export function openFilterEditor({
     model, scope = 'bugs', filter = null, seedExpr = null, items = [],
     rowLabel = null, onSaved = null, onDeleted = null,
+    // A CONDITION for something else (an alert rule): Save hands back
+    // `{label, expr}` and stores nothing in the user's filters.
+    onPick = null,
 } = {}) {
     if (!model) throw new Error('openFilterEditor needs a filter model');
     _model = model;
@@ -867,6 +870,12 @@ export function openFilterEditor({
         showSaveError('');
         saving = true;
         updateSave();
+        if (onPick) {
+            onPick({ label, expr: clone(state.expr) });
+            saving = false;
+            close();
+            return;
+        }
         try {
             const saved = await saveFilter({
                 id: state.id || null,

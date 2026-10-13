@@ -345,6 +345,25 @@ export async function installTilingShell({ eventBus, logger } = {}) {
     // browser's own. See auto_scrollbars.js.
     installAutoScrollbars(document.body);
 
+    // Toasts and the bell. FlexDesk's NotificationCenter shows every
+    // `toast:show` on the bus — BugDesk emitted them long before anything drew
+    // them — and past three it collapses the rest into "+N more" rather than
+    // pushing an unread alert off the screen. The bell (NotificationHistory)
+    // keeps them. Then the alert rules start watching (alerts.js).
+    try {
+        const { NotificationCenter, NotificationHistory } = await import('@flexdesk/widgets');
+        const center = new NotificationCenter({
+            eventBus, logger: log, maxVisible: 3, overflow: 'collapse',
+            summaryAction: () => wm.showPanel?.('bottom'),
+        });
+        center.mount(document.body);
+        new NotificationHistory({ notificationCenter: center, eventBus, logger: log }).mount();
+        const { installAlerts } = await import('../ticketdesk/alerts.js');
+        await installAlerts({ eventBus });
+    } catch (err) {
+        log.warn?.('notifications could not be installed', { err });
+    }
+
     // A schema in project.json with problems is in effect without the broken
     // entries — said once here, at the bottom, and in full in Settings ›
     // Record types, rather than leaving a field to be quietly missing.
@@ -539,6 +558,7 @@ async function _loadTrackerCopy({ eventBus }) {
         workflow: cfg.workflow || null,
         numbering: cfg.numbering || null,
         saving: cfg.saving || null,
+        alerts: Array.isArray(cfg.alerts) ? cfg.alerts : [],
         tracker: cfg.tracker || { available: true },
     };
     const T = '../ticketdesk@t/';

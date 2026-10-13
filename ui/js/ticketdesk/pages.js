@@ -2251,8 +2251,10 @@ function mountTicketBottomPanel(host, props, ctx) {
         <div class="twm-bp">
             <div class="twm-bp__tabs" role="tablist">
                 <button class="twm-bp__tab twm-bp__tab--on" role="tab" data-bptab="console" aria-selected="true">Console</button>
+                <button class="twm-bp__tab" role="tab" data-bptab="alerts" aria-selected="false">Alerts</button>
                 <button class="twm-bp__tab" role="tab" data-bptab="changes" aria-selected="false">Changes</button>
             </div>
+            <div class="twm-bp__body" role="tabpanel" data-bppanel="alerts" hidden></div>
             <div class="twm-bp__body" role="tabpanel" data-bppanel="changes" hidden></div>
             <div class="twm-bp__body" role="tabpanel" data-bppanel="console">
                 <div class="td-audit">
@@ -2264,6 +2266,7 @@ function mountTicketBottomPanel(host, props, ctx) {
         </div>`;
     // Changes: the store's uncommitted records, mounted when first shown.
     let changes = null;
+    let alertsPane = null;
     host.addEventListener('click', async (e) => {
         const tab = e.target.closest('[data-bptab]');
         if (!tab) return;
@@ -2273,6 +2276,10 @@ function mountTicketBottomPanel(host, props, ctx) {
             t.setAttribute('aria-selected', String(on));
         }
         for (const p of host.querySelectorAll('[data-bppanel]')) p.hidden = p.dataset.bppanel !== tab.dataset.bptab;
+        if (tab.dataset.bptab === 'alerts' && !alertsPane) {
+            const { mountAlertsPane } = await import('./alerts.js');
+            alertsPane = mountAlertsPane(host.querySelector('[data-bppanel="alerts"]'), { eventBus: _eventBus });
+        }
         if (tab.dataset.bptab === 'changes') {
             if (!changes) {
                 const { mountChangesPane } = await import('./changes_pane.js');
@@ -2280,7 +2287,7 @@ function mountTicketBottomPanel(host, props, ctx) {
             } else changes.refresh();
         }
     });
-    return { title: 'Console', destroy: () => changes?.destroy() };
+    return { title: 'Console', destroy: () => { changes?.destroy(); alertsPane?.destroy(); } };
 }
 
 /* ── the Tracker section, inside a project page ──────────────────── */

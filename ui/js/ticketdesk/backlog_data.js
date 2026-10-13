@@ -370,6 +370,7 @@ async function apiPost(path, body) {
         err.status = res.status;
         throw err;
     }
+    try { window.dispatchEvent(new CustomEvent('bugdesk:saved', { detail: { store: 'backlog', path } })); } catch { /* no window */ }
     return j;
 }
 

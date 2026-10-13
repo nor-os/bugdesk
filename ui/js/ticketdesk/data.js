@@ -275,6 +275,10 @@ async function apiPost(path, body) {
         err.status = res.status;
         throw err;
     }
+    // A record was written by this page: the bridge does not echo our own
+    // writes back as a store event, so whatever watches the stores (alerts.js)
+    // hears it here.
+    try { window.dispatchEvent(new CustomEvent('bugdesk:saved', { detail: { store: 'bugs', path } })); } catch { /* no window */ }
     return j;
 }
 

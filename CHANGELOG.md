@@ -7,6 +7,18 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Alerts** (STORY-0005). Settings › Alerts holds rules: a name, a store, a
+  condition built in the filter editor (any field, custom ones included), a
+  level (info, warning, alert), and whether it also shows a toast, which can be
+  sticky. When a record starts matching a rule — an edit here, an agent's edit
+  to the file, a `git pull` — the open BugDesk raises it within a second or two:
+  in the bottom panel's new *Alerts* tab (time, level, rule, a link to the
+  record) and, if asked, as a toast with *Open*. A rule fires once per record,
+  not again while it keeps matching; nothing is raised for changes made while
+  BugDesk was closed. Toasts and the bell are FlexDesk's: past three, the rest
+  collapse into "+N more". BugDesk now shows the toasts it has always emitted
+  (a saved roster, a saved schema), which nothing was drawing before.
+
 - **Auto-save** (STORY-0020). Settings › Saving and git can save record edits
   without pressing Save: a few seconds after you stop typing, or every few
   seconds while there are edits (off by default). Save becomes *Save now*, and
