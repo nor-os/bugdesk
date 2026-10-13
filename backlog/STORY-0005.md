@@ -60,9 +60,9 @@ All six criteria are met.
   name, a store, a level (info, warning or alert), Toast, Sticky, and a
   condition built in the filter editor (any field, custom ones included).
   Picking a condition there doesn't touch your saved filters. Stored as
-  \`alerts\` in \`.bugdesk/project.json\`. The bridge checks each rule's shape.
+  `alerts` in `.bugdesk/project.json`. The bridge checks each rule's shape.
 - **Within seconds, no reload:** the rules are evaluated in the page after
-  every store change. An agent's file edit or a \`git pull\` reaches the page
+  every store change. An agent's file edit or a `git pull` reaches the page
   over SSE, and this page's own saves are caught too.
 - **The Alerts tab** (bottom panel) lists each alert with level icon, time,
   rule, and a link that opens the record.
@@ -73,8 +73,8 @@ All six criteria are met.
   again while it keeps matching. When BugDesk opens it takes today's matches
   as the baseline, so nothing fires for changes made while it was closed. The
   settings description and the rules editor say so.
-- **FlexDesk's own pieces:** \`NotificationCenter\` (\`overflow: 'collapse'\`)
-  and \`NotificationHistory\`, mounted once at boot; no BugDesk copy. As a side
+- **FlexDesk's own pieces:** `NotificationCenter` (`overflow: 'collapse'`)
+  and `NotificationHistory`, mounted once at boot; no BugDesk copy. As a side
   effect, BugDesk now shows the toasts it has always emitted ("Collaborators
   saved", …), which nothing was drawing before.
 
