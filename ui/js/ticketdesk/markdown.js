@@ -23,7 +23,7 @@
  */
 
 import { esc } from './data.js';
-import { BUG_PREFIX, BACKLOG_PREFIXES } from './refs.js';
+import { ALL_PREFIXES } from './refs.js';
 import { IS_TRACKER_COPY } from './instance.js';
 
 // A record link names a record in the store whose text it sits in — STORY-0002
@@ -36,7 +36,7 @@ const COPY_ATTR = IS_TRACKER_COPY ? ' data-copy="tracker"' : '';
  * type. It stays in the tile rather than opening a browser tab, and
  * ref_autolink.js's delegated click handler opens the record. */
 const RE_RECORD_LINK = new RegExp(
-    `\\[([^\\]]+)\\]\\(#((?:${[BUG_PREFIX, ...Object.values(BACKLOG_PREFIXES)].join('|')})-\\d+)\\)`, 'gi');
+    `\\[([^\\]]+)\\]\\(#((?:${ALL_PREFIXES.join('|')})-\\d+)\\)`, 'gi');
 
 /* ── inline ─────────────────────────────────────────────────────── */
 

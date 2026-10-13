@@ -54,6 +54,18 @@ static class RecordIds
         return max + 1;
     }
 
+    /// <summary>
+    /// The next id for a store under the project's numbering: above every id
+    /// ever seen under ANY prefix the store has used, stepped by its increment,
+    /// and never below its start number.
+    /// </summary>
+    public static int NextFor(string store, string dir, string trashDir, IEnumerable<int> loaded)
+    {
+        var n = Numbering.Current;
+        var prefixes = store == "bugs" ? n.BugPrefixes() : n.BacklogPrefixes().Select(p => p.Prefix);
+        return n.Next(store, Next(dir, prefixes, trashDir, loaded) - 1);
+    }
+
     /// <summary>Every path under <paramref name="dir"/> that any commit on any ref
     /// added, or nothing when git cannot answer in time.</summary>
     static IEnumerable<string> EverAdded(string dir)

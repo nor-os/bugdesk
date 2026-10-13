@@ -319,6 +319,15 @@ of `## Comments`.
 
 History entries: same grammar, same placement — see [`/bugs`](../bugs/SKILL.md).
 
+### Numbering
+
+A project may set its own prefixes (`STORY` → `US`, say), padding, first number
+and increment under `numbering` in `project.json`. Name new items, and write
+references, the way [`/bugs`](../bugs/SKILL.md) describes in *Numbering:
+prefixes, padding, start and step*. Existing files keep their names, and the
+shared id sequence and the "highest ever seen" rule are unchanged; the next id
+is that highest plus `step`, and never below `start`.
+
 ### Custom fields and statuses
 
 A project can give each backlog type its own fields and statuses and hide

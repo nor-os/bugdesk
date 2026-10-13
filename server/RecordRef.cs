@@ -54,11 +54,11 @@ static class Refs
                 ? new RecordRef(selfStore, n) : default;
         }
         if (!int.TryParse(m.Groups["pn"].Value, out var id) || id <= 0) return default;
-        var p = m.Groups["p"].Value;
-        if (string.Equals(p, "BUG", StringComparison.OrdinalIgnoreCase)) return new RecordRef("bugs", id);
-        foreach (var prefix in BacklogItem.Prefixes.Values)
-            if (string.Equals(p, prefix, StringComparison.OrdinalIgnoreCase)) return new RecordRef("backlog", id);
-        return default;                       // an unknown prefix is never guessed at
+        // Any prefix the project has used — its current ones, the ones a save
+        // replaced and the defaults (Numbering.cs) — so a reference written before
+        // a rename still resolves.
+        var hit = Numbering.Current.Resolve(m.Groups["p"].Value);
+        return hit is { } h ? new RecordRef(h.Store, id) : default;   // an unknown prefix is never guessed at
     }
 
     /// <summary>
@@ -68,9 +68,7 @@ static class Refs
     /// a stale prefix survives a retype.
     /// </summary>
     public static string Format(RecordRef r, string selfStore = "bugs", string type = "task") =>
-        r.Store == selfStore ? r.Id.ToString()
-        : r.Store == "bugs" ? $"BUG-{r.Id:D4}"
-        : $"{BacklogItem.Prefixes.GetValueOrDefault(type, "TASK")}-{r.Id:D4}";
+        r.Store == selfStore ? r.Id.ToString() : Numbering.Current.Format(r.Store, type, r.Id);
 
     /// <summary>
     /// The form to write into a comment SENTENCE (and into an API <c>ref</c>
@@ -79,6 +77,5 @@ static class Refs
     /// a heading anchor rather than as a bug.
     /// </summary>
     public static string Display(RecordRef r, string type = "task") =>
-        r.Store == "bugs" ? $"BUG-{r.Id:D4}"
-        : $"{BacklogItem.Prefixes.GetValueOrDefault(type, "TASK")}-{r.Id:D4}";
+        Numbering.Current.Format(r.Store, type, r.Id);
 }

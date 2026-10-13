@@ -27,6 +27,7 @@ import { AGENT_AUTHOR, HUMAN_AUTHOR, formatStamp } from './data.js';
 import { registerRecordHierarchy } from '../tiling/kind_taxonomy.js';
 import { apiUrl, CONFIG, KIND } from './instance.js';
 import { customStatus, customStatuses, isFinished, isHidden, storeStatuses } from './schema.js';
+import { BACKLOG_PREFIXES, padId } from './refs.js';
 
 /* ── mode ────────────────────────────────────────────────────────────
  *
@@ -224,13 +225,13 @@ export const TYPE_ICON = {
  * upper-casing the type. This used to do exactly that, which was correct only
  * for as long as every prefix happened to be the type in capitals.
  */
-export const TYPE_PREFIX = { project: 'PROJ', epic: 'EPIC', story: 'STORY', task: 'TASK' };
+export const TYPE_PREFIX = BACKLOG_PREFIXES;
 
 export const typeLabelOf = (t) => TYPE_LABEL[t] || 'Task';
 
 /** `EPIC-0007` — how an item is referred to from a bug's `links` and in prose. */
 export const itemRef = (item) =>
-    `${TYPE_PREFIX[item?.type] || 'TASK'}-${String(item?.id ?? '').padStart(4, '0')}`;
+    `${TYPE_PREFIX[item?.type] || TYPE_PREFIX.task}-${padId('backlog', item?.id ?? '')}`;
 
 /** Tab / tile label. The bare id says nothing about which item you left open. */
 export const itemLabel = (item) =>

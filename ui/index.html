@@ -157,6 +157,8 @@
             schema: cfg.schema || null,
             // The move tables, their flows and the custom actions (workflow.js).
             workflow: cfg.workflow || null,
+            // Prefixes, padding, and every prefix still read (refs.js).
+            numbering: cfg.numbering || null,
             projects: Array.isArray(cfg.projects) ? cfg.projects : [],
             tracker: cfg.tracker || { available: false },
         };

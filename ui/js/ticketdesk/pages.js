@@ -1660,7 +1660,7 @@ function mountTicket(host, props, ctx) {
     const convertThis = async () => {
         if (state.dirty) { statusLine('Save or cancel your edits first — the conversion copies what is on disk.'); return; }
         try {
-            const made = await convertRecord({ from: `BUG-${String(t.bugId).padStart(4, '0')}`, store: 'bugs', title: t.summary || '' });
+            const made = await convertRecord({ from: formatRef(bugRef(t.bugId), 'backlog'), store: 'bugs', title: t.summary || '' });
             if (!made) { statusLine('Not converted.'); return; }
             await loadData();
             await loadBacklog();

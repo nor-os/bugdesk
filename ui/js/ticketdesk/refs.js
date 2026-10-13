@@ -19,20 +19,60 @@
 
 /** @typedef {{store:'bugs'|'backlog', id:number, prefix:string, type:string}} Ref */
 
+/* ── the project's numbering ──────────────────────────────────────────
+ * A project may rename its prefixes, pad differently, and start or step its
+ * numbers its own way (`numbering` in project.json, server/Numbering.cs). New
+ * records take the current prefix; records written before keep theirs, so
+ * every prefix the store has used still parses. Read straight off the page's
+ * config rather than through instance.js, to keep this module import-free —
+ * the same test instance.js makes decides which copy's config it is. */
+const TRACKER_COPY = /\/ticketdesk@t\//.test(import.meta.url);
+const NUMBERING = (typeof window === 'undefined' ? null
+    : (TRACKER_COPY ? window.__BUGDESK_TRACKER_CONFIG__ : window.__BUGDESK_CONFIG__)?.numbering) || {};
+
+const DEFAULT_BACKLOG = { project: 'PROJ', epic: 'EPIC', story: 'STORY', task: 'TASK' };
+
 /** The bug store has exactly one prefix; the backlog has one per type. */
-export const BUG_PREFIX = 'BUG';
-export const BACKLOG_PREFIXES = { project: 'PROJ', epic: 'EPIC', story: 'STORY', task: 'TASK' };
+export const BUG_PREFIX = String(NUMBERING.bugs?.prefix || 'BUG').toUpperCase();
+export const BACKLOG_PREFIXES = Object.fromEntries(Object.entries(DEFAULT_BACKLOG)
+    .map(([t, p]) => [t, String(NUMBERING.backlog?.prefix?.[t] || p).toUpperCase()]));
+
+const padOf = (store) => {
+    const n = Number(store === 'bugs' ? NUMBERING.bugs?.pad : NUMBERING.backlog?.pad);
+    return Number.isInteger(n) && n >= 0 && n <= 8 ? n : 4;
+};
+
+/** Every prefix that still names a record — current, replaced, default — with
+ *  the store and type it names. What a typed reference is checked against. */
+const KNOWN = (() => {
+    const out = new Map([[BUG_PREFIX, { store: 'bugs', type: '' }]]);
+    for (const p of NUMBERING.bugs?.previous || []) out.set(String(p).toUpperCase(), { store: 'bugs', type: '' });
+    if (!out.has('BUG')) out.set('BUG', { store: 'bugs', type: '' });
+    for (const [t, p] of Object.entries(BACKLOG_PREFIXES)) if (!out.has(p)) out.set(p, { store: 'backlog', type: t });
+    for (const [t, list] of Object.entries(NUMBERING.backlog?.previous || {})) {
+        for (const p of list || []) if (!out.has(String(p).toUpperCase())) out.set(String(p).toUpperCase(), { store: 'backlog', type: t });
+    }
+    for (const [t, p] of Object.entries(DEFAULT_BACKLOG)) if (!out.has(p)) out.set(p, { store: 'backlog', type: t });
+    return out;
+})();
+
+/** Every prefix a reference may be written with, for the autolinkers. */
+export const ALL_PREFIXES = [...KNOWN.keys()];
+
+/** An id padded as the project pads that store's references. */
+export const padId = (store, id) => {
+    const pad = padOf(store);
+    return pad > 0 ? String(id).padStart(pad, '0') : String(Number(id));
+};
 
 /* `0*` is load-bearing: the corpus carries both `STORY-0007`, which is what the server writes, and
  * `STORY-7`, which is what a hand types and what BacklogItem.cs's own doc comment prints. Both are
  * the same record and neither is rewritten in place. */
 const REF_RE = /^\s*(?:#?(\d+)|([A-Za-z]+)-0*(\d+))\s*$/;
 
-const pad4 = (id) => String(id).padStart(4, '0');
-
-/** The type whose prefix is `p`, or '' when no backlog type claims it. */
-const backlogTypeFor = (p) =>
-    Object.keys(BACKLOG_PREFIXES).find((t) => BACKLOG_PREFIXES[t] === p) || '';
+/** The type whose prefix is `p` — current, replaced or default — or '' when
+ *  no backlog type claims it. */
+const backlogTypeFor = (p) => (KNOWN.get(p)?.store === 'backlog' ? KNOWN.get(p).type : '');
 
 /**
  * Parse one reference token. `null` when it is not a reference — an unknown prefix is never
@@ -54,7 +94,7 @@ export function parseRef(token, selfStore = 'bugs') {
     const id = Number(m[3]);
     if (!(id > 0)) return null;
     const prefix = m[2].toUpperCase();
-    if (prefix === BUG_PREFIX) return { store: 'bugs', id, prefix: BUG_PREFIX, type: '' };
+    if (KNOWN.get(prefix)?.store === 'bugs') return { store: 'bugs', id, prefix: BUG_PREFIX, type: '' };
     const type = backlogTypeFor(prefix);
     return type ? { store: 'backlog', id, prefix, type } : null;
 }
@@ -71,9 +111,11 @@ export function parseRef(token, selfStore = 'bugs') {
 export function formatRef(ref, selfStore = 'bugs') {
     if (!(Number(ref?.id) > 0)) return '';
     if (ref.store === selfStore) return String(Number(ref.id));
-    const prefix = BACKLOG_PREFIXES[ref.type] || ref.prefix
-        || (ref.store === 'bugs' ? BUG_PREFIX : 'TASK');
-    return `${prefix}-${pad4(Number(ref.id))}`;
+    // Always the CURRENT prefix: a reference written today uses today's name,
+    // whatever the record's file was called when it was made.
+    const prefix = ref.store === 'bugs' ? BUG_PREFIX
+        : (BACKLOG_PREFIXES[ref.type] || BACKLOG_PREFIXES.task);
+    return `${prefix}-${padId(ref.store, Number(ref.id))}`;
 }
 
 /**
@@ -87,7 +129,7 @@ export function formatRef(ref, selfStore = 'bugs') {
 export function displayRef(ref) {
     if (!(Number(ref?.id) > 0)) return '';
     if (ref.store === 'bugs') return `#${Number(ref.id)}`;
-    return `${BACKLOG_PREFIXES[ref.type] || ref.prefix || 'TASK'}-${pad4(Number(ref.id))}`;
+    return `${BACKLOG_PREFIXES[ref.type] || ref.prefix || BACKLOG_PREFIXES.task}-${padId('backlog', Number(ref.id))}`;
 }
 
 /** Store AND id. Without the store half, bug #7 claims every `implements STORY-7` in the backlog. */
@@ -117,7 +159,7 @@ export function itemRefOf(item) {
     return {
         store: 'backlog',
         id: Number(item?.id),
-        prefix: BACKLOG_PREFIXES[type] || 'TASK',
+        prefix: BACKLOG_PREFIXES[type] || BACKLOG_PREFIXES.task,
         type,
     };
 }

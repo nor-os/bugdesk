@@ -56,13 +56,17 @@ sealed class StoreWatcher : IDisposable
     public StoreWatcher(string bugsDir, string backlogDir, string projectFile, ILogger log)
     {
         _log = log;
-        Watch(bugsDir, "BUG-*.md");
+        // A tracker has no bug store at all: an empty folder, which matches nothing.
+        _bugsDir = string.IsNullOrEmpty(bugsDir) ? "" : Path.GetFullPath(bugsDir);
+        // Every record file, whatever its prefix: a project's numbering may name
+        // new records differently from old ones (Numbering.cs), and both are records.
+        Watch(bugsDir, "*-*.md");
         // One watcher per prefix, and the list has to be the SAME one the store
         // knows about — PROJ-*.md was missing, so a project record created or
         // changed outside BugDesk never reached an open browser at all, while
         // every other type did. Driven off BacklogItem.Prefixes now, so a fifth
         // type cannot be half-added.
-        foreach (var prefix in BacklogItem.Prefixes.Values) Watch(backlogDir, $"{prefix}-*.md");
+        Watch(backlogDir, "*-*.md");
         // The collaborator roster is committed too, so it arrives on a pull like
         // any record does.
         var projectDir = Path.GetDirectoryName(projectFile);
@@ -182,7 +186,7 @@ sealed class StoreWatcher : IDisposable
                 }
             }
 
-            changed.Add(new ChangedFile(name, StoreOf(name), IdOf(name), !exists));
+            changed.Add(new ChangedFile(name, StoreOf(path), IdOf(name), !exists));
         }
 
         if (changed.Count == 0) return;
@@ -195,10 +199,14 @@ sealed class StoreWatcher : IDisposable
         }));
     }
 
-    static string StoreOf(string fileName) =>
-        fileName.StartsWith("BUG-", StringComparison.OrdinalIgnoreCase) ? "bugs"
-        : fileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? "project"
+    /// <summary>Which store a changed file belongs to — by its FOLDER, not its
+    /// prefix, which a project may have renamed.</summary>
+    string StoreOf(string path) =>
+        path.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? "project"
+        : _bugsDir.Length > 0 && string.Equals(Path.GetDirectoryName(Path.GetFullPath(path)), _bugsDir, StringComparison.OrdinalIgnoreCase) ? "bugs"
         : "backlog";
+
+    readonly string _bugsDir;
 
     /// <summary>The record id in a file name, or 0 for anything that is not a record.</summary>
     static int IdOf(string fileName)

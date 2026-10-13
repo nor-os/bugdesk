@@ -259,10 +259,10 @@ static class Records
     static string Key(string dir) => Path.GetFullPath(dir);
 
     static RecordCache<Bug> NewBugs(string dir, string? file) =>
-        new(dir, new[] { "BUG-*.md" }, Bug.Parse, file);
+        new(dir, new[] { "*-*.md" }, Bug.Parse, file);
 
     static RecordCache<BacklogItem> NewBacklog(string dir, string? file) =>
-        new(dir, BacklogItem.Prefixes.Values.Select(p => $"{p}-*.md").ToArray(), BacklogItem.Parse, file);
+        new(dir, new[] { "*-*.md" }, BacklogItem.Parse, file);
 
     public static RecordCache<Bug> Bugs(string dir) => _bugs.GetOrAdd(Key(dir), d => NewBugs(d, null));
     public static RecordCache<BacklogItem> Backlog(string dir) => _backlog.GetOrAdd(Key(dir), d => NewBacklog(d, null));

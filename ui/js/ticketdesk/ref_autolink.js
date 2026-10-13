@@ -24,13 +24,13 @@
  * store-relative; those are a different grammar for a different place.
  */
 
-import { BUG_PREFIX, BACKLOG_PREFIXES, formatRef, parseRef } from './refs.js';
+import { ALL_PREFIXES, formatRef, parseRef } from './refs.js';
 import { findRow, openRow, storesAvailable } from './records.js';
 import { TICKETS, loadData } from './data.js';
 import { ITEMS, loadBacklog } from './backlog_data.js';
 import { IS_TRACKER_COPY } from './instance.js';
 
-const PREFIXES = [BUG_PREFIX, ...Object.values(BACKLOG_PREFIXES)];
+const PREFIXES = ALL_PREFIXES;
 
 /** A rendered record link's target: `#BUG-0042`, `#STORY-0007`. */
 export const RECORD_TARGET_RE = new RegExp(`^#((?:${PREFIXES.join('|')})-\\d+)$`, 'i');

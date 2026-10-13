@@ -325,6 +325,33 @@ Field notes:
   date; that still reads, but always write the full stamp. `created`, comment
   headers and history lines stay plain dates.
 
+### Numbering: prefixes, padding, start and step
+
+A project may name and number its records differently from the defaults, under
+`numbering` in `project.json` (Settings › Numbering):
+
+```json
+"numbering": {
+  "bugs":    { "prefix": "DEF", "pad": 3, "start": 100, "step": 1, "previous": [] },
+  "backlog": { "prefix": { "project": "PROJ", "epic": "EPIC", "story": "US", "task": "TASK" },
+               "pad": 0, "start": 1, "step": 1, "previous": { "story": ["STORY"] } }
+}
+```
+
+- **A new record** is named `<prefix>-<id padded to pad>.md`, e.g. `DEF-042.md`,
+  or `US-31.md` with `pad: 0`. Its id is the highest id the store has ever seen
+  (the rule under *New* below, counting files under **every** prefix the store
+  has used) plus `step`, and never below `start`. With no `numbering`, it is
+  `BUG-0042` / `STORY-0007`, padded to four and counting by one, as everywhere
+  in this file.
+- **Existing records keep their file names.** Never rename a file because the
+  prefix changed.
+- **A reference** you write (a link target, a comment) uses the **current**
+  prefix and padding: `relates-to US-31`. One written before a change stays
+  valid, because every prefix in `previous`, and every default, still resolves
+  to the same record. The number is the identity; the prefix only says which
+  store and type.
+
 ### Custom fields and statuses
 
 A project can give each record type **its own fields** and **its own statuses**,

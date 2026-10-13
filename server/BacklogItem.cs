@@ -204,7 +204,13 @@ class BacklogItem
     /// <summary>Sort weight: projects before epics before stories before tasks.</summary>
     public int TypeOrder => Type switch { "project" => 0, "epic" => 1, "story" => 2, _ => 3 };
 
-    public string FileName => $"{Prefixes.GetValueOrDefault(Type, "TASK")}-{Id:D4}.md";
+    /// <summary>The file this record was read from — kept, so a record written
+    /// under an earlier prefix or padding is still found under its own name.</summary>
+    public string SourceFile { get; set; } = "";
+
+    /// <summary>Its file: the one it was read from, or, for a new record, the name
+    /// the project's numbering gives it (Numbering.cs).</summary>
+    public string FileName => SourceFile.Length > 0 ? SourceFile : Numbering.Current.FileName("backlog", Type, Id);
 
     /// <summary>
     /// Acceptance criteria as checklist rows, so the UI can show "3/5 met" without
@@ -276,6 +282,7 @@ class BacklogItem
         // disagrees with the prefix would otherwise make the same record answer
         // to two different types depending on who asked.
         var name = Path.GetFileName(path);
+        item.SourceFile = name;
         foreach (var (type, prefix) in Prefixes)
             if (name.StartsWith(prefix + "-", StringComparison.OrdinalIgnoreCase)) item.Type = type;
 

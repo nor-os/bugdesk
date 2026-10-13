@@ -491,7 +491,7 @@ app.MapPost("/api/convert", async (HttpRequest req) =>
     if (toStore == "backlog")
     {
         var all = LoadBacklog(store.BacklogDir);
-        newId = RecordIds.Next(store.BacklogDir, BacklogItem.Prefixes.Values, Path.Combine(store.ConfigDir, "trash"), all.Select(i => i.Id));
+        newId = RecordIds.NextFor("backlog", store.BacklogDir, Path.Combine(store.ConfigDir, "trash"), all.Select(i => i.Id));
         var item = new BacklogItem
         {
             Id = newId, Type = toType, Title = title, Status = "draft", Assignee = assignee,
@@ -505,7 +505,7 @@ app.MapPost("/api/convert", async (HttpRequest req) =>
     }
     else
     {
-        newId = RecordIds.Next(store.BugsDir, new[] { "BUG" }, Path.Combine(store.ConfigDir, "trash"), LoadAll(store.BugsDir).Select(b => b.Id));
+        newId = RecordIds.NextFor("bugs", store.BugsDir, Path.Combine(store.ConfigDir, "trash"), LoadAll(store.BugsDir).Select(b => b.Id));
         var severity = Get("severity");
         if (severity is not ("crash" or "high" or "medium" or "low")) severity = "medium";
         var sb = new StringBuilder();
@@ -830,7 +830,7 @@ app.MapPost("/api/bugs", async (HttpRequest req) =>
         return Results.Json(new { ok = false, error = "title required" }, json, statusCode: 400);
 
     // Above every bug id this checkout has ever seen, not just the folder's — see RecordIds.cs.
-    var nextId = RecordIds.Next(Req.Store.BugsDir, new[] { "BUG" }, Path.Combine(Req.Store.ConfigDir, "trash"),
+    var nextId = RecordIds.NextFor("bugs", Req.Store.BugsDir, Path.Combine(Req.Store.ConfigDir, "trash"),
         LoadAll(Req.Store.BugsDir).Select(b => b.Id));
     var labels = body.TryGetValue("labels", out var lv) && lv.ValueKind == JsonValueKind.Array
         ? string.Join(", ", lv.EnumerateArray().Select(e => e.GetString()))
@@ -973,7 +973,7 @@ app.MapPost("/api/backlog", async (HttpRequest req) =>
     var item = new BacklogItem
     {
         // One sequence across every prefix, above every id ever seen — see RecordIds.cs.
-        Id = RecordIds.Next(Req.Store.BacklogDir, BacklogItem.Prefixes.Values, Path.Combine(Req.Store.ConfigDir, "trash"),
+        Id = RecordIds.NextFor("backlog", Req.Store.BacklogDir, Path.Combine(Req.Store.ConfigDir, "trash"),
             all.Select(i => i.Id)),
         Type = type,
         Title = title,
@@ -1174,7 +1174,7 @@ app.MapPost("/api/backlog/{id:int}", async (int id, HttpRequest req) =>
         // Write the NEW file first, then drop the old one: an interruption
         // between the two leaves the record duplicated (visible, fixable by
         // hand) rather than deleted (gone).
-        var next = Path.Combine(Req.Store.BacklogDir, $"{BacklogItem.Prefixes[retype]}-{id:D4}.md");
+        var next = Path.Combine(Req.Store.BacklogDir, Numbering.Current.FileName("backlog", retype, id));
         await Req.Store.WriteRecord(next, text);
         File.Delete(path);
     }
@@ -1486,7 +1486,7 @@ app.MapGet("/api/search", (string? q, int? limit) =>
     foreach (var bug in LoadAll(Req.Store.BugsDir))
     {
         Consider(new SearchDoc(
-            Store: "bugs", Id: bug.Id, Ref: $"BUG-{bug.Id:D4}", Type: bug.Type,
+            Store: "bugs", Id: bug.Id, Ref: Numbering.Current.Format("bugs", "", bug.Id), Type: bug.Type,
             Title: bug.Title, Status: bug.Status, Assignee: bug.Assignee, Updated: bug.Updated,
             Description: bug.Description,
             Extra: string.Join(' ', bug.Labels.Concat(new[] { bug.Subsystem, bug.Severity }).Concat(bug.Fields.Values)),
@@ -1497,7 +1497,7 @@ app.MapGet("/api/search", (string? q, int? limit) =>
     foreach (var item in all)
     {
         Consider(new SearchDoc(
-            Store: "backlog", Id: item.Id, Ref: $"{BacklogItem.Prefixes.GetValueOrDefault(item.Type, "TASK")}-{item.Id:D4}",
+            Store: "backlog", Id: item.Id, Ref: Numbering.Current.Format("backlog", item.Type, item.Id),
             Type: item.Type, Title: item.Title, Status: item.Status, Assignee: item.Assignee,
             Updated: item.Updated, Description: item.Description,
             Extra: string.Join(' ', item.Labels.Concat(new[] { item.Subsystem, item.Phase, item.Points, item.Acceptance }).Concat(item.Fields.Values)),
@@ -1554,6 +1554,8 @@ object ConfigPayload(Store s, string? slug = null) => new
     schema = SchemaPayload(s.Project.Schema()),
     // The move tables, their flows and the custom actions (RecordWorkflow.cs).
     workflow = s.Project.Workflow(),
+    // How references are written: prefixes, padding, and every prefix still read.
+    numbering = s.Project.Numbering().ToJson(),
     // The store this page is on, and which of its two halves exist.
     store = new { kind = s.Kind, name = s.Name, hasBugs = s.HasBugs, hasBacklog = s.HasBacklog, @base = s.UrlBase },
     projects = ProjectList(),
@@ -1726,6 +1728,34 @@ app.MapPost("/api/project/schema", async (HttpRequest req) =>
 
     var saved = Req.Store.Project.SetSchema(next);
     return Results.Json(new { ok = true, schema = SchemaPayload(saved) }, json);
+});
+
+// The numbering, saved from Settings › Numbering. A prefix the save replaces is
+// kept as a previous one, so records written under it stay reachable.
+app.MapPost("/api/project/numbering", async (HttpRequest req) =>
+{
+    var body = await JsonSerializer.DeserializeAsync<Dictionary<string, JsonElement>>(req.Body, json) ?? new();
+    if (!body.TryGetValue("numbering", out var nv) || nv.ValueKind != JsonValueKind.Object)
+        return Results.Json(new { ok = false, error = "numbering object required" }, json, statusCode: 400);
+    var problems = new List<string>();
+    var next = Numbering.Parse(JsonNode.Parse(nv.GetRawText()), problems);
+    if (problems.Count > 0)
+        return Results.Json(new { ok = false, error = string.Join("\n", problems), problems }, json, statusCode: 400);
+    var saved = Numbering.Carry(Req.Store.Project.Numbering(), next);
+    // A prefix still READ by one store or type — a default, or one an earlier
+    // save replaced — cannot become another's: `STORY-7` written last year would
+    // then name a bug.
+    var bugSet = saved.BugPrefixes().ToHashSet(StringComparer.OrdinalIgnoreCase);
+    foreach (var (p, t) in saved.BacklogPrefixes())
+        if (bugSet.Contains(p)) problems.Add($"'{p}' already names {(saved.BugPrefix.Equals(p, StringComparison.OrdinalIgnoreCase) ? "bugs" : $"{t} records written earlier")}, so it cannot also name {t} records.");
+    foreach (var (p, t) in saved.BacklogPrefixes())
+        foreach (var (q, u) in saved.BacklogPrefixes())
+            if (t != u && p.Equals(q, StringComparison.OrdinalIgnoreCase) && string.CompareOrdinal(t, u) < 0)
+                problems.Add($"'{p}' would name both {t} and {u} records.");
+    if (problems.Count > 0)
+        return Results.Json(new { ok = false, error = string.Join("\n", problems.Distinct()), problems = problems.Distinct() }, json, statusCode: 400);
+    Req.Store.Project.SetNumbering(saved);
+    return Results.Json(new { ok = true, numbering = saved.ToJson() }, json);
 });
 
 // The workflow, saved from Settings › Workflow. Checked against the schema and
@@ -2301,7 +2331,10 @@ static async Task<(string? Text, string Error)> EditCommentIn(string path, int i
     return (text, error);
 }
 
-static string BugPath(string dir, int id) => Path.Combine(dir, $"BUG-{id:D4}.md");
+// A bug's file: the one it already has, under any prefix or padding the store has
+// used, or the name the project's numbering gives a new one.
+static string BugPath(string dir, int id) =>
+    Numbering.Current.Find(dir, "bugs", id) ?? Path.Combine(dir, Numbering.Current.FileName("bugs", "", id));
 
 /// "an epic", "a story". These messages are read by people on every rejected
 /// edit, and "a epic" reads as a bug in the tool.

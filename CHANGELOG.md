@@ -7,6 +7,17 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Your own prefixes and numbering** (STORY-0002). Settings › Numbering sets,
+  per store, the prefix of new records (one for bugs, one per backlog type), how
+  far their number is zero-padded (0 for none), the first number and the
+  increment. Existing records keep their file names. Every prefix the store has
+  used, plus the defaults, still resolves in typed references, links and search,
+  so `BUG-0011` keeps finding the bug after bugs became `DEF-`. An id is never
+  reused: the next is above every id the store has ever seen under any prefix,
+  and never below the first number. A prefix that is not letters, or that
+  another type or store still uses, is refused with a message. With nothing set,
+  names are as before.
+
 - **Convert a bug to a backlog item, and back** (STORY-0001). A bug offers
   *Convert to backlog item…* (as an epic, story or task), and an item *Convert to
   bug…* (with its type and severity). The new record gets a fresh id in its own

@@ -121,6 +121,7 @@ export const VISIBLE_SETTINGS = new Set([
     'bugdesk.collaborators',
     'bugdesk.recordTypes',
     'bugdesk.workflow',
+    'bugdesk.numbering',
     'bugdesk.modifierOpen',
     // Read by FlexDesk's managed windows, which BugDesk's floats are.
     'window.animateMinimize',
@@ -172,6 +173,7 @@ export const BUGDESK_SETTINGS_SLICE = {
             collaborators: null,
             recordTypes: null,
             workflow: null,
+            numbering: null,
         },
     },
 
@@ -231,6 +233,20 @@ export const BUGDESK_SETTINGS_SLICE = {
             onClick: async () => {
                 const { openWorkflowEditor } = await import('../ticketdesk/workflow_editor.js');
                 return openWorkflowEditor({ eventBus: window.__ecoagent?.eventBus });
+            },
+        },
+
+        // How new records are named and numbered.
+        'bugdesk.numbering': {
+            type: 'action', category: 'general', group: 'Project',
+            label: 'Numbering',
+            description: 'The prefix new records are named with (BUG, EPIC, STORY, …), how far their numbers are zero-padded, the first number and the increment. Existing records keep their names, and references to them keep working. Saved in the shared project.json.',
+            buttonLabel: 'Edit numbering…',
+            icon: 'pin',
+            defaultValue: null,
+            onClick: async () => {
+                const { openNumberingEditor } = await import('../ticketdesk/numbering_editor.js');
+                return openNumberingEditor({ eventBus: window.__ecoagent?.eventBus });
             },
         },
 

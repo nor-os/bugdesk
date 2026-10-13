@@ -204,6 +204,33 @@ class ProjectConfig
         }
     }
 
+    /// <summary>How the store names and numbers records (Numbering.cs). Read on
+    /// every reference resolved, so it is kept until the file changes.</summary>
+    public Numbering Numbering()
+    {
+        DateTime stamp;
+        try { stamp = File.Exists(Path) ? File.GetLastWriteTimeUtc(Path) : DateTime.MinValue; }
+        catch (IOException) { stamp = DateTime.MinValue; }
+        var cached = _numbering;
+        if (cached is not null && cached.Value.Stamp == stamp) return cached.Value.Value;
+        var parsed = global::Numbering.Parse(Read()?["numbering"]);
+        _numbering = (stamp, parsed);
+        return parsed;
+    }
+    (DateTime Stamp, Numbering Value)? _numbering;
+
+    /// <summary>Replace the numbering; the caller has checked it.</summary>
+    public void SetNumbering(Numbering next)
+    {
+        lock (_gate)
+        {
+            var doc = Read() ?? new JsonObject();
+            doc["numbering"] = next.ToJson();
+            Write(doc);
+            _numbering = null;
+        }
+    }
+
     /// <summary>The workflow — move tables, their flows and the custom actions
     /// (see <see cref="RecordWorkflow"/>) — as stored, or null.</summary>
     public JsonNode? Workflow() => Read()?["workflow"]?.DeepClone();
