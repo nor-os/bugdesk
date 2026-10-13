@@ -149,3 +149,38 @@ export function mountChangesPane(host, { eventBus = null } = {}) {
         },
     };
 }
+
+/**
+ * Settings › Saving and git: the same two switches as the pane's, in a dialog.
+ * Resolves true once saved.
+ */
+export async function openGitSettings({ eventBus = null } = {}) {
+    let state;
+    try { state = await call('/git'); } catch (err) { state = { enabled: false, reason: err.message }; }
+    const { openForm, openConfirm } = await import('../ui/components/modal.js');
+    if (!state.enabled) {
+        await openConfirm({ title: 'Saving and git', message: `<p>${esc(state.reason || 'Git is not available here.')}</p>`,
+            confirmLabel: 'OK' });
+        return false;
+    }
+    const answer = await openForm({
+        title: 'Saving and git',
+        fields: [
+            { name: 'commitAfterSave', label: 'Commit after save', type: 'checkbox',
+              hint: 'Every save commits the record it wrote — that file only — as BUG-0042: record edits from the UI.' },
+            { name: 'pushAfterCommit', label: 'Push after commit', type: 'checkbox',
+              hint: 'Each of those commits is pushed straight after. A failed push is shown in the Changes pane.' },
+        ],
+        defaults: state.settings || {},
+        submitLabel: 'Save',
+    });
+    if (!answer) return false;
+    try {
+        await call('/project/git', { commitAfterSave: !!answer.commitAfterSave, pushAfterCommit: !!answer.pushAfterCommit });
+        eventBus?.emit?.(ev('git:changed'), {});
+        return true;
+    } catch (err) {
+        eventBus?.emit?.('toast:show', { type: 'error', message: `Could not save: ${err.message}` });
+        return false;
+    }
+}

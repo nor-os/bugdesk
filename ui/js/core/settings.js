@@ -122,6 +122,7 @@ export const VISIBLE_SETTINGS = new Set([
     'bugdesk.recordTypes',
     'bugdesk.workflow',
     'bugdesk.numbering',
+    'bugdesk.git',
     'bugdesk.modifierOpen',
     // Read by FlexDesk's managed windows, which BugDesk's floats are.
     'window.animateMinimize',
@@ -174,6 +175,7 @@ export const BUGDESK_SETTINGS_SLICE = {
             recordTypes: null,
             workflow: null,
             numbering: null,
+            git: null,
         },
     },
 
@@ -247,6 +249,20 @@ export const BUGDESK_SETTINGS_SLICE = {
             onClick: async () => {
                 const { openNumberingEditor } = await import('../ticketdesk/numbering_editor.js');
                 return openNumberingEditor({ eventBus: window.__ecoagent?.eventBus });
+            },
+        },
+
+        // Commit after save, push after commit — the Changes pane's two switches.
+        'bugdesk.git': {
+            type: 'action', category: 'general', group: 'Project',
+            label: 'Saving and git',
+            description: 'Whether each save commits the record it wrote, and whether that commit is pushed. Off by default. The bottom panel\'s Changes tab lists what is uncommitted, with its diff, and commits and pushes by hand.',
+            buttonLabel: 'Saving and git…',
+            icon: 'commit',
+            defaultValue: null,
+            onClick: async () => {
+                const { openGitSettings } = await import('../ticketdesk/changes_pane.js');
+                return openGitSettings({ eventBus: window.__ecoagent?.eventBus });
             },
         },
 
