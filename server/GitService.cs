@@ -190,12 +190,31 @@ sealed class GitService
     }
 }
 
-/// <summary>The project's saving and git settings — <c>git</c> in project.json.</summary>
-record GitSettings(bool CommitAfterSave, bool PushAfterCommit)
+/// <summary>
+/// The project's saving and git settings — <c>git</c> in project.json: whether a
+/// save commits and a commit pushes (STORY-0006), and whether the record pages
+/// save by themselves (STORY-0020): <c>off</c>, every <c>interval</c> seconds, or
+/// <c>debounce</c> — that many seconds after the last keystroke.
+/// </summary>
+record GitSettings(bool CommitAfterSave, bool PushAfterCommit, string Autosave = "off", int AutosaveSeconds = 0)
 {
-    public static GitSettings Parse(JsonNode? n) => new(
+    public static GitSettings Parse(JsonNode? n) => new GitSettings(
         n?["commitAfterSave"] is JsonValue c && c.TryGetValue<bool>(out var cv) && cv,
-        n?["pushAfterCommit"] is JsonValue p && p.TryGetValue<bool>(out var pv) && pv);
+        n?["pushAfterCommit"] is JsonValue p && p.TryGetValue<bool>(out var pv) && pv,
+        n?["autosave"] is JsonValue a && a.TryGetValue<string>(out var av) ? av : "off",
+        n?["autosaveSeconds"] is JsonValue s && s.TryGetValue<int>(out var sv) ? sv : 0).Normalised();
 
-    public JsonObject ToJson() => new() { ["commitAfterSave"] = CommitAfterSave, ["pushAfterCommit"] = PushAfterCommit };
+    /// <summary>Unknown modes are off; seconds default to 30 (interval) or 2 (debounced).</summary>
+    public GitSettings Normalised()
+    {
+        var mode = Autosave is "interval" or "debounce" ? Autosave : "off";
+        var secs = mode == "off" ? 0 : Math.Clamp(AutosaveSeconds > 0 ? AutosaveSeconds : (mode == "interval" ? 30 : 2), 1, 3600);
+        return this with { Autosave = mode, AutosaveSeconds = secs };
+    }
+
+    public JsonObject ToJson() => new()
+    {
+        ["commitAfterSave"] = CommitAfterSave, ["pushAfterCommit"] = PushAfterCommit,
+        ["autosave"] = Autosave, ["autosaveSeconds"] = AutosaveSeconds,
+    };
 }

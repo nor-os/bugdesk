@@ -7,6 +7,16 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Auto-save** (STORY-0020). Settings › Saving and git can save record edits
+  without pressing Save: a few seconds after you stop typing, or every few
+  seconds while there are edits (off by default). Save becomes *Save now*, and
+  the state beside it says Unsaved, Saving…, Saved at hh:mm or Save failed. A
+  failed save is retried after 2, 4, 8 … up to 60 seconds, with nothing typed
+  lost. An auto-save never overwrites a file that changed on disk since it was
+  opened: it stops and says so. With commit after save on, auto-saves don't
+  commit one by one; the record is committed once when you leave it, or after
+  five quiet minutes.
+
 - **Commit, push and a Changes pane** (STORY-0006). The bottom panel's new
   *Changes* tab lists the store's uncommitted record files with their diffs,
   and has a commit message, *Commit* and *Push*. Its two switches, *Commit after

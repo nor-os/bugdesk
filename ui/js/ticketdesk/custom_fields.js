@@ -31,7 +31,7 @@ let _seq = 1;
  * @param {object}  [o.values] the record's `fields` map
  * @param {boolean} [o.creating]  a new record: every required field is asked for
  * @param {Function} [o.onChange] called after any edit (to mark the page dirty)
- * @returns {{ setType(type: string): void, set(values: object): void,
+ * @returns {{ setType(type: string): void, set(values: object): void, rebase(values: object): void,
  *            collect(): object, validate(): string|null, destroy(): void }}
  */
 export function mountCustomFields(slot, { store, type, values = {}, creating = false, onChange = null } = {}) {
@@ -114,6 +114,11 @@ export function mountCustomFields(slot, { store, type, values = {}, creating = f
             initial = { ...(next || {}) };
             current = { ...initial };
             render();
+        },
+        /** What is now on disk, WITHOUT redrawing — after an auto-save, while
+         *  somebody may still be typing in one of these fields. */
+        rebase(next) {
+            initial = { ...(next || {}) };
         },
         /** `{ name: value }` for every schema field whose value changed. */
         collect() {

@@ -159,6 +159,8 @@
             workflow: cfg.workflow || null,
             // Prefixes, padding, and every prefix still read (refs.js).
             numbering: cfg.numbering || null,
+            // Auto-save and git (autosave.js, changes_pane.js).
+            saving: cfg.saving || null,
             projects: Array.isArray(cfg.projects) ? cfg.projects : [],
             tracker: cfg.tracker || { available: false },
         };

@@ -64,6 +64,7 @@ import { mountCustomFields } from './custom_fields.js';
 import { customStatus, isHidden, statusKnown } from './schema.js';
 import { actionsFor } from './workflow.js';
 import { convertRecord, convertedBanner } from './convert.js';
+import { attachAutosave, autosaveMode } from './autosave.js';
 import { attachTagInput } from './tag_input.js';
 import { ITEMS, isClosedItem, loadBacklog } from './backlog_data.js';
 import { watchRecord } from './live.js';
@@ -839,13 +840,16 @@ function mountTicket(host, props, ctx) {
     if (actionsEl) {
         actionsEl.innerHTML = `
             <div class="td-floatactions">
+                <span class="td-savestate" data-slot="savestate" aria-live="polite"></span>
                 <button class="ea-btn" data-a="cancel" disabled>${icon('undo')} Cancel</button>
-                <button class="ea-btn ea-btn--primary" data-a="save" disabled>${icon('save')} Save</button>
+                <button class="ea-btn ea-btn--primary" data-a="save" disabled>${icon('save')} ${autosaveMode().mode === 'off' ? 'Save' : 'Save now'}</button>
             </div>`;
     }
 
     const $ = (s) => host.querySelector(s) || actionsEl?.querySelector(s) || null;
     const $$ = (s) => Array.from(host.querySelectorAll(s));
+    // Auto-save (Settings › Saving and git) — attached once `save` exists, below.
+    let autosave = null;
     const fval = (id) => host.querySelector(`[data-f="${id}"]`)?.value?.trim() || '';
     const setV = (id, val) => {
         const el = host.querySelector(`[data-f="${id}"]`);
@@ -874,6 +878,12 @@ function mountTicket(host, props, ctx) {
         const a = $('[data-a="save"]'), c = $('[data-a="cancel"]');
         if (a) a.disabled = !on;
         if (c) c.disabled = !on;
+        // Every edit is counted, so an auto-save can tell whether more arrived
+        // while it was on the wire (autosave.js).
+        // A value the PAGE wrote (loading the record fills the labels, which
+        // fires an input) is not an edit and schedules nothing.
+        if (on && !state.applying) { state.edits = (state.edits || 0) + 1; autosave?.edited(); }
+        if (!on) autosave?.clean();
     };
     // The link adder's two controls are [data-f] because that is how this mount finds
     // its fields, but typing a link target is not an unsaved edit to the record — and
@@ -1344,6 +1354,10 @@ function mountTicket(host, props, ctx) {
     };
 
     const applyBug = (bug) => {
+        state.applying = true;
+        try { fillBug(bug); } finally { state.applying = false; }
+    };
+    const fillBug = (bug) => {
         setV('summary', bug.title);
         setV('status', humanizeStatus(bug.status));
         setV('severity', bug.severity);
@@ -1353,6 +1367,7 @@ function mountTicket(host, props, ctx) {
         setV('assignee', bug.assignee || '');
         setV('reporter', bug.reporter || '');
         setV('updated', formatStamp(bug.updated) || '—');
+        state.updated = bug.updated || '';
         customFieldsCtl?.set(bug.fields || {});
         syncTypeRows();
         const conv = host.querySelector('[data-slot="converted"]');
@@ -1483,18 +1498,39 @@ function mountTicket(host, props, ctx) {
         });
     };
 
-    const save = async () => {
+    const save = async ({ auto = false } = {}) => {
         if (!t.bugId) { statusLine('Local bug — nothing to persist.'); return; }
         const fieldError = customFieldsCtl?.validate();
-        if (fieldError) { statusLine(`Not saved: ${fieldError}`); return; }
+        if (fieldError) {
+            statusLine(`Not saved: ${fieldError}`);
+            if (auto) throw new Error(fieldError);
+            return;
+        }
+        // AN AUTO-SAVE DOES NOT REDRAW THE FORM: somebody may be typing. It says
+        // which version it started from, so a file changed on disk meanwhile is
+        // refused rather than overwritten, and it moves the baseline only.
+        const editsAtStart = state.edits || 0;
         try {
             const patch = collectPatch();
+            if (auto) { patch.autosave = true; if (state.updated) patch.expectUpdated = state.updated; }
             state.moveMessage = null;
             const updated = await patchBug(t.bugId, patch);
+            if (auto) {
+                state.updated = updated.updated || state.updated;
+                customFieldsCtl?.rebase(updated.fields || {});
+                setV('updated', formatStamp(updated.updated) || '—');
+                if ((state.edits || 0) === editsAtStart) { state.dirty = false; const a = $('[data-a="save"]'), c = $('[data-a="cancel"]'); if (a) a.disabled = true; if (c) c.disabled = true; }
+                live.clear();
+                return;
+            }
             applyRecord(updated);
             live.clear();
+            autosave?.saved();
             statusLine(`Bug #${t.bugId} saved.`);
-        } catch (err) { statusLine(`Save failed: ${err.message}`); }
+        } catch (err) {
+            if (auto) throw err;
+            statusLine(`Save failed: ${err.message}`);
+        }
     };
     // Cancel: discard unsaved edits and restore the saved state. For a
     // persisted bug that means re-fetching the authoritative record from
@@ -1585,7 +1621,14 @@ function mountTicket(host, props, ctx) {
         await save();
     };
 
-    const actions = { save, cancel };
+    autosave = mode === 'edit' && t.bugId ? attachAutosave({
+        statusEl: $('[data-slot="savestate"]'),
+        isDirty: () => state.dirty,
+        save,
+        ref: () => `BUG-${t.bugId}`,
+    }) : null;
+
+    const actions = { save: () => save(), cancel };
     const onAction = (e) => {
         const btn = e.target.closest('[data-a]');
         if (btn && actions[btn.dataset.a]) actions[btn.dataset.a]();
@@ -1716,6 +1759,7 @@ function mountTicket(host, props, ctx) {
             try { composer?.destroy(); } catch { /* already gone */ }
             try { commentEditing?.destroy(); } catch { /* already gone */ }
             try { customFieldsCtl?.destroy(); } catch { /* already gone */ }
+            try { autosave?.destroy(); } catch { /* already gone */ }
         },
     };
 }

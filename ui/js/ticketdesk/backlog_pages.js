@@ -33,6 +33,7 @@ import { mountCustomFields } from './custom_fields.js';
 import { hiddenForAll, isHidden, statusKnown, withCustomStatuses } from './schema.js';
 import { actionsFor, movesFor, planMove } from './workflow.js';
 import { convertRecord, convertedBanner } from './convert.js';
+import { attachAutosave, autosaveMode } from './autosave.js';
 import { watchRecord } from './live.js';
 import { attachParentPicker, attachRecordTypeahead, childTypesFor, openItemPicker, openRecordPicker } from './item_picker.js';
 import { installRecordDragSource, markDragCell, openRecordAs } from './record_dnd.js';
@@ -783,19 +784,27 @@ function mountItem(host, props, ctx) {
     if (actionsEl) {
         actionsEl.innerHTML = `
             <div class="td-floatactions">
+                <span class="td-savestate" data-slot="savestate" aria-live="polite"></span>
                 <button class="ea-btn" data-a="cancel" disabled>${icon('undo')} Cancel</button>
-                <button class="ea-btn ea-btn--primary" data-a="save" disabled>${icon('save')} Save</button>
+                <button class="ea-btn ea-btn--primary" data-a="save" disabled>${icon('save')} ${autosaveMode().mode === 'off' ? 'Save' : 'Save now'}</button>
             </div>`;
     }
 
     const $ = (s) => host.querySelector(s) || actionsEl?.querySelector(s) || null;
     const fval = (k) => host.querySelector(`[data-f="${k}"]`)?.value?.trim() ?? '';
+    // Auto-save (Settings › Saving and git), attached once `save` exists.
+    let autosave = null;
+    let edits = 0;
     const setDirty = (on) => {
         dirty = on;
         const save = $('[data-a="save"]'), cancel = $('[data-a="cancel"]');
         if (save) save.disabled = !on;
         if (cancel) cancel.disabled = !on;
+        if (on && !applying) { edits++; autosave?.edited(); }
+        if (!on) autosave?.clean();
     };
+    // True while the page itself fills the form from a record (see apply).
+    let applying = false;
 
     let tagInput = null;
     let composer = null;
@@ -1485,6 +1494,10 @@ function mountItem(host, props, ctx) {
     /** One place where a fresh record becomes the rendered page, so no caller
      *  has to remember which sections a write invalidates. */
     const apply = (fresh) => {
+        applying = true;
+        try { applyFresh(fresh); } finally { applying = false; }
+    };
+    const applyFresh = (fresh) => {
         item = fresh;
         dueTouched = false;
         // A repaint means the record moved on; an open editor holding the
@@ -1514,9 +1527,14 @@ function mountItem(host, props, ctx) {
         _eventBus?.emit?.(ev('backlog:changed'), { id: item?.id });
     };
 
-    const save = async () => {
+    const save = async ({ auto = false } = {}) => {
         const fieldError = customFieldsCtl?.validate();
-        if (fieldError) { statusLine(`Not saved: ${fieldError}`); return; }
+        if (fieldError) {
+            statusLine(`Not saved: ${fieldError}`);
+            if (auto) throw new Error(fieldError);
+            return;
+        }
+        const editsAtStart = edits;
         try {
             const shows = (f) => !isHidden('backlog', item.type, f);
             const patch = {
@@ -1543,12 +1561,38 @@ function mountItem(host, props, ctx) {
             if ((item.type === 'project' || item.type === 'epic') && shows('phase')) patch.phase = fval('phase');
             if (parentTypesFor(item.type).length > 0) patch.parent = parentPicker ? parentPicker.value() : 0;
             if (item.type !== 'project' && shows('points')) patch.points = fval('points');
-            apply(await patchItem(item.id, patch));
+            // An auto-save says which version it started from and does not
+            // redraw the page under somebody typing (see the bug page's save).
+            if (auto) { patch.autosave = true; if (item.updatedRaw || item.updated) patch.expectUpdated = item.updatedRaw || item.updated; }
+            const saved = await patchItem(item.id, patch);
+            if (auto) {
+                item = { ...item, updated: saved.updated, updatedRaw: saved.updated, fields: saved.fields };
+                customFieldsCtl?.rebase(saved.fields || {});
+                if (edits === editsAtStart) {
+                    dirty = false;
+                    const sv = $('[data-a="save"]'), cc = $('[data-a="cancel"]');
+                    if (sv) sv.disabled = true;
+                    if (cc) cc.disabled = true;
+                }
+                live.clear();
+                return;
+            }
+            apply(saved);
             await broadcast();
             live.clear();
+            autosave?.saved();
             statusLine(`${itemRef(item)} saved.`);
-        } catch (err) { statusLine(`Save failed: ${err?.message || err}`); }
+        } catch (err) {
+            if (auto) throw err;
+            statusLine(`Save failed: ${err?.message || err}`);
+        }
     };
+    autosave = attachAutosave({
+        statusEl: $('[data-slot="savestate"]'),
+        isDirty: () => dirty,
+        save,
+        ref: () => itemRef(item || { id, type: 'task' }),
+    });
 
     /** Delete, then leave — the page is about a record that no longer exists,
      *  and a live-update banner announcing our own deletion on top of it is
@@ -1808,6 +1852,7 @@ function mountItem(host, props, ctx) {
             host.removeEventListener('keydown', onCriteriaKey);
             destroyWidgets();
             for (const w of linkWidgets) { try { w.destroy(); } catch { /* already gone */ } }
+            try { autosave?.destroy(); } catch { /* already gone */ }
         },
     };
 }

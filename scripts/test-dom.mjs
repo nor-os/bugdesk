@@ -2941,5 +2941,64 @@ console.log('\nConversion');
     });
 }
 
+/* ── auto-save (STORY-0020) ─────────────────────────────────────────── */
+
+console.log('\nAuto-save');
+{
+    const inst = await import(join(UI, 'ticketdesk', 'instance.js'));
+    const { attachAutosave } = await import(join(UI, 'ticketdesk', 'autosave.js'));
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const make = (saveImpl) => {
+        inst.CONFIG.saving = { autosave: 'debounce', autosaveSeconds: 1 };
+        const el = document.createElement('span');
+        let dirty = false;
+        const calls = [];
+        const a = attachAutosave({ statusEl: el, isDirty: () => dirty, ref: () => 'BUG-0001',
+            save: async (o) => { calls.push(o); return saveImpl(() => { dirty = false; }); } });
+        return { a, el, calls, edit: () => { dirty = true; a.edited(); } };
+    };
+
+    await t('off by default: nothing is scheduled', () => {
+        inst.CONFIG.saving = null;
+        const a = attachAutosave({ statusEl: null, isDirty: () => true, save: async () => { throw new Error('saved'); }, ref: () => '' });
+        assert.equal(a.enabled, false);
+        a.destroy();
+    });
+
+    await t('debounced: one save a second after the last edit, and the state says so', async () => {
+        const m = make(async (clean) => clean());
+        m.edit(); await wait(400); m.edit();
+        assert.equal(m.el.textContent, 'Unsaved');
+        await wait(700);
+        assert.equal(m.calls.length, 0, 'saved before the debounce ran out');
+        await wait(600);
+        assert.equal(m.calls.length, 1);
+        assert.deepEqual(m.calls[0], { auto: true });
+        assert.match(m.el.textContent, /^Saved at \d\d:\d\d$/);
+        m.a.destroy();
+    });
+
+    await t('a failed save is retried after 2 s, and says so meanwhile', async () => {
+        let n = 0;
+        const m = make(async (clean) => { n++; if (n === 1) throw new Error('offline'); clean(); });
+        m.edit(); await wait(1200);
+        assert.match(m.el.textContent, /retrying in 2 s/);
+        await wait(2200);
+        assert.equal(m.calls.length, 2);
+        assert.match(m.el.textContent, /^Saved at/);
+        m.a.destroy();
+    });
+
+    await t('a conflict stops auto-save instead of saving over the file', async () => {
+        const m = make(async () => { const e = new Error('changed'); e.conflict = true; throw e; });
+        m.edit(); await wait(1200);
+        assert.match(m.el.textContent, /changed on disk/);
+        m.edit(); await wait(1200);
+        assert.equal(m.calls.length, 1, 'tried again after a conflict');
+        m.a.destroy();
+    });
+    inst.CONFIG.saving = null;
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

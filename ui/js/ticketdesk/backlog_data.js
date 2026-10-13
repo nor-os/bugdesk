@@ -365,7 +365,10 @@ async function apiPost(path, body) {
     // surface ITS message, which names the actual problem ("#3 is already below
     // #1"), instead of a bare status code.
     if (!res.ok || !j || j.ok === false) {
-        throw new Error(j?.error || `POST ${path} → ${res.status}`);
+        const err = new Error(j?.error || `POST ${path} → ${res.status}`);
+        err.conflict = !!j?.conflict;
+        err.status = res.status;
+        throw err;
     }
     return j;
 }

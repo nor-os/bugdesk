@@ -268,7 +268,13 @@ async function apiPost(path, body) {
     const j = await res.json().catch(() => null);
     // A refused edit names its problem ("Environment is required.") — surface
     // that rather than a bare status code, as backlog_data.js's apiPost does.
-    if (!res.ok) throw new Error(j?.error || `POST ${path} → ${res.status}`);
+    if (!res.ok) {
+        const err = new Error(j?.error || `POST ${path} → ${res.status}`);
+        // An auto-save refused because the file moved on under it (autosave.js).
+        err.conflict = !!j?.conflict;
+        err.status = res.status;
+        throw err;
+    }
     return j;
 }
 

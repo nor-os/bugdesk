@@ -340,6 +340,26 @@ app.MapPost("/api/attachments", async (HttpRequest req) =>
     return Results.Json(new { ok = true, url = $"/attachments/{fileName}", name = fileName }, json);
 });
 
+// ---- Auto-save (STORY-0020) ------------------------------------------------
+// An auto-save says which version of the record it started from (`expectUpdated`,
+// the record's `updated` stamp when the page loaded it or last saved it). If the
+// file has moved on since — an agent's edit, a pull — the save is refused with a
+// 409 rather than written over it, and the page shows the conflict. An auto-save
+// also writes WITHOUT committing (`autosave: true`); the page settles the record
+// — one commit — when it is left, or after five quiet minutes.
+
+static string? StaleAgainst(string text, Dictionary<string, JsonElement> patch)
+{
+    if (!patch.TryGetValue("expectUpdated", out var ev) || ev.ValueKind != JsonValueKind.String) return null;
+    var expected = (ev.GetString() ?? "").Trim();
+    var actual = (Md.GetFrontmatter(text, "updated") ?? "").Trim();
+    return expected.Length > 0 && actual != expected
+        ? $"the record changed on disk since it was opened (it now says updated {actual}); not saved over it"
+        : null;
+}
+static bool IsAutosave(Dictionary<string, JsonElement> patch) =>
+    patch.TryGetValue("autosave", out var a) && a.ValueKind == JsonValueKind.True;
+
 // ---- Custom fields ----------------------------------------------------------
 // See RecordSchema.cs. A request carries custom values as `fields: {name: value}`;
 // each is checked against the record type's schema and written as its own
@@ -596,6 +616,8 @@ app.MapPost("/api/bugs/{id:int}", async (int id, HttpRequest req) =>
     if (!File.Exists(path)) return Results.Json(new { ok = false, error = "not found" }, json, statusCode: 404);
     var patch = await JsonSerializer.DeserializeAsync<Dictionary<string, JsonElement>>(req.Body, json) ?? new();
     var text = await File.ReadAllTextAsync(path);
+    if (StaleAgainst(text, patch) is { } stale)
+        return Results.Json(new { ok = false, conflict = true, error = stale }, json, statusCode: 409);
 
     // Who is making the change. NEVER written to frontmatter — it is only ever the
     // actor column of a history line — and it defaults to the human because this API
@@ -660,7 +682,7 @@ app.MapPost("/api/bugs/{id:int}", async (int id, HttpRequest req) =>
         text = Md.AppendComment(text, actor, cv.GetString()!, commentNote);
     else if (statusNote is not null && patch.TryGetValue("tagRecentComment", out var tv) && tv.ValueKind == JsonValueKind.True)
         text = Md.TagRecentComment(text, actor, statusNote, DateTime.UtcNow).Text;
-    await Req.Store.WriteRecord(path, text);
+    await Req.Store.WriteRecord(path, text, commit: !IsAutosave(patch));
     return Results.Json(new { ok = true, bug = LoadOne(Req.Store.BugsDir, id) }, json);
 });
 
@@ -1029,6 +1051,8 @@ app.MapPost("/api/backlog/{id:int}", async (int id, HttpRequest req) =>
     if (actor.Length == 0) actor = Req.Store.Users.HumanAuthor;
 
     var text = await File.ReadAllTextAsync(path);
+    if (StaleAgainst(text, patch) is { } stale)
+        return Results.Json(new { ok = false, conflict = true, error = stale }, json, statusCode: 409);
     string? retype = null;      // set when the patch changes the item's type
     string? newStatus = null;   // set when the patch changes the status
 
@@ -1175,12 +1199,14 @@ app.MapPost("/api/backlog/{id:int}", async (int id, HttpRequest req) =>
         // between the two leaves the record duplicated (visible, fixable by
         // hand) rather than deleted (gone).
         var next = Path.Combine(Req.Store.BacklogDir, Numbering.Current.FileName("backlog", retype, id));
-        await Req.Store.WriteRecord(next, text);
+        await Req.Store.WriteRecord(next, text, commit: false);
         File.Delete(path);
+        // The rename is one commit: the new file and the old one's removal.
+        if (!IsAutosave(patch)) Req.Store.CommitAfterSave(new[] { next, path });
     }
     else
     {
-        await Req.Store.WriteRecord(path, text);
+        await Req.Store.WriteRecord(path, text, commit: !IsAutosave(patch));
     }
 
     var reloaded = LoadBacklog(Req.Store.BacklogDir);
@@ -1556,6 +1582,8 @@ object ConfigPayload(Store s, string? slug = null) => new
     workflow = s.Project.Workflow(),
     // How references are written: prefixes, padding, and every prefix still read.
     numbering = s.Project.Numbering().ToJson(),
+    // Auto-save, commit after save, push after commit (GitService.cs).
+    saving = GitSettings.Parse(s.Project.Document()["git"]).ToJson(),
     // The store this page is on, and which of its two halves exist.
     store = new { kind = s.Kind, name = s.Name, hasBugs = s.HasBugs, hasBacklog = s.HasBacklog, @base = s.UrlBase },
     projects = ProjectList(),
@@ -1798,6 +1826,21 @@ app.MapPost("/api/git/commit", async (HttpRequest req) =>
     return Results.Json(GitPayload(Req.Store), json);
 });
 
+// After auto-saves: the record is left, or quiet for five minutes — ONE commit
+// for everything it auto-saved, if the project commits after save.
+app.MapPost("/api/git/settle", async (HttpRequest req) =>
+{
+    var body = await JsonSerializer.DeserializeAsync<Dictionary<string, JsonElement>>(req.Body, json) ?? new();
+    var r = Refs.Parse(body.TryGetValue("ref", out var rv) && rv.ValueKind == JsonValueKind.String ? rv.GetString() : "", "bugs");
+    if (!r.Ok) return Results.Json(new { ok = false, error = "ref required" }, json, statusCode: 400);
+    var store = Req.Store;
+    var path = r.Store == "bugs" ? Numbering.Current.Find(store.BugsDir, "bugs", r.Id)
+                                 : Numbering.Current.Find(store.BacklogDir, "backlog", r.Id);
+    if (path is null) return Results.Json(new { ok = false, error = "not found" }, json, statusCode: 404);
+    var error = store.CommitAfterSave(new[] { path });
+    return error is null ? Results.Json(new { ok = true }, json) : Results.Json(new { ok = false, error }, json, statusCode: 409);
+});
+
 // Push in the background; the pane asks again (or hears the `git` event) for the result.
 app.MapPost("/api/git/push", () =>
 {
@@ -1811,7 +1854,9 @@ app.MapPost("/api/project/git", async (HttpRequest req) =>
 {
     var body = await JsonSerializer.DeserializeAsync<Dictionary<string, JsonElement>>(req.Body, json) ?? new();
     bool B(string k) => body.TryGetValue(k, out var v) && v.ValueKind == JsonValueKind.True;
-    var next = new GitSettings(B("commitAfterSave"), B("pushAfterCommit") && B("commitAfterSave"));
+    var mode = body.TryGetValue("autosave", out var am) && am.ValueKind == JsonValueKind.String ? am.GetString() ?? "off" : "off";
+    var secs = body.TryGetValue("autosaveSeconds", out var asv) && asv.ValueKind == JsonValueKind.Number && asv.TryGetInt32(out var n) ? n : 0;
+    var next = new GitSettings(B("commitAfterSave"), B("pushAfterCommit") && B("commitAfterSave"), mode, secs).Normalised();
     Req.Store.Project.SetKey("git", next.ToJson());
     return Results.Json(GitPayload(Req.Store), json);
 });

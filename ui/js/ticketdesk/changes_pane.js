@@ -14,7 +14,7 @@
  */
 
 import { esc } from './data.js';
-import { apiUrl, ev } from './instance.js';
+import { CONFIG, apiUrl, ev } from './instance.js';
 
 const icon = (name) => `<span class="material-symbols-outlined">${name}</span>`;
 
@@ -170,13 +170,25 @@ export async function openGitSettings({ eventBus = null } = {}) {
               hint: 'Every save commits the record it wrote — that file only — as BUG-0042: record edits from the UI.' },
             { name: 'pushAfterCommit', label: 'Push after commit', type: 'checkbox',
               hint: 'Each of those commits is pushed straight after. A failed push is shown in the Changes pane.' },
+            { section: 'Auto-save' },
+            { name: 'autosave', label: 'Save edits', type: 'select', required: true,
+              options: [{ value: 'off', label: 'Only when I press Save' },
+                        { value: 'debounce', label: 'A few seconds after I stop typing' },
+                        { value: 'interval', label: 'Every few seconds while there are edits' }] },
+            { name: 'autosaveSeconds', label: 'Seconds', type: 'number',
+              hint: 'How long after the last keystroke, or how often. Auto-saves commit once you leave the record, or after five quiet minutes.' },
         ],
         defaults: state.settings || {},
         submitLabel: 'Save',
     });
     if (!answer) return false;
     try {
-        await call('/project/git', { commitAfterSave: !!answer.commitAfterSave, pushAfterCommit: !!answer.pushAfterCommit });
+        const saved = await call('/project/git', {
+            commitAfterSave: !!answer.commitAfterSave, pushAfterCommit: !!answer.pushAfterCommit,
+            autosave: answer.autosave || 'off', autosaveSeconds: Number(answer.autosaveSeconds) || 0,
+        });
+        // The pages read the mode at mount: a page opened from now on uses it.
+        CONFIG.saving = saved.settings;
         eventBus?.emit?.(ev('git:changed'), {});
         return true;
     } catch (err) {
