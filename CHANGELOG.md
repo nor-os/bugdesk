@@ -7,6 +7,12 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **A desktop prototype** (STORY-0009, a spike). `desktop/BugDesk.Desktop`
+  opens BugDesk in a native Photino.NET window on Windows, with the server
+  running in the same process on a free loopback port. What it found (the host
+  bridge design, Linux and macOS, packaging and size) is in
+  `docs/desktop-spike.md`.
+
 - **Alerts** (STORY-0005). Settings › Alerts holds rules: a name, a store, a
   condition built in the filter editor (any field, custom ones included), a
   level (info, warning, alert), and whether it also shows a toast, which can be

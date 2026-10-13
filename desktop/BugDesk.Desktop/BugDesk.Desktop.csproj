@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- STORY-0009 spike: BugDesk in a native window (Photino.NET), the server
+       in-process. Windows first, as SixShare.Desktop does; see
+       docs/desktop-spike.md for Linux and macOS. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>BugDesk.Desktop</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Photino.NET" Version="4.0.16" />
+    <!-- The server, as an assembly: started in this process, not as a child. -->
+    <ProjectReference Include="..\..\server\BugDesk.Server.csproj" />
+  </ItemGroup>
+
+</Project>
