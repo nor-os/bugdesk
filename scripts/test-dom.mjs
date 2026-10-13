@@ -1435,7 +1435,9 @@ await t('clicking a name opens that person\'s OPEN work in the main tile', async
     assert.match(expr, /"bob"/, 'the filter is not about bob');
     // OPEN work: the row's own count is of things in flight, so the list it
     // opens has to be the same set or the number and the body disagree.
-    assert.match(expr, /"done"/, `not restricted to open work: ${expr}`);
+    // "Open" is its own status not finished — done, dropped, or a project's own
+    // finished status (STORY-0024) — hence `ownFinished`, not a status list.
+    assert.match(expr, /"ownFinished","op":"is","value":"no"/, `not restricted to open work: ${expr}`);
 
     panel.destroy?.();
     host.remove();
@@ -2841,6 +2843,28 @@ console.log('\nRecord schema');
         assert.equal(slot.innerHTML, '');
         assert.equal(slot.style.display, 'none');
         cf.destroy();
+    });
+
+    await t('a record is snoozed while its "Snooze until" date is ahead, and only on a type that has the field', () => {
+        schema.setSchema({ types: { bugs: { bug: { fields: [schema.SNOOZE_FIELD], hidden: [], statuses: [] } } } });
+        const ahead = new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10);
+        const past = new Date(Date.now() - 5 * 86400000).toISOString().slice(0, 10);
+        assert.equal(schema.snoozeConfigured('bugs'), true);
+        assert.equal(schema.snoozeConfigured('backlog'), false);
+        assert.equal(schema.isSnoozed('bugs', 'bug', { not_before: ahead }), true);
+        assert.equal(schema.isSnoozed('bugs', 'bug', { not_before: past }), false, 'its day has come');
+        assert.equal(schema.isSnoozed('bugs', 'regression', { not_before: ahead }), false, 'regressions have no such field');
+        assert.equal(schema.isSnoozed('bugs', 'bug', {}), false);
+    });
+
+    await t('the Snoozed view says how to set it up where nothing has the field', () => {
+        schema.setSchema(null);
+        const notice = schema.snoozeNotice('backlog');
+        assert.ok(notice, 'no notice');
+        assert.match(notice.textContent, /Snooze until/);
+        assert.ok(notice.querySelector('button'), 'no button to set it up');
+        schema.setSchema({ types: { backlog: { story: { fields: [schema.SNOOZE_FIELD], hidden: [], statuses: [] } } } });
+        assert.equal(schema.snoozeNotice('backlog'), null, 'a notice where the field exists');
     });
 
     schema.setSchema(null);

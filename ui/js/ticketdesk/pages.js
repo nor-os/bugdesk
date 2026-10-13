@@ -61,7 +61,10 @@ import { CONFIG, ev, KIND, trackerModule } from './instance.js';
 import { attachRecordTypeahead, openRecordPicker } from './item_picker.js';
 import { attachSelect, setRowVisible } from './select_field.js';
 import { mountCustomFields } from './custom_fields.js';
-import { customStatus, isHidden, statusKnown, withCustomStatuses } from './schema.js';
+import {
+    customStatus, displayValue, isHidden, snoozeNotice, sortValue as schemaSortValue, statusKnown,
+    storeFields as customColumns, withCustomStatuses,
+} from './schema.js';
 import { actionsFor } from './workflow.js';
 import { convertRecord, convertedBanner } from './convert.js';
 import { attachAutosave, autosaveMode } from './autosave.js';
@@ -205,8 +208,27 @@ const QUEUE_COLUMNS = [
     { header: 'Status',   field: 'status',    cell: (t) => t.status,    toFilterValue: (v) => machineStatus(v) },
     { header: 'Updated',  field: 'updated',   cell: (t) => t.sla,       toFilterValue: (v) => v },
     { header: 'Assignee', field: 'assignee',  cell: (t) => t.assignee,  toFilterValue: (v) => v },
+    // The project's own fields (Settings › Record types), after the built-ins
+    // so no built-in column moves — hidden until somebody picks them from the
+    // header's right-click menu.
+    ...customColumns('bugs').map((f) => ({
+        header: f.label || f.name, field: `cf.${f.name}`, custom: f,
+        cell: (t) => displayValue(f, t.fields?.[f.name]),
+        toFilterValue: (v) => (f.type === 'bool' ? (v === 'Yes' ? 'true' : v === 'No' ? 'false' : '') : v),
+        cellFilter: f.type !== 'text',
+    })),
 ];
+/** Indices of the custom-field columns: hidden by default. */
+const QUEUE_CUSTOM_IDX = QUEUE_COLUMNS.map((c, i) => (c.custom ? i : -1)).filter((i) => i >= 0);
+/** Part of the table's remembered-state key, so a remembered hidden set and
+ *  widths never land on the wrong columns after the schema changed. */
+const QUEUE_COLS_SIG = QUEUE_CUSTOM_IDX.length ? `:${QUEUE_CUSTOM_IDX.map((i) => QUEUE_COLUMNS[i].field).join(',')}` : '';
 const QUEUE_HEADERS = QUEUE_COLUMNS.map((c) => c.header);
+
+/** Custom fields of both stores, one per name, for the search results. */
+const SEARCH_CUSTOM = [...customColumns('bugs'), ...customColumns('backlog')]
+    .filter((f, i, all) => all.findIndex((g) => g.name === f.name) === i);
+const SEARCH_SIG = SEARCH_CUSTOM.length ? `:${SEARCH_CUSTOM.map((f) => f.name).join(',')}` : '';
 
 /** A bug's status as a position: the built-in order with custom statuses in
  *  their configured place (schema.js), for a sort by Status. */
@@ -447,7 +469,12 @@ function mountQueues(host, props, ctx) {
     // with an expression and no saved filter) has no stable name, so they share
     // one slot rather than each minting a key that is never seen again. Only set
     // when a store was handed in — a table given a persistKey and no store throws.
-    const persistKey = `bugs:queue:${resolved.key || 'adhoc'}`;
+    const persistKey = `bugs:queue:${resolved.key || 'adhoc'}${QUEUE_COLS_SIG}`;
+    // The Snoozed view in a project with no "Snooze until" field: say how to get one.
+    if (resolved.key === 'snoozed') {
+        const notice = snoozeNotice('bugs', _eventBus);
+        if (notice) host.querySelector('.td-tablehost').before(notice);
+    }
     const table = createTable(host.querySelector('.td-tablehost'), {
         ...(ctx?.tableStore ? { stateStore: ctx.tableStore, persistKey } : {}),
         // Priority is a short-badge column (an 8px swatch + "P3"): pinned narrow
@@ -455,7 +482,15 @@ function mountQueues(host, props, ctx) {
         seedColWidths: { 0: 48 },
         // Status sorts by where a status stands — custom ones in their
         // configured place (Settings › Record types) — not alphabetically.
-        sortValue: { [QUEUE_COLUMNS.findIndex((c) => c.field === 'status')]: (_v, _c, row) => bugStatusRank(row[QUEUE_ID_COL]) },
+        sortValue: {
+            [QUEUE_COLUMNS.findIndex((c) => c.field === 'status')]: (_v, _c, row) => bugStatusRank(row[QUEUE_ID_COL]),
+            // Dates as dates, numbers as numbers — off the RAW value, not the text drawn.
+            ...Object.fromEntries(QUEUE_CUSTOM_IDX.map((i) => [i, (_v, _c, row) => {
+                const t = TICKETS.find((x) => x.id === row[QUEUE_ID_COL]);
+                return schemaSortValue(QUEUE_COLUMNS[i].custom, t?.fields?.[QUEUE_COLUMNS[i].custom.name]) ?? undefined;
+            }])),
+        },
+        ...(QUEUE_CUSTOM_IDX.length ? { hiddenColumns: QUEUE_CUSTOM_IDX, columnChooser: true } : {}),
         // Every ad-hoc view shares the 'adhoc' slot, so its page would land a
         // new filter's results on whatever page the last one was left on.
         persistPage: !!resolved.key,
@@ -1135,7 +1170,7 @@ function mountTicket(host, props, ctx) {
             }).map((i) => ({
                 store: 'backlog', ref: i.ref, id: i.ref, bugId: i.id,
                 summary: i.title, type: i.typeLabel, status: i.statusLabel,
-                sla: i.updated, assignee: i.assignee, closed: isClosedItem(i),
+                sla: i.updated, assignee: i.assignee, closed: isClosedItem(i), fields: i.fields || {},
             }));
 
             const matches = [...bugs, ...items];
@@ -1168,12 +1203,22 @@ function mountTicket(host, props, ctx) {
             resultsTable = createTable(resultsEl.querySelector('.td-tablehost'), {
                 // The results are rebuilt on every search, so this is how a sort
                 // you chose survives running the next one.
-                ...(ctx?.tableStore ? { stateStore: ctx.tableStore, persistKey: 'bugs:search' } : {}),
+                ...(ctx?.tableStore ? { stateStore: ctx.tableStore, persistKey: `bugs:search${SEARCH_SIG}` } : {}),
                 // A new search starts on its first page, not the last one's.
                 persistPage: false,
-                headers: ['Ref', 'Store', 'Type', 'Summary', 'Status', 'Updated', 'Assignee'],
+                headers: ['Ref', 'Store', 'Type', 'Summary', 'Status', 'Updated', 'Assignee',
+                          ...SEARCH_CUSTOM.map((f) => f.label || f.name)],
                 rows: matches.map((m) => [m.ref, m.store === 'backlog' ? 'Backlog' : 'Bugs',
-                                          m.type, m.summary, m.status, m.sla, m.assignee]),
+                                          m.type, m.summary, m.status, m.sla, m.assignee,
+                                          ...SEARCH_CUSTOM.map((f) => displayValue(f, m.fields?.[f.name]))]),
+                // Custom fields of either store, hidden until picked from the header menu.
+                ...(SEARCH_CUSTOM.length ? {
+                    hiddenColumns: SEARCH_CUSTOM.map((_, i) => 7 + i), columnChooser: true,
+                    sortValue: Object.fromEntries(SEARCH_CUSTOM.map((f, i) => [7 + i, (_v, _c, row) => {
+                        const m = byRef.get(row[0]);
+                        return schemaSortValue(f, m?.fields?.[f.name]) ?? undefined;
+                    }])),
+                } : {}),
                 pagination: true, selectable: true, copyable: true, sortable: true, mode: 'compact',
                 onRender: paintRecordCount,
                 emptyMessage: 'Nothing matches the criteria',

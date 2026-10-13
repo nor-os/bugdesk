@@ -86,12 +86,18 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     field existed still saves. A value the schema no longer names is shown,
     marked and kept.
   - Custom fields are conditions in the filter editor (with the operators of
-    their type), and full-text search finds their values. A saved filter naming
+    their type), and full-text search finds their values. They are also
+    columns on the bug queue, the backlog board and search results, hidden
+    until picked from a header's right-click menu, and they sort by type. A saved filter naming
     a field that was removed is marked in the rail and reads "unknown field".
   - A hidden built-in leaves the forms, the record page, the board's columns
     and the filter editor, and its values stay in the files. Hiding `due` turns
     off overdue highlighting; hiding `points` drops the estimate check from
     refinement.
+  - **Snooze until** (TASK-0004), a ready-made date field one click away in
+    Record types: a record is left out of the open views until that day, and
+    each rail's *Snoozed* view lists what is waiting. Where no type has the
+    field, the view says so and offers to set it up.
   - A custom status is offered as a move on the record page and in the
     right-click menu, gets its own view in the rail, and sorts in its place in
     the tree. A finished one leaves the open views like `closed` / `done`. A

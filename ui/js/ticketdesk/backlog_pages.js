@@ -30,7 +30,10 @@ import { attachMarkdownEditor } from './md_editor.js';
 import { attachTagInput } from './tag_input.js';
 import { attachSelect, setRowVisible } from './select_field.js';
 import { mountCustomFields } from './custom_fields.js';
-import { hiddenForAll, isHidden, statusKnown, withCustomStatuses } from './schema.js';
+import {
+    displayValue, hiddenForAll, isHidden, snoozeNotice, sortValue as schemaSortValue, statusKnown, storeFields,
+    withCustomStatuses,
+} from './schema.js';
 import { actionsFor, movesFor, planMove } from './workflow.js';
 import { convertRecord, convertedBanner } from './convert.js';
 import { attachAutosave, autosaveMode } from './autosave.js';
@@ -230,9 +233,21 @@ const BOARD_COLS = [
     ...(TRACKER ? [{ key: 'due', label: 'Due', get: (i) => i.dueLabel || '', filter: 'due', filterValue: (i) => i.due }] : []),
     { key: 'phase', label: 'Phase', get: (i) => i.phaseLabel, filter: 'phase', filterValue: (i) => i.phaseLabel },
     { key: 'updated', label: 'Updated', get: (i) => i.updated, filter: 'updated', filterValue: (i) => i.updated },
+    // The project's own fields (Settings › Record types), after the built-ins,
+    // hidden until picked from the header's right-click menu.
+    ...storeFields('backlog').map((f) => ({
+        key: `cf.${f.name}`, label: f.label || f.name, custom: f,
+        get: (i) => displayValue(f, i.fields?.[f.name]),
+        sortKey: (i) => schemaSortValue(f, i.fields?.[f.name]),
+        ...(f.type === 'text' ? {} : { filter: `cf.${f.name}`, filterValue: (i) => String(i.fields?.[f.name] ?? '') }),
+    })),
 // A built-in the project hides on every type (Settings › Record types) has no
 // column: a board column empty on every row by decision is only noise.
 ].filter((c) => !(['points', 'due', 'phase'].includes(c.key) && hiddenForAll('backlog', c.key)));
+/** Indices of the custom-field columns (hidden by default), and a key part so a
+ *  remembered hidden set never lands on the wrong columns after a schema change. */
+const BOARD_CUSTOM_IDX = BOARD_COLS.map((c, i) => (c.custom ? i : -1)).filter((i) => i >= 0);
+const BOARD_COLS_SIG = BOARD_CUSTOM_IDX.length ? `:${BOARD_CUSTOM_IDX.map((i) => BOARD_COLS[i].key).join(',')}` : '';
 const BOARD_HEADERS = BOARD_COLS.map((c) => c.label);
 
 /** A status's place in the canonical order, custom statuses included. */
@@ -398,10 +413,22 @@ function mountBacklogBoard(host, props, ctx) {
     // Remembered per view, as on the bug queue — and per LAYOUT: the flat list
     // and the tree are the same columns laid out for different reading, and a
     // sort chosen for one should not rearrange the other.
-    const persistKey = `backlog:board:${view.key || 'adhoc'}${flat ? ':flat' : ''}`;
+    const persistKey = `backlog:board:${view.key || 'adhoc'}${flat ? ':flat' : ''}${BOARD_COLS_SIG}`;
+    if (view.key === 'snoozed') {
+        const notice = snoozeNotice('backlog', _eventBus);
+        if (notice) host.querySelector('.td-tablehost').before(notice);
+    }
     const table = createTable(host.querySelector('.td-tablehost'), {
-        // Status sorts by position, custom statuses in their configured place.
-        sortValue: { [COL.status]: (_v, _c, row) => { const m = byRef.get(row[REF_COL]); return m ? statusRank(m) : 999; } },
+        // Status sorts by position, custom statuses in their configured place;
+        // custom fields by their type (dates as dates, numbers as numbers).
+        sortValue: {
+            [COL.status]: (_v, _c, row) => { const m = byRef.get(row[REF_COL]); return m ? statusRank(m) : 999; },
+            ...Object.fromEntries(BOARD_CUSTOM_IDX.map((i) => [i, (_v, _c, row) => {
+                const m = byRef.get(row[REF_COL]);
+                return m ? (BOARD_COLS[i].sortKey(m) ?? undefined) : undefined;
+            }])),
+        },
+        ...(BOARD_CUSTOM_IDX.length ? { hiddenColumns: BOARD_CUSTOM_IDX, columnChooser: true } : {}),
         ...(ctx?.tableStore ? { stateStore: ctx.tableStore, persistKey } : {}),
         // Ad-hoc views share one slot; see the bug queue.
         persistPage: !!view.key,

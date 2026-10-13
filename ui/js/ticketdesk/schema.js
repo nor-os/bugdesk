@@ -265,3 +265,45 @@ export function markHiddenFilterFields(store, fields) {
     }
     return fields;
 }
+
+/* ── "Snooze until" — the ready-made example field (TASK-0004) ─────────
+ * A date before which a record is left out of the open views: "don't show me
+ * this until the 3rd". Not built in — it is a custom field like any other — but
+ * offered ready-made in Settings › Record types, and the rail's "Snoozed" view
+ * is built on it. A store whose types do not carry it behaves exactly as before. */
+
+export const SNOOZE_FIELD = Object.freeze({ name: 'not_before', label: 'Snooze until', type: 'date', required: false, values: [] });
+
+/** Does any type of this store carry the snooze field? */
+export const snoozeConfigured = (store) => storeFields(store).some((f) => f.name === SNOOZE_FIELD.name && f.type === 'date');
+
+const todayISO = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+/** Is this record snoozed — its type carries the field, and the date is still ahead? */
+export function isSnoozed(store, type, fields) {
+    if (!customFields(store, type).some((f) => f.name === SNOOZE_FIELD.name)) return false;
+    const v = String(fields?.[SNOOZE_FIELD.name] ?? '').trim();
+    return /^\d{4}-\d{2}-\d{2}$/.test(v) && v > todayISO();
+}
+
+/**
+ * The notice the "Snoozed" view shows where no type carries the field, with the
+ * button that sets it up — rather than an empty list that says nothing.
+ * Returns the element, or null when the field is there.
+ */
+export function snoozeNotice(store, eventBus = null) {
+    if (snoozeConfigured(store) || typeof document === 'undefined') return null;
+    const el = document.createElement('div');
+    el.className = 'td-snooze-notice';
+    el.innerHTML = `<span class="material-symbols-outlined">snooze</span>
+        <span>Snoozing a record needs a <b>Snooze until</b> date on its type. Nothing here has one yet.</span>
+        <button type="button" class="ea-btn ea-btn--primary"><span class="material-symbols-outlined">tune</span> Set it up</button>`;
+    el.querySelector('button').addEventListener('click', async () => {
+        const { openSchemaEditor } = await import('./schema_editor.js');
+        openSchemaEditor({ eventBus, store, preset: 'snooze' });
+    });
+    return el;
+}

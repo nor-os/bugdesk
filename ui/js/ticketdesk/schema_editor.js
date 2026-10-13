@@ -25,7 +25,7 @@ import { esc } from './data.js';
 import { appName } from '../core/app_identity.js';
 import { CONFIG } from './instance.js';
 import {
-    CATEGORY_LABEL, FIELD_TYPE_LABEL, STORE_TYPES,
+    CATEGORY_LABEL, FIELD_TYPE_LABEL, SNOOZE_FIELD, STORE_TYPES,
     fieldTypes, hideableFields, saveSchema, schemaTypes, schemaWarnings, statusCategories,
 } from './schema.js';
 import { attachSelect } from './select_field.js';
@@ -71,7 +71,7 @@ const storeLabel = (s) => (typeof STORE_LABEL[s] === 'function' ? STORE_LABEL[s]
  * @param {string} [o.store]   preselect a store
  * @param {string} [o.type]    and a type
  */
-export function openSchemaEditor({ eventBus = null, store = null, type = null } = {}) {
+export function openSchemaEditor({ eventBus = null, store = null, type = null, preset = null } = {}) {
     const stores = storesHere();
     // Every store and type present, so switching types never meets a hole.
     const draft = schemaTypes();
@@ -87,7 +87,24 @@ export function openSchemaEditor({ eventBus = null, store = null, type = null } 
         }
     }
 
+    /** "Snooze until" on every type of a store that lacks it — unsaved until Save. */
+    const addSnooze = (s) => {
+        let added = 0;
+        for (const [t] of STORE_TYPES[s] || []) {
+            const sp = draft[s]?.[t];
+            if (!sp || sp.fields.some((f) => f.name === SNOOZE_FIELD.name)) continue;
+            sp.fields.push({ ...SNOOZE_FIELD, values: [] });
+            added++;
+        }
+        return added;
+    };
     let curStore = stores.includes(store) ? store : stores[0];
+    // Opened from the "Snoozed" view's notice: the field is already in place.
+    let presetNote = '';
+    if (preset === 'snooze' && curStore) {
+        const n = addSnooze(curStore);
+        presetNote = n ? `“Snooze until” was added to ${n} type${n === 1 ? '' : 's'} — Save to keep it.` : '';
+    }
     let curType = type && STORE_TYPES[curStore]?.some(([t]) => t === type) ? type : STORE_TYPES[curStore][0][0];
     let confirmRemove = null;      // `field:<i>` or `status:<i>` awaiting a yes
     let problems = [];
@@ -200,8 +217,11 @@ export function openSchemaEditor({ eventBus = null, store = null, type = null } 
                     The schema in project.json has problems, and those entries are not in effect:
                     <ul>${warnings.map((w) => `<li>${esc(w)}</li>`).join('')}</ul></div></div>` : ''}
                 <h3 class="bd-schema__h">${esc(storeLabel(curStore))} › ${esc(typeLabel)}</h3>
+                ${presetNote ? `<div class="bd-schema__warn bd-schema__note">${icon('snooze')}<div>${esc(presetNote)}</div></div>` : ''}
                 <section>
                     <div class="bd-schema__shead"><h4>Custom fields</h4>
+                        <button type="button" class="ea-btn" data-add="snooze"
+                                title="A ready-made date: a record is left out of the open views until that day. Added to every ${esc(storeLabel(curStore))} type.">${icon('snooze')} Snooze until</button>
                         <button type="button" class="ea-btn" data-add="field">${icon('add')} Add field</button></div>
                     <div class="bd-schema__fields">${fieldRows()}</div>
                 </section>
@@ -289,6 +309,13 @@ export function openSchemaEditor({ eventBus = null, store = null, type = null } 
         if (!t) return;
         if (t.dataset.store) {
             curStore = t.dataset.store; curType = t.dataset.type; confirmRemove = null; render(); return;
+        }
+        if (t.dataset.add === 'snooze') {
+            const n = addSnooze(curStore);
+            presetNote = n ? `“Snooze until” was added to ${n} type${n === 1 ? '' : 's'} — Save to keep it.`
+                : 'Every type here already has “Snooze until”.';
+            render();
+            return;
         }
         if (t.dataset.add === 'field') {
             spec().fields.push({ name: '', label: '', type: 'text', required: false, values: [] });

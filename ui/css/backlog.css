@@ -1143,3 +1143,8 @@ tr[draggable="true"]:active,
 .td-savestate[data-tone="ok"] { color: #89d185; }
 .td-savestate[data-tone="err"] { color: #f48771; }
 .td-savestate[data-tone="busy"] { color: var(--text-secondary, #9a9a9a); }
+.bd-schema__note { background: rgb(79 193 255 / 10%); color: #4fc1ff; }
+/* The Snoozed view in a project that has no "Snooze until" field (TASK-0004). */
+.td-snooze-notice { display: flex; align-items: center; gap: 10px; margin: 8px 0; padding: 10px 12px; border-radius: var(--radius-sm, 4px); background: rgb(79 193 255 / 8%); color: var(--text-secondary, #9a9a9a); }
+.td-snooze-notice .ea-btn { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; }
+.td-snooze-notice .material-symbols-outlined { font-size: 16px; }

@@ -13,7 +13,9 @@
  * pages.js and filter_editor.js did not have to learn about the split.
  */
 
-import { customFilterFields, isFinished, markHiddenFilterFields, storeStatuses } from './schema.js';
+import {
+    customFilterFields, isFinished, isSnoozed, markHiddenFilterFields, snoozeConfigured, storeStatuses,
+} from './schema.js';
 import { createFilterModel, FILTER_ICONS, emptyExpr } from './filter_engine.js';
 import {
     deleteFilter as storeDelete, duplicateFilter as storeDuplicate,
@@ -67,6 +69,13 @@ export const FILTER_FIELDS = [
         options: [{ value: 'no', label: 'no' }, { value: 'yes', label: 'yes' }],
         get: (t) => (isFinished('bugs', t.rawType || 'bug', t.rawStatus) ? 'yes' : 'no'),
     },
+    {
+        // "Snooze until" still ahead (TASK-0004). Always 'no' for a type that
+        // does not carry the field, so it narrows nothing there.
+        key: 'snoozed', label: 'Snoozed', type: 'enum',
+        options: [{ value: 'no', label: 'no' }, { value: 'yes', label: 'yes' }],
+        get: (t) => (isSnoozed('bugs', t.rawType || 'bug', t.fields) ? 'yes' : 'no'),
+    },
     { key: 'summary', label: 'Summary', type: 'text', get: (t) => t.summary || '' },
     { key: 'subsystem', label: 'Subsystem', type: 'text', get: (t) => t.subsystem || '' },
     {
@@ -115,7 +124,12 @@ export const BUILTIN_FILTERS = [
     // "All Bugs" below still means all, closed included.
     {
         key: 'active', label: 'Active', icon: 'pending', builtin: true,
-        expr: { kind: 'group', op: 'AND', children: [{ kind: 'clause', field: 'finished', op: 'is', value: 'no' }] },
+        expr: { kind: 'group', op: 'AND', children: [
+            { kind: 'clause', field: 'finished', op: 'is', value: 'no' },
+            // A snoozed bug stays out until its day — only where the project
+            // has the field, so a project without it sees the same view as ever.
+            ...(snoozeConfigured('bugs') ? [{ kind: 'clause', field: 'snoozed', op: 'is', value: 'no' }] : []),
+        ] },
     },
     { key: 'all', label: 'All Bugs', icon: 'inbox', builtin: true, expr: emptyExpr() },
     {
@@ -136,6 +150,10 @@ export const BUILTIN_FILTERS = [
         icon: { waiting: 'hourglass_top', finished: 'do_not_disturb_on' }[st.category] || 'radio_button_checked',
         expr: { kind: 'group', op: 'AND', children: [{ kind: 'clause', field: 'status', op: 'is', value: st.name }] },
     })),
+    {
+        key: 'snoozed', label: 'Snoozed', icon: 'snooze', builtin: true,
+        expr: { kind: 'group', op: 'AND', children: [{ kind: 'clause', field: 'snoozed', op: 'is', value: 'yes' }] },
+    },
     {
         key: 'closed', label: 'Closed', icon: 'check_circle', builtin: true,
         expr: { kind: 'group', op: 'AND', children: [{ kind: 'clause', field: 'status', op: 'is', value: 'closed' }] },

@@ -31,14 +31,14 @@
  */
 
 import { createFilterModel, emptyExpr } from './filter_engine.js';
-import { customFilterFields, markHiddenFilterFields } from './schema.js';
+import { customFilterFields, isSnoozed, markHiddenFilterFields, snoozeConfigured } from './schema.js';
 import {
     deleteFilter as storeDelete, duplicateFilter as storeDuplicate,
     getFilter as storeGet, listFilters as storeList, saveFilter as storeSave,
 } from './filter_store.js';
 import { ASSIGNEES, HUMAN_AUTHOR, AGENT_AUTHOR } from './data.js';
 import {
-    DUE_LABEL, ITEMS, PHASES, STATUSES, TRACKER, TYPES, typeLabelOf,
+    DUE_LABEL, ITEMS, PHASES, STATUSES, TRACKER, TYPES, isClosedItem, typeLabelOf,
 } from './backlog_data.js';
 
 export const SCOPE = 'backlog';
@@ -69,6 +69,19 @@ export const FILTER_FIELDS = [
         options: [{ value: 'no', label: 'no — it or something under it is open' },
                   { value: 'yes', label: 'yes — it and everything under it is done' }],
         get: (i) => i.finished || 'no',
+    },
+    {
+        // Its OWN status is finished — done, dropped, or a finished custom
+        // status. `finished` above also asks about everything under it.
+        key: 'ownFinished', label: 'Finished (itself)', type: 'enum',
+        options: [{ value: 'no', label: 'no' }, { value: 'yes', label: 'yes' }],
+        get: (i) => (isClosedItem(i) ? 'yes' : 'no'),
+    },
+    {
+        // "Snooze until" still ahead (TASK-0004); 'no' where the type has no such field.
+        key: 'snoozed', label: 'Snoozed', type: 'enum',
+        options: [{ value: 'no', label: 'no' }, { value: 'yes', label: 'yes' }],
+        get: (i) => (isSnoozed('backlog', i.type, i.fields) ? 'yes' : 'no'),
     },
     { key: 'title', label: 'Title', type: 'text', get: (i) => i.title || '' },
     {
@@ -150,13 +163,22 @@ const and = (...children) => ({ kind: 'group', op: 'AND', children });
  * them as ASTs is what makes "duplicate this and tweak it" a data operation
  * rather than a feature request. */
 
-const OPEN = clause('status', 'none_of', ['done', 'dropped']);
+// Its own status is not finished — `done`, `dropped`, or a project's own
+// finished status (Settings › Record types), which a status list would miss.
+const OPEN = clause('ownFinished', 'is', 'no');
 /** Not FINISHED: open itself, or holding anything still open. What the views
  *  that list "the work" use — a project, epic or story stays in them until it
  *  and everything under it is done. OPEN (its own status) is for the views
  *  about one record's own work: on me, nobody on it, no date. */
 const ACTIVE = clause('finished', 'is', 'no');
 const FINISHED = clause('finished', 'is', 'yes');
+/** The open views leave a snoozed item out until its day (TASK-0004) — only
+ *  where the project carries the field, so nothing changes elsewhere. */
+const AWAKE = snoozeConfigured('backlog') ? [clause('snoozed', 'is', 'no')] : [];
+const SNOOZED_VIEW = {
+    key: 'snoozed', label: 'Snoozed', icon: 'snooze', builtin: true,
+    expr: { kind: 'group', op: 'AND', children: [clause('snoozed', 'is', 'yes')] },
+};
 
 /**
  * TRACKER views. A different job asks different questions: a manager following
@@ -207,8 +229,9 @@ const TRACKER_FILTERS = [
     },
     {
         key: 'board', label: 'Everything open', icon: 'list', builtin: true,
-        expr: and(ACTIVE),
+        expr: and(ACTIVE, ...AWAKE),
     },
+    SNOOZED_VIEW,
     { key: 'all', label: 'Everything', icon: 'list_alt', builtin: true, expr: emptyExpr() },
     {
         key: 'done', label: 'Closed', icon: 'check_circle', builtin: true,
@@ -219,8 +242,9 @@ const TRACKER_FILTERS = [
 const BACKLOG_FILTERS = [
     {
         key: 'board', label: 'Backlog', icon: 'workspaces', builtin: true,
-        expr: and(ACTIVE),
+        expr: and(ACTIVE, ...AWAKE),
     },
+    SNOOZED_VIEW,
     { key: 'all', label: 'Everything', icon: 'list', builtin: true, expr: emptyExpr() },
     {
         key: 'unrefined', label: 'Needs refinement', icon: 'pending_actions', builtin: true,
