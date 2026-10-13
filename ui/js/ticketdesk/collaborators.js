@@ -57,7 +57,7 @@ async function fetchRoster() {
  * Open the roster editor. Resolves to the saved list, or null if cancelled.
  */
 export async function openCollaborators({ eventBus } = {}) {
-    const { openModal } = await import('../ui/components/modal.js');
+    const { openModal } = await import('@flexdesk/widgets');
 
     let rows = [];
     let path = '.bugdesk/project.json';

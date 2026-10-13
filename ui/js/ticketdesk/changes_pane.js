@@ -157,7 +157,7 @@ export function mountChangesPane(host, { eventBus = null } = {}) {
 export async function openGitSettings({ eventBus = null } = {}) {
     let state;
     try { state = await call('/git'); } catch (err) { state = { enabled: false, reason: err.message }; }
-    const { openForm, openConfirm } = await import('../ui/components/modal.js');
+    const { openForm, openConfirm } = await import('@flexdesk/widgets');
     if (!state.enabled) {
         await openConfirm({ title: 'Saving and git', message: `<p>${esc(state.reason || 'Git is not available here.')}</p>`,
             confirmLabel: 'OK' });

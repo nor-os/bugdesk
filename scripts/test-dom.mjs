@@ -1463,7 +1463,8 @@ await t('it opens as a real managed window, not a hand-rolled overlay', async ()
     }
 
     // Cancel: the window closes and nothing is saved.
-    const cancel = [...document.querySelectorAll('.ea-modal__actions .ea-btn')]
+    // FlexDesk's openModal since 0.11.0 (STORY-0022): its classes are `twm-`.
+    const cancel = [...document.querySelectorAll('.twm-modal__actions .twm-btn')]
         .find((b) => b.textContent.trim() === 'Cancel');
     assert.ok(cancel, 'no Cancel action');
     cancel.click();

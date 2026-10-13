@@ -528,14 +528,11 @@
 }
 .twm-user-chip .material-symbols-outlined { font-size: 13px; }
 
-/* Adaptive form rows (openForm's onFieldChange). `.ea-modal__row` is a grid, so
-   the `hidden` attribute alone loses to it — display has to be forced. */
 /* `[hidden]` carries only the UA stylesheet's `display: none`, which any class
    rule with its own `display` beats — and both of these are grids. Without
    this, a row marked hidden stays on screen. select_field.js's setRowVisible
-   also sets an inline style; this covers anything that does not use it. */
-.ea-modal__form .ea-modal__row[hidden],
-.ea-modal__form .ea-modal__section[hidden],
+   also sets an inline style; this covers anything that does not use it.
+   (openForm's own hidden rows are FlexDesk's since 0.11.0.) */
 .td-field[hidden],
 .td-group[hidden] { display: none !important; }
 

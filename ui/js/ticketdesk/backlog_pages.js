@@ -167,7 +167,7 @@ function saveCollapsed() {
 export const itemMovesFor = (it) => movesFor('backlog', it.type, it.status, stageActions(it));
 
 async function askItem(form) {
-    const { openForm } = await import('../ui/components/modal.js');
+    const { openForm } = await import('@flexdesk/widgets');
     return openForm(form);
 }
 

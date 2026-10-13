@@ -207,7 +207,7 @@ export function openProjectSwitcher({ eventBus, select = null } = {}) {
     const remove = async (idx) => {
         const p = rows[idx]?.kind === 'project' ? rows[idx].project : null;
         if (!p || p.transient) return;
-        const { openConfirm } = await import('../ui/components/modal.js');
+        const { openConfirm } = await import('@flexdesk/widgets');
         const ok = await openConfirm({
             title: 'Remove project',
             message: `Remove <b>${_esc(p.name)}</b> from projects.toml?<br><br>`
@@ -263,7 +263,7 @@ export function openProjectSwitcher({ eventBus, select = null } = {}) {
  * alone.
  */
 export async function addProject({ eventBus, name = '' } = {}) {
-    const { openForm } = await import('../ui/components/modal.js');
+    const { openForm } = await import('@flexdesk/widgets');
     const sep = (p) => (p.includes('\\') ? '\\' : '/');
     const parent = (p) => p.replace(/[\\/]+$/, '').replace(/[\\/][^\\/]*$/, '');
     const leaf = (p) => p.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || '';

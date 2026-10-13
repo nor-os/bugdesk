@@ -20,7 +20,7 @@ const DEFAULT = {
 
 /** Open the dialog. Resolves true once saved. */
 export async function openNumberingEditor({ eventBus = null } = {}) {
-    const { openForm } = await import('../ui/components/modal.js');
+    const { openForm } = await import('@flexdesk/widgets');
     const cur = CONFIG.numbering || DEFAULT;
     const bugs = { ...DEFAULT.bugs, ...(cur.bugs || {}) };
     const back = { ...DEFAULT.backlog, ...(cur.backlog || {}), prefix: { ...DEFAULT.backlog.prefix, ...(cur.backlog?.prefix || {}) } };

@@ -35,7 +35,7 @@ const BUG_TYPES = [{ value: 'bug', label: 'Bug' }, { value: 'regression', label:
  * @param {string} [o.actor]
  */
 export async function convertRecord({ from, store, title = '', actor = '' }) {
-    const { openForm } = await import('../ui/components/modal.js');
+    const { openForm } = await import('@flexdesk/widgets');
     const toBacklog = store === 'bugs';
     const answer = await openForm({
         title: `${toBacklog ? 'Convert to a backlog item' : 'Convert to a bug'} — ${from}${title ? ` ${title}` : ''}`,

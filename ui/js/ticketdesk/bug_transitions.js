@@ -126,7 +126,7 @@ export async function resolveMoveMessage({ bugId, from, to, label, title = '', a
     } catch { /* no fresh copy: ask, rather than guess */ }
     const prompt = question || messagePrompt(from, to);
     const open = ask || (async (opts) => {
-        const { openForm } = await import('../ui/components/modal.js');
+        const { openForm } = await import('@flexdesk/widgets');
         return openForm(opts);
     });
     const result = await open({
@@ -166,7 +166,7 @@ export const bugMovesFor = (status, type = 'bug') => movesFor('bugs', type, stat
  */
 export async function planBugMove({ bugId, bug, move, from, title = '', author = HUMAN_AUTHOR, ask = null }) {
     const open = ask || (async (opts) => {
-        const { openForm } = await import('../ui/components/modal.js');
+        const { openForm } = await import('@flexdesk/widgets');
         return openForm(opts);
     });
     return planMove({

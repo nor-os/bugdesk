@@ -160,6 +160,12 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **BugDesk's copy of FlexDesk's dialogs is gone** (STORY-0022). Every prompt,
+  confirm and form (settings, collaborators, first run, the project switcher,
+  move messages, conversions, numbering) is FlexDesk's `openForm` /
+  `openConfirm` / `openModal`. What the copy had that FlexDesk lacked
+  (`onFieldChange`, the picker field, `create: true`, hidden rows that stay
+  hidden) went into FlexDesk 0.11.0.
 - **FlexDesk 0.11.0**: the DataTable, form and toast additions BugDesk's own
   copies carried now come from FlexDesk (STORY-0008, STORY-0022, STORY-0005).
 - **FlexDesk 0.9.1** (STORY-0023), up from 0.4.5. `@flexdesk/flow` and
