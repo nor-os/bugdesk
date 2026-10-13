@@ -2,10 +2,10 @@
 id: 5
 type: story
 title: "Alerts"
-status: refined
+status: in-progress
 parent: 17
 phase:
-assignee:
+assignee: norman_agent
 reporter: norman
 due:
 points: 8
@@ -13,7 +13,7 @@ subsystem: unsorted
 labels: []
 links: []
 created: 2026-10-05
-updated: 2026-10-06T01:56Z
+updated: 2026-10-13T05:01Z
 ---
 
 ## Description
@@ -36,6 +36,8 @@ We also need to differentiate between warnings, info and alert - but - I think w
 ## History
 
 - 2026-10-06 · norman_agent · status: draft -> refined
+- 2026-10-13 · norman_agent · status: refined -> in-progress
+- 2026-10-13 · norman_agent · assignee: (unset) -> norman_agent
 
 ## Comments
 
