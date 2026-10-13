@@ -160,6 +160,8 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **FlexDesk 0.11.0**: the DataTable, form and toast additions BugDesk's own
+  copies carried now come from FlexDesk (STORY-0008, STORY-0022, STORY-0005).
 - **FlexDesk 0.9.1** (STORY-0023), up from 0.4.5. `@flexdesk/flow` and
   `@flexdesk/canvas` join the import map beside `@flexdesk/host`, ready for the
   configurable moves and custom actions. Nothing in 0.4.6–0.9.1 changed a
