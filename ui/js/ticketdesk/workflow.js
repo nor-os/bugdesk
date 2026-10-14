@@ -212,6 +212,55 @@ export function seedMoveFlows(wf, tables) {
     return n;
 }
 
+/**
+ * THE BUILT-IN WAY IS FLOWS TOO: every transition has one, configured or not.
+ * A type with no move table moves the built-in way, and its built-in moves'
+ * flows are what seedMoveFlows makes of them — so an editor shows the stored
+ * workflow WITH them, and saves it WITHOUT whatever is still exactly built-in:
+ * project.json holds what the project changed, and a type nobody changed keeps
+ * following the built-in rules (a custom status added later included).
+ */
+export function withBuiltinFlows(stored, tables) {
+    const wf = JSON.parse(JSON.stringify(stored || {}));
+    liftInlineFlows(wf);
+    seedMoveFlows(wf, tables);
+    wf.flows = Array.isArray(wf.flows) ? wf.flows : [];
+    return wf;
+}
+
+/** Whether a table of `draft` is still exactly the built-in one — unconfigured
+ *  in `stored`, and its moves and their flows as withBuiltinFlows made them. */
+export function isBuiltinTable(draft, stored, pristine, { store, type }) {
+    if (Array.isArray(movesOf(stored, store, type))) return false;
+    const mine = movesOf(draft, store, type);
+    const theirs = movesOf(pristine, store, type);
+    if (!Array.isArray(mine) || JSON.stringify(mine) !== JSON.stringify(theirs)) return false;
+    const flowOf = (wf, id) => JSON.stringify((wf.flows || []).find((f) => f.id === id) || null);
+    return mine.every((m) => flowOf(draft, m.flow) === flowOf(pristine, m.flow));
+}
+
+/** `draft` as it is saved: the tables and flows still exactly built-in left out. */
+export function withoutBuiltinFlows(draft, stored, tables) {
+    const pristine = withBuiltinFlows(stored, tables);
+    const out = JSON.parse(JSON.stringify(draft));
+    const builtin = tables.filter((t) => isBuiltinTable(out, stored, pristine, t));
+    for (const { store, type } of builtin) {
+        if (store === 'bugs') { delete out.bugs.moves; if (!Object.keys(out.bugs).length) delete out.bugs; }
+        else {
+            delete out.backlog[type].moves;
+            if (!Object.keys(out.backlog[type]).length) delete out.backlog[type];
+            if (!Object.keys(out.backlog).length) delete out.backlog;
+        }
+    }
+    // A built-in flow nothing stored uses any more goes with them; one the
+    // project made, kept, or changed stays.
+    const kept = new Set((stored?.flows || []).map((f) => f.id));
+    const same = (f) => JSON.stringify(f) === JSON.stringify(pristine.flows.find((x) => x.id === f.id) || null);
+    out.flows = (out.flows || []).filter((f) => kept.has(f.id) || !same(f) || flowUses(out, f.id).length);
+    if (!out.flows.length) delete out.flows;
+    return out;
+}
+
 /** The custom actions of a store and type (STORY-0007). */
 export const configuredActions = (store, type) => {
     const list = W.actions?.[store]?.[type];

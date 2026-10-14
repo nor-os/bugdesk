@@ -3074,6 +3074,26 @@ console.log('\nWorkflow');
         wf.setWorkflow(null);
     });
 
+    await t('the built-in way is flows too: shown with them, saved without what is still built-in (STORY-0028)', async () => {
+        const { builtinTable } = await import(join(UI, 'ticketdesk', 'builtin_moves.js'));
+        const tables = [{ store: 'bugs', type: null, label: 'Bugs', builtin: builtinTable('bugs', ['bug', 'regression', 'task']) },
+                        { store: 'backlog', type: 'story', label: 'Backlog › Story', builtin: builtinTable('backlog', ['story']) }];
+        const stored = { actions: { bugs: { bug: [{ id: 'park', label: 'Park', flow: null }] } } };
+        const shown = wf.withBuiltinFlows(stored, tables);
+        assert.ok(shown.bugs.moves.every((m) => m.flow) && shown.backlog.story.moves.every((m) => m.flow), 'every transition has a flow');
+        assert.deepEqual(wf.withoutBuiltinFlows(shown, stored, tables), stored, 'untouched, nothing built-in is written');
+        const edited = JSON.parse(JSON.stringify(shown));
+        const close = edited.flows.find((f) => f.label === 'Close');
+        close.flow.nodes.push({ id: 'c', type: 'clear-field', label: 'Clear', config: { field: 'assignee' }, position: { x: 0, y: 0 } });
+        close.flow.connections.push({ source: 'message', sourcePort: 'out', target: 'c', targetPort: 'in' });
+        const saved = wf.withoutBuiltinFlows(edited, stored, tables);
+        assert.ok(Array.isArray(saved.bugs?.moves), 'the table whose flow changed is written');
+        assert.equal(saved.backlog, undefined, 'the story table, still built-in, is not');
+        assert.ok(saved.flows.some((f) => f.id === close.id) && saved.flows.every((f) => wf.flowUses(saved, f.id).length),
+            'its flows go with it, and no flow nothing uses');
+        assert.deepEqual(wf.withoutBuiltinFlows(wf.withBuiltinFlows(saved, tables), saved, tables), saved, 'and it stays put');
+    });
+
     await t('a flow for any record offers what both stores have, and every row may use it', () => {
         const fields = wf.fieldChoices(wf.ANY_STORE, []).map(([n]) => n);
         assert.ok(fields.includes('assignee') && fields.includes('labels'), 'what both have is offered');

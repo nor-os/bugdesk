@@ -37,7 +37,7 @@ import { attachSelect } from './select_field.js';
 import { builtinTable } from './builtin_moves.js';
 import {
     BLOCKS, CATEGORIES, DEFAULT_MASS_ACTIONS, checkFlow, configuredFlows, emptyFlow, fieldChoices, flowGraph,
-    liftInlineFlows, newFlowId, saveWorkflow, statusesOf, stepTypes, workflowConfig,
+    isBuiltinTable, newFlowId, saveWorkflow, statusesOf, stepTypes, withBuiltinFlows, withoutBuiltinFlows, workflowConfig,
 } from './workflow.js';
 
 const icon = (name) => `<span class="material-symbols-outlined">${name}</span>`;
@@ -188,10 +188,14 @@ function attachFlowPicker(el, { draft, store, holder, onNew, onPick }) {
  */
 export function openWorkflowEditor({ eventBus = null, start = '' } = {}) {
     const tables = tablesHere();
-    const draft = workflowConfig();
-    // Flows stored inside a row (before STORY-0028) become named ones in the draft.
-    liftInlineFlows(draft);
-    draft.flows = Array.isArray(draft.flows) ? draft.flows : [];
+    // Every transition has a flow, the built-in ones included (STORY-0028):
+    // the draft is the stored workflow with them — and with flows stored inside
+    // a row lifted into named ones — and is saved without what is still built-in.
+    const stored = workflowConfig();
+    const moveTables = moveTablesHere();
+    const pristine = withBuiltinFlows(stored, moveTables);
+    const draft = JSON.parse(JSON.stringify(pristine));
+    const moveTable = (key) => moveTables.find((t) => t.key === key);
     for (const byType of Object.values(draft.actions || {})) {
         for (const list of Object.values(byType || {})) for (const a of list || []) a.saved = true;
     }
@@ -208,7 +212,8 @@ export function openWorkflowEditor({ eventBus = null, start = '' } = {}) {
         const n = isActions(key) ? actionsOf(draft, key).length : 0;
         const badge = isMass(key) ? (massOf(draft, key) ? '<span class="bd-schema__count">custom</span>' : '')
             : isActions(key) ? (n ? `<span class="bd-schema__count">${n}</span>` : '')
-                : (tableOf(draft, key) ? '<span class="bd-schema__count">custom</span>' : '');
+                : (tableOf(draft, key) && !isBuiltinTable(draft, stored, pristine, moveTable(key))
+                    ? '<span class="bd-schema__count">custom</span>' : '');
         return `${i === 0 || tables[i - 1][4] !== group ? `<div class="bd-schema__group">${esc(group)}</div>` : ''}
         <button type="button" class="bd-schema__type${key === cur ? ' bd-schema__type--on' : ''}" data-table="${key}">
             ${esc(label)}${badge}
@@ -434,7 +439,18 @@ export function openWorkflowEditor({ eventBus = null, start = '' } = {}) {
             setTable(draft, cur, builtinTable(store, types).map(({ prompt: _prompt, ...m }) => m));
             render(); return;
         }
-        if (b.dataset.act === 'builtin') { setTable(draft, cur, null); render(); return; }
+        if (b.dataset.act === 'builtin') {
+            // The built-in moves, each with its built-in flow back as it was.
+            const moves = JSON.parse(JSON.stringify(tableOf(pristine, cur) || []));
+            setTable(draft, cur, moves);
+            for (const m of moves) {
+                const f = pristine.flows.find((x) => x.id === m.flow);
+                const i = draft.flows.findIndex((x) => x.id === m.flow);
+                if (f && i >= 0) draft.flows[i] = JSON.parse(JSON.stringify(f));
+                else if (f) draft.flows.push(JSON.parse(JSON.stringify(f)));
+            }
+            render(); return;
+        }
         if (b.dataset.act === 'add') {
             const [, store, types] = curSpec();
             const st = statusesOf(store, types[0]);
@@ -476,7 +492,7 @@ export function openWorkflowEditor({ eventBus = null, start = '' } = {}) {
             setMass(draft, key, list.filter((v) => !v.startsWith('action:') || ids.has(v)));
         }
         try {
-            await saveWorkflow(draft);
+            await saveWorkflow(withoutBuiltinFlows(draft, stored, moveTables));
             eventBus?.emit?.('toast:show', { type: 'info', message: `Workflow saved to project.json. Reload ${appName()} for every page to use it.` });
             close(true);
         } catch (err) {

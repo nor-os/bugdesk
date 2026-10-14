@@ -113,11 +113,13 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   setting of the flow — *any record* (new flows' default: the fields bugs and
   backlog items both have), or bugs or backlog items only, for their own fields
   — and each list chip takes its colour. The same steps stored on several rows
-  (one action on three bug types) become one flow they share. *Give every
-  transition a flow* gives each move one that does what it does now: a move
-  that asks for a message gets a flow that asks it, with the same question, and
-  moves still on the built-in rules are written down first (custom statuses
-  included, as *Customise the moves* now also does). In Edit workflow a move or an action picks
+  (one action on three bug types) become one flow they share. Every
+  transition has a flow, the built-in ones included: a move that asks for a
+  message has a flow that asks it, with the same question, and the rest an
+  empty one to extend. They are listed and edited like any other, and only what
+  you change is saved — a type nobody changed keeps the built-in rules, a custom
+  status added later included. *Back to the built-in moves* brings back the
+  built-in flows too. In Edit workflow a move or an action picks
   its flow from a searchable list, makes a new one with *New flow…* or by typing
   a name that is not a flow yet, and opens the chosen one with its edit button.
   A flow's window is titled *Flow — <name>*, with the name editable in it. Flows

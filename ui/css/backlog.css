@@ -1164,12 +1164,6 @@ tr[draggable="true"]:active,
 .bd-flowsmgr__none { margin: 16px; }
 .bd-flowsmgr__goto { border: 0; background: none; padding: 0; color: inherit; font: inherit; text-decoration: underline; cursor: pointer; }
 .bd-flowsmgr__foot { font-size: 11px; }
-.bd-flowsmgr__seed { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 4px; font-size: 12px; line-height: 1.45;
-    background: var(--twm-flow-violet-text-bg, #261e30); border: 1px solid var(--twm-flow-violet-line, rgba(167,139,250,.45)); }
-.bd-flowsmgr__seed > .material-symbols-outlined { color: var(--twm-flow-violet-fg, #c6b4fb); font-size: 18px; }
-.bd-flowsmgr__seed > span:not(.material-symbols-outlined) { flex: 1 1 auto; }
-.bd-flowsmgr__seed .ea-btn { display: inline-flex; align-items: center; gap: 4px; flex: none; }
-.bd-flowsmgr__seed .ea-btn .material-symbols-outlined { font-size: 15px; }
 .bd-flowsmgr .bd-flows__empty { margin: 10px; }
 
 /* ── Changes pane (changes_pane.js) ─────────────────────────────── */
