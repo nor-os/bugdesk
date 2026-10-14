@@ -2,10 +2,10 @@
 id: 29
 type: story
 title: "Mass actions: select many records and change their assignee or status in one go, per type in Settings"
-status: in-progress
+status: review
 parent: 17
 phase:
-assignee: norman_agent
+assignee: norman
 reporter: norman
 due:
 points: 5
@@ -13,7 +13,7 @@ subsystem: workflow
 labels: []
 links: []
 created: 2026-10-14
-updated: 2026-10-14T06:29Z
+updated: 2026-10-14T08:19Z
 ---
 
 ## Description
@@ -40,20 +40,22 @@ A project may also offer its custom actions (STORY-0007) as mass actions.
 
 ## Acceptance criteria
 
-- [ ] The bug queue, the backlog board and the search results each have a select-mode toggle; while rows are ticked, a bar shows how many and the mass actions on offer
-- [ ] "Change assignee" sets the one chosen person on every selected record
-- [ ] "Change status to…" lists only targets every selected record can move to from its current status; a target any one of them cannot reach is not offered, and a move a type gates (refined, with unmet refinement checks) is not offered when any selected record fails the gate
-- [ ] A move that needs a message asks once, and every moved record gets that message as its status comment; a move's flow asks its questions once and runs per record
-- [ ] Afterwards a status line says how many records changed and names any that failed, and the list refreshes
-- [ ] Settings › Workflow lets a project pick, per store and type, which mass actions are offered (assignee, status, and its custom actions); saved in `workflow.massActions` and checked by the bridge (an unknown entry or custom action is refused)
-- [ ] With nothing configured every type offers Change assignee and Change status; a mass action is offered only when every selected record's type offers it
-- [ ] Tests cover the intersection of moves, the once-only message and the config check; the existing suites pass
+- [x] The bug queue, the backlog board and the search results each have a select-mode toggle; while rows are ticked, a bar shows how many and the mass actions on offer
+- [x] "Change assignee" sets the one chosen person on every selected record
+- [x] "Change status to…" lists only targets every selected record can move to from its current status; a target any one of them cannot reach is not offered, and a move a type gates (refined, with unmet refinement checks) is not offered when any selected record fails the gate
+- [x] A move that needs a message asks once, and every moved record gets that message as its status comment; a move's flow asks its questions once and runs per record
+- [x] Afterwards a status line says how many records changed and names any that failed, and the list refreshes
+- [x] Settings › Workflow lets a project pick, per store and type, which mass actions are offered (assignee, status, and its custom actions); saved in `workflow.massActions` and checked by the bridge (an unknown entry or custom action is refused)
+- [x] With nothing configured every type offers Change assignee and Change status; a mass action is offered only when every selected record's type offers it
+- [x] Tests cover the intersection of moves, the once-only message and the config check; the existing suites pass
 
 ## History
 
 - 2026-10-14 · norman_agent · status: draft -> refined
 - 2026-10-14 · norman_agent · status: refined -> in-progress
 - 2026-10-14 · norman_agent · assignee:  -> norman_agent
+- 2026-10-14 · norman_agent · status: in-progress -> review
+- 2026-10-14 · norman_agent · assignee: norman_agent -> norman
 
 ## Comments
 
@@ -62,3 +64,18 @@ A project may also offer its custom actions (STORY-0007) as mass actions.
 Filed, refined and taken on together, from the user's request in this session.
 8 criteria, 5 points, under EPIC-0017. Needs FlexDesk STORY-0016 released
 (flexdesk 0.12.0) first.
+
+### 2026-10-14T08:19Z · norman_agent
+
+Done on main: 6794a91 (ui/js/ticketdesk/mass_actions.js, the queue, board and
+search wiring, the Settings > Workflow "Mass actions" group, CheckMassActions
+in server/RecordWorkflow.cs) and 6eb86c9 (vendors flexdesk 0.12.0, FlexDesk
+STORY-0016). Status targets are the intersection of each record's own moves,
+and gated moves drop out. A message is asked once and saved on every record.
+Nothing is saved if a question is cancelled. Checked in headless Edge: tick
+without opening, only "Closed" offered for a mixed set, one close message on
+3 files, a backlog set offering only "Drop", Settings saving
+massActions.backlog.story. test-dom 176/176, test-ui 218/218, test-tracker
+34/34, check-graph OK, eslint 0 errors, server build 0 warnings.
+A running BugDesk needs a restart to pick up the bridge check. Back to norman
+for review.
