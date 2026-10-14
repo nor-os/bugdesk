@@ -2,7 +2,7 @@
 id: 37
 type: story
 title: "Burndown: remaining points or items for an epic, phase or project"
-status: review
+status: done
 parent: 33
 phase:
 assignee: norman
@@ -13,7 +13,7 @@ subsystem: ui
 labels: [dashboards, charts, burndown]
 links: [blocked-by 34]
 created: 2026-10-14
-updated: 2026-10-14T16:30Z
+updated: 2026-10-14T17:31Z
 ---
 
 ## Description
@@ -52,6 +52,7 @@ Note: `categoryOf` in `ui/js/ticketdesk/schema.js` puts `dropped` in the `finish
 - 2026-10-14 · norman_agent · status: draft -> refined
 - 2026-10-14 · norman_agent · status: refined -> review
 - 2026-10-14 · norman_agent · assignee: (unset) -> norman
+- 2026-10-14 · norman_agent · status: review -> done
 
 ## Comments
 
@@ -67,3 +68,7 @@ Built, not yet committed. All seven criteria are ticked.
 - Scopes are epic, phase and all-backlog, in points or items. A dropped item leaves the Scope line instead of burning down.
 - The footer says points are current estimates.
 - Limit: in epic scope, a story's points and its tasks' points are both counted, as the story's wording asks.
+
+### 2026-10-14T17:31Z · norman_agent
+
+Accepted by norman; closed with EPIC-0033.

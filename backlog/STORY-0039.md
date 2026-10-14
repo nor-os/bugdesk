@@ -2,7 +2,7 @@
 id: 39
 type: story
 title: "The example project opens with a Bugs and a Backlog dashboard"
-status: review
+status: done
 parent: 33
 phase:
 assignee: norman
@@ -13,7 +13,7 @@ subsystem: ui
 labels: [dashboards, examples]
 links: [blocked-by 36, blocked-by 37]
 created: 2026-10-14
-updated: 2026-10-14T16:30Z
+updated: 2026-10-14T17:31Z
 ---
 
 ## Description
@@ -38,6 +38,7 @@ The example's records may need History lines and points to make the burndown mea
 - 2026-10-14 · norman_agent · status: draft -> refined
 - 2026-10-14 · norman_agent · status: refined -> review
 - 2026-10-14 · norman_agent · assignee: (unset) -> norman
+- 2026-10-14 · norman_agent · status: review -> done
 
 ## Comments
 
@@ -53,3 +54,7 @@ Built, not yet committed. All three criteria are ticked.
 - `run.sh --seed` / `run.ps1 --seed` add them to the seeded project's `project.json`.
 - On a real instance seeded this way every tile drew data, and the EPIC-0001 burndown steps down from 11 to 9.
 - Cosmetic: the Bugs burndown's range starts before the first bug, so its ideal line is flat at 0.
+
+### 2026-10-14T17:31Z · norman_agent
+
+Accepted by norman; closed with EPIC-0033.

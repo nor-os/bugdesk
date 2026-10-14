@@ -2,7 +2,7 @@
 id: 34
 type: story
 title: "Dashboards is a top-level section with shared, committed dashboards"
-status: review
+status: done
 parent: 33
 phase:
 assignee: norman
@@ -13,7 +13,7 @@ subsystem: ui
 labels: [dashboards, flexdesk]
 links: []
 created: 2026-10-14
-updated: 2026-10-14T16:30Z
+updated: 2026-10-14T17:31Z
 ---
 
 ## Description
@@ -46,6 +46,7 @@ opened, not on startup.
 - 2026-10-14 · norman_agent · status: draft -> refined
 - 2026-10-14 · norman_agent · status: refined -> review
 - 2026-10-14 · norman_agent · assignee: (unset) -> norman
+- 2026-10-14 · norman_agent · status: review -> done
 
 ## Comments
 
@@ -63,3 +64,7 @@ Built, not yet committed. All six criteria are ticked.
 - A hand-broken entry shows its reason and survives other dashboards' saves unchanged.
 - Light theme: BugDesk is dark-only, so only dark was checked.
 - Limit: in tracker mode the config is in `config/`, which is not under git.
+
+### 2026-10-14T17:31Z · norman_agent
+
+Accepted by norman; closed with EPIC-0033.

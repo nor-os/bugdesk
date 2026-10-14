@@ -2,7 +2,7 @@
 id: 36
 type: story
 title: "Chart tiles over any bug or backlog attribute, custom fields included"
-status: review
+status: done
 parent: 33
 phase:
 assignee: norman
@@ -13,7 +13,7 @@ subsystem: ui
 labels: [dashboards, charts, custom-fields]
 links: [blocked-by 34]
 created: 2026-10-14
-updated: 2026-10-14T16:30Z
+updated: 2026-10-14T17:31Z
 ---
 
 ## Description
@@ -49,6 +49,7 @@ turns records into the series those tiles take, and re-renders on `bugs:changed`
 - 2026-10-14 · norman_agent · status: draft -> refined
 - 2026-10-14 · norman_agent · status: refined -> review
 - 2026-10-14 · norman_agent · assignee: (unset) -> norman
+- 2026-10-14 · norman_agent · status: review -> done
 
 ## Comments
 
@@ -65,3 +66,7 @@ Built, not yet committed. All eight criteria are ticked.
 - `M` and `?` are counted in the tile's note, and a removed field gives an empty state naming it.
 - New endpoint: `GET /api/dashboards/status_history`.
 - Limits: weeks are counted in UTC, and a saved filter is copied into the tile when chosen.
+
+### 2026-10-14T17:31Z · norman_agent
+
+Accepted by norman; closed with EPIC-0033.

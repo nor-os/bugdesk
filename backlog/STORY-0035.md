@@ -2,7 +2,7 @@
 id: 35
 type: story
 title: "Personal dashboards next to the shared ones"
-status: review
+status: done
 parent: 33
 phase:
 assignee: norman
@@ -13,7 +13,7 @@ subsystem: ui
 labels: [dashboards]
 links: [blocked-by 34]
 created: 2026-10-14
-updated: 2026-10-14T16:30Z
+updated: 2026-10-14T17:31Z
 ---
 
 ## Description
@@ -34,6 +34,7 @@ dashboard ever shows up in a commit.
 - 2026-10-14 · norman_agent · status: draft -> refined
 - 2026-10-14 · norman_agent · status: refined -> review
 - 2026-10-14 · norman_agent · assignee: (unset) -> norman
+- 2026-10-14 · norman_agent · status: review -> done
 
 ## Comments
 
@@ -48,3 +49,7 @@ Built, not yet committed. All four criteria are ticked.
 - The list has Shared and Personal sections, with an icon per row and a badge in the header.
 - Personal dashboards are kept in the git-ignored `.bugdesk/state-<user>/dashboards.json`. Checked on a real instance with `git check-ignore`.
 - Copy to personal and Share both work. Share asks for another name when a shared dashboard already has it, and always uses a new id, so it never overwrites one.
+
+### 2026-10-14T17:31Z · norman_agent
+
+Accepted by norman; closed with EPIC-0033.

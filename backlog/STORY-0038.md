@@ -2,7 +2,7 @@
 id: 38
 type: story
 title: "Dashboards can chart tracker records"
-status: review
+status: done
 parent: 33
 phase:
 assignee: norman
@@ -13,7 +13,7 @@ subsystem: ui
 labels: [dashboards, tracker]
 links: [blocked-by 36]
 created: 2026-10-14
-updated: 2026-10-14T16:30Z
+updated: 2026-10-14T17:31Z
 ---
 
 ## Description
@@ -38,6 +38,7 @@ read tracker records from there, without mixing them into the project's backlog.
 - 2026-10-14 · norman_agent · status: draft -> refined
 - 2026-10-14 · norman_agent · status: refined -> review
 - 2026-10-14 · norman_agent · assignee: (unset) -> norman
+- 2026-10-14 · norman_agent · status: review -> done
 
 ## Comments
 
@@ -53,3 +54,7 @@ Built, not yet committed. All four criteria are ticked.
 - "Due (week)" split by assignee gives overdue / due this week / no date per person in one chart.
 - A burndown can scope to a PROJ record and everything under it.
 - With the tracker off, the source is not offered and a saved tracker tile shows an empty state.
+
+### 2026-10-14T17:31Z · norman_agent
+
+Accepted by norman; closed with EPIC-0033.
