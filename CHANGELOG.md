@@ -286,6 +286,27 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **`run.ps1` opens BugDesk in its own window.** By default it builds the desktop
+  app from the checkout (into `desktop\BugDesk.Desktop\bin\dev`) and starts it
+  on the checkout's `projects.toml` and `server\state`, the same ones the
+  browser mode uses. It returns to the prompt; closing the window stops it.
+  Running it again while the window is open brings that window forward.
+  `--browser` is the old behaviour: the server alone on
+  http://127.0.0.1:8766. `--tracker` still runs in the browser. The desktop
+  app keeps one window per `projects.toml`, so a tracker window would only
+  bring the open BugDesk window forward.
+- **Help, keyboard shortcuts and About are current.** The help had been written
+  when BugDesk was a single bug queue. It now has nine topics in three groups:
+  Getting started, Bugs and their lifecycle, The backlog, Tracker and
+  TicketDesk, Dashboards, Editing records, Filters, You, the agent and the team,
+  and Keyboard shortcuts. The shortcuts list was checked against FlexDesk's
+  keymap and the list, editor and workflow-editor handlers. It adds F1…F4 for
+  the pages, Ctrl/⌘+A, Ctrl/⌘+C and Space in lists, and the editor keys. It
+  drops what was wrong: F1 as "Queues", Alt+← as browser Back, and a Console
+  tab. The About dialog shows the version and commit of the build serving the
+  window (`version` and `commit` in `/api/config`; the server reads its version
+  from package.json), a tagline per product, the licence, the source link and
+  what ships under `ui/vendor/`. The unused EcoSim `about_dialog.css` is gone.
 - **Settings is sorted by who a change affects** (STORY-0032). The sidebar has
   two sections. **You**: *Profile* (your name and agent name) and *Behaviour*
   (Ctrl-click, auto-save, animate minimize). **This project**: *Record types*,
@@ -352,6 +373,12 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **`?` opened two help modals**: BugDesk's own copy of the modal, and
+  FlexDesk's, which `@flexdesk/widgets` installs with its own `?` listener and
+  which was empty. BugDesk now gives its topics to FlexDesk's modal
+  (`setHelpProvider`), and its copy is deleted.
+- Ctrl/⌘+K in a description or comment inserted a link *and* opened the command
+  palette. It now only inserts the link.
 - The toasts' "+N more" summary did nothing when clicked: it called a
   `wm.showPanel` FlexDesk does not have. It now opens the bottom panel on its
   Alerts tab.

@@ -6,6 +6,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>BugDesk.Server</RootNamespace>
     <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- package.json is the one place the version is written; the desktop builds
+         pass it in as -p:Version, and a plain `dotnet run` reads it from there,
+         so the About dialog (/api/config's `version`) never says 1.0.0. -->
+    <Version Condition="'$(Version)' == ''">$([System.Text.RegularExpressions.Regex]::Match($([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)../package.json')), '"version":\s*"([^"]+)"').Groups[1].Value)</Version>
   </PropertyGroup>
 
 </Project>

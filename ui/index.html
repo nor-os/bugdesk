@@ -24,7 +24,6 @@
     <link href="css/components/controls.css" rel="stylesheet" />
     <link href="css/components/containers.css" rel="stylesheet" />
     <link id="main-new-css" href="css/main_new.css" rel="stylesheet" />
-    <link href="css/about_dialog.css" rel="stylesheet" />
     <link href="css/help.css" rel="stylesheet" />
     <link href="css/settings_page.css" rel="stylesheet" />
 
@@ -143,6 +142,9 @@
             // --tracker; BugDesk otherwise, whatever store this page is on.
             // See core/app_identity.js.
             app: cfg.app === 'ticketdesk' ? 'ticketdesk' : 'bugdesk',
+            // The build serving this window, for the About dialog (boot.js).
+            version: cfg.version || '',
+            commit: cfg.commit || '',
             // Whether `<name>_agent` is assignable here — false in tracker mode.
             agentsAssignable: cfg.agentsAssignable !== false,
             // True when the names below came from the bridge, not the fallback.

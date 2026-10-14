@@ -20,7 +20,7 @@ bugdesk/
   scripts/   sync-flexdesk.mjs — refresh ui/vendor/flexdesk/ from the npm package
   examples/  sample bugs and backlog items for --seed
   run.sh     dotnet run wrapper (Linux/macOS/WSL)
-  run.ps1    dotnet run wrapper (Windows PowerShell)
+  run.ps1    Windows launcher: the desktop window, or the server alone with --browser
 ```
 
 ## Two stores
@@ -115,13 +115,17 @@ BUGDESK_USER=alice ./run.sh           # pick a profile without the first-run pro
 BUGDESK_HUMAN=alice BUGDESK_AGENT=claude ./run.sh   # seed a profile, skip the prompt
 ```
 
-On Windows, `run.ps1` is the same wrapper for PowerShell (5.1 or 7):
+On Windows, `run.ps1` is the same wrapper for PowerShell (5.1 or 7). By default it
+opens BugDesk in its own window: the desktop app (see `docs/desktop.md`), built
+from the checkout, on the same stores and projects. `--browser` runs the server
+alone, as `run.sh` does:
 
 ```powershell
 .\run.ps1 --help              # every option and environment variable
-.\run.ps1                     # http://127.0.0.1:8766, .\bugs + .\backlog
+.\run.ps1                     # its own window, .\bugs + .\backlog
+.\run.ps1 --browser           # http://127.0.0.1:8766 in a browser instead
 .\run.ps1 --seed              # + pre-seed empty stores with the examples
-.\run.ps1 --tracker           # TRACKER mode
+.\run.ps1 --tracker           # TRACKER mode (always in the browser)
 .\run.ps1 --bugs-dir C:\path\to\bugs     # backlog follows as its sibling
 $env:BUGDESK_BUGS='C:\path\to\bugs'; .\run.ps1
 $env:BUGDESK_HUMAN='alice'; $env:BUGDESK_AGENT='claude'; .\run.ps1

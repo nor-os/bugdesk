@@ -333,7 +333,9 @@ export function attachMarkdownEditor(ta, {
             const k = e.key.toLowerCase();
             if (k === 'b') { e.preventDefault(); COMMANDS.bold(); return; }
             if (k === 'i') { e.preventDefault(); COMMANDS.italic(); return; }
-            if (k === 'k') { e.preventDefault(); COMMANDS.link(); return; }
+            // Stopped as well as prevented: FlexDesk's keymap, on the document,
+            // opens the command palette on Ctrl+K even inside a field.
+            if (k === 'k') { e.preventDefault(); e.stopPropagation(); COMMANDS.link(); return; }
         }
         if (e.key !== 'Enter') return;
         // Alt+Enter (and Shift+Enter, the habit most chat apps train) is the

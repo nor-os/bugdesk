@@ -25,14 +25,13 @@ import { installHistoryBack } from './history_nav.js';
 import { taxonomy, activeTopNavKind, MERGED_TRACKER } from './kind_taxonomy.js';
 import { createSettingsContent } from '../ticketdesk/settings_content.js';
 
-import { HelpModal } from '../help/help_modal.js';
 import { installRecordCount, paintRecordCount } from '../ticketdesk/record_count.js';
 
 import {
     WindowManager, createContentRegistry, installKeymap, mountZoomControl,
 } from '@flexdesk/wm';
 import { createPhotinoHost, createPywebviewHost, isPhotinoWindow } from '@flexdesk/host';
-import { createTableStateStore, installAutoScrollbars, openForm, showContextMenu } from '@flexdesk/widgets';
+import { HelpModal, createTableStateStore, installAutoScrollbars, openForm, showContextMenu } from '@flexdesk/widgets';
 
 export async function installTilingShell({ eventBus, logger } = {}) {
     const log = logger ?? { info(){}, warn(){}, error(){}, debug(){} };

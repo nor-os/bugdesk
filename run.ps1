@@ -5,9 +5,11 @@
 # rather than kept in step with a copy in this header.
 #
 # Windows counterpart of run.sh. The bridge serves the FlexDesk UI (ui/) AND the
-# JSON API, and reads/writes the markdown files in both stores. Open the printed
-# URL in a browser; the first run asks who you are and remembers it in a
-# git-ignored .bugdesk\ beside the stores.
+# JSON API, and reads/writes the markdown files in both stores. By default it
+# opens BugDesk in its own window: the desktop app (desktop\BugDesk.Desktop),
+# built from this checkout and running the bridge in-process. With --browser it
+# runs the bridge alone; open the printed URL in a browser. The first run asks
+# who you are and remembers it in a git-ignored .bugdesk\ beside the stores.
 #
 # If PowerShell refuses to run this ("running scripts is disabled on this
 # system"), either unblock it for the session:
@@ -30,6 +32,11 @@ USAGE
 
 OPTIONS
   --help, -h        Show this and exit.
+  --browser         Run the server only, on http://127.0.0.1:8766, and use it
+                    from a browser. Without it, BugDesk opens in its own window
+                    (the desktop app, built from this checkout into
+                    desktop\BugDesk.Desktop\bin\dev), on the same projects and
+                    stores, with the server inside it on a free port.
   --seed            Copy the bundled examples into any store that is still
                     empty. Never overwrites: a store that already holds records
                     is skipped, and the two stores are considered separately.
@@ -37,7 +44,10 @@ OPTIONS
                     Backlog dashboards (an id already there is left alone).
   --tracker         Tracker mode - follow up work you handed to other people.
                     Its records live under %APPDATA%\BugDesk\<project>\, NOT in
-                    this repo, and the port is chosen automatically.
+                    this repo, and the port is chosen automatically. Always in
+                    the browser for now: the desktop app keeps one window per
+                    projects.toml, so a tracker window would only bring an open
+                    BugDesk window forward.
   --project=NAME    Tracker mode only: which tracker to open. Defaults to the
                     name of the directory you ran this from.
 
@@ -77,7 +87,8 @@ THE .NET SDK
   qualifies, it says where it looked and which SDKs it found.
 
 OTHER ENVIRONMENT VARIABLES
-  ASPNETCORE_URLS   Where to listen. Default http://127.0.0.1:8766.
+  ASPNETCORE_URLS   Where to listen, with --browser. Default
+                    http://127.0.0.1:8766.
   BUGDESK_CONFIG    Where profiles and filters live. Default .bugdesk\ beside
                     the stores; it is git-ignored and per-person.
   BUGDESK_USER      Pick a profile by name and skip the first-run prompt.
@@ -94,7 +105,8 @@ YOUR WORKING DIRECTORY
   matters in tracker mode, where that directory is what names the tracker.
 
 EXAMPLES
-  .\run.ps1                                  # this repo's own stores
+  .\run.ps1                                  # this repo's own stores, in a window
+  .\run.ps1 --browser                        # the same, in a browser
   .\run.ps1 --seed                           # and fill them if they are empty
   .\run.ps1 --bugs-dir C:\work\acme\bugs     # track another repo, backlog follows
   .\run.ps1 --bugs-dir C:\acme\bugs --backlog-dir C:\plans\backlog
@@ -125,6 +137,7 @@ foreach ($a in $args) {
 # the CLI swallowed it and answered "The provided file path does not exist", and
 # the tracker quietly fell back to naming itself after the current directory.
 $seed = $false
+$browser = $false
 $dotnetArgs = @()
 $wantValue = $null
 foreach ($a in $args) {
@@ -136,6 +149,7 @@ foreach ($a in $args) {
         continue
     }
     if ($a -eq '--seed') { $seed = $true }
+    elseif ($a -eq '--browser') { $browser = $true }
     elseif ($a -eq '--tracker') { $env:BUGDESK_MODE = 'tracker' }
     elseif ($a -like '--mode=*') { $env:BUGDESK_MODE = $a.Substring(7) }
     elseif ($a -like '--bugs-dir=*') { $env:BUGDESK_BUGS = $a.Substring(11) }
@@ -236,6 +250,8 @@ Write-Host "BugDesk: .NET SDK $dotnetSdk ($dotnet)"
 # So the paths computed above are not its business, and neither is a fixed port:
 # the server takes the next free one, because a tracker is usually opened
 # alongside a BugDesk already running on a repo.
+# A tracker stays in the browser, even without --browser: see --tracker in the
+# usage.
 if ($env:BUGDESK_MODE -eq 'tracker') {
     if ($seed) {
         # The server owns the tracker's paths, so ask it to seed rather than
@@ -257,7 +273,43 @@ if ($seed) {
     Seed-Store $backlogDir '*-*.md'   (Join-Path $root 'examples\backlog') 'backlog item(s)'
 }
 
-if (-not $env:ASPNETCORE_URLS) { $env:ASPNETCORE_URLS = 'http://127.0.0.1:8766' }
-Write-Host "BugDesk -> $($env:ASPNETCORE_URLS)   (mode: $($env:BUGDESK_MODE), bugs: $bugsDir, backlog: $backlogDir)"
-& $dotnet run --project (Join-Path $root 'server') -- @dotnetArgs
-exit $LASTEXITCODE
+if ($browser) {
+    if (-not $env:ASPNETCORE_URLS) { $env:ASPNETCORE_URLS = 'http://127.0.0.1:8766' }
+    Write-Host "BugDesk -> $($env:ASPNETCORE_URLS)   (mode: $($env:BUGDESK_MODE), bugs: $bugsDir, backlog: $backlogDir)"
+    & $dotnet run --project (Join-Path $root 'server') -- @dotnetArgs
+    exit $LASTEXITCODE
+}
+
+# -- the window (the default) --------------------------------------------------
+#
+# The desktop app, built from this checkout. It runs the same server in its own
+# process, so everything above (the stores, --seed, BUGDESK_*) still applies.
+# Built into bin\dev, never with a plain `dotnet run`: that would build the
+# server into server\bin, whose DLL a --browser BugDesk already running holds.
+#
+# The app normally keeps projects.toml and the server state in %AppData%\BugDesk.
+# Run from a checkout, it uses the checkout's own, which is where --browser
+# keeps them, so the two modes show the same projects, profiles and layout.
+if (-not $env:BUGDESK_PROJECTS) { $env:BUGDESK_PROJECTS = Join-Path $root 'projects.toml' }
+if (-not $env:BUGDESK_STATE) { $env:BUGDESK_STATE = Join-Path $root 'server\state' }
+$appDir = Join-Path $root 'desktop\BugDesk.Desktop\bin\dev'
+$app = Join-Path $appDir $(if ($env:OS -eq 'Windows_NT') { 'BugDesk.exe' } else { 'BugDesk' })
+
+# A window already open from here holds bin\dev, so a build would fail on the
+# locked files. Starting it again is what's wanted anyway: the app brings its
+# open window forward and exits.
+$running = @(Get-Process -Name BugDesk -ErrorAction SilentlyContinue |
+    Where-Object { $_.Path -and ($_.Path -eq $app) })
+if ($running.Count -eq 0) {
+    Write-Host "BugDesk: building the desktop app ($appDir)"
+    & $dotnet build (Join-Path $root 'desktop\BugDesk.Desktop') -o $appDir --nologo -v q
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "BugDesk: the desktop app did not build (see above). .\run.ps1 --browser runs the server alone."
+        exit $LASTEXITCODE
+    }
+}
+Write-Host "BugDesk -> its own window   (mode: $($env:BUGDESK_MODE), bugs: $bugsDir, backlog: $backlogDir)"
+# Started, not waited for: it is a window app, so the prompt comes back and
+# closing the window is what stops it (Ctrl+C here no longer does).
+if ($dotnetArgs.Count) { Start-Process -FilePath $app -ArgumentList $dotnetArgs }
+else { Start-Process -FilePath $app }

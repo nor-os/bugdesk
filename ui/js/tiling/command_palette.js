@@ -30,7 +30,7 @@
  */
 
 import { taxonomy, MERGED_TRACKER } from './kind_taxonomy.js';
-import { HelpModal } from '../help/help_modal.js';
+import { HelpModal } from '@flexdesk/widgets';
 
 const ROOT_ID = 'twm-cmdpal';
 

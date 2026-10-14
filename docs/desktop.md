@@ -7,7 +7,9 @@ and the window shows its page. How it came about is in `desktop-spike.md`.
 
 ## Running it from a checkout
 
-Windows:
+On Windows, `.\run.ps1` does this for you: it builds the app as below and starts
+it on the checkout's own `projects.toml` and `server\state`, so the window and
+`.\run.ps1 --browser` show the same projects. By hand:
 
 ```
 dotnet build desktop\BugDesk.Desktop -o desktop\BugDesk.Desktop\bin\dev

@@ -1622,6 +1622,10 @@ object ConfigPayload(Store s, string? slug = null) => new
     // page: `--tracker` is TicketDesk, everything else is BugDesk, including
     // the tracker's own page (/t/) inside a BugDesk.
     app = mode == "tracker" ? "ticketdesk" : "bugdesk",
+    // The build's version and commit, for the About dialog: package.json's
+    // version, and the commit the SDK appends after a `+`.
+    version = AppVersion.Version,
+    commit = AppVersion.Commit,
     // Whether `<name>_agent` is a thing you can assign work to here.
     agentsAssignable = s.AgentsAssignable,
     humanAuthor = s.Users.HumanAuthor,
@@ -2794,4 +2798,16 @@ static object FullItem(IReadOnlyList<BacklogItem> all, BacklogItem item)
     };
 }
 }
+}
+
+// The informational version is "0.2.0+<full commit sha>" (the SDK appends the
+// commit); the About dialog shows the two apart, and the commit short.
+static class AppVersion
+{
+    static readonly string Info = typeof(AppVersion).Assembly
+        .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+        .OfType<System.Reflection.AssemblyInformationalVersionAttribute>()
+        .FirstOrDefault()?.InformationalVersion ?? "";
+    public static string Version => Info.Split('+')[0];
+    public static string Commit => Info.Contains('+') ? Info.Split('+')[1][..Math.Min(7, Info.Split('+')[1].Length)] : "";
 }

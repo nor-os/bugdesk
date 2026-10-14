@@ -24,9 +24,9 @@ import { EventBus, LoggingService } from '@flexdesk/core';
 // Imported for its side effect as well: TooltipService initialises itself when
 // the module is evaluated, so there is no init() to call — calling one anyway
 // would bind every tooltip listener twice.
-import { showAboutDialog } from '@flexdesk/widgets';
+import { HelpModal, showAboutDialog } from '@flexdesk/widgets';
 import { registerSettings, registerSettingsEventBus, BUGDESK_SETTINGS_SLICE } from '../core/settings.js';
-import { HelpModal } from '../help/help_modal.js';
+import { installHelp } from '../help/help_service.js';
 import { appName, appIcon, appSlug } from '../core/app_identity.js';
 
 /**
@@ -51,6 +51,7 @@ export function bootBugDesk({ enableConsoleLogging = false } = {}) {
         enableConsole: enableConsoleLogging,
     });
 
+    installHelp(appName());
     buildTopBar();
     buildBottomBar();
 
@@ -99,12 +100,56 @@ function buildTopBar() {
             </div>
         </div>`;
     bar.querySelector('#menu-help-topics').addEventListener('click', () => HelpModal.open());
-    bar.querySelector('#menu-help-about').addEventListener('click', () => showAboutDialog({ name }));
+    bar.querySelector('#menu-help-about').addEventListener('click', () => showAboutDialog(aboutProduct()));
     document.body.appendChild(bar);
     // No F1 binding, and no "F1" hint on Help Topics. The entry used to advertise
-    // one, but FlexDesk's keymap owns F1..F8 as "jump to the Nth page", so F1 has
+    // one, but FlexDesk's keymap owns F1..F12 as "jump to the Nth page", so F1 has
     // always taken you to the first page rather than to help. A second listener
     // here would make one key do both.
+}
+
+/**
+ * What the About dialog says. The version and commit come from the server
+ * (`/api/config`, read from the build), so the dialog names the build that is
+ * actually serving this window; an older server sends neither and the line is
+ * left out. The credits are what ships under ui/vendor/ (THIRD_PARTY_LICENSES.md),
+ * plus the native window the desktop app runs in.
+ */
+function aboutProduct() {
+    const config = window.__BUGDESK_CONFIG__ || {};
+    const ticketDesk = appSlug() === 'ticketdesk';
+    const version = config.version
+        ? (config.commit ? `${config.version} (${config.commit})` : config.version)
+        : '';
+    return {
+        name: appName(),
+        version,
+        tagline: ticketDesk
+            ? 'IT tickets as plain markdown files, tracked in git.'
+            : 'Bugs and backlog as plain markdown files, shared by you and your coding agent.',
+        logo: ticketDesk ? 'support_agent' : 'bug_report',
+        license: 'MIT',
+        url: 'https://github.com/nor-os/bugdesk',
+        urlLabel: 'Source on GitHub',
+        credits: [
+            {
+                title: 'Built on',
+                deps: [
+                    { name: 'FlexDesk', url: 'https://github.com/nor-os/FlexDesk', license: 'MIT' },
+                    { name: 'Plotly.js', url: 'https://github.com/plotly/plotly.js', license: 'MIT' },
+                    { name: 'Photino.NET (desktop app)', url: 'https://github.com/tryphotino/photino.NET', license: 'Apache-2.0' },
+                ],
+            },
+            {
+                title: 'Icons and fonts',
+                deps: [
+                    { name: 'Material Symbols', url: 'https://github.com/google/material-design-icons', license: 'Apache-2.0' },
+                    { name: 'Marck Script', url: 'https://fonts.google.com/specimen/Marck+Script', license: 'OFL-1.1' },
+                    { name: 'Sonsie One', url: 'https://fonts.google.com/specimen/Sonsie+One', license: 'OFL-1.1' },
+                ],
+            },
+        ],
+    };
 }
 
 /**
