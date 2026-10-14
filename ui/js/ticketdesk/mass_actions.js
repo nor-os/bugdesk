@@ -308,21 +308,16 @@ export function massActionBar(before, { recordsOf, report, afterChange, noun = '
         return r ? targets.find((t) => t.to === r.to) || null : null;
     };
 
-    bar.addEventListener('click', async (e) => {
-        const b = e.target.closest('button');
-        if (!b || !table || busy) return;
-        if (b.hasAttribute('data-mass-done')) { table.setSelectMode(false); return; }
-        if (b.hasAttribute('data-mass-clear')) { table.clearSelection(); return; }
-        const key = b.dataset.mass;
-        const recs = current();
-        if (!key || !recs.length) return;
+    /** Run mass action `key` over `recs`; `to` names the status target up front (the menu). */
+    const run = async (key, recs, to = null) => {
+        if (!key || !recs.length || busy) return;
         busy = true;
         paint();
         try {
             let msg = null;
             if (key === 'assignee') msg = await massAssign(recs);
             else if (key === 'status') {
-                const target = await chooseTarget(recs);
+                const target = to ? commonTargets(recs).find((t) => t.to === to) : await chooseTarget(recs);
                 msg = target ? await massMove(recs, target) : 'Change status: cancelled, nothing changed.';
             } else if (key.startsWith('action:')) msg = await massAction(recs, key.slice(7));
             if (msg) report(msg);
@@ -333,7 +328,47 @@ export function massActionBar(before, { recordsOf, report, afterChange, noun = '
             busy = false;
             paint();
         }
+    };
+
+    bar.addEventListener('click', async (e) => {
+        const b = e.target.closest('button');
+        if (!b || !table || busy) return;
+        if (b.hasAttribute('data-mass-done')) { table.setSelectMode(false); return; }
+        if (b.hasAttribute('data-mass-clear')) { table.clearSelection(); return; }
+        await run(b.dataset.mass, current());
     });
+
+    /* The right-click menu over a selection of several rows (ticked, or Ctrl/
+       Shift-picked) offers the same: every status they can all reach, the
+       assignee, the custom actions. One row keeps that row's own menu. */
+    const menuItems = () => {
+        const recs = current();
+        if (recs.length < 2) return [];
+        const offered = offeredMassActions(recs);
+        const items = [];
+        for (const a of offered) {
+            if (a.key === 'status') {
+                for (const t of commonTargets(recs)) {
+                    items.push({ label: `${t.label}${t.message ? '…' : ''} — ${recs.length} ${noun}`,
+                                 icon: t.to === 'closed' || t.to === 'done' ? 'task_alt' : 'swap_horiz',
+                                 action: `mass:status:${t.to}`, disabled: busy });
+                }
+            } else {
+                items.push({ label: `${a.label}${a.key === 'assignee' ? '…' : ''} — ${recs.length} ${noun}`,
+                             icon: a.icon, action: `mass:${a.key}`, disabled: busy });
+            }
+        }
+        return items.length ? [...items, { separator: true }] : [];
+    };
+    /** True when `action` was one of menuItems()'s, now running. */
+    const runMenu = (action) => {
+        const m = /^mass:(status:(.+)|assignee|action:.+)$/.exec(String(action));
+        if (!m) return false;
+        const recs = current();
+        if (m[2]) run('status', recs, m[2]);
+        else run(m[1], recs);
+        return true;
+    };
 
     return {
         el: bar,
@@ -346,6 +381,8 @@ export function massActionBar(before, { recordsOf, report, afterChange, noun = '
         },
         attach(t) { table = t; paint(); },
         refresh: paint,
+        menuItems,
+        runMenu,
         destroy() { bar.remove(); table = null; },
     };
 }

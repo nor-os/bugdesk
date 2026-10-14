@@ -397,9 +397,11 @@ function mountQueues(host, props, ctx) {
         const n = menuIds(cm).length;
         const cc = cellClause(cm);
         const fieldLabel = cc ? (fieldDef(cc.col.field)?.label || cc.col.header) : '';
+        // Several bugs selected: what they can ALL do (STORY-0029), else the
+        // right-clicked bug's status moves, the same list its page offers.
+        const many = mass.menuItems();
         return [
-            // The right-clicked bug's status moves, the same list its page offers.
-            ...statusMenuItems(cm.row ? TICKETS.find((x) => x.id === cm.row[QUEUE_ID_COL]) : null),
+            ...(many.length ? many : statusMenuItems(cm.row ? TICKETS.find((x) => x.id === cm.row[QUEUE_ID_COL]) : null)),
             { label: n > 1 ? `Open ${n} bugs in tabs` : 'Open', icon: 'open_in_new', action: 'open', disabled: !n },
             { label: 'Open in new tab', icon: 'tab', action: 'open-tab', disabled: !n },
             { label: 'Open in new window', icon: 'web_asset', action: 'open-window', disabled: !cm.row },
@@ -422,6 +424,7 @@ function mountQueues(host, props, ctx) {
     };
 
     const onContextMenuAction = (action, cm) => {
+        if (mass.runMenu(action)) return;
         const ids = menuIds(cm);
         const one = cm.row?.[QUEUE_ID_COL] || ids[0];
         const cc = cellClause(cm);
@@ -1260,8 +1263,9 @@ function mountTicket(host, props, ctx) {
                 contextMenuItems: (cm) => {
                     const n = resultIds(cm).length;
                     const m = cm.row ? byRef.get(cm.row[0]) : null;
+                    const many = resultsMass.menuItems();
                     return [
-                        ...statusMenuItems(m?.store === 'bugs' ? TICKETS.find((x) => x.id === m.id) : null),
+                        ...(many.length ? many : statusMenuItems(m?.store === 'bugs' ? TICKETS.find((x) => x.id === m.id) : null)),
                         { label: n > 1 ? `Open ${n} in tabs` : 'Open', icon: 'open_in_new', action: 'open', disabled: !n },
                         { label: 'Open in new window', icon: 'web_asset', action: 'open-window', disabled: !cm.row },
                         { separator: true },
@@ -1269,6 +1273,7 @@ function mountTicket(host, props, ctx) {
                     ];
                 },
                 onContextMenuAction: (action, cm) => {
+                    if (resultsMass.runMenu(action)) return;
                     const refs = resultIds(cm);
                     if (/^(move|act):/.test(String(action))) {
                         const m = cm.row ? byRef.get(cm.row[0]) : null;

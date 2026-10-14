@@ -3227,6 +3227,24 @@ console.log('\nMass actions');
         assert.equal(btn2.hidden, true, 'offered on a table without select mode');
         host.remove();
     });
+
+    await t('right-clicking a selection of several offers what they can ALL do; one row offers nothing extra', () => {
+        wf.setWorkflow(null);
+        const host = document.createElement('div');
+        host.innerHTML = '<div class="td-tablehost"></div>';
+        let recs = [bug(1, 'open'), bug(2, 'investigation')];
+        const bar = mass.massActionBar(host.querySelector('.td-tablehost'), {
+            noun: 'bugs', recordsOf: () => recs, report: () => {} });
+        bar.attach({ isSelectMode: () => false, getSelection: () => recs.map((_, i) => i), clearSelection() {} });
+        const items = bar.menuItems().filter((i) => !i.separator);
+        assert.deepEqual(items.map((i) => i.action), ['mass:assignee', 'mass:status:closed'],
+            'the assignee, and only the status both bugs can reach');
+        assert.match(items[0].label, /Change assignee.* 2 bugs/);
+        assert.equal(bar.menuItems().at(-1).separator, true);
+        assert.equal(bar.runMenu('open'), false, 'took an ordinary menu entry');
+        recs = [bug(1, 'open')];
+        assert.deepEqual(bar.menuItems(), [], 'one row keeps its own menu');
+    });
 }
 
 console.log('\nConversion');

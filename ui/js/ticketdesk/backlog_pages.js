@@ -475,7 +475,10 @@ function mountBacklogBoard(host, props, ctx) {
             })) : [];
             const acts = model && refs.length <= 1 ? actionsFor('backlog', model.type, model.status)
                 .map((a) => ({ label: a.label, icon: 'bolt', action: `act:${a.id}` })) : [];
+            // Several items selected: what they can ALL do (STORY-0029).
+            const many = refs.length > 1 ? mass.menuItems() : [];
             return [
+                ...many,
                 ...(moves.length || acts.length ? [...moves, ...acts, { separator: true }] : []),
                 { label: refs.length > 1 ? `Open ${refs.length} items in tabs` : 'Open',
                   icon: 'open_in_new', action: 'open', disabled: !refs.length },
@@ -506,6 +509,7 @@ function mountBacklogBoard(host, props, ctx) {
             ];
         },
         onContextMenuAction: async (action, cm) => {
+            if (mass.runMenu(action)) return;
             const refs = menuRefs(cm);
             const model = cm.row ? byRef.get(cm.row[REF_COL]) : null;
             const cc = cellClause(cm);
