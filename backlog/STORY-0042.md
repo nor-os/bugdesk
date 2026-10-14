@@ -13,7 +13,7 @@ subsystem: desktop
 labels: [desktop]
 links: []
 created: 2026-10-14
-updated: 2026-10-14T18:02Z
+updated: 2026-10-14T18:09Z
 ---
 
 ## Description
@@ -96,3 +96,32 @@ Linux is left out on purpose: it keeps the native frame here. If the trial
 shows a criterion can't be met with Photino, that goes back to norman before
 anything is built against it. FlexDesk's half (the host reporting custom chrome,
 the buttons' markup and CSS, the drag area's names) stays FlexDesk STORY-0026.
+
+### 2026-10-14T18:09Z · norman_agent
+
+Trial, first results (Windows 11, on branch `story-0042-trial`, commit 1bf532d;
+not on main). Two frameless variants behind `BUGDESK_DESKTOP_FRAME`, both
+driven by FlexDesk's own `WindowChromeController`, unchanged:
+
+- **`photino`, Photino's own chromeless window: ruled out.** It's a bare
+  `WS_POPUP` window (style 0x94000000): no Aero Snap, no Win+arrows, square
+  corners, no shadow. Photino also reports it as fullscreen, so the controller
+  turns its resize handles off and the window can't be resized at all.
+- **`custom`, the native frame kept but not drawn: works so far.** The window
+  keeps `WS_CAPTION | WS_THICKFRAME` and a window subclass (`CustomFrame.cs`)
+  returns the whole window as client area from `WM_NCCALCSIZE`. Measured: the
+  client area is the whole 1400×900 window, so the page reaches the top edge.
+  Rounded corners and the shadow are there. The maximise button maximises to
+  exactly the monitor's work area (5120×1392, taskbar visible, no strip lost),
+  restores to 1400×900, and its icon follows both ways. Drags and resizes are
+  handed to Windows (`WM_NCLBUTTONDOWN` with `HTCAPTION` or an edge), which is
+  what should bring snapping and a resize that keeps up with the pointer.
+
+Still to check by hand, because it needs a real mouse and keyboard: dragging and
+snapping, Win+arrows, edge and corner resizing, double-click on the top bar,
+Alt+F4 and the taskbar button. Two findings already point at FlexDesk
+STORY-0026: the controller only finds BugDesk's top bar once it carries the
+`twm-global-top-bar` class, and nothing in FlexDesk draws the window buttons.
+Snap layouts on hovering the maximise button look out of reach, because the
+WebView2 covers the window and Windows never sees the hover. I'll confirm or
+drop that criterion with norman.
