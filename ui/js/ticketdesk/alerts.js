@@ -155,16 +155,26 @@ export function mountAlertsPane(host, { eventBus = null } = {}) {
 
 /* ── Settings › Alerts ───────────────────────────────────────────── */
 
-/** Open the rules editor. Resolves true once saved. */
-export async function openAlertsEditor({ eventBus = null } = {}) {
-    const [{ ManagedWindow }, { openFilterEditor }, bugsF, backF, { TICKETS }, { ITEMS }] = await Promise.all([
-        import('@flexdesk/widgets'), import('./filter_editor.js'), import('./filters.js'), import('./backlog_filters.js'),
+/**
+ * The rules editor, unattached: drawn on the Settings page (`mountAlertsRules`,
+ * STORY-0032) and in a window from the Alerts tab's Edit rules
+ * (`openAlertsEditor`) — which, on a tracker's page, edits the tracker's rules.
+ * @param {object} o
+ * @param {object} [o.eventBus]
+ * @param {() => void} [o.onChange]  after any edit
+ * @param {boolean} [o.page]         on the Settings page: no Cancel/Save row
+ */
+async function alertsRulesEditor({ eventBus = null, onChange = () => {}, page = false } = {}) {
+    const [{ openFilterEditor }, bugsF, backF, { TICKETS }, { ITEMS }] = await Promise.all([
+        import('./filter_editor.js'), import('./filters.js'), import('./backlog_filters.js'),
         import('./data.js'), import('./backlog_data.js'),
     ]);
     const hasBugs = CONFIG.store?.hasBugs !== false && CONFIG.mode !== 'tracker';
     const stores = [...(hasBugs ? ['bugs'] : []), 'backlog'];
     const modelOf = (s) => (s === 'bugs' ? bugsF.MODEL : backF.MODEL);
-    let rules = _rules.map((r) => ({ ...r, expr: JSON.parse(JSON.stringify(r.expr || null)) }));
+    const copy = () => _rules.map((r) => ({ ...r, expr: JSON.parse(JSON.stringify(r.expr || null)) }));
+    let rules = copy();
+    let base = JSON.stringify(rules);
     let problems = [];
 
     const body = document.createElement('div');
@@ -194,11 +204,13 @@ export async function openAlertsEditor({ eventBus = null } = {}) {
                 <div class="bd-workflow__foot"><button type="button" class="ea-btn" data-act="add"><span class="material-symbols-outlined">add</span> Add rule</button></div>
                 ${problems.length ? `<div class="bd-schema__problems" role="alert"><span class="material-symbols-outlined">error</span><ul>${problems.map((p) => `<li>${esc(p)}</li>`).join('')}</ul></div>` : ''}
             </div>
+            ${page ? '<div class="td-dim bd-schema__foot">Saved to .bugdesk/project.json — commit it to share it.</div>' : `
             <div class="ea-modal__actions bd-schema__actions">
                 <span class="td-dim bd-schema__path">Saved to .bugdesk/project.json, shared with everyone on this store.</span>
                 <button type="button" class="ea-btn" data-act="cancel">Cancel</button>
                 <button type="button" class="ea-btn ea-btn--primary" data-act="save">Save</button>
-            </div>`;
+            </div>`}`;
+        onChange();
     };
     body.addEventListener('input', (e) => {
         const row = e.target.closest('[data-rule]');
@@ -206,6 +218,7 @@ export async function openAlertsEditor({ eventBus = null } = {}) {
         const r = rules[Number(row.dataset.rule)];
         const k = e.target.dataset.k;
         if (k === 'name') r.name = e.target.value;
+        onChange();
     });
     body.addEventListener('change', (e) => {
         const row = e.target.closest('[data-rule]');
@@ -216,6 +229,7 @@ export async function openAlertsEditor({ eventBus = null } = {}) {
         else if (k === 'level') r.level = e.target.value;
         else if (k === 'toast') { r.toast = e.target.checked; if (!r.toast) r.sticky = false; render(); }
         else if (k === 'sticky') r.sticky = e.target.checked;
+        onChange();
     });
     body.addEventListener('click', (e) => {
         const b = e.target.closest('button');
@@ -235,9 +249,12 @@ export async function openAlertsEditor({ eventBus = null } = {}) {
             });
             return;
         }
-        if (b.dataset.act === 'cancel') { close(false); return; }
-        if (b.dataset.act === 'save') save();
+        if (b.dataset.act === 'cancel') { onCancel(); return; }
+        if (b.dataset.act === 'save') save().then((ok) => ok && onSaved());
     });
+    let onCancel = () => {};
+    let onSaved = () => {};
+    /** Save; resolves true once saved, false with the problems shown. */
     const save = async () => {
         problems = [];
         try {
@@ -246,7 +263,7 @@ export async function openAlertsEditor({ eventBus = null } = {}) {
                 body: JSON.stringify({ alerts: rules }),
             });
             const j = await res.json().catch(() => null);
-            if (!res.ok || !j?.ok) { problems = j?.problems || [j?.error || `HTTP ${res.status}`]; render(); return; }
+            if (!res.ok || !j?.ok) { problems = j?.problems || [j?.error || `HTTP ${res.status}`]; render(); return false; }
             _rules = j.alerts;
             CONFIG.alerts = j.alerts;
             // New rules start from what matches now: no alert for the past.
@@ -254,14 +271,30 @@ export async function openAlertsEditor({ eventBus = null } = {}) {
             await checkAlerts({ quiet: true });
             if (!_ready) installAlerts({ eventBus });
             eventBus?.emit?.('toast:show', { type: 'info', message: 'Alert rules saved.' });
-            close(true);
-        } catch (err) { problems = [err.message]; render(); }
+            rules = copy();
+            base = JSON.stringify(rules);
+            render();
+            return true;
+        } catch (err) { problems = [err.message]; render(); return false; }
     };
+    render();
+    return {
+        body, save,
+        dirty: () => JSON.stringify(rules) !== base,
+        discard: () => { rules = copy(); base = JSON.stringify(rules); problems = []; render(); },
+        /** The window's own Cancel and Save. */
+        onButtons: (cancel, saved) => { onCancel = cancel; onSaved = saved; },
+    };
+}
+
+/** Open the rules editor in a window. Resolves true once saved. */
+export async function openAlertsEditor({ eventBus = null } = {}) {
+    const [{ ManagedWindow }, ed] = await Promise.all([import('@flexdesk/widgets'), alertsRulesEditor({ eventBus })]);
     let settle;
     const done = new Promise((r) => { settle = r; });
     let closed = false;
     const win = new ManagedWindow({
-        id: `bd-alerts-${Date.now()}`, title: 'Alerts', icon: 'notifications', content: body,
+        id: `bd-alerts-${Date.now()}`, title: 'Alerts', icon: 'notifications', content: ed.body,
         modal: true, canMinimize: false, canMaximize: true, canResize: true, canDrag: true,
         defaultWidth: 860, defaultHeight: 520, onClose: () => close(false),
     });
@@ -271,7 +304,46 @@ export async function openAlertsEditor({ eventBus = null } = {}) {
         try { win.close({ force: true }); } catch { /* closing */ }
         settle(saved);
     }
-    render();
+    ed.onButtons(() => close(false), () => close(true));
     win.show();
     return done;
+}
+
+/**
+ * Settings › Alerts: the rules, on the page, with their own Save.
+ * @param {HTMLElement} el
+ * @param {object} [o]
+ * @param {object} [o.eventBus]
+ * @returns {Promise<() => void>} cleanup
+ */
+export async function mountAlertsRules(el, { eventBus = null } = {}) {
+    let saving = false;
+    const wrap = document.createElement('div');
+    wrap.className = 'bd-alerts-page';
+    wrap.innerHTML = `
+        <div class="bd-schema__bar">
+            <span class="bd-schema__state td-dim" data-slot="state" aria-live="polite"></span>
+            <button type="button" class="ea-btn" data-act="discard">Discard changes</button>
+            <button type="button" class="ea-btn ea-btn--primary" data-act="save">Save</button>
+        </div>`;
+    let ed = null;
+    const sync = () => {
+        if (!ed) return;
+        const changed = ed.dirty();
+        wrap.querySelector('[data-slot="state"]').textContent = changed ? 'Unsaved changes' : '';
+        for (const b of wrap.querySelectorAll('.bd-schema__bar [data-act]')) b.disabled = saving || !changed;
+    };
+    ed = await alertsRulesEditor({ eventBus, page: true, onChange: () => sync() });
+    wrap.append(ed.body);
+    wrap.querySelector('.bd-schema__bar').addEventListener('click', async (e) => {
+        const act = e.target.closest('[data-act]')?.dataset.act;
+        if (act === 'discard') { ed.discard(); return; }
+        if (act !== 'save') return;
+        saving = true; sync();
+        await ed.save();
+        saving = false; sync();
+    });
+    sync();
+    el.replaceChildren(wrap);
+    return () => {};
 }

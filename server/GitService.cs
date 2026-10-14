@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 
 /// <summary>
 /// Git for a store's RECORD files, and nothing else — what the Changes pane and
-/// "commit after save" need (Settings › Saving and git).
+/// "commit after save" need (Settings › Git).
 ///
 /// <para>
 /// BugDesk only ever stages and commits files that are records in this store's
@@ -217,4 +217,26 @@ record GitSettings(bool CommitAfterSave, bool PushAfterCommit, string Autosave =
         ["commitAfterSave"] = CommitAfterSave, ["pushAfterCommit"] = PushAfterCommit,
         ["autosave"] = Autosave, ["autosaveSeconds"] = AutosaveSeconds,
     };
+    /// <summary>
+    /// What one person's pages do. Auto-save is a habit, not a team policy, so it
+    /// is theirs to choose (STORY-0032): <c>autosave</c>/<c>autosaveSeconds</c> in
+    /// their profile's settings, set in Settings › Behaviour. Until they choose,
+    /// the project's value applies. Commit and push stay the project's. The
+    /// project's own auto-save is reported beside it, for the page to say what
+    /// "the project's default" is.
+    /// </summary>
+    public JsonObject ForUser(JsonObject user)
+    {
+        var own = user["autosave"] is JsonValue a && a.TryGetValue<string>(out var av) ? av : null;
+        var mine = own is null ? this : (this with
+        {
+            Autosave = own,
+            AutosaveSeconds = user["autosaveSeconds"] is JsonValue s && s.TryGetValue<int>(out var sv) ? sv : 0,
+        }).Normalised();
+        var j = mine.ToJson();
+        j["ownAutosave"] = own is not null;
+        j["projectAutosave"] = Autosave;
+        j["projectAutosaveSeconds"] = AutosaveSeconds;
+        return j;
+    }
 }

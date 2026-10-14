@@ -219,6 +219,19 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Settings is sorted by who a change affects** (STORY-0032). The sidebar has
+  two sections. **You**: *Profile* (your name and agent name) and *Behaviour*
+  (Ctrl-click, auto-save, animate minimize). **This project**: *Record types*,
+  *Workflow*, *Team*, *Alerts* and *Git*, each saying that changes there apply
+  to everyone who pulls the repo. FlexDesk's General and Windows pages are gone.
+  Every project editor is drawn on the page with its own Save and Discard, and
+  none opens a window; unsaved Record types changes are still there when you
+  come back. Numbering is part of Record types: a prefix is set beside its
+  type, and padding, first number and increment once per store. **Auto-save is
+  now each person's own** (Settings › Behaviour, saved in their profile); until
+  someone chooses, the project's existing value still applies to them. Commit
+  and push stay shared, under Git.
+
 - **BugDesk's copy of FlexDesk's table is gone** (STORY-0008). The bug queue,
   the backlog board and search results are FlexDesk's DataTable, through one
   small adapter (`bd_table.js`). The right-click menus, the record count, Enter,

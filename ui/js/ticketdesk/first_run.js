@@ -188,8 +188,8 @@ export async function resolveIdentity() {
  *
  *   1. re-points `window.__BUGDESK_CONFIG__`, which is what every module reads
  *      at load and what the next page to mount will therefore see;
- *   2. mirrors the pair into the settings store, so Settings › General ›
- *      Authorship shows the truth rather than whatever was typed there once;
+ *   2. mirrors the pair into the settings store, so Settings › Profile
+ *      shows the truth rather than whatever was typed there once;
  *   3. announces it, so the chip repaints.
  *
  * What it CANNOT do is retro-fit the constants already baked into filter
@@ -248,7 +248,7 @@ export async function applyIdentity(cfg, { eventBus } = {}) {
 }
 
 /**
- * Keep Settings › General › Authorship and the per-user profile in agreement.
+ * Keep Settings › Profile and the per-user profile in agreement.
  *
  * Without this the two drift in the worst possible way: the setting is
  * browser-local, so the UI would post comments as the new name while

@@ -11,10 +11,12 @@
  * so this editor exists for the cases that cannot: somebody who has not opened
  * BugDesk yet, a name spelled two ways, a person who has left.
  *
- * Reached from Settings › General › Authorship, the hamburger menu, and the
- * change-your-name dialog.
+ * Drawn on the Settings page as Settings › Team (`mountTeam`, STORY-0032), and
+ * opened as a window from the hamburger menu and the change-your-name dialog,
+ * where it is a question you have while looking at something else. Both are the
+ * same editor (`rosterEditor`).
  *
- * A REAL MANAGED WINDOW (openModal), not a hand-rolled overlay. The overlay it
+ * The window is A REAL MANAGED WINDOW (openModal), not a hand-rolled overlay. The overlay it
  * replaced was written when this could open on top of another modal, which it
  * no longer can — every caller closes its own dialog first — and it cost more
  * than the stacking it bought: no drag, no resize, chrome that only looked like
@@ -54,13 +56,14 @@ async function fetchRoster() {
 }
 
 /**
- * Open the roster editor. Resolves to the saved list, or null if cancelled.
+ * The roster editor, unattached: its element, and what to do with it.
+ * @param {object} [o]
+ * @param {() => void} [o.onChange]  after any edit, and once loaded
  */
-export async function openCollaborators({ eventBus } = {}) {
-    const { openModal } = await import('@flexdesk/widgets');
-
+function rosterEditor({ onChange = () => {} } = {}) {
     let rows = [];
     let path = '.bugdesk/project.json';
+    let loaded = '[]';
 
     const body = document.createElement('div');
     // No Agent column where nobody has one — see AGENTS_ASSIGNABLE in ./data.js.
@@ -123,10 +126,11 @@ export async function openCollaborators({ eventBus } = {}) {
                 rows[i].agent = agentNameFor(nameEl.value);
                 agentEl.value = rows[i].agent;
             }
+            onChange();
             return;
         }
         const agentEl = e.target.closest('[data-agent]');
-        if (agentEl) rows[Number(agentEl.dataset.agent)].agent = agentEl.value;
+        if (agentEl) { rows[Number(agentEl.dataset.agent)].agent = agentEl.value; onChange(); }
     });
 
     rowsEl.addEventListener('click', (e) => {
@@ -134,6 +138,7 @@ export async function openCollaborators({ eventBus } = {}) {
         if (!rm) return;
         rows.splice(Number(rm.dataset.remove), 1);
         render();
+        onChange();
     });
 
     newEl.addEventListener('keydown', (e) => {
@@ -142,51 +147,129 @@ export async function openCollaborators({ eventBus } = {}) {
         add(newEl.value);
         newEl.value = '';
         newEl.focus();
+        onChange();
     });
+    newEl.addEventListener('input', () => onChange());
 
-    render();
-    fetchRoster()
-        .then((r) => { rows = r.collaborators.map((c) => ({ ...c })); path = r.path || path; render(); })
+    /** The list as it would be saved: a name typed into the add box but never
+     *  confirmed with Enter is still something the user asked for. */
+    const collect = () => {
+        const list = rows.map((r) => ({ name: String(r.name || '').trim(), agent: String(r.agent || '').trim() }));
+        const typed = String(newEl.value || '').trim();
+        if (typed && !list.some((r) => r.name.toLowerCase() === typed.toLowerCase())) {
+            list.push({ name: typed, agent: AGENTS_ASSIGNABLE ? agentNameFor(typed) : '' });
+        }
+        return list.filter((r) => r.name);
+    };
+
+    const load = () => fetchRoster()
+        .then((r) => {
+            rows = r.collaborators.map((c) => ({ ...c }));
+            path = r.path || path;
+            newEl.value = '';
+            loaded = JSON.stringify(collect());
+            render();
+            onChange();
+        })
         .catch((err) => {
             rowsEl.innerHTML = `<div class="td-dim">Could not load the roster: ${esc(err?.message || String(err))}</div>`;
         });
 
+    /** Save; resolves the saved list, or throws. */
+    const save = async () => {
+        const res = await fetch(apiUrl('/project/collaborators'), {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', accept: 'application/json' },
+            body: JSON.stringify({ collaborators: collect() }),
+        });
+        const j = await res.json().catch(() => null);
+        if (!res.ok || !j?.ok) throw new Error(j?.error || `HTTP ${res.status}`);
+        return j.collaborators;
+    };
+
+    render();
+    return { body, newEl, load, save, dirty: () => JSON.stringify(collect()) !== loaded };
+}
+
+const savedToast = (eventBus) => eventBus?.emit?.('toast:show', {
+    type: 'info',
+    message: `Collaborators saved. Reload ${appName()} for the assignee lists to pick it up.`,
+});
+
+/**
+ * Open the roster editor in a window. Resolves to the saved list, or null if cancelled.
+ */
+export async function openCollaborators({ eventBus } = {}) {
+    const { openModal } = await import('@flexdesk/widgets');
+    const ed = rosterEditor();
+    ed.load();
+
     const choice = await openModal({
         title: 'Collaborators',
         icon: 'group',
-        content: body,
+        content: ed.body,
         width: 560,
         height: 420,
         actions: [
             { label: 'Cancel', value: null },
             { label: 'Save', value: 'save', primary: true },
         ],
-        onMount: () => requestAnimationFrame(() => newEl.focus()),
+        onMount: () => requestAnimationFrame(() => ed.newEl.focus()),
     });
     if (choice !== 'save') return null;
 
-    // A name typed into the add box but never confirmed with Enter is still
-    // something the user asked for.
-    add(newEl.value);
     try {
-        const res = await fetch(apiUrl('/project/collaborators'), {
-            method: 'POST',
-            headers: { 'content-type': 'application/json', accept: 'application/json' },
-            body: JSON.stringify({
-                collaborators: rows
-                    .map((r) => ({ name: String(r.name || '').trim(), agent: String(r.agent || '').trim() }))
-                    .filter((r) => r.name),
-            }),
-        });
-        const j = await res.json().catch(() => null);
-        if (!res.ok || !j?.ok) throw new Error(j?.error || `HTTP ${res.status}`);
-        eventBus?.emit?.('toast:show', {
-            type: 'info',
-            message: `Collaborators saved. Reload ${appName()} for the assignee lists to pick it up.`,
-        });
-        return j.collaborators;
+        const saved = await ed.save();
+        savedToast(eventBus);
+        return saved;
     } catch (err) {
         eventBus?.emit?.('toast:show', { type: 'error', message: `Could not save: ${err?.message || err}` });
         return null;
     }
+}
+
+/**
+ * Settings › Team: the same editor, on the page, with its own Save.
+ * @param {HTMLElement} el
+ * @param {object} [o]
+ * @param {object} [o.eventBus]
+ * @returns {() => void} cleanup
+ */
+export function mountTeam(el, { eventBus = null } = {}) {
+    let saving = false;
+    let problem = '';
+    const wrap = document.createElement('div');
+    wrap.className = 'bd-team';
+    wrap.innerHTML = `
+        <div class="bd-schema__bar">
+            <span class="bd-schema__state td-dim" data-slot="state" aria-live="polite"></span>
+            <button type="button" class="ea-btn" data-act="discard">Discard changes</button>
+            <button type="button" class="ea-btn ea-btn--primary" data-act="save">Save</button>
+        </div>`;
+    const sync = () => {
+        const changed = ed.dirty();
+        wrap.querySelector('[data-slot="state"]').textContent = problem || (changed ? 'Unsaved changes' : '');
+        for (const b of wrap.querySelectorAll('[data-act]')) b.disabled = saving || !changed;
+    };
+    const ed = rosterEditor({ onChange: () => sync() });
+    wrap.append(ed.body);
+    wrap.addEventListener('click', async (e) => {
+        const act = e.target.closest('[data-act]')?.dataset.act;
+        if (act === 'discard') { problem = ''; ed.load(); return; }
+        if (act !== 'save') return;
+        saving = true; problem = ''; sync();
+        try {
+            await ed.save();
+            savedToast(eventBus);
+            await ed.load();
+        } catch (err) {
+            problem = `Not saved: ${err?.message || err}`;
+        }
+        saving = false;
+        sync();
+    });
+    sync();
+    ed.load();
+    el.replaceChildren(wrap);
+    return () => {};
 }

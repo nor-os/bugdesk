@@ -87,14 +87,16 @@ const t = async (name, fn) => {
 };
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
-/* ── the Collaborators row in Settings ───────────────────────────────
+/* ── Settings, sorted by who a change affects (STORY-0032) ─────────────
  *
- * A roster is a list of records, so it is edited by a dialog rather than a
- * scalar control — the settings row is a BUTTON (`type: 'action'`). That is an
- * unusual enough shape in this page that "it renders and its click reaches the
- * handler" is worth asserting rather than assuming. */
+ * The sidebar is two headed sections: "You" (your profile, this browser) and
+ * "This project" (project.json / bugdesk.json, committed — everyone who pulls).
+ * Every project editor is drawn on the page; none opens a window. These assert
+ * what lands in the document, because "a row that renders but does nothing"
+ * and "a heading over the wrong things" are exactly what a unit test misses.
+ */
 
-console.log('\nSettings › Collaborators');
+console.log('\nSettings, sorted by who a change affects');
 
 const settings = await import(join(UI, 'core', 'settings.js'));
 settings.registerSettings(settings.BUGDESK_SETTINGS_SLICE);
@@ -107,55 +109,112 @@ settings.registerSettings(settings.BUGDESK_SETTINGS_SLICE);
 settings.setSetting('bugdesk.humanName', 'stale-bob');
 settings.setSetting('bugdesk.agentName', 'stale-bob_agent');
 
-await t('the setting is registered under General › Authorship', () => {
-    const row = settings.getSettingsByCategory('general')
-        .find((r) => r.path === 'bugdesk.collaborators');
-    assert.ok(row, 'bugdesk.collaborators is not in the general category');
-    assert.equal(row.type, 'action');
-    assert.equal(row.group, 'Authorship');
-    assert.equal(typeof row.onClick, 'function');
-});
-
 const { SettingsPage } = await import(join(UI, 'ui', 'pages', 'settings_page.js'));
 
-await t('the row RENDERS, with a button', async () => {
+/** Mount the page, wait for it, and hand it back with its host. */
+const mountSettings = async (opts = {}) => {
     const host = document.createElement('div');
     document.body.appendChild(host);
-    const page = new SettingsPage({ embedded: true });
+    const page = new SettingsPage({ embedded: true, ...opts });
     page.mount(host);
     await tick();
+    return { host, page, done: () => { page.dispose(); host.remove(); } };
+};
 
-    const row = host.querySelector('[data-path="bugdesk.collaborators"]');
-    assert.ok(row, 'no settings row rendered for bugdesk.collaborators');
-    const btn = row.querySelector('[data-action="setting-action"]');
-    assert.ok(btn, 'the row rendered without its button');
-    assert.match(btn.textContent, /collaborator/i);
-    page.dispose();
-    host.remove();
+await t('the sidebar is You (Profile, Behaviour), then This project (Record types, Workflow, Team, Alerts, Git)', async () => {
+    const { host, done } = await mountSettings();
+    const nav = [...host.querySelectorAll('.settings-page__sidebar .tree-view > *')].map((el) =>
+        el.classList.contains('settings-page__section') ? `# ${el.textContent.trim()}` : el.dataset.category);
+    assert.deepEqual(nav, ['# You', 'profile', 'behaviour',
+        '# This project', 'recordTypes', 'workflow', 'team', 'alerts', 'git']);
+    done();
 });
 
-await t('clicking the button reaches the schema onClick', async () => {
-    // The click handler looks the def up by path at click time; a row whose
-    // button renders but whose handler cannot find its onClick is exactly the
-    // "does nothing" failure this asserts against.
+await t('it opens on Profile, and General and Windows are gone', async () => {
+    const { host, done } = await mountSettings();
+    assert.equal(host.querySelector('.tree-item.selected')?.dataset.category, 'profile');
+    assert.equal(host.querySelector('[data-category="general"]'), null, 'General is still listed');
+    assert.equal(host.querySelector('[data-category="window"]'), null, 'Windows is still listed');
+    for (const path of ['bugdesk.humanName', 'bugdesk.agentName']) {
+        assert.ok(host.querySelector(`[data-path="${path}"]`), `${path} is not on Profile`);
+    }
+    assert.equal(host.querySelector('[data-action="reset-category"]'), null,
+        'Reset on Profile would blank your name, which switches profile');
+    assert.equal(host.querySelector('.settings-page__shared'), null, 'Profile is yours, not shared');
+    done();
+});
+
+await t('Behaviour holds Ctrl-click, animate minimize and auto-save', async () => {
+    const { host, page, done } = await mountSettings();
+    page._switchCategory('behaviour');
+    await tick(); await tick();
+    for (const path of ['bugdesk.modifierOpen', 'window.animateMinimize']) {
+        assert.ok(host.querySelector(`[data-path="${path}"]`), `${path} is not on Behaviour`);
+    }
+    assert.ok(host.querySelector('[data-panel="bugdesk.autosave"] [data-path="bugdesk.autosave"]'),
+        'the auto-save row is not drawn');
+    const titles = [...host.querySelectorAll('.settings-page__group-title')].map((h) => h.textContent.trim());
+    assert.deepEqual(titles, ['Records', 'Saving', 'Windows']);
+    done();
+});
+
+await t('every This project page says it applies to everyone, and no row opens a window', async () => {
     const schema = settings.getSchema();
-    const original = schema['bugdesk.collaborators'].onClick;
-    let fired = 0;
-    schema['bugdesk.collaborators'].onClick = () => { fired++; };
+    for (const path of settings.VISIBLE_SETTINGS) {
+        assert.notEqual(schema[path].type, 'action', `${path} is still a button that opens a window`);
+    }
+    // Stand the editors in, so this asserts the page, not five editors' fetches.
+    const project = ['bugdesk.recordTypes', 'bugdesk.workflow', 'bugdesk.collaborators', 'bugdesk.alerts', 'bugdesk.git'];
+    const original = Object.fromEntries(project.map((p) => [p, schema[p].mount]));
+    const seen = [];
+    for (const p of project) schema[p].mount = (el) => { seen.push(p); return () => {}; };
     try {
-        const host = document.createElement('div');
-        document.body.appendChild(host);
-        const page = new SettingsPage({ embedded: true });
-        page.mount(host);
-        await tick();
-        host.querySelector('[data-path="bugdesk.collaborators"] [data-action="setting-action"]')
-            .dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
-        await tick();
-        assert.equal(fired, 1, 'the button click did not reach onClick');
-        page.dispose();
-        host.remove();
+        const { host, page, done } = await mountSettings();
+        for (const [cat, path] of [['recordTypes', 'bugdesk.recordTypes'], ['workflow', 'bugdesk.workflow'],
+            ['team', 'bugdesk.collaborators'], ['alerts', 'bugdesk.alerts'], ['git', 'bugdesk.git']]) {
+            page._switchCategory(cat);
+            await tick();
+            assert.match(host.querySelector('.settings-page__shared')?.textContent || '',
+                /everyone who pulls this repo/, `${cat} does not say it is shared`);
+            assert.ok(host.querySelector(`[data-panel="${path}"]`), `${cat} does not draw its editor on the page`);
+        }
+        assert.deepEqual(seen, project);
+        done();
     } finally {
-        schema['bugdesk.collaborators'].onClick = original;
+        for (const p of project) schema[p].mount = original[p];
+    }
+});
+
+await t('the filter still finds rows by name, and offers to go to a page', async () => {
+    const { host, page, done } = await mountSettings();
+    for (const [q, path] of [['Your name', 'bugdesk.humanName'], ['Ctrl-click', 'bugdesk.modifierOpen'],
+        ['Collaborators', 'bugdesk.collaborators'], ['Auto-save', 'bugdesk.autosave'], ['Record types', 'bugdesk.recordTypes']]) {
+        page._handleSearch(q);
+        assert.ok(host.querySelector(`[data-path="${path}"]`), `filtering for "${q}" does not find ${path}`);
+    }
+    page._handleSearch('Collaborators');
+    host.querySelector('[data-action="goto-category"][data-category="team"]')
+        .dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    await tick();
+    assert.equal(host.querySelector('.tree-item.selected')?.dataset.category, 'team');
+    done();
+});
+
+await t('Settings can be opened on a page, with props for its editor', async () => {
+    const schema = settings.getSchema();
+    const original = schema['bugdesk.recordTypes'].mount;
+    const got = [];
+    schema['bugdesk.recordTypes'].mount = (el, props) => { got.push(props.store || null); return () => {}; };
+    try {
+        const { host, page, done } = await mountSettings({ category: 'recordTypes', panelProps: { store: 'backlog' } });
+        await tick();
+        assert.equal(host.querySelector('.tree-item.selected')?.dataset.category, 'recordTypes');
+        page._switchCategory('profile'); await tick();
+        page._switchCategory('recordTypes'); await tick();
+        assert.deepEqual(got, ['backlog', null], 'the props are for the first time it is drawn only');
+        done();
+    } finally {
+        schema['bugdesk.recordTypes'].mount = original;
     }
 });
 
@@ -178,7 +237,7 @@ await t('Settings › Workflow is drawn on the page, and let go of when the page
         assert.equal(host.querySelector('[data-action="setting-action"]'), null, 'the Workflow page has no button to open a window');
         assert.equal(host.querySelector('[data-action="reset-category"]'), null, 'nothing on it for Reset to reset');
         assert.deepEqual(seen, ['bugdesk.workflow']);
-        page._switchCategory('general');
+        page._switchCategory('profile');
         await tick();
         assert.deepEqual(seen, ['bugdesk.workflow', 'cleanup'], 'the editor was not let go of');
         page._handleSearch('mass actions for ticked');
@@ -1523,6 +1582,159 @@ await t('it opens as a real managed window, not a hand-rolled overlay', async ()
     assert.ok(cancel, 'no Cancel action');
     cancel.click();
     assert.equal(await done, null);
+    put('fetch', realFetchLocal);
+});
+
+/* ── the project editors, on the Settings page (STORY-0032) ──────────── */
+
+console.log('\nSettings editors on the page');
+
+/** Answer the editors' fetches from `routes` (`'GET /api/x'` → body), and record every POST. */
+const fakeApi = (routes) => {
+    const posts = [];
+    put('fetch', async (url, init = {}) => {
+        const method = init.method || 'GET';
+        const path = `/${String(url).replace(/^.*?\bapi\//, 'api/')}`;
+        const body = init.body ? JSON.parse(init.body) : undefined;
+        if (method === 'POST') posts.push({ path, body });
+        const answer = routes[`${method} ${path}`];
+        const j = typeof answer === 'function' ? answer(body) : answer;
+        return { ok: !!j?.ok, status: j?.ok ? 200 : 400, json: async () => j };
+    });
+    return posts;
+};
+
+await t('Record types: a prefix is set beside its type, and Save sends only the numbering that changed', async () => {
+    const realFetchLocal = globalThis.fetch;
+    const { CONFIG } = await import(join(UI, 'ticketdesk', 'instance.js'));
+    CONFIG.numbering = { bugs: { prefix: 'BUG', pad: 4, start: 1, step: 1 },
+        backlog: { prefix: { project: 'PROJ', epic: 'EPIC', story: 'STORY', task: 'TASK' }, pad: 4, start: 1, step: 1 } };
+    let refuse = true;
+    const posts = fakeApi({
+        'POST /api/project/numbering': (b) => (refuse ? { ok: false, error: 'prefix "EPIC" is used by two types' }
+            : { ok: true, numbering: b.numbering }),
+    });
+    const { mountRecordTypes } = await import(join(UI, 'ticketdesk', 'schema_editor.js'));
+    const el = document.createElement('div');
+    document.body.appendChild(el);
+    const cleanup = mountRecordTypes(el, { store: 'backlog', type: 'story' });
+    const save = () => el.querySelector('[data-act="save"]');
+    assert.ok(save().disabled, 'Save is offered with nothing changed');
+    const prefix = el.querySelector('[data-num="prefix"]');
+    assert.equal(prefix.value, 'STORY');
+    prefix.value = 'US';
+    prefix.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    assert.match(el.querySelector('[data-slot="sample"]').textContent, /^US-0001$/);
+    assert.equal(el.querySelector('[data-slot="state"]').textContent, 'Unsaved changes');
+    assert.ok(!save().disabled);
+
+    // Refused: the reason is on the page, and what was typed is still there.
+    save().click();
+    await tick(); await tick();
+    assert.match(el.querySelector('.bd-schema__problems')?.textContent || '', /used by two types/);
+    assert.equal(el.querySelector('[data-num="prefix"]').value, 'US');
+    assert.deepEqual(posts.map((x) => x.path), ['/api/project/numbering'], 'the unchanged schema was sent too');
+    assert.equal(posts[0].body.numbering.backlog.prefix.story, 'US');
+
+    refuse = false;
+    save().click();
+    await tick(); await tick();
+    assert.equal(el.querySelector('.bd-schema__problems'), null);
+    assert.ok(save().disabled, 'still unsaved after saving');
+    assert.equal(CONFIG.numbering.backlog.prefix.story, 'US');
+    cleanup();
+    el.remove();
+    put('fetch', realFetchLocal);
+});
+
+await t('Record types: unsaved changes are still there when you come back', async () => {
+    const realFetchLocal = globalThis.fetch;
+    fakeApi({});
+    const { mountRecordTypes } = await import(join(UI, 'ticketdesk', 'schema_editor.js'));
+    const el = document.createElement('div');
+    let cleanup = mountRecordTypes(el, { store: 'backlog', type: 'epic' });
+    const pad = el.querySelector('[data-num="pad"]');
+    pad.value = '6';
+    pad.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    cleanup();
+    cleanup = mountRecordTypes(el);
+    assert.equal(el.querySelector('[data-num="pad"]').value, '6');
+    assert.match(el.querySelector('.bd-schema__h').textContent, /Epic/, 'not back on the type you left');
+    el.querySelector('[data-act="discard"]').click();
+    assert.notEqual(el.querySelector('[data-num="pad"]').value, '6');
+    cleanup();
+    put('fetch', realFetchLocal);
+});
+
+await t('Team: the roster on the page, saved with its own Save', async () => {
+    const realFetchLocal = globalThis.fetch;
+    const posts = fakeApi({
+        'GET /api/project': { ok: true, path: '.bugdesk/project.json', config: { collaborators: [{ name: 'bob', agent: 'bob_agent' }] } },
+        'POST /api/project/collaborators': (b) => ({ ok: true, collaborators: b.collaborators }),
+    });
+    const { mountTeam } = await import(join(UI, 'ticketdesk', 'collaborators.js'));
+    const el = document.createElement('div');
+    mountTeam(el);
+    await tick(); await tick();
+    assert.equal(document.querySelector('.twm-managed-window'), null, 'it opened a window');
+    assert.equal(el.querySelector('[data-name="0"]').value, 'bob');
+    assert.ok(el.querySelector('[data-act="save"]').disabled);
+    const add = el.querySelector('[data-slot="newname"]');
+    add.value = 'carol';
+    add.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    assert.ok(!el.querySelector('[data-act="save"]').disabled);
+    el.querySelector('[data-act="save"]').click();
+    await tick(); await tick(); await tick();
+    assert.deepEqual(posts[0].body.collaborators.map((c) => c.name), ['bob', 'carol']);
+    put('fetch', realFetchLocal);
+});
+
+await t('Git: the two switches apply as flipped, and leave the project auto-save alone', async () => {
+    const realFetchLocal = globalThis.fetch;
+    const posts = fakeApi({
+        'GET /api/git': { ok: true, enabled: true, settings: { commitAfterSave: false, pushAfterCommit: false, autosave: 'debounce', autosaveSeconds: 3 } },
+        'POST /api/project/git': (b) => ({ ok: true, enabled: true, settings: { ...b, autosave: 'debounce', autosaveSeconds: 3 } }),
+    });
+    const { mountGitSettings } = await import(join(UI, 'ticketdesk', 'changes_pane.js'));
+    const el = document.createElement('div');
+    await mountGitSettings(el);
+    assert.ok(el.querySelector('[data-set="pushAfterCommit"]').disabled, 'push is offered without commit');
+    const commit = el.querySelector('[data-set="commitAfterSave"]');
+    commit.checked = true;
+    commit.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    await tick(); await tick();
+    assert.deepEqual(posts[0].body, { commitAfterSave: true, pushAfterCommit: false });
+    assert.ok(!el.querySelector('[data-set="pushAfterCommit"]').disabled);
+    put('fetch', realFetchLocal);
+});
+
+await t('Auto-save is yours: chosen in your profile, and the project default clears it', async () => {
+    const realFetchLocal = globalThis.fetch;
+    const { CONFIG } = await import(join(UI, 'ticketdesk', 'instance.js'));
+    const { autosaveMode } = await import(join(UI, 'ticketdesk', 'autosave.js'));
+    CONFIG.saving = { commitAfterSave: false, pushAfterCommit: false, autosave: 'off', autosaveSeconds: 0,
+        ownAutosave: false, projectAutosave: 'off', projectAutosaveSeconds: 0 };
+    const posts = fakeApi({ 'POST /api/user/settings': { ok: true, settings: {} } });
+    const { mountAutosaveSetting } = await import(join(UI, 'ticketdesk', 'autosave_setting.js'));
+    const el = document.createElement('div');
+    document.body.appendChild(el);
+    const cleanup = mountAutosaveSetting(el);
+    assert.match(el.querySelector('.settings-page__setting-desc').textContent, /Yours alone/);
+    const pick = async (value) => {
+        el.querySelector('.bd-sel__button').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+        await tick();
+        document.querySelector(`.bd-sel__panel [data-value="${value}"]`)
+            .dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+        await tick(); await tick();
+    };
+    await pick('debounce');
+    assert.deepEqual(posts.at(-1), { path: '/api/user/settings', body: { autosave: 'debounce', autosaveSeconds: 2 } });
+    assert.deepEqual(autosaveMode(), { mode: 'debounce', seconds: 2 }, 'a record opened now does not auto-save');
+    await pick('project');
+    assert.deepEqual(posts.at(-1).body, { autosave: null, autosaveSeconds: null });
+    assert.equal(autosaveMode().mode, 'off');
+    cleanup();
+    el.remove();
     put('fetch', realFetchLocal);
 });
 

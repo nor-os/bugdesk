@@ -840,7 +840,7 @@ function mountItem(host, props, ctx) {
 
     const $ = (s) => host.querySelector(s) || actionsEl?.querySelector(s) || null;
     const fval = (k) => host.querySelector(`[data-f="${k}"]`)?.value?.trim() ?? '';
-    // Auto-save (Settings › Saving and git), attached once `save` exists.
+    // Auto-save (Settings › Behaviour), attached once `save` exists.
     let autosave = null;
     let edits = 0;
     const setDirty = (on) => {

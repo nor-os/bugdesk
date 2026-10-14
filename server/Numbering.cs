@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 
 /// <summary>
 /// How a store names and numbers its records — <c>numbering</c> in the committed
-/// <c>.bugdesk/project.json</c>, edited from Settings › Numbering.
+/// <c>.bugdesk/project.json</c>, edited from Settings › Record types.
 ///
 /// <code>
 /// "numbering": {

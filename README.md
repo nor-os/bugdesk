@@ -257,7 +257,7 @@ there is.
 Who you are is shown in the **bottom-left corner** at all times — in a repo
 several people share, that is the one piece of state you want to be able to
 check before commenting as somebody else. Clicking it opens
-**Settings › General › Authorship**, where the name is editable; changing it
+**Settings › Profile**, where the name is editable; changing it
 switches BugDesk to that person's profile (creating it if the name is new),
 along with their saved filters, and writes through to the profile on disk so
 `/api/config` and the UI can never disagree about who you are.
@@ -324,8 +324,8 @@ look fine locally, and silently never reach anyone else's checkout.
 The list maintains itself: setting your name adds you, **assigning to a name
 that is not on it adds that person**, and the `/bugs` and `/backlog` skills add
 the people they find in the git history. Edit it directly — add, rename, change
-an agent name, remove — from **Settings › General › Authorship › Manage
-collaborators**, the hamburger menu's **Collaborators…**, or the change-your-name
+an agent name, remove — from **Settings › Team**, the hamburger menu's
+**Collaborators…**, or the change-your-name
 dialog. Override the path with `BUGDESK_PROJECT`. `GET /api/project` reports the
 resolved `path`, which is the quickest way to see which file the running UI has
 in force; an agent works it out from the same three rules, in the same order.
@@ -718,7 +718,7 @@ to aim for a particular column:
 | gesture | what happens |
 |---|---|
 | **drag a row onto any tile** | that tile displays the record. Every tile that can take it is outlined while you drag; panels are not offered, because dropping a bug onto the filter rail means nothing |
-| **Ctrl-click a row** (⌘ on a Mac) | opens it **without taking the list off screen** — a floating window by default, or a genuinely background tab that waits for you. Set which in **Settings › General › Records** |
+| **Ctrl-click a row** (⌘ on a Mac) | opens it **without taking the list off screen** — a floating window by default, or a genuinely background tab that waits for you. Set which in **Settings › Behaviour** |
 
 Neither replaces the plain click, because neither is discoverable on its own.
 **Shift-click is left alone**: it is the table's range-select and the one

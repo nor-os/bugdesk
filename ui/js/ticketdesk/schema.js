@@ -304,8 +304,8 @@ export function snoozeNotice(store, eventBus = null) {
         <span>Snoozing a record needs a <b>Snooze until</b> date field (named <code>not_before</code>) on its type. No type here has one.</span>
         <button type="button" class="ea-btn ea-btn--primary"><span class="material-symbols-outlined">tune</span> Record types</button>`;
     el.querySelector('button').addEventListener('click', async () => {
-        const { openSchemaEditor } = await import('./schema_editor.js');
-        openSchemaEditor({ eventBus, store });
+        const { openSettings } = await import('./settings_content.js');
+        openSettings('recordTypes', { store });
     });
     return el;
 }

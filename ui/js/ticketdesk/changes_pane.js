@@ -151,48 +151,54 @@ export function mountChangesPane(host, { eventBus = null } = {}) {
 }
 
 /**
- * Settings › Saving and git: the same two switches as the pane's, in a dialog.
- * Resolves true once saved.
+ * Settings › Git: the same two switches as the pane's, on the Settings page
+ * (STORY-0032). Each applies as it is flipped, as in the pane. Auto-save is not
+ * here any more: it is each person's own, under Settings › Behaviour.
+ * @param {HTMLElement} el
+ * @param {object} [o]
+ * @param {object} [o.eventBus]
+ * @returns {Promise<() => void>} cleanup
  */
-export async function openGitSettings({ eventBus = null } = {}) {
+export async function mountGitSettings(el, { eventBus = null } = {}) {
     let state;
+    let error = '';
     try { state = await call('/git'); } catch (err) { state = { enabled: false, reason: err.message }; }
-    const { openForm, openConfirm } = await import('@flexdesk/widgets');
-    if (!state.enabled) {
-        await openConfirm({ title: 'Saving and git', message: `<p>${esc(state.reason || 'Git is not available here.')}</p>`,
-            confirmLabel: 'OK' });
-        return false;
-    }
-    const answer = await openForm({
-        title: 'Saving and git',
-        fields: [
-            { name: 'commitAfterSave', label: 'Commit after save', type: 'checkbox',
-              hint: 'Every save commits the record it wrote — that file only — as BUG-0042: record edits from the UI.' },
-            { name: 'pushAfterCommit', label: 'Push after commit', type: 'checkbox',
-              hint: 'Each of those commits is pushed straight after. A failed push is shown in the Changes pane.' },
-            { section: 'Auto-save' },
-            { name: 'autosave', label: 'Save edits', type: 'select', required: true,
-              options: [{ value: 'off', label: 'Only when I press Save' },
-                        { value: 'debounce', label: 'A few seconds after I stop typing' },
-                        { value: 'interval', label: 'Every few seconds while there are edits' }] },
-            { name: 'autosaveSeconds', label: 'Seconds', type: 'number',
-              hint: 'How long after the last keystroke, or how often. Auto-saves commit once you leave the record, or after five quiet minutes.' },
-        ],
-        defaults: state.settings || {},
-        submitLabel: 'Save',
-    });
-    if (!answer) return false;
-    try {
-        const saved = await call('/project/git', {
-            commitAfterSave: !!answer.commitAfterSave, pushAfterCommit: !!answer.pushAfterCommit,
-            autosave: answer.autosave || 'off', autosaveSeconds: Number(answer.autosaveSeconds) || 0,
-        });
-        // The pages read the mode at mount: a page opened from now on uses it.
-        CONFIG.saving = saved.settings;
-        eventBus?.emit?.(ev('git:changed'), {});
-        return true;
-    } catch (err) {
-        eventBus?.emit?.('toast:show', { type: 'error', message: `Could not save: ${err.message}` });
-        return false;
-    }
+    const render = () => {
+        if (!state.enabled) {
+            el.innerHTML = `<p class="td-dim">${esc(state.reason || 'Git is not available here.')}</p>`;
+            return;
+        }
+        const s = state.settings || {};
+        el.innerHTML = `
+            <div class="bd-git-settings">
+                <label class="bd-git-settings__row">
+                    <input type="checkbox" data-set="commitAfterSave" ${s.commitAfterSave ? 'checked' : ''}>
+                    <span><b>Commit after save</b><span class="td-dim">Every save commits the record it wrote — that file only — as BUG-0042: record edits from the UI. Auto-saves commit once you leave the record, or after five quiet minutes.</span></span>
+                </label>
+                <label class="bd-git-settings__row">
+                    <input type="checkbox" data-set="pushAfterCommit" ${s.pushAfterCommit ? 'checked' : ''} ${s.commitAfterSave ? '' : 'disabled'}>
+                    <span><b>Push after commit</b><span class="td-dim">Each of those commits is pushed straight after. A failed push is shown in the Changes tab.</span></span>
+                </label>
+                ${error ? `<div class="bd-schema__problems" role="alert"><span class="material-symbols-outlined">error</span><span>Not saved: ${esc(error)}</span></div>` : ''}
+                <div class="td-dim bd-schema__foot">Saved to .bugdesk/project.json — commit it to share it. The bottom panel's Changes tab lists what is uncommitted, and commits and pushes by hand.</div>
+            </div>`;
+    };
+    const onChange = async (e) => {
+        const key = e.target.dataset?.set;
+        if (!key) return;
+        // Only the two switches: the project's auto-save is left as it is.
+        const cur = state.settings || {};
+        const next = { commitAfterSave: !!cur.commitAfterSave, pushAfterCommit: !!cur.pushAfterCommit, [key]: e.target.checked };
+        if (!next.commitAfterSave) next.pushAfterCommit = false;
+        try {
+            state = await call('/project/git', next);
+            error = '';
+            CONFIG.saving = { ...(CONFIG.saving || {}), commitAfterSave: state.settings.commitAfterSave, pushAfterCommit: state.settings.pushAfterCommit };
+            eventBus?.emit?.(ev('git:changed'), {});
+        } catch (err) { error = err.message; }
+        render();
+    };
+    el.addEventListener('change', onChange);
+    render();
+    return () => el.removeEventListener('change', onChange);
 }

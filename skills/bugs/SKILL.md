@@ -328,7 +328,7 @@ Field notes:
 ### Numbering: prefixes, padding, start and step
 
 A project may name and number its records differently from the defaults, under
-`numbering` in `project.json` (Settings › Numbering):
+`numbering` in `project.json` (Settings › Record types, under each type's Name and number):
 
 ```json
 "numbering": {

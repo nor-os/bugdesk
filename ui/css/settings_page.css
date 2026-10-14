@@ -108,6 +108,36 @@
     margin: 0;
 }
 
+/* A page whose changes reach everyone who pulls the repo says so, under its title. */
+.settings-page__shared {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    margin: var(--space-sm) 0 0 0;
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary, var(--text-muted));
+}
+
+.settings-page__shared .material-symbols-outlined {
+    font-size: var(--font-size-lg);
+    color: var(--accent, var(--text-muted));
+}
+
+/* ── Sidebar sections: who a change affects ("You", "This project") ───────── */
+
+.settings-page__section {
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-muted);
+    padding: var(--space-md) var(--space-md) var(--space-xs);
+}
+
+.settings-page__section:first-child {
+    padding-top: var(--space-xs);
+}
+
 /* ── Reset buttons ────────────────────────────────────────────────────────── */
 
 .settings-page__reset-btn {
@@ -487,3 +517,67 @@
 .settings-page__content::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.2);
 }
+
+/* ── Project editors drawn on the page (STORY-0032) ───────────────────────
+   Record types, Team, Alerts and Git used to open windows; on the page they
+   share the Workflow page's bar (state, Discard, Save) and its foot line. */
+
+.bd-schema__bar { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.bd-schema__bar .ea-btn:disabled { opacity: .45; cursor: default; }
+.bd-schema__state { margin-right: auto; font-size: 11.5px; }
+.bd-schema__foot { font-size: 10.5px; }
+
+.bd-schema--page {
+    grid-template-rows: auto 1fr auto;
+    row-gap: 8px;
+    height: max(460px, calc(100vh - 330px));
+    background: none;
+}
+.bd-schema--page > .bd-schema__bar,
+.bd-schema--page > .bd-schema__foot { grid-column: 1 / -1; }
+.bd-schema--page > .bd-schema__nav,
+.bd-schema--page > .bd-schema__main {
+    grid-row: 2;
+    background: var(--surface-1, #252526);
+    border: 1px solid var(--border-default, #333);
+}
+.bd-schema--page > .bd-schema__nav { border-radius: 4px 0 0 4px; border-right-color: var(--border-subtle, #2a2a2a); }
+.bd-schema--page > .bd-schema__main { border-left: 0; border-radius: 0 4px 4px 0; }
+
+/* Name and number: label, field, what it does. */
+/* Two classes: `.ea-modal__row` (the field styling) sets a two-column grid of its own. */
+.bd-schema--page .bd-schema__num {
+    display: grid;
+    grid-template-columns: 110px 120px 1fr;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 4px;
+}
+.bd-schema__num .td-dim { font-size: 11px; }
+
+.bd-team, .bd-alerts-page { display: flex; flex-direction: column; gap: 8px; }
+.bd-alerts-page .bd-schema { grid-template-rows: auto auto; background: none; }
+.bd-alerts-page .bd-schema__foot { grid-column: 1 / -1; padding-top: 6px; }
+
+.bd-git-settings { display: flex; flex-direction: column; gap: 12px; }
+.bd-git-settings__row { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; }
+.bd-git-settings__row input { margin-top: 3px; }
+.bd-git-settings__row > span { display: flex; flex-direction: column; gap: 2px; }
+.bd-git-settings__row .td-dim { font-size: var(--font-size-sm); }
+
+.bd-autosave-setting { display: flex; align-items: center; gap: 6px; }
+.bd-autosave-setting .settings-number { width: 64px; }
+
+/* The roster on the page: the three columns its window gets (backlog.css),
+   which `.ea-modal__row` would otherwise turn into its two. */
+.bd-team .bd-collabs__hdr,
+.bd-team .bd-collabs__row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 22px;
+    align-items: center;
+    column-gap: 8px;
+    margin-bottom: 5px;
+}
+.bd-team .bd-collabs--noagents .bd-collabs__hdr,
+.bd-team .bd-collabs--noagents .bd-collabs__row { grid-template-columns: 1fr 22px; }
+.bd-team .bd-collabs__addrow { grid-template-columns: 130px 1fr; }

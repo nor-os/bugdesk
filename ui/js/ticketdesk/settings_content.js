@@ -19,6 +19,22 @@ import { makeLoadingOverlay, mountTileBreadcrumb } from '@flexdesk/wm';
 import { SettingsPage } from '../ui/pages/settings_page.js';
 
 /**
+ * Open Settings in the primary tile, on one of its pages: what a button that
+ * used to open an editor window does now that every editor is on the page
+ * (STORY-0032) — "Record types" on the snooze notice, say.
+ * @param {string} [category]  a settings category id: 'recordTypes', 'team', …
+ * @param {object} [panelProps] for that page's editor: `{ store }` on Record types
+ */
+export function openSettings(category = null, panelProps = null) {
+    // `label` titles the tab (FlexDesk titles it from the props, falling back
+    // to the bare kind), and `at` makes every request new: asked for the same page twice, with the
+    // person having moved to another one in between, the window manager would
+    // otherwise see the tab's props unchanged and redraw nothing.
+    window.__twm?.wm?.openInPrimary?.('settings',
+        category ? { label: 'Settings', category, ...(panelProps ? { panelProps } : {}), at: Date.now() } : {});
+}
+
+/**
  * @param {object} deps
  * @param {object} [deps.eventBus]
  * @param {object} [deps.api]  the bridge handle; the page reads one bridge-backed row
@@ -47,6 +63,8 @@ export function createSettingsContent({ eventBus, api } = {}) {
                 eventBus,
                 embedded: true,
                 bridgeApi: api || window.pywebview?.api,
+                category: props?.category || null,
+                panelProps: props?.panelProps || null,
             });
             page.mount(contentSlot);
             Promise.resolve(page._initPromise).then(hideLoading, hideLoading);

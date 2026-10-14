@@ -1582,8 +1582,9 @@ object ConfigPayload(Store s, string? slug = null) => new
     workflow = s.Project.Workflow(),
     // How references are written: prefixes, padding, and every prefix still read.
     numbering = s.Project.Numbering().ToJson(),
-    // Auto-save, commit after save, push after commit (GitService.cs).
-    saving = GitSettings.Parse(s.Project.Document()["git"]).ToJson(),
+    // Commit after save and push after commit (the project's), and auto-save
+    // (this person's, or the project's until they choose one) — GitService.cs.
+    saving = GitSettings.Parse(s.Project.Document()["git"]).ForUser(s.Users.Settings()),
     // Alert rules (STORY-0005): evaluated in the page, on every store change.
     alerts = s.Project.Document()["alerts"]?.DeepClone() ?? new JsonArray(),
     // The store this page is on, and which of its two halves exist.
@@ -1760,7 +1761,7 @@ app.MapPost("/api/project/schema", async (HttpRequest req) =>
     return Results.Json(new { ok = true, schema = SchemaPayload(saved) }, json);
 });
 
-// The numbering, saved from Settings › Numbering. A prefix the save replaces is
+// The numbering, saved from Settings › Record types. A prefix the save replaces is
 // kept as a previous one, so records written under it stay reachable.
 app.MapPost("/api/project/numbering", async (HttpRequest req) =>
 {
@@ -1856,8 +1857,12 @@ app.MapPost("/api/project/git", async (HttpRequest req) =>
 {
     var body = await JsonSerializer.DeserializeAsync<Dictionary<string, JsonElement>>(req.Body, json) ?? new();
     bool B(string k) => body.TryGetValue(k, out var v) && v.ValueKind == JsonValueKind.True;
-    var mode = body.TryGetValue("autosave", out var am) && am.ValueKind == JsonValueKind.String ? am.GetString() ?? "off" : "off";
-    var secs = body.TryGetValue("autosaveSeconds", out var asv) && asv.ValueKind == JsonValueKind.Number && asv.TryGetInt32(out var n) ? n : 0;
+    // Auto-save is per person now (Settings › Behaviour, STORY-0032): a save that
+    // does not mention it keeps the project's, which still applies to anyone who
+    // has not chosen their own.
+    var was = GitSettings.Parse(Req.Store.Project.Document()["git"]);
+    var mode = body.TryGetValue("autosave", out var am) && am.ValueKind == JsonValueKind.String ? am.GetString() ?? "off" : was.Autosave;
+    var secs = body.TryGetValue("autosaveSeconds", out var asv) && asv.ValueKind == JsonValueKind.Number && asv.TryGetInt32(out var n) ? n : was.AutosaveSeconds;
     var next = new GitSettings(B("commitAfterSave"), B("pushAfterCommit") && B("commitAfterSave"), mode, secs).Normalised();
     Req.Store.Project.SetKey("git", next.ToJson());
     return Results.Json(GitPayload(Req.Store), json);

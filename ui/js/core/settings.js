@@ -37,12 +37,8 @@
  * `bugdesk.humanName` / `bugdesk.agentName` are BugDesk's own addition: the
  * editable form of WHO YOU ARE (see README.md's "Who you are" and
  * "Authorship" sections). Both default to `''` ("use whatever the server
- * resolved"). They live under the shell's own `general` category
- * (@flexdesk/core's CATEGORIES already has one, order 10 — "Workspace
- * behavior and notifications" fits an identity setting fine) rather than a
- * new bugdesk-only category, since there's exactly one group ("Authorship")
- * of settings here — not enough to earn its own sidebar entry the way
- * `ecoagent` used to.
+ * resolved"). They live on Settings › Profile, under "You" — see
+ * BUGDESK_SETTINGS_SLICE below for how the sidebar is sorted.
  *
  * These are NOT browser-only overrides any more, and they are no longer the
  * authority either. Since the per-user profile landed (server/UserConfig.cs),
@@ -115,16 +111,17 @@ export {
  * row is now a lie.
  */
 export const VISIBLE_SETTINGS = new Set([
-    // Who you are, and what a Ctrl-click does — BugDesk's own.
+    // You: who you are, and how BugDesk behaves for you — BugDesk's own.
     'bugdesk.humanName',
     'bugdesk.agentName',
-    'bugdesk.collaborators',
+    'bugdesk.modifierOpen',
+    'bugdesk.autosave',
+    // This project: shared with everyone who pulls the repo.
     'bugdesk.recordTypes',
     'bugdesk.workflow',
-    'bugdesk.numbering',
-    'bugdesk.git',
+    'bugdesk.collaborators',
     'bugdesk.alerts',
-    'bugdesk.modifierOpen',
+    'bugdesk.git',
     // Read by FlexDesk's managed windows, which BugDesk's floats are.
     'window.animateMinimize',
 ]);
@@ -153,12 +150,55 @@ export const HIDDEN_SETTINGS = new Set([
 // app_bootstrap.js itself) so the defaults/schema/category triple lives
 // next to the settings documentation above, matching where this data used
 // to live before the extraction.
+/**
+ * The page's event bus, for the editors Settings opens. install.js publishes it
+ * as `window.__bugdesk.eventBus` because these callbacks are defined before the
+ * shell exists. They used to read `window.__ecoagent`, a name left over from
+ * the app this shell came from that BugDesk never sets: every editor got no bus,
+ * so a save there never told the open pages (Alerts, Changes, the queues).
+ */
+const pageBus = () => window.__bugdesk?.eventBus ?? null;
+
+/** Where a panel's editor comes from, mounted with the page's bus. */
+const panel = (load) => async (el, { eventBus, ...props } = {}) => (await load())(el, { ...props, eventBus: eventBus || pageBus() });
+
+/**
+ * The sidebar, sorted by WHO A CHANGE AFFECTS (STORY-0032), then by topic:
+ *
+ *   You           Profile, Behaviour        — your profile, or this browser
+ *   This project  Record types, Workflow,   — project.json / bugdesk.json,
+ *                 Team, Alerts, Git           committed: everyone who pulls
+ *
+ * It used to be FlexDesk's General ("Workspace behavior and notifications")
+ * holding everything, with nothing to say that Saving and git or Record types
+ * changed things for the whole team while the row beside them changed only
+ * this browser. A category's `section` is the sidebar heading it is listed
+ * under; `shared` puts the "applies to everyone" line under its title;
+ * `groupOrder` orders its groups where schema order cannot (a FlexDesk row
+ * moved onto the page comes first in it). Every
+ * project editor is drawn on the page (`type: 'panel'`); none opens a window.
+ * FlexDesk's own General and Windows are left with no rows we offer, so the
+ * page does not list them.
+ */
 export const BUGDESK_SETTINGS_SLICE = {
-    // The workflow gets a sidebar entry of its own (STORY-0030): record types,
-    // their actions and the flows those run, on one page. Right under General.
     categories: [
-        { id: 'workflow', label: 'Workflow', icon: 'account_tree',
-          description: 'What each record type can do: its actions, and the flows they run', order: 15 },
+        { id: 'profile', label: 'Profile', icon: 'badge', section: 'You', order: 11, noReset: true,
+          description: 'Who you are here: the names your work, and your assistant\'s comments, are signed with. Saved to your profile beside the store.' },
+        { id: 'behaviour', label: 'Behaviour', icon: 'tune', section: 'You', order: 12,
+          groupOrder: ['Records', 'Saving', 'Windows'],
+          description: 'How BugDesk behaves for you. Other people choose their own.' },
+        { id: 'recordTypes', label: 'Record types', icon: 'schema', section: 'This project', order: 21, shared: true,
+          description: 'Each record type\'s fields and statuses, and how new records of it are named and numbered.' },
+        // Its Tracker section is saved to the tracker's own project.json.
+        { id: 'workflow', label: 'Workflow', icon: 'account_tree', section: 'This project', order: 22,
+          shared: 'Changes here apply to everyone who pulls this repo — and in the Tracker section, to everyone who uses that tracker.',
+          description: 'What each record type can do: its actions, and the flows they run' },
+        { id: 'team', label: 'Team', icon: 'group', section: 'This project', order: 23, shared: true,
+          description: 'Everyone who can be assigned work on this repo.' },
+        { id: 'alerts', label: 'Alerts', icon: 'notifications', section: 'This project', order: 24, shared: true,
+          description: 'Rules that raise an alert when a record starts matching a condition.' },
+        { id: 'git', label: 'Git', icon: 'commit', section: 'This project', order: 25, shared: true,
+          description: 'Whether each save commits the record it wrote, and whether that commit is pushed.' },
     ],
 
     defaults: {
@@ -176,13 +216,13 @@ export const BUGDESK_SETTINGS_SLICE = {
             agentName: '',
             // What Ctrl/Cmd-click on a list row does. See ticketdesk/record_dnd.js.
             modifierOpen: 'tab',
-            // Not a stored value — the row is a button (see the schema below).
-            // It carries a default so the settings store has a shape for the
-            // path and the row renders like every other one.
+            // Not stored values — these rows are editors drawn on the page (see the
+            // schema below). Each carries a default so the settings store has a
+            // shape for the path and the row renders like every other one.
+            autosave: null,
             collaborators: null,
             recordTypes: null,
             workflow: null,
-            numbering: null,
             git: null,
             alerts: null,
         },
@@ -196,106 +236,26 @@ export const BUGDESK_SETTINGS_SLICE = {
             defaultValue: true,
         },
 
+        // ── You › Profile ───────────────────────────────────────────────
         'bugdesk.humanName': {
-            type: 'text', category: 'general', group: 'Authorship',
+            type: 'text', category: 'profile', group: 'Authorship',
             label: 'Your name',
             description: 'The name shown as assignee and comment author on everything you file. Saved to your per-user profile beside the store, so it follows you rather than this browser. Entering a different name switches to that person\'s profile (creating it if it is new), along with their saved filters. Leave blank to use the server\'s BUGDESK_HUMAN default. Takes effect after a reload.',
             defaultValue: '', placeholder: '(server default)', reloadHint: true,
         },
-        // A roster is a list of records, and no scalar control can edit one —
-        // so this row is a button that opens the editor that owns it. See
-        // settings_page.js's `type: 'action'`.
-        'bugdesk.collaborators': {
-            type: 'action', category: 'general', group: 'Authorship',
-            label: 'Collaborators',
-            description: 'Everyone who can be assigned work on this repo, from the shared bugdesk.json beside the stores. Setting your name adds you automatically; edit the list here to add someone who has not opened it yet, or to remove someone who has left.',
-            buttonLabel: 'Manage collaborators…',
-            icon: 'group',
-            defaultValue: null,
-            onClick: async () => {
-                const { openCollaborators } = await import('../ticketdesk/collaborators.js');
-                return openCollaborators({ eventBus: window.__ecoagent?.eventBus });
-            },
+        'bugdesk.agentName': {
+            type: 'text', category: 'profile', group: 'Authorship',
+            label: 'Agent name',
+            description: 'The name your AI assistant signs its comments with. Left blank it is derived from your own name as <you>_agent, which is what keeps two people\'s assistants from signing identically. Takes effect after a reload.',
+            defaultValue: '', placeholder: '(server default)', reloadHint: true,
         },
 
-        // Custom fields, hidden built-ins and custom statuses per record type —
-        // a schema, edited in its own window like the roster above.
-        'bugdesk.recordTypes': {
-            type: 'action', category: 'general', group: 'Project',
-            label: 'Record types',
-            description: 'Your own fields (text, number, date, yes/no, choice) and statuses per record type, and which optional built-in fields each type shows. Saved in the shared project.json beside the stores, so everyone who pulls the repo gets the same ones.',
-            buttonLabel: 'Edit record types…',
-            icon: 'schema',
-            defaultValue: null,
-            onClick: async () => {
-                const { openSchemaEditor } = await import('../ticketdesk/schema_editor.js');
-                return openSchemaEditor({ eventBus: window.__ecoagent?.eventBus });
-            },
-        },
-
-        // STORY-0030: one workflow. A record type's actions, the flows they run
-        // (a flow's "Change the status" step is the move) and its mass actions,
-        // drawn on the Settings page itself (settings_page.js's `type: 'panel'`).
-        'bugdesk.workflow': {
-            type: 'panel', category: 'workflow', group: 'Workflow',
-            label: 'Workflow',
-            description: 'What each record type can do: its actions — moves among them — each offered in some statuses and running a flow (ask a question, set or clear a field, add a comment, check a field and branch, change the status), and its mass actions for ticked records. Flows are shared, and say which records and types they are for. Saved in the shared project.json beside the stores; only what differs from the built-in way is saved.',
-            buttonLabel: 'Go to Workflow',
-            icon: 'account_tree',
-            defaultValue: null,
-            mount: async (el, { eventBus } = {}) => {
-                const { mountWorkflowPage } = await import('../ticketdesk/workflow_page.js');
-                return mountWorkflowPage(el, { eventBus: eventBus || window.__bugdesk?.eventBus });
-            },
-        },
-
-        // How new records are named and numbered.
-        'bugdesk.numbering': {
-            type: 'action', category: 'general', group: 'Project',
-            label: 'Numbering',
-            description: 'The prefix new records are named with (BUG, EPIC, STORY, …), how far their numbers are zero-padded, the first number and the increment. Existing records keep their names, and references to them keep working. Saved in the shared project.json.',
-            buttonLabel: 'Edit numbering…',
-            icon: 'pin',
-            defaultValue: null,
-            onClick: async () => {
-                const { openNumberingEditor } = await import('../ticketdesk/numbering_editor.js');
-                return openNumberingEditor({ eventBus: window.__ecoagent?.eventBus });
-            },
-        },
-
-        // Commit after save, push after commit — the Changes pane's two switches.
-        'bugdesk.git': {
-            type: 'action', category: 'general', group: 'Project',
-            label: 'Saving and git',
-            description: 'Whether each save commits the record it wrote, and whether that commit is pushed. Off by default. The bottom panel\'s Changes tab lists what is uncommitted, with its diff, and commits and pushes by hand.',
-            buttonLabel: 'Saving and git…',
-            icon: 'commit',
-            defaultValue: null,
-            onClick: async () => {
-                const { openGitSettings } = await import('../ticketdesk/changes_pane.js');
-                return openGitSettings({ eventBus: window.__ecoagent?.eventBus });
-            },
-        },
-
-        // Alert rules: a condition, a level, and how it is shown.
-        'bugdesk.alerts': {
-            type: 'action', category: 'general', group: 'Project',
-            label: 'Alerts',
-            description: 'Rules that raise an alert when a record starts matching a condition — any filter, custom fields included — as info, a warning or an alert, in the bottom panel and optionally as a toast. Alerts only fire while BugDesk is open; changes made while it was closed are not reported.',
-            buttonLabel: 'Edit alerts…',
-            icon: 'notifications',
-            defaultValue: null,
-            onClick: async () => {
-                const { openAlertsEditor } = await import('../ticketdesk/alerts.js');
-                return openAlertsEditor({ eventBus: window.__ecoagent?.eventBus });
-            },
-        },
-
+        // ── You › Behaviour ─────────────────────────────────────────────
         // Both answers are reasonable and the difference is about how someone
         // works, not about which is correct — so it is a setting rather than a
         // decision made for everybody.
         'bugdesk.modifierOpen': {
-            type: 'select', category: 'general', group: 'Records',
+            type: 'select', category: 'behaviour', group: 'Records',
             label: 'Ctrl-click a record',
             description: 'What Ctrl-click or Ctrl+Enter (Cmd on a Mac) does to a row in the bug queue, '
                 + 'the backlog, search results or the Tracker dashboard. Either way the list you are reading '
@@ -307,12 +267,82 @@ export const BUGDESK_SETTINGS_SLICE = {
             ],
             defaultValue: 'tab',
         },
+        // A habit, so each person's: in their profile, laid over the project's
+        // value until they choose (ticketdesk/autosave_setting.js).
+        'bugdesk.autosave': {
+            type: 'panel', category: 'behaviour', group: 'Saving',
+            label: 'Auto-save',
+            description: 'Whether a record you are editing saves by itself, and how long after you stop typing. Yours alone, saved to your profile.',
+            buttonLabel: 'Go to Behaviour',
+            icon: 'save',
+            defaultValue: null,
+            mount: panel(async () => (await import('../ticketdesk/autosave_setting.js')).mountAutosaveSetting),
+        },
+        // FlexDesk's, read by its managed windows (which BugDesk's floats are),
+        // listed here rather than on a Windows page of one row.
+        'window.animateMinimize': {
+            type: 'boolean', category: 'behaviour', group: 'Windows',
+            label: 'Animate minimize/restore',
+            description: 'Animate floating windows toward and from the taskbar when minimizing and restoring.',
+            defaultValue: true,
+        },
 
-        'bugdesk.agentName': {
-            type: 'text', category: 'general', group: 'Authorship',
-            label: 'Agent name',
-            description: 'The name your AI assistant signs its comments with. Left blank it is derived from your own name as <you>_agent, which is what keeps two people\'s assistants from signing identically. Takes effect after a reload.',
-            defaultValue: '', placeholder: '(server default)', reloadHint: true,
+        // ── This project › Record types ─────────────────────────────────
+        // Custom fields, hidden built-ins, custom statuses and numbering per
+        // record type — a schema, edited on the page.
+        'bugdesk.recordTypes': {
+            type: 'panel', category: 'recordTypes', group: 'Record types',
+            label: 'Record types',
+            description: 'Your own fields (text, number, date, yes/no, choice) and statuses per record type, which optional built-in fields each type shows, and how new records are named: the prefix (BUG, EPIC, STORY, …), zero-padding, first number and increment. Existing records keep their names. Saved in the shared project.json beside the stores.',
+            buttonLabel: 'Go to Record types',
+            icon: 'schema',
+            defaultValue: null,
+            mount: panel(async () => (await import('../ticketdesk/schema_editor.js')).mountRecordTypes),
+        },
+
+        // STORY-0030: one workflow. A record type's actions, the flows they run
+        // (a flow's "Change the status" step is the move) and its mass actions.
+        'bugdesk.workflow': {
+            type: 'panel', category: 'workflow', group: 'Workflow',
+            label: 'Workflow',
+            description: 'What each record type can do: its actions — moves among them — each offered in some statuses and running a flow (ask a question, set or clear a field, add a comment, check a field and branch, change the status), and its mass actions for ticked records. Flows are shared, and say which records and types they are for. Saved in the shared project.json beside the stores; only what differs from the built-in way is saved.',
+            buttonLabel: 'Go to Workflow',
+            icon: 'account_tree',
+            defaultValue: null,
+            mount: panel(async () => (await import('../ticketdesk/workflow_page.js')).mountWorkflowPage),
+        },
+
+        // A roster is a list of records, edited on the page.
+        'bugdesk.collaborators': {
+            type: 'panel', category: 'team', group: 'Team',
+            label: 'Collaborators',
+            description: 'Everyone who can be assigned work on this repo, from the shared bugdesk.json beside the stores. Setting your name adds you automatically; edit the list here to add someone who has not opened it yet, or to remove someone who has left.',
+            buttonLabel: 'Go to Team',
+            icon: 'group',
+            defaultValue: null,
+            mount: panel(async () => (await import('../ticketdesk/collaborators.js')).mountTeam),
+        },
+
+        // Alert rules: a condition, a level, and how it is shown.
+        'bugdesk.alerts': {
+            type: 'panel', category: 'alerts', group: 'Alerts',
+            label: 'Alert rules',
+            description: 'Rules that raise an alert when a record starts matching a condition — any filter, custom fields included — as info, a warning or an alert, in the bottom panel and optionally as a toast. Alerts only fire while BugDesk is open; changes made while it was closed are not reported. Which alerts you have read is yours.',
+            buttonLabel: 'Go to Alerts',
+            icon: 'notifications',
+            defaultValue: null,
+            mount: panel(async () => (await import('../ticketdesk/alerts.js')).mountAlertsRules),
+        },
+
+        // Commit after save, push after commit — the Changes tab's two switches.
+        'bugdesk.git': {
+            type: 'panel', category: 'git', group: 'Git',
+            label: 'Commit and push',
+            description: 'Whether each save commits the record it wrote, and whether that commit is pushed. Off by default. The bottom panel\'s Changes tab lists what is uncommitted, with its diff, and commits and pushes by hand. Auto-save is each person\'s own, under Behaviour.',
+            buttonLabel: 'Go to Git',
+            icon: 'commit',
+            defaultValue: null,
+            mount: panel(async () => (await import('../ticketdesk/changes_pane.js')).mountGitSettings),
         },
     },
 };

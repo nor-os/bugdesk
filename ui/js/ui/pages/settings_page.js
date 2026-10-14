@@ -29,7 +29,7 @@ const DEBOUNCE_MS = 400;
 
 export class SettingsPage extends PageBase {
     constructor({ eventBus, dataManager, notificationCenter, logger,
-                  embedded = false, categories = null, bridgeApi = null } = {}) {
+                  embedded = false, categories = null, bridgeApi = null, category = null, panelProps = null } = {}) {
         super({ eventBus, dataManager, notificationCenter, logger });
         this.container = null;
         this._mounted = false;
@@ -41,19 +41,22 @@ export class SettingsPage extends PageBase {
         // (preserves order) so a host can surface a curated subset without
         // mutating the shared schema. `bridgeApi` backs the handful of
         // settings that live in the project store (config/app_settings.json)
-        // rather than localStorage — see _bridgeDefs.
+        // rather than localStorage — see _bridgeDefs. `category` opens the page
+        // on that category (Settings › Record types from a record page, say),
+        // and `panelProps` go to its editor the first time it is drawn.
         this._embedded = !!embedded;
         this._categoryFilter = Array.isArray(categories) ? categories : null;
         this._bridgeApi = bridgeApi;
         this._sidebarHost = null;
         this._contentHost = null;
-        this._activeCategory = (this._categoryFilter && this._categoryFilter[0]) || 'general';
+        this._activeCategory = category || (this._categoryFilter && this._categoryFilter[0]) || null;
         this._controlRefs = new Map();       // path -> { el, type }
         this._debounceTimers = new Map();     // path -> timerId
         this._sidebarEl = null;
         this._contentEl = null;
         this._searchQuery = '';
         this._panels = [];               // mounted `type: 'panel'` rows — see _mountPanels
+        this._panelProps = panelProps && category ? { [category]: panelProps } : {};
     }
 
     /** Categories to show — the allow-list (in its given order) or all. */
@@ -89,6 +92,9 @@ export class SettingsPage extends PageBase {
     }
 
     async init() {
+        // An unknown or empty category opens the first one there is.
+        const cats = this._visibleCategories();
+        if (!cats.some((c) => c.id === this._activeCategory)) this._activeCategory = cats[0]?.id || null;
         if (this._embedded) this._buildEmbeddedScaffold();
         this._buildSidebar();
         this._buildContent();
@@ -146,10 +152,17 @@ export class SettingsPage extends PageBase {
         this._sidebarEl = this._sidebarHost || document.getElementById('fixed-200-settings');
         if (!this._sidebarEl) return;
 
+        // A category may name the `section` it is listed under ("You", "This
+        // project"): who a change there affects. A heading is drawn wherever the
+        // section changes, so categories without one are listed as before.
         const categories = this._visibleCategories();
+        let section = null;
         const navItems = categories.map(cat => {
             const selectedClass = cat.id === this._activeCategory ? ' selected' : '';
-            return `<div class="tree-item${selectedClass}" data-category="${cat.id}">
+            const head = cat.section && cat.section !== section
+                ? `<div class="settings-page__section" role="heading" aria-level="3">${cat.section}</div>` : '';
+            section = cat.section || null;
+            return `${head}<div class="tree-item${selectedClass}" data-category="${cat.id}">
                 <span class="tree-item__icon"><span class="material-symbols-outlined">${cat.icon}</span></span>
                 <span class="tree-item__label">${cat.label}</span>
             </div>`;
@@ -211,21 +224,33 @@ export class SettingsPage extends PageBase {
             groups.get(groupName).push(def);
         }
 
+        // `groupOrder` on the category puts its named groups first, in that order.
+        if (Array.isArray(cat.groupOrder)) {
+            const rank = (g) => { const i = cat.groupOrder.indexOf(g); return i < 0 ? cat.groupOrder.length : i; };
+            const sorted = [...groups.entries()].sort((a, b) => rank(a[0]) - rank(b[0]));
+            groups.clear();
+            for (const [g, defs] of sorted) groups.set(g, defs);
+        }
+
         let html = `
             <div class="settings-page__header">
                 <div class="settings-page__header-info">
                     <h2 class="settings-page__title">${cat.label}</h2>
                     <p class="settings-page__description">${cat.description}</p>
+                    ${cat.shared ? `<p class="settings-page__shared">
+                        <span class="material-symbols-outlined">group</span>
+                        <span>${cat.shared === true ? 'Changes here apply to everyone who pulls this repo.' : cat.shared}</span>
+                    </p>` : ''}
                 </div>
-                ${onlyPanels ? '' : `<button class="settings-page__reset-btn" data-action="reset-category" data-category="${categoryId}" type="button">
+                ${onlyPanels || cat.noReset ? '' : `<button class="settings-page__reset-btn" data-action="reset-category" data-category="${categoryId}" type="button">
                     <span class="material-symbols-outlined">restart_alt</span>
                     <span>Reset</span>
                 </button>`}
             </div>`;
 
         for (const [groupName, groupSettings] of groups) {
-            // A group that is one editor needs no heading over the page's own.
-            html += groupSettings.every(d => d.type === 'panel') ? '<div class="settings-page__group">' : `<div class="settings-page__group">
+            // A page that is one editor needs no heading over the page's own.
+            html += onlyPanels ? '<div class="settings-page__group">' : `<div class="settings-page__group">
                 <h3 class="settings-page__group-title">${groupName}</h3>`;
             for (const def of groupSettings) {
                 html += def.type === 'panel'
@@ -257,7 +282,9 @@ export class SettingsPage extends PageBase {
             if (!el) continue;
             const entry = { cleanup: null, gone: false };
             this._panels.push(entry);
-            Promise.resolve(def.mount(el, { eventBus: this.eventBus }))
+            const props = this._panelProps[def.category] || {};
+            delete this._panelProps[def.category];
+            Promise.resolve(def.mount(el, { ...props, eventBus: this.eventBus }))
                 .then((fn) => {
                     if (typeof fn !== 'function') return;
                     if (entry.gone) fn(); else entry.cleanup = fn;
