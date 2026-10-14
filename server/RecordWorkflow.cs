@@ -43,7 +43,7 @@ static class RecordWorkflow
     public record Problem(string Where, string Message, string? NodeId = null);
 
     /// <summary>The named flows of one workflow, by id.</summary>
-    sealed class Flows : Dictionary<string, (string Store, string Label, JsonNode? Graph)> { }
+    sealed class Flows : Dictionary<string, (string Store, string Label, JsonNode? Graph, string[] Types)> { }
 
     /// <summary>The step types a flow may hold — the catalogue's ids.</summary>
     public static readonly HashSet<string> StepTypes = new()
@@ -111,9 +111,15 @@ static class RecordWorkflow
                     if (!FlowId.IsMatch(id)) { problems.Add(new(w, $"'{label}': the flow id '{id}' must start with a letter or digit and use only a-z, 0-9 and -.")); continue; }
                     if (store != AnyStore && !RecordSchema.TypesOf.ContainsKey(store)) { problems.Add(new(w, $"'{label}' is for '{store}', which is not bugs, backlog or any.")); continue; }
                     if (flows.ContainsKey(id)) { problems.Add(new(w, $"two flows have the id '{id}'.")); continue; }
-                    flows[id] = (store, label.Length > 0 ? label : id, f?["flow"]);
+                    // Which of its store's types it is available to (STORY-0030); none listed is all.
+                    var only = (f?["types"] as JsonArray)?.Select(Str).Where(x => x.Length > 0).Distinct().ToArray() ?? Array.Empty<string>();
+                    var bad = only.Where(t => store == AnyStore
+                        ? !RecordSchema.TypesOf.Values.Any(ts => ts.Contains(t))
+                        : !RecordSchema.TypesOf[store].Contains(t)).ToList();
+                    if (bad.Count > 0) problems.Add(new(w, $"'{label}' is available to {string.Join(", ", bad.Select(x => $"'{x}'"))}, which {(bad.Count == 1 ? "is" : "are")} not a type of {store}."));
+                    flows[id] = (store, label.Length > 0 ? label : id, f?["flow"], only);
                     if (store != AnyStore)
-                        CheckFlow(f?["flow"], store, RecordSchema.TypesOf[store], w, label, schema, problems);
+                        CheckFlow(f?["flow"], store, only.Length > 0 && bad.Count == 0 ? only : RecordSchema.TypesOf[store], w, label, schema, problems);
                     else
                     {
                         // For any record: what it does must make sense for both
@@ -163,7 +169,8 @@ static class RecordWorkflow
                     }
                 }
             }
-        if (root["massActions"] is JsonNode mass) CheckMassActions(mass, root["actions"], problems);
+        if (root["types"] is JsonNode typesNode) CheckTypes(typesNode, schema, problems, flows);
+        if (root["massActions"] is JsonNode mass) CheckMassActions(mass, root["actions"], root["types"], problems);
         return problems;
     }
 
@@ -173,7 +180,46 @@ static class RecordWorkflow
     /// <c>"action:&lt;id&gt;"</c>, one of that type's custom actions. A type not
     /// listed offers the first two (ui/js/ticketdesk/mass_actions.js).
     /// </summary>
-    static void CheckMassActions(JsonNode mass, JsonNode? actions, List<Problem> problems)
+    /// <summary>
+    /// STORY-0030. <c>types.&lt;store&gt;.&lt;type&gt;</c>: a record type's whole list of
+    /// actions, <c>{id, label, when, flow}</c>, once the project changed it. An
+    /// action whose flow changes the status is one of the type's moves.
+    /// </summary>
+    static void CheckTypes(JsonNode node, RecordSchema.Schema schema, List<Problem> problems, Flows flows)
+    {
+        if (node is not JsonObject stores) { problems.Add(new("workflow.types", "types is not an object.")); return; }
+        foreach (var (store, byType) in stores)
+        {
+            var where = $"workflow.types.{store}";
+            if (!RecordSchema.TypesOf.ContainsKey(store)) { problems.Add(new(where, $"'{store}' is not bugs or backlog.")); continue; }
+            if (byType is not JsonObject types) { problems.Add(new(where, "not an object of record types.")); continue; }
+            foreach (var (type, list) in types)
+            {
+                var w0 = $"{where}.{type}";
+                if (!RecordSchema.TypesOf[store].Contains(type)) { problems.Add(new(w0, $"unknown {store} type '{type}'.")); continue; }
+                if (list is not JsonArray arr) { problems.Add(new(w0, "not a list of actions.")); continue; }
+                var known = Statuses(schema, store, new[] { type });
+                var typeWord = store == "bugs" && type == "task" ? "chore" : type;
+                var ids = new HashSet<string>();
+                for (var i = 0; i < arr.Count; i++)
+                {
+                    var a = arr[i];
+                    var w = $"{w0}[{i}]";
+                    var label = Str(a?["label"]);
+                    var id = Str(a?["id"]);
+                    if (label.Length == 0) problems.Add(new(w, $"an action of a {typeWord} needs a name."));
+                    if (!FlowId.IsMatch(id)) problems.Add(new(w, $"'{label}': the action id '{id}' must start with a letter or digit and use only a-z, 0-9 and -."));
+                    else if (!ids.Add(id)) problems.Add(new(w, $"two actions of a {typeWord} have the id '{id}'."));
+                    if (a?["when"] is JsonArray when)
+                        foreach (var st in when.Select(Str))
+                            if (st != "*" && !known.Contains(st)) problems.Add(new(w, $"'{label}' is offered in '{st}', which is not a status of a {typeWord}."));
+                    CheckRef(a?["flow"], store, new[] { type }, w, $"{typeWord} › {label}", schema, problems, action: true, flows);
+                }
+            }
+        }
+    }
+
+    static void CheckMassActions(JsonNode mass, JsonNode? actions, JsonNode? ownTypes, List<Problem> problems)
     {
         if (mass is not JsonObject stores) { problems.Add(new("workflow.massActions", "massActions is not an object.")); return; }
         foreach (var (store, byType) in stores)
@@ -187,7 +233,8 @@ static class RecordWorkflow
                 if (!RecordSchema.TypesOf[store].Contains(type)) { problems.Add(new(w, $"unknown {store} type '{type}'.")); continue; }
                 if (list is not JsonArray arr) { problems.Add(new(w, "not a list.")); continue; }
                 var ids = new HashSet<string>();
-                if (actions?[store]?[type] is JsonArray acts)
+                // A type's own list (STORY-0030) when it has one, else its older custom actions.
+                if ((ownTypes?[store]?[type] ?? actions?[store]?[type]) is JsonArray acts)
                     foreach (var a in acts) { var id = Str(a?["id"]); if (id.Length > 0) ids.Add(id); }
                 var seen = new HashSet<string>();
                 for (var i = 0; i < arr.Count; i++)
@@ -259,6 +306,12 @@ static class RecordWorkflow
             if (named.Store != store && named.Store != AnyStore)
             {
                 problems.Add(new(where, $"'{owner}' uses '{named.Label}', a flow for {named.Store}, not {store}."));
+                return;
+            }
+            var notFor = named.Types.Length > 0 ? types.Where(t => !named.Types.Contains(t)).ToList() : new List<string>();
+            if (notFor.Count > 0)
+            {
+                problems.Add(new(where, $"'{owner}' uses '{named.Label}', which is available to {string.Join(", ", named.Types)} only."));
                 return;
             }
             CheckFlow(named.Graph, store, types, where, $"{owner}' through '{named.Label}", schema, problems);

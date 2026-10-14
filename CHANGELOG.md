@@ -102,31 +102,23 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   They show on the record page and in the right-click menus, and, like a move,
   are saved once or not at all.
 
-- **Flows of their own** (STORY-0028). Settings has a *Flows* entry in its
-  sidebar, and the flows are managed right on that page, no windows: the
-  project's named flows are listed on the left — what each is for, its steps,
-  and how many moves and actions use it — with a search and *New flow*, and the
-  selected one's name and steps are edited on the right. One *Save* writes them
-  all; changes left unsaved are still there when you come back to the page.
-  Right-click a flow to open, rename, duplicate or delete it; one in use is not
-  deleted, and the page says what uses it. Which records a flow is for is a
-  setting of the flow — *any record* (new flows' default: the fields bugs and
-  backlog items both have), or bugs or backlog items only, for their own fields
-  — and each list chip takes its colour. The same steps stored on several rows
-  (one action on three bug types) become one flow they share. Every
-  transition has a flow, the built-in ones included: a move that asks for a
-  message has a flow that asks it, with the same question, and the rest an
-  empty one to extend. They are listed and edited like any other, and only what
-  you change is saved — a type nobody changed keeps the built-in rules, a custom
-  status added later included. *Back to the built-in moves* brings back the
-  built-in flows too. In Edit workflow a move or an action picks
-  its flow from a searchable list, makes a new one with *New flow…* or by typing
-  a name that is not a flow yet, and opens the chosen one with its edit button.
-  A flow's window is titled *Flow — <name>*, with the name editable in it. Flows
-  stored inside a move or action keep working, and become named flows the first
-  time the workflow is saved. Saving refuses a flow that moves to a status when
-  a move uses it — only an action may — and checks each flow against every table
-  that uses it.
+- **One workflow: record types have actions, actions run flows** (STORY-0028,
+  STORY-0030). Settings › *Workflow* is one page, no windows: pick a record
+  type (Bug, Regression, Chore, Epic, Story, Task — Project in a tracker), and
+  its actions are listed — the moves among them. An action has a name, the
+  statuses it is offered in, and the flow it runs; a flow is a list of steps
+  (ask a question, ask for the message, set or clear a field, add a comment,
+  check a field and branch) and its *Change the status* step is the move. So
+  the built-in "Close" on a Bug is one action, offered in open, investigation
+  and testing, running the flow Close: ask for the close message, change the
+  status to closed. A flow is shared and says what it is for: which records
+  (bugs, backlog, or any) and which of their types; an action only offers the
+  flows available to its type. *Flows*, under the types, lists every flow with
+  what runs it. A type's mass actions are set on the same page. Right-click an
+  action or a flow for more. Only what differs from the built-in way is saved:
+  an untouched type keeps the built-in moves (a custom status added later
+  included), and move tables and custom actions saved before keep working
+  until their type is changed here. The *Edit workflow* window is gone.
 
 - **Record types: your own fields and statuses** (EPIC-0003). Settings ›
   Record types gives each record type — Bug, Regression, Chore, and each

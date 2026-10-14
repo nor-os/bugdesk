@@ -49,6 +49,24 @@ export function setWorkflow(next) {
     if (CONFIG && typeof CONFIG === 'object') CONFIG.workflow = W;
 }
 
+/**
+ * A record type's actions (STORY-0030): `workflow.types.<store>.<type>`, the
+ * type's whole list once the project changed it — each `{id, label, when,
+ * flow}`, and an action whose flow changes the status IS a move. null while
+ * the type keeps what it had before: the built-in moves, or a move table and
+ * custom actions stored the older way, read below as they always were.
+ */
+export function typeActions(store, type) {
+    const list = W.types?.[store]?.[type];
+    return Array.isArray(list) ? list : null;
+}
+
+/** The status a flow changes to — its first "Change the status" step — or null. */
+export const statusStep = (graph) =>
+    (Array.isArray(graph?.nodes) ? graph.nodes : []).find((n) => n?.type === 'set-status')?.config?.status || null;
+
+const offeredIn = (a, status) => !Array.isArray(a.when) || !a.when.length || a.when.includes('*') || a.when.includes(status);
+
 /** The configured move table of a store (bugs) or a backlog type, or null. */
 export function configuredMoves(store, type) {
     const t = store === 'bugs' ? W.bugs : W.backlog?.[type];
@@ -117,6 +135,15 @@ export function flowSlots(wf) {
             }
         }
     }
+    // STORY-0030: a type's actions, the moves among them.
+    for (const [store, byType] of Object.entries(wf?.types || {})) {
+        for (const [t, list] of Object.entries(byType || {})) {
+            for (const [i, a] of (Array.isArray(list) ? list : []).entries()) {
+                out.push({ holder: a, store, types: [t], actions: true, type: t, index: i,
+                    owner: `${typeLabel(store, t)} › ${a.label || 'action'}`, where: `workflow.types.${store}.${t}[${i}]` });
+            }
+        }
+    }
     return out.map((x) => ({ ...x, ref: x.holder.flow || null }));
 }
 
@@ -159,159 +186,19 @@ export function transitionFlow({ to, message = false, prompt = '', toLabel = to 
     return { nodes, connections: nodes.slice(1).map((n, i) => ({ source: nodes[i].id, sourcePort: 'out', target: n.id, targetPort: 'in' })) };
 }
 
-/** The move table a `{store, type}` holds in a workflow, or null. */
-const movesOf = (wf, store, type) => (store === 'bugs' ? wf?.bugs?.moves : wf?.backlog?.[type]?.moves);
-
-/** How many of these tables' moves have no flow: every built-in one, and the
- *  configured rows without a flow. */
-export function movesWithoutFlow(wf, tables) {
-    return tables.reduce((n, { store, type, builtin }) => {
-        const moves = movesOf(wf, store, type);
-        return n + (Array.isArray(moves) ? moves.filter((m) => !m.flow).length : builtin.length);
-    }, 0);
-}
-
-/**
- * Give every move a flow, in place (an editor's draft): a table that moves the
- * built-in way is written down first, from `builtin`; then each move without a
- * flow gets one named after it that does what the move did — asks for its
- * message, with the move's own question, when it needs one, and changes the
- * status (transitionFlow). The asking moves INTO the flow, so it is asked once,
- * there. The same steps under the same name are one flow every such move
- * shares, for the move's store (a status is one store's). Returns how many
- * moves got a flow.
- *
- * @param {object} wf
- * @param {Array<{store: string, type?: string, builtin: Array}>} tables
- */
-export function seedMoveFlows(wf, tables) {
-    let n = 0;
-    wf.flows = Array.isArray(wf.flows) ? wf.flows : [];
-    for (const { store, type, builtin, label: where = '' } of tables) {
-        let moves = movesOf(wf, store, type);
-        if (!Array.isArray(moves)) {
-            moves = builtin.map((m) => ({ ...m }));
-            if (store === 'bugs') wf.bugs = { ...(wf.bugs || {}), moves };
-            else { wf.backlog = wf.backlog || {}; wf.backlog[type] = { ...(wf.backlog[type] || {}), moves }; }
-        }
-        for (const m of moves) {
-            const { prompt = '' } = m;
-            delete m.prompt;
-            if (m.flow) continue;
-            const graph = transitionFlow({ to: m.to, message: !!m.message, prompt });
-            const label = String(m.label || '').trim() || 'Move';
-            const same = JSON.stringify(graph);
-            const twin = wf.flows.find((f) => (f.label || '') === label && JSON.stringify(f.flow) === same && f.store === store);
-            // Two that share a name but not their steps (a bug's Reopen asks
-            // why, an item's does not) are told apart by where they are from.
-            const named = !twin && wf.flows.some((f) => (f.label || '') === label)
-                ? `${label} — ${String(where).split(' › ')[0] || store}` : label;
-            const twin2 = twin || wf.flows.find((f) => (f.label || '') === named && JSON.stringify(f.flow) === same && f.store === store);
-            const id = twin2 ? twin2.id : newFlowId(named, wf.flows);
-            // For the store: a status is one store's.
-            if (!twin2) wf.flows.push({ id, label: named, store, flow: graph });
-            m.flow = id;
-            m.message = false;
-            n++;
-        }
-    }
-    return n;
-}
-
-/**
- * THE BUILT-IN WAY IS FLOWS TOO: every transition has one, configured or not.
- * A type with no move table moves the built-in way, and its built-in moves'
- * flows are what seedMoveFlows makes of them — so an editor shows the stored
- * workflow WITH them, and saves it WITHOUT whatever is still exactly built-in:
- * project.json holds what the project changed, and a type nobody changed keeps
- * following the built-in rules (a custom status added later included).
- */
-export function withBuiltinFlows(stored, tables) {
-    const wf = JSON.parse(JSON.stringify(stored || {}));
-    liftInlineFlows(wf);
-    seedMoveFlows(wf, tables);
-    wf.flows = Array.isArray(wf.flows) ? wf.flows : [];
-    return wf;
-}
-
-/** Whether a table of `draft` is still exactly the built-in one — unconfigured
- *  in `stored`, and its moves and their flows as withBuiltinFlows made them. */
-export function isBuiltinTable(draft, stored, pristine, { store, type }) {
-    if (Array.isArray(movesOf(stored, store, type))) return false;
-    const mine = movesOf(draft, store, type);
-    const theirs = movesOf(pristine, store, type);
-    if (!Array.isArray(mine) || JSON.stringify(mine) !== JSON.stringify(theirs)) return false;
-    const flowOf = (wf, id) => JSON.stringify((wf.flows || []).find((f) => f.id === id) || null);
-    return mine.every((m) => flowOf(draft, m.flow) === flowOf(pristine, m.flow));
-}
-
-/** `draft` as it is saved: the tables and flows still exactly built-in left out. */
-export function withoutBuiltinFlows(draft, stored, tables) {
-    const pristine = withBuiltinFlows(stored, tables);
-    const out = JSON.parse(JSON.stringify(draft));
-    const builtin = tables.filter((t) => isBuiltinTable(out, stored, pristine, t));
-    for (const { store, type } of builtin) {
-        if (store === 'bugs') { delete out.bugs.moves; if (!Object.keys(out.bugs).length) delete out.bugs; }
-        else {
-            delete out.backlog[type].moves;
-            if (!Object.keys(out.backlog[type]).length) delete out.backlog[type];
-            if (!Object.keys(out.backlog).length) delete out.backlog;
-        }
-    }
-    // A built-in flow nothing stored uses any more goes with them; one the
-    // project made, kept, or changed stays.
-    const kept = new Set((stored?.flows || []).map((f) => f.id));
-    const same = (f) => JSON.stringify(f) === JSON.stringify(pristine.flows.find((x) => x.id === f.id) || null);
-    out.flows = (out.flows || []).filter((f) => kept.has(f.id) || !same(f) || flowUses(out, f.id).length);
-    if (!out.flows.length) delete out.flows;
-    return out;
-}
-
 /** The custom actions of a store and type (STORY-0007). */
 export const configuredActions = (store, type) => {
     const list = W.actions?.[store]?.[type];
     return Array.isArray(list) ? list : [];
 };
 
-/* ── the built-in moves, as data ──────────────────────────────────────
- * What a store moves like with no table configured. The editor starts a table
- * from these, so "change one label" does not mean retyping the other eleven. */
-
-const BUG_BUILTIN = [
-    { from: 'open', label: 'Start investigation', to: 'investigation', message: false },
-    { from: 'open', label: 'Close', to: 'closed', message: true },
-    { from: 'investigation', label: 'Hand to testing', to: 'testing', message: true },
-    { from: 'investigation', label: 'Close', to: 'closed', message: true },
-    { from: 'investigation', label: 'Back to open', to: 'open', message: true },
-    { from: 'testing', label: 'Back to investigation', to: 'investigation', message: true },
-    { from: 'testing', label: 'Close', to: 'closed', message: true },
-    { from: 'testing', label: 'Back to open', to: 'open', message: true },
-    { from: 'closed', label: 'Reopen', to: 'open', message: true },
-];
-
+/** Each backlog type's ladder of statuses. */
 const ITEM_LADDERS = {
     project: ['draft', 'in-progress', 'done'],
     epic: ['draft', 'refined', 'in-progress', 'done'],
     story: ['draft', 'refined', 'in-progress', 'review', 'done'],
     task: ['draft', 'in-progress', 'done'],
 };
-const ADVANCE = { refined: 'Mark refined', 'in-progress': 'Start work', review: 'Send to review', done: 'Mark done' };
-const BACK = { draft: 'Back to draft', refined: 'Back to refined', 'in-progress': 'Back to in progress', review: 'Back to review' };
-
-/** The built-in move table of a store or type — what the editor starts from. */
-export function builtinMoves(store, type) {
-    if (store === 'bugs') return BUG_BUILTIN.map((m) => ({ ...m }));
-    const ladder = ITEM_LADDERS[type] || ITEM_LADDERS.story;
-    const out = [];
-    ladder.forEach((s, i) => {
-        if (i + 1 < ladder.length) out.push({ from: s, label: ADVANCE[ladder[i + 1]] || `Move to ${ladder[i + 1]}`, to: ladder[i + 1], message: false });
-        if (i > 0) out.push({ from: s, label: i === ladder.length - 1 ? 'Reopen' : (BACK[ladder[i - 1]] || `Back to ${ladder[i - 1]}`), to: ladder[i - 1], message: false });
-        if (s !== 'done') out.push({ from: s, label: 'Drop', to: 'dropped', message: false });
-    });
-    out.push({ from: 'dropped', label: 'Restore to draft', to: 'draft', message: false });
-    return out;
-}
-
 /** Every status a record of this store and type may hold, in order. */
 export function statusesOf(store, type) {
     if (store === 'bugs') {
@@ -331,6 +218,13 @@ export function statusesOf(store, type) {
  * before, custom statuses included.
  */
 export function movesFor(store, type, status, builtin = []) {
+    const acts = typeActions(store, type);
+    if (acts) {
+        return acts.filter((a) => offeredIn(a, status))
+            .map((a) => ({ a, to: statusStep(flowGraph(a.flow)) }))
+            .filter(({ to }) => to && to !== status)
+            .map(({ a, to }) => ({ id: a.id, label: a.label, to, message: false, flow: a.flow || null, configured: true }));
+    }
     const table = configuredMoves(store, type);
     if (!table) {
         return builtin.map(([label, to]) => ({
@@ -346,8 +240,12 @@ export function movesFor(store, type, status, builtin = []) {
 }
 
 /** The custom actions offered in a status (STORY-0007). */
-export const actionsFor = (store, type, status) => configuredActions(store, type)
-    .filter((a) => !Array.isArray(a.when) || !a.when.length || a.when.includes('*') || a.when.includes(status));
+export const actionsFor = (store, type, status) => {
+    const acts = typeActions(store, type);
+    // Of a type's own list, the ones that do not move it: the rest are its moves.
+    if (acts) return acts.filter((a) => offeredIn(a, status) && !statusStep(flowGraph(a.flow)));
+    return configuredActions(store, type).filter((a) => offeredIn(a, status));
+};
 
 /* ── the step catalogue ────────────────────────────────────────────── */
 
@@ -459,7 +357,7 @@ export function stepTypes(store, types, { actions: _actions = false } = {}) {
 
 /** The block mapping the outline editor draws with: an If and an End, no loops. */
 export const BLOCKS = {
-    start: { role: 'start', label: 'When the move is made' },
+    start: { role: 'start', label: 'When the action runs' },
     end: { role: 'end', entry: { label: 'Stop here', sub: 'End', description: 'Save what was collected, and do nothing more.' } },
     step: { input: 'in', continue: 'out' },
     branch: { role: 'branch', arms: { true: 'Then', false: 'Otherwise' }, unconnected: 'stop',

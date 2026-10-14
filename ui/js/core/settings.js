@@ -121,8 +121,6 @@ export const VISIBLE_SETTINGS = new Set([
     'bugdesk.collaborators',
     'bugdesk.recordTypes',
     'bugdesk.workflow',
-    'bugdesk.massActions',
-    'bugdesk.flows',
     'bugdesk.numbering',
     'bugdesk.git',
     'bugdesk.alerts',
@@ -156,11 +154,11 @@ export const HIDDEN_SETTINGS = new Set([
 // next to the settings documentation above, matching where this data used
 // to live before the extraction.
 export const BUGDESK_SETTINGS_SLICE = {
-    // Flows get a sidebar entry of their own (STORY-0028): they are managed
-    // apart from the move tables that use them. Right under General.
+    // The workflow gets a sidebar entry of its own (STORY-0030): record types,
+    // their actions and the flows those run, on one page. Right under General.
     categories: [
-        { id: 'flows', label: 'Flows', icon: 'account_tree',
-          description: 'Reusable flows for moves and actions', order: 15 },
+        { id: 'workflow', label: 'Workflow', icon: 'account_tree',
+          description: 'What each record type can do: its actions, and the flows they run', order: 15 },
     ],
 
     defaults: {
@@ -184,7 +182,6 @@ export const BUGDESK_SETTINGS_SLICE = {
             collaborators: null,
             recordTypes: null,
             workflow: null,
-            flows: null,
             numbering: null,
             git: null,
             alerts: null,
@@ -236,47 +233,19 @@ export const BUGDESK_SETTINGS_SLICE = {
             },
         },
 
-        // The moves, what they do on the side, and the custom actions.
+        // STORY-0030: one workflow. A record type's actions, the flows they run
+        // (a flow's "Change the status" step is the move) and its mass actions,
+        // drawn on the Settings page itself (settings_page.js's `type: 'panel'`).
         'bugdesk.workflow': {
-            type: 'action', category: 'general', group: 'Project',
+            type: 'panel', category: 'workflow', group: 'Workflow',
             label: 'Workflow',
-            description: 'Which moves each status offers, what they are called, which need a message, and which flow a move runs on the side (clear the assignee, ask a question, add a comment) — per record type. The flows themselves are under Flows. Saved in the shared project.json beside the stores. With nothing set, records move the built-in way.',
-            buttonLabel: 'Edit workflow…',
+            description: 'What each record type can do: its actions — moves among them — each offered in some statuses and running a flow (ask a question, set or clear a field, add a comment, check a field and branch, change the status), and its mass actions for ticked records. Flows are shared, and say which records and types they are for. Saved in the shared project.json beside the stores; only what differs from the built-in way is saved.',
+            buttonLabel: 'Go to Workflow',
             icon: 'account_tree',
             defaultValue: null,
-            onClick: async () => {
-                const { openWorkflowEditor } = await import('../ticketdesk/workflow_editor.js');
-                return openWorkflowEditor({ eventBus: window.__ecoagent?.eventBus });
-            },
-        },
-
-        // STORY-0029: which mass actions each type offers. Its own entry, though
-        // it opens the workflow editor, so it can be found by name.
-        'bugdesk.massActions': {
-            type: 'action', category: 'general', group: 'Project',
-            label: 'Mass actions',
-            description: 'What the bar offers once you press Select in a list and tick several records: change the assignee, change the status (only to statuses every ticked record can reach, asking a needed message once), and your custom actions, per record type. Saved in the shared project.json beside the stores. With nothing set, every type offers the assignee and the status.',
-            buttonLabel: 'Edit mass actions…',
-            icon: 'checklist',
-            defaultValue: null,
-            onClick: async () => {
-                const { openWorkflowEditor } = await import('../ticketdesk/workflow_editor.js');
-                return openWorkflowEditor({ eventBus: window.__ecoagent?.eventBus, start: 'mass.' });
-            },
-        },
-
-        // The named flows the moves and actions use (STORY-0028).
-        'bugdesk.flows': {
-            type: 'panel', category: 'flows', group: 'Flows',
-            label: 'Flows',
-            description: 'What a move or a custom action does on the side — ask a question, set or clear a field, add a comment, check a field and branch — as named flows, shared by every move and action that picks them in Edit workflow. Saved in the shared project.json beside the stores.',
-            buttonLabel: 'Go to Flows',
-            icon: 'account_tree',
-            defaultValue: null,
-            // Drawn on the Settings page itself, not in a window (settings_page.js's `type: 'panel'`).
             mount: async (el, { eventBus } = {}) => {
-                const { mountFlowsManager } = await import('../ticketdesk/flows_editor.js');
-                return mountFlowsManager(el, { eventBus: eventBus || window.__ecoagent?.eventBus });
+                const { mountWorkflowPage } = await import('../ticketdesk/workflow_page.js');
+                return mountWorkflowPage(el, { eventBus: eventBus || window.__bugdesk?.eventBus });
             },
         },
 

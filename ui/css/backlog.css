@@ -1119,52 +1119,80 @@ tr[draggable="true"]:active,
 .bd-schema .bd-workflow__mrow input { margin-top: 2px; }
 .bd-workflow__lede .material-symbols-outlined { font-size: 14px; vertical-align: -2px; }
 
-/* ── Settings › Flows (flows_editor.js, STORY-0028) ──────────────── */
-.bd-flows__search { display: flex; align-items: center; gap: 6px; flex: 1 1 auto; color: var(--text-secondary, #9a9a9a); }
+/* ── Settings › Workflow (workflow_page.js, STORY-0030) ──────────────
+   One page, no windows: record types | the type's actions (and its mass
+   actions) | the selected action and its flow, edited in place; "Flows" under
+   the types lists every flow on its own. One Save for the lot. */
+.bd-flows__search { display: flex; align-items: center; gap: 6px; color: var(--text-secondary, #9a9a9a); margin: 0 8px 6px; }
 .bd-flows__search .material-symbols-outlined { font-size: 16px; }
-.bd-flows__search input { flex: 1 1 auto; max-width: 320px; }
-.bd-flows__empty { margin: 8px 0; line-height: 1.6; max-width: 70ch; }
+.bd-flows__search input { flex: 1 1 auto; min-width: 0; }
+.bd-flows__empty { margin: 10px; line-height: 1.6; max-width: 70ch; }
 
-/* The page itself (STORY-0028 review): the list on the left, the selected
-   flow on the right, one Save — no windows. */
-.bd-flowsmgr { display: flex; flex-direction: column; gap: 8px; height: max(420px, calc(100vh - 360px)); }
-.bd-flowsmgr__bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.bd-flowsmgr__bar .ea-btn { display: inline-flex; align-items: center; gap: 4px; }
-.bd-flowsmgr__bar .ea-btn .material-symbols-outlined { font-size: 15px; }
-.bd-flowsmgr__bar .ea-btn:disabled { opacity: .45; cursor: default; }
-.bd-flowsmgr__state { margin-left: auto; font-size: 11.5px; }
-.bd-flowsmgr__split { display: flex; flex: 1 1 auto; min-height: 0; border: 1px solid var(--border-default, #333); border-radius: 4px; overflow: hidden; }
-.bd-flowsmgr__list { flex: 0 0 250px; overflow-y: auto; border-right: 1px solid var(--border-default, #333); background: var(--surface-0, #1e1e1e); padding: 4px; }
-/* A flow's chip takes the tone of what it is for (FlexDesk's flow tones:
-   any record violet, bugs amber, backlog teal) — the step picker's colours. */
-.bd-flowsmgr__item { --tone-bg: var(--twm-flow-grey-bg); --tone-fg: var(--twm-flow-grey-fg); --tone-dot: var(--twm-flow-grey-dot);
+.bd-wf { display: flex; flex-direction: column; gap: 8px; height: max(460px, calc(100vh - 330px)); }
+.bd-wf__bar { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.bd-wf .ea-btn { display: inline-flex; align-items: center; gap: 4px; }
+.bd-wf .ea-btn .material-symbols-outlined { font-size: 15px; }
+.bd-wf .ea-btn:disabled { opacity: .45; cursor: default; }
+.bd-wf__state { margin-right: auto; font-size: 11.5px; }
+.bd-wf__split { display: flex; flex: 1 1 auto; min-height: 0; border: 1px solid var(--border-default, #333); border-radius: 4px; overflow: hidden; }
+.bd-wf__types { flex: 0 0 136px; overflow-y: auto; padding: 4px; background: var(--surface-0, #1e1e1e); border-right: 1px solid var(--border-default, #333); }
+.bd-wf__group { padding: 10px 8px 4px; font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-dim, #777); }
+.bd-wf__type { display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%; padding: 5px 8px; border: 0; border-radius: 3px;
+    background: none; color: var(--text-primary, #ddd); font: inherit; font-size: 12.5px; text-align: left; cursor: pointer; }
+.bd-wf__type > span:first-child { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+.bd-wf__type .material-symbols-outlined { font-size: 15px; }
+.bd-wf__type:hover { background: var(--state-hover, rgba(255,255,255,.05)); }
+.bd-wf__type.is-on { background: var(--state-selected, rgba(0,122,204,.15)); }
+.bd-wf__count { font-size: 11px; color: var(--text-secondary, #9a9a9a); }
+.bd-wf__mid { flex: 0 0 260px; display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--border-default, #333); background: var(--surface-0, #1e1e1e); }
+.bd-wf__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px; }
+.bd-wf__head h3 { margin: 0; font-size: 12.5px; font-weight: 600; }
+.bd-wf__list { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 0 4px 4px; }
+.bd-wf__mass { border-top: 1px solid var(--border-default, #333); padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; max-height: 40%; overflow-y: auto; }
+.bd-wf__subhead { font-size: 11.5px; font-weight: 600; margin-bottom: 2px; }
+.bd-wf__check { display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; }
+
+/* An item's chip takes a tone (FlexDesk's flow tones): a move teal, an action
+   that leaves the status alone violet; a flow by what it is for — any record
+   violet, bugs amber, backlog teal. */
+.bd-wf__item { --tone-bg: var(--twm-flow-grey-bg); --tone-fg: var(--twm-flow-grey-fg); --tone-dot: var(--twm-flow-grey-dot);
     display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 6px 8px; margin: 0 0 2px;
     border: 0; border-left: 2px solid transparent; border-radius: 3px; background: none; color: var(--text-primary, #ddd); cursor: pointer; font: inherit; }
-.bd-flowsmgr__item[data-tone="violet"] { --tone-bg: var(--twm-flow-violet-bg); --tone-fg: var(--twm-flow-violet-fg); --tone-dot: var(--twm-flow-violet-dot); }
-.bd-flowsmgr__item[data-tone="amber"] { --tone-bg: var(--twm-flow-amber-bg); --tone-fg: var(--twm-flow-amber-fg); --tone-dot: var(--twm-flow-amber-dot); }
-.bd-flowsmgr__item[data-tone="teal"] { --tone-bg: var(--twm-flow-teal-bg); --tone-fg: var(--twm-flow-teal-fg); --tone-dot: var(--twm-flow-teal-dot); }
-.bd-flowsmgr__item:hover { background: var(--state-hover, rgba(255,255,255,.05)); }
-.bd-flowsmgr__item.is-selected { background: var(--state-selected, rgba(0,122,204,.15)); border-left-color: var(--tone-dot); }
-.bd-flowsmgr__chip { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 6px; background: var(--tone-bg); color: var(--tone-fg); }
-.bd-flowsmgr__chip .material-symbols-outlined { font-size: 17px; }
-.bd-flowsmgr__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.bd-flowsmgr__name { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bd-flowsmgr__sub { font-size: 11px; color: var(--text-secondary, #9a9a9a); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bd-wf__item[data-tone="violet"] { --tone-bg: var(--twm-flow-violet-bg); --tone-fg: var(--twm-flow-violet-fg); --tone-dot: var(--twm-flow-violet-dot); }
+.bd-wf__item[data-tone="amber"] { --tone-bg: var(--twm-flow-amber-bg); --tone-fg: var(--twm-flow-amber-fg); --tone-dot: var(--twm-flow-amber-dot); }
+.bd-wf__item[data-tone="teal"] { --tone-bg: var(--twm-flow-teal-bg); --tone-fg: var(--twm-flow-teal-fg); --tone-dot: var(--twm-flow-teal-dot); }
+.bd-wf__item:hover { background: var(--state-hover, rgba(255,255,255,.05)); }
+.bd-wf__item.is-selected { background: var(--state-selected, rgba(0,122,204,.15)); border-left-color: var(--tone-dot); }
+.bd-wf__chip { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 6px; background: var(--tone-bg); color: var(--tone-fg); }
+.bd-wf__chip .material-symbols-outlined { font-size: 17px; }
+.bd-wf__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.bd-wf__name { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bd-wf__sub { font-size: 11px; color: var(--text-secondary, #9a9a9a); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.bd-wf__detail { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; background: var(--surface-1, #252526); }
+.bd-wf__action { display: flex; flex-direction: column; gap: 6px; padding-bottom: 8px; border-bottom: 1px solid var(--border-default, #333); }
+.bd-wf__action .bd-flowedit__name { border-bottom: 0; }
+.bd-wf__when, .bd-wf__avail { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; padding: 0 12px; font-size: 11.5px; }
+.bd-wf__when > .td-dim, .bd-wf__avail > .td-dim { margin-right: 4px; }
+.bd-wf__avail { padding: 6px 12px; border-bottom: 1px solid var(--border-subtle, #2a2a2a); }
+.bd-wf__chipcheck { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 10px; cursor: pointer;
+    border: 1px solid var(--border-default, #3a3a3a); color: var(--text-secondary, #aaa); }
+.bd-wf__chipcheck input { margin: 0; }
+.bd-wf__chipcheck.is-on { border-color: var(--twm-flow-teal-line, rgba(45,180,165,.45)); background: var(--twm-flow-teal-bg, rgba(45,180,165,.17)); color: var(--twm-flow-teal-fg, #72d8c8); }
+.bd-wf__flowpick { display: flex; align-items: center; gap: 8px; padding: 0 12px; font-size: 11.5px; }
+.bd-wf__flowpick > :last-child { flex: 0 1 320px; min-width: 0; }
+.bd-wf__flowhead { display: flex; flex-wrap: wrap; align-items: center; column-gap: 12px; border-bottom: 1px solid var(--border-subtle, #2a2a2a); padding: 0 12px 0 0; }
+.bd-wf__flowhead .bd-flowedit__name { flex: 1 1 220px; min-width: 0; border-bottom: 0; }
+.bd-wf__flowhead .bd-flowedit__name input { min-width: 0; }
+.bd-wf__flowhead > :not(.bd-flowedit__name) { padding: 6px 0 6px 12px; }
+.bd-wf__editor { flex: 1 1 auto; min-height: 0; }
+.bd-wf__goto { border: 0; background: none; padding: 0; color: inherit; font: inherit; text-decoration: underline; cursor: pointer; }
+.bd-wf__foot { font-size: 11px; }
 .bd-flowsmgr__for { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-secondary, #9a9a9a); }
 .bd-flowsmgr__for > :last-child { min-width: 150px; }
-.bd-flowsmgr__detail { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; background: var(--surface-1, #252526); }
-.bd-flowsmgr__head { display: flex; flex-wrap: wrap; align-items: center; column-gap: 12px; border-bottom: 1px solid var(--border-subtle, #2a2a2a); padding: 0 12px 0 0; }
-.bd-flowsmgr__head .bd-flowedit__name { flex: 1 1 220px; min-width: 0; border-bottom: 0; }
-.bd-flowsmgr__head .bd-flowedit__name input { min-width: 0; }
-.bd-flowsmgr__head > :not(.bd-flowedit__name) { padding: 6px 0; }
-.bd-flowsmgr__rm { display: inline-flex; align-items: center; gap: 4px; }
 .bd-flowsmgr__rm .material-symbols-outlined { font-size: 15px; }
-.bd-flowsmgr__rm:disabled { opacity: .4; cursor: default; }
 .bd-flowsmgr__uses { padding: 6px 12px; font-size: 11.5px; border-bottom: 1px solid var(--border-subtle, #2a2a2a); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bd-flowsmgr__none { margin: 16px; }
-.bd-flowsmgr__goto { border: 0; background: none; padding: 0; color: inherit; font: inherit; text-decoration: underline; cursor: pointer; }
-.bd-flowsmgr__foot { font-size: 11px; }
-.bd-flowsmgr .bd-flows__empty { margin: 10px; }
 
 /* ── Changes pane (changes_pane.js) ─────────────────────────────── */
 .twm-bp__body[hidden] { display: none !important; }

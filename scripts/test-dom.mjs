@@ -159,31 +159,31 @@ await t('clicking the button reaches the schema onClick', async () => {
     }
 });
 
-await t('Settings › Flows is drawn on the page, and let go of when the page changes (STORY-0028)', async () => {
+await t('Settings › Workflow is drawn on the page, and let go of when the page changes (STORY-0028, STORY-0030)', async () => {
     // A `type: 'panel'` row is mounted into the page, not opened in a window:
     // the editor gets its element, and its cleanup runs on leaving the page.
     const schema = settings.getSchema();
-    const original = schema['bugdesk.flows'].mount;
+    const original = schema['bugdesk.workflow'].mount;
     const seen = [];
-    schema['bugdesk.flows'].mount = (el) => { seen.push(el.dataset.panel); return () => seen.push('cleanup'); };
+    schema['bugdesk.workflow'].mount = (el) => { seen.push(el.dataset.panel); return () => seen.push('cleanup'); };
     try {
         const host = document.createElement('div');
         document.body.appendChild(host);
         const page = new SettingsPage({ embedded: true });
         page.mount(host);
         await tick();
-        page._switchCategory('flows');
+        page._switchCategory('workflow');
         await tick();
-        assert.ok(host.querySelector('[data-panel="bugdesk.flows"]'), 'no panel element on the Flows page');
-        assert.equal(host.querySelector('[data-action="setting-action"]'), null, 'the Flows page has no button to open a window');
+        assert.ok(host.querySelector('[data-panel="bugdesk.workflow"]'), 'no panel element on the Workflow page');
+        assert.equal(host.querySelector('[data-action="setting-action"]'), null, 'the Workflow page has no button to open a window');
         assert.equal(host.querySelector('[data-action="reset-category"]'), null, 'nothing on it for Reset to reset');
-        assert.deepEqual(seen, ['bugdesk.flows']);
+        assert.deepEqual(seen, ['bugdesk.workflow']);
         page._switchCategory('general');
         await tick();
-        assert.deepEqual(seen, ['bugdesk.flows', 'cleanup'], 'the editor was not let go of');
-        page._handleSearch('as named flows');
-        const go = host.querySelector('[data-action="goto-category"][data-category="flows"]');
-        assert.ok(go, 'search finds the Flows page and offers to go there');
+        assert.deepEqual(seen, ['bugdesk.workflow', 'cleanup'], 'the editor was not let go of');
+        page._handleSearch('mass actions for ticked');
+        const go = host.querySelector('[data-action="goto-category"][data-category="workflow"]');
+        assert.ok(go, 'search finds the Workflow page and offers to go there');
         go.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
         await tick();
         assert.equal(seen.length, 3, 'going there mounts it again');
@@ -192,7 +192,7 @@ await t('Settings › Flows is drawn on the page, and let go of when the page ch
         assert.equal(seen.at(-1), 'cleanup', 'dispose lets go of it');
         host.remove();
     } finally {
-        schema['bugdesk.flows'].mount = original;
+        schema['bugdesk.workflow'].mount = original;
     }
 });
 
@@ -3044,56 +3044,6 @@ console.log('\nWorkflow');
         assert.equal(wf.flowUses(draft, 'blocked').length, 3);
     });
 
-    await t('every transition gets a flow that does what it did — the message moves into it (STORY-0028)', async () => {
-        const { builtinTable } = await import(join(UI, 'ticketdesk', 'builtin_moves.js'));
-        const bugs = builtinTable('bugs', ['bug', 'regression', 'task']);
-        assert.ok(bugs.some((m) => m.from === 'open' && m.to === 'closed' && m.message && /Close message/.test(m.prompt)),
-            'the built-in table carries each move\'s own question');
-        const draft = {};
-        const tables = [{ store: 'bugs', type: null, label: 'Bugs', builtin: bugs },
-                        { store: 'backlog', type: 'story', label: 'Backlog › Story', builtin: builtinTable('backlog', ['story']) }];
-        assert.equal(wf.movesWithoutFlow(draft, tables), tables[0].builtin.length + tables[1].builtin.length);
-        const n = wf.seedMoveFlows(draft, tables);
-        assert.equal(n, tables[0].builtin.length + tables[1].builtin.length);
-        assert.equal(wf.movesWithoutFlow(draft, tables), 0, 'nothing left without a flow');
-        assert.ok(draft.bugs.moves.every((m) => m.flow && m.message === false && !('prompt' in m)), 'the asking moved into the flow');
-        const close = draft.flows.filter((f) => f.label === 'Close');
-        assert.equal(close.length, 1, 'every Close shares one flow');
-        assert.equal(wf.flowUses(draft, close[0].id).length, draft.bugs.moves.filter((m) => m.label === 'Close').length);
-        assert.equal(close[0].flow.nodes[1].type, 'require-message');
-        const reopen = draft.flows.filter((f) => /^Reopen/.test(f.label)).map((f) => f.label).sort();
-        assert.deepEqual(reopen, ['Reopen', 'Reopen — Backlog'], 'same name, different steps: told apart');
-        // It still asks, with the question the move asked before.
-        wf.setWorkflow(draft);
-        const move = wf.movesFor('bugs', 'bug', 'open').find((m) => m.to === 'closed');
-        let asked = null;
-        const patch = await wf.planMove({ store: 'bugs', record: { status: 'open' }, move,
-            ask: async () => null, askMessage: async (prompt) => { asked = prompt; return { comment: 'fixed' }; } });
-        assert.match(asked, /Close message/);
-        assert.deepEqual(patch, { status: 'closed', comment: 'fixed' });
-        wf.setWorkflow(null);
-    });
-
-    await t('the built-in way is flows too: shown with them, saved without what is still built-in (STORY-0028)', async () => {
-        const { builtinTable } = await import(join(UI, 'ticketdesk', 'builtin_moves.js'));
-        const tables = [{ store: 'bugs', type: null, label: 'Bugs', builtin: builtinTable('bugs', ['bug', 'regression', 'task']) },
-                        { store: 'backlog', type: 'story', label: 'Backlog › Story', builtin: builtinTable('backlog', ['story']) }];
-        const stored = { actions: { bugs: { bug: [{ id: 'park', label: 'Park', flow: null }] } } };
-        const shown = wf.withBuiltinFlows(stored, tables);
-        assert.ok(shown.bugs.moves.every((m) => m.flow) && shown.backlog.story.moves.every((m) => m.flow), 'every transition has a flow');
-        assert.deepEqual(wf.withoutBuiltinFlows(shown, stored, tables), stored, 'untouched, nothing built-in is written');
-        const edited = JSON.parse(JSON.stringify(shown));
-        const close = edited.flows.find((f) => f.label === 'Close');
-        close.flow.nodes.push({ id: 'c', type: 'clear-field', label: 'Clear', config: { field: 'assignee' }, position: { x: 0, y: 0 } });
-        close.flow.connections.push({ source: 'message', sourcePort: 'out', target: 'c', targetPort: 'in' });
-        const saved = wf.withoutBuiltinFlows(edited, stored, tables);
-        assert.ok(Array.isArray(saved.bugs?.moves), 'the table whose flow changed is written');
-        assert.equal(saved.backlog, undefined, 'the story table, still built-in, is not');
-        assert.ok(saved.flows.some((f) => f.id === close.id) && saved.flows.every((f) => wf.flowUses(saved, f.id).length),
-            'its flows go with it, and no flow nothing uses');
-        assert.deepEqual(wf.withoutBuiltinFlows(wf.withBuiltinFlows(saved, tables), saved, tables), saved, 'and it stays put');
-    });
-
     await t('a flow for any record offers what both stores have, and every row may use it', () => {
         const fields = wf.fieldChoices(wf.ANY_STORE, []).map(([n]) => n);
         assert.ok(fields.includes('assignee') && fields.includes('labels'), 'what both have is offered');
@@ -3106,17 +3056,89 @@ console.log('\nWorkflow');
         assert.deepEqual(wf.configuredFlows('backlog', flows).map((f) => f.id), ['a', 'k']);
     });
 
-    await t('the built-in table is what an unconfigured store already does', () => {
-        const story = wf.builtinMoves('backlog', 'story');
+    await t('the built-in moves are what the pages offer, custom statuses included', async () => {
+        const { builtinTable } = await import(join(UI, 'ticketdesk', 'builtin_moves.js'));
+        const story = builtinTable('backlog', ['story']);
         assert.ok(story.some((m) => m.from === 'refined' && m.to === 'in-progress' && m.label === 'Start work'));
         assert.ok(story.some((m) => m.from === 'dropped' && m.to === 'draft'));
-        assert.equal(wf.builtinMoves('bugs').filter((m) => m.message === false).length, 1, 'only starting work skips the message');
+        const bugs = builtinTable('bugs', ['bug']);
+        assert.equal(bugs.filter((m) => !m.message).length, 1, 'only starting work skips the message');
+        assert.ok(bugs.every((m) => !m.message || m.prompt), 'a move that asks says what it asks');
     });
 }
 
 /* ── conversion between the stores (STORY-0001) ─────────────────────── */
 
 /* ── mass actions over ticked rows (STORY-0029) ───────────────────── */
+
+/* ── one workflow: a type's actions run flows, a flow makes the move (STORY-0030) ── */
+
+console.log('\nOne workflow');
+{
+    const wf = await import(join(UI, 'ticketdesk', 'workflow.js'));
+    const model = await import(join(UI, 'ticketdesk', 'workflow_model.js'));
+    const TYPES = [
+        ...['bug', 'regression', 'task'].map((type) => ({ store: 'bugs', type, storeLabel: 'Bugs' })),
+        ...['epic', 'story', 'task'].map((type) => ({ store: 'backlog', type, storeLabel: 'Backlog' })),
+    ];
+    const flowOf = (w, id) => w.flows.find((f) => f.id === id);
+
+    await t('every type is a list of actions, the built-in moves among them, each running a flow that makes the move', () => {
+        const view = model.withTypeActions({}, TYPES);
+        const close = view.types.bugs.bug.find((a) => a.label === 'Close');
+        assert.deepEqual(close.when, ['open', 'investigation', 'testing'], 'one action, offered where the move was');
+        const g = flowOf(view, close.flow).flow;
+        assert.deepEqual(g.nodes.map((n) => n.type), ['start', 'require-message', 'set-status']);
+        assert.equal(wf.statusStep(g), 'closed');
+        assert.equal(view.types.bugs.regression.find((a) => a.label === 'Close').flow, close.flow, 'shared by the bug types');
+        const refine = flowOf(view, view.types.backlog.story.find((a) => a.label === 'Mark refined').flow);
+        assert.deepEqual(refine.types, ['epic', 'story'], 'a flow made here is available to the types that use it');
+        assert.equal(view.bugs, undefined, 'the older keys are gone from the view');
+        const reopen = (store, type) => flowOf(view, view.types[store][type].find((a) => a.label === 'Reopen').flow).label;
+        assert.deepEqual([reopen('bugs', 'bug'), reopen('backlog', 'epic'), reopen('backlog', 'story'), reopen('backlog', 'task')],
+            ['Reopen', 'Reopen (→ in-progress)', 'Reopen (→ review)', 'Reopen (→ in-progress)'], 'same name, other steps: told apart by where they go');
+    });
+
+    await t('saved, only a type that differs is written; the rest keep what they had', () => {
+        const stored = { actions: { bugs: { bug: [{ id: 'park', label: 'Park', when: ['open'], flow: null }] } } };
+        const view = model.withTypeActions(stored, TYPES);
+        assert.deepEqual(view.types.bugs.bug.at(-1), { id: 'park', label: 'Park', when: ['open'], flow: null }, 'custom actions follow the moves');
+        assert.deepEqual(model.withoutTypeActions(view, stored, TYPES), stored, 'nothing changed, nothing written');
+        const edited = JSON.parse(JSON.stringify(view));
+        edited.types.backlog.story.find((a) => a.label === 'Drop').label = 'Abandon';
+        const saved = model.withoutTypeActions(edited, stored, TYPES);
+        assert.deepEqual(Object.keys(saved.types), ['backlog']);
+        assert.deepEqual(Object.keys(saved.types.backlog), ['story']);
+        assert.deepEqual(saved.actions, stored.actions, 'the bug type still on its older keys keeps them');
+        assert.ok(saved.flows.every((f) => wf.flowUses(saved, f.id).length), 'no flow nothing uses');
+        assert.deepEqual(model.withoutTypeActions(model.withTypeActions(saved, TYPES), saved, TYPES), saved, 'and it stays put');
+    });
+
+    await t('a type\'s own list is what its records offer: the actions that change the status are its moves', () => {
+        const view = model.withTypeActions({}, TYPES);
+        wf.setWorkflow({ types: { bugs: { bug: view.types.bugs.bug } }, flows: view.flows });
+        assert.deepEqual(wf.movesFor('bugs', 'bug', 'open', [['ignored', 'x']]).map((m) => [m.label, m.to]),
+            [['Start investigation', 'investigation'], ['Close', 'closed']]);
+        assert.deepEqual(wf.actionsFor('bugs', 'bug', 'open'), [], 'no action here leaves the status alone');
+        assert.equal(wf.typeActions('bugs', 'regression'), null, 'a type not listed keeps its older way');
+        wf.setWorkflow(null);
+    });
+
+    await t('an older move\'s flow gets the move put into it: the message, then the status change', () => {
+        const side = { nodes: [{ id: 'start', type: 'start', config: {} }, { id: 'c', type: 'clear-field', config: { field: 'assignee' } }],
+                       connections: [{ source: 'start', sourcePort: 'out', target: 'c', targetPort: 'in' }] };
+        const stored = { flows: [{ id: 'unassign', label: 'Unassign', store: 'bugs', flow: side }],
+                         bugs: { moves: [{ from: 'testing', label: 'Close', to: 'closed', message: true, flow: 'unassign' }] } };
+        const view = model.withTypeActions(stored, TYPES);
+        const a = view.types.bugs.bug[0];
+        const g = flowOf(view, a.flow).flow;
+        assert.deepEqual(g.nodes.map((n) => n.type), ['start', 'clear-field', 'require-message', 'set-status']);
+        const order = []; let at = 'start';
+        while (at) { order.push(at); at = g.connections.find((c) => c.source === at)?.target; }
+        assert.deepEqual(order.map((id) => g.nodes.find((n) => n.id === id).type), ['start', 'require-message', 'set-status', 'clear-field']);
+        assert.deepEqual(flowOf(view, 'unassign').flow, side, 'the older flow itself is left as it was');
+    });
+}
 
 console.log('\nMass actions');
 {
