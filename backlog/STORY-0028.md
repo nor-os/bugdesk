@@ -13,7 +13,7 @@ subsystem: workflow
 labels: [workflow, settings]
 links: [relates-to STORY-0018, relates-to STORY-0007]
 created: 2026-10-14
-updated: 2026-10-14T09:11Z
+updated: 2026-10-14T09:20Z
 ---
 
 ## Description
@@ -141,3 +141,13 @@ norman chose option 1 for "flows for all transitions", done in 9dd8b31 on main:
 - Nothing is kept until Save; *Discard changes* undoes it.
 
 Checked in Edge on a copy of the real project.json: 44 transitions became 19 flows, saved, and the moves in Edit workflow name their flows. A test runs a seeded Close and checks that it asks its old question. Suites: DOM 181, UI 221, tracker 34, check-graph OK on the committed tree.
+
+### 2026-10-14T09:20Z · norman_agent
+
+norman: "the built-in way must be: every transition has a flow". Done in 2980994 on main, replacing the button from 9dd8b31.
+
+- No button. The Flows page and Edit workflow show the workflow with every transition's flow. Built-in moves that ask for a message have a flow that asks it, with the same question; the rest have an empty flow to extend.
+- Saving leaves out what is still exactly built-in, so project.json holds only what was changed. A type nobody changed keeps the built-in rules, including the moves of a custom status added later.
+- Edit workflow's "custom" badge marks only tables that differ from built-in. *Back to the built-in moves* restores the built-in flows too.
+
+Checked in Edge on a copy of the real project.json: the Flows page opens with 19 flows and nothing to save. After renaming "Close", the save wrote only the bug moves and their 9 flows; the backlog stayed built-in, with its flows still listed. DOM 186 passed (round-trip test included), check-graph OK on the committed tree.
