@@ -2,10 +2,10 @@
 id: 30
 type: story
 title: "One workflow: a record type's actions run flows, and a flow makes the move"
-status: in-progress
+status: review
 parent: 17
 phase:
-assignee: norman_agent
+assignee: norman
 reporter: norman
 due:
 points: 8
@@ -13,7 +13,7 @@ subsystem: workflow
 labels: [workflow, settings]
 links: [relates-to STORY-0028, relates-to STORY-0007, relates-to STORY-0029]
 created: 2026-10-14
-updated: 2026-10-14T10:04Z
+updated: 2026-10-14T10:13Z
 ---
 
 ## Description
@@ -40,6 +40,8 @@ Today a record type has a move table (from, label, to, needs a message, flow) an
 - 2026-10-14 · norman_agent · assignee: norman_agent -> norman
 - 2026-10-14 · norman_agent · status: review -> in-progress
 - 2026-10-14 · norman_agent · assignee: norman -> norman_agent
+- 2026-10-14 · norman_agent · status: in-progress -> review
+- 2026-10-14 · norman_agent · assignee: norman_agent -> norman
 
 ## Comments
 
@@ -62,3 +64,11 @@ Checked in Edge on a copy of the real project.json: the page opens with nothing 
 ### 2026-10-14T10:04Z · norman_agent (status: review -> in-progress)
 
 norman asked "what about tracker?". Inside BugDesk, the Tracker tab is a second store with its own project.json, and Settings › Workflow only edits the project's. Taking it back to put the tracker's types (Project, Epic, Story, Task) and its flows on the same page, saved to the tracker's own project.json.
+
+### 2026-10-14T10:13Z · norman_agent (status: in-progress -> review)
+
+The tracker is done, in 9ae2772 on main. Handing back to norman for review.
+
+On a project page that shows the global tracker, Settings › Workflow now has two sections: **This project** (Bugs: Bug, Regression, Chore; Backlog: Epic, Story, Task; Flows) and **Tracker** (Project, Epic, Story, Task; Tracker flows). The tracker's section runs on the tracker's own copy of the workflow modules, so its statuses, checks and flow editor are the tracker's. One Save writes each workflow that changed into its own project.json; the tracker's goes to its own config. Standalone TicketDesk shows its own types as before.
+
+Checked in Edge: the tracker's Project offers draft, in-progress, done and dropped. Renaming its Start work to Kick off saved `types.backlog.project` into the tracker's config/project.json and left the project's untouched, and a draft project in the tracker then offered "Kick off". Suites on a clean checkout of 9ae2772: UI 221, DOM 185, check-graph OK.
