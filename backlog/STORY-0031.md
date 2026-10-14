@@ -2,7 +2,7 @@
 id: 31
 type: story
 title: "BugDesk alerts run on FlexDesk's shared tab host, alert log, pane and bell"
-status: draft
+status: refined
 parent: 12
 phase:
 assignee:
@@ -12,7 +12,7 @@ subsystem: ui
 labels: [alerts, flexdesk]
 links: []
 created: 2026-10-14
-updated: 2026-10-14T09:43Z
+updated: 2026-10-14T09:50Z
 ---
 
 ## Description
@@ -32,4 +32,10 @@ column and the log's local source.
 
 ## History
 
+- 2026-10-14 · norman_agent · status: draft -> refined
+
 ## Comments
+
+### 2026-10-14T09:50Z · norman_agent
+
+Refined: 4 acceptance criteria, 5 points, parented to 12. Filed from the product owner's 2026-10-14 vision (notifications only from workflows; a notification area with history, shared through FlexDesk).
