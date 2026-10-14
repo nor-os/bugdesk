@@ -2,10 +2,10 @@
 id: 28
 type: story
 title: "Manage flows on their own, and pick them from a move or an action"
-status: review
+status: in-progress
 parent: 17
 phase:
-assignee: norman
+assignee: norman_agent
 reporter: norman
 due:
 points: 5
@@ -13,7 +13,7 @@ subsystem: workflow
 labels: [workflow, settings]
 links: [relates-to STORY-0018, relates-to STORY-0007]
 created: 2026-10-14
-updated: 2026-10-14T07:01Z
+updated: 2026-10-14T08:08Z
 ---
 
 ## Description
@@ -45,6 +45,8 @@ taking the fixed release.
 - 2026-10-14 · norman_agent · assignee: -> norman_agent
 - 2026-10-14 · norman_agent · status: in-progress -> review
 - 2026-10-14 · norman_agent · assignee: norman_agent -> norman
+- 2026-10-14 · norman_agent · status: review -> in-progress
+- 2026-10-14 · norman_agent · assignee: norman -> norman_agent
 
 ## Comments
 
@@ -91,3 +93,7 @@ are met.
 - **Placement:** you chose the Settings sidebar over a nav entry inside Edit
   workflow.
 - **To see it:** restart your BugDesk on 8766 (the server changed) and reload.
+
+### 2026-10-14T08:08Z · norman_agent (status: review -> in-progress)
+
+Review feedback from norman: in Settings › Flows the flows should be managed on the page itself, without managed windows. Taking it back: the Flows page will list the flows and edit the selected one in place (name, steps, remove, new), with one Save for the lot. Edit workflow's pencil keeps its window, since that already lives in one.
