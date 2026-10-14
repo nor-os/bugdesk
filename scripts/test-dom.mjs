@@ -2990,8 +2990,8 @@ console.log('\nWorkflow');
         const patch = await wf.planMove({ store: 'bugs', record: { status: 'open' }, move: { label: act.label, flow: act.flow },
             ask: async () => ({ answer: 'the vendor' }), askMessage: async () => null });
         assert.deepEqual(patch, { status: 'blocked', comment: 'Blocked: the vendor', commentNote: 'blocked' });
-        assert.equal(wf.checkFlow(act.flow, 'bugs', ['bug']).some((f) => f.code === 'unknown_step'), true,
-            'a move\'s flow cannot change the status itself');
+        assert.equal(wf.checkFlow(act.flow, 'bugs', ['bug']).some((f) => f.code === 'unknown_step'), false,
+            'a move\'s flow shows its status change as a step too (STORY-0028)');
         wf.setWorkflow(null);
     });
 

@@ -19,8 +19,8 @@ using System.Text.Json.Nodes;
 /// (STORY-0028): flows are managed on their own and shared. A graph stored
 /// inline, the way it was before, is still read and checked. A named flow is
 /// checked on its own against every type of its store, and again for each row
-/// that uses it, against that row's types — and only an action's flow may move
-/// to a status, since a move IS the status change.
+/// that uses it, against that row's types. A move's flow shows its status
+/// change as a step, and one way through it must reach the move's own target.
 /// </para>
 ///
 /// <para>
@@ -113,14 +113,14 @@ static class RecordWorkflow
                     if (flows.ContainsKey(id)) { problems.Add(new(w, $"two flows have the id '{id}'.")); continue; }
                     flows[id] = (store, label.Length > 0 ? label : id, f?["flow"]);
                     if (store != AnyStore)
-                        CheckFlow(f?["flow"], store, RecordSchema.TypesOf[store], w, label, schema, problems, allowStatus: true);
+                        CheckFlow(f?["flow"], store, RecordSchema.TypesOf[store], w, label, schema, problems);
                     else
                     {
                         // For any record: what it does must make sense for both
                         // stores. The same problem found in both is said once.
                         var both = new List<Problem>();
                         foreach (var (s, types) in RecordSchema.TypesOf)
-                            CheckFlow(f?["flow"], s, types, w, label, schema, both, allowStatus: true);
+                            CheckFlow(f?["flow"], s, types, w, label, schema, both);
                         problems.AddRange(both.Distinct());
                     }
                 }
@@ -225,7 +225,15 @@ static class RecordWorkflow
                     ? $"'{label}' goes to '{to}', which is not on a {types[0]}'s ladder ({string.Join(" → ", BacklogItem.LadderFor(types[0]))}) or among its custom statuses."
                     : $"'{label}' goes to '{to}', which is not a status here."));
             if (from == to && from != "*") problems.Add(new(w, $"'{label}' goes from '{from}' to itself."));
-            CheckRef(m?["flow"], store, types, w, label, schema, problems, action: false, flows);
+            // A transition's flow shows its status change as a step (STORY-0028);
+            // it may branch to others, but one way through must be the move's own.
+            CheckRef(m?["flow"], store, types, w, label, schema, problems, action: true, flows);
+            var graph = m?["flow"] is JsonValue fv && fv.TryGetValue<string>(out var fid) && flows.TryGetValue(fid.Trim(), out var named)
+                ? named.Graph : m?["flow"] as JsonObject;
+            var sets = (graph?["nodes"] as JsonArray)?.Where(n => Str(n?["type"]) == "set-status")
+                .Select(n => Str(n?["config"]?["status"])).ToList() ?? new();
+            if (sets.Count > 0 && to.Length > 0 && !sets.Contains(to))
+                problems.Add(new(w, $"'{label}' goes to '{to}', but its flow changes the status to {string.Join(" or ", sets.Select(x => $"'{x}'"))}."));
         }
     }
 
@@ -253,14 +261,14 @@ static class RecordWorkflow
                 problems.Add(new(where, $"'{owner}' uses '{named.Label}', a flow for {named.Store}, not {store}."));
                 return;
             }
-            CheckFlow(named.Graph, store, types, where, $"{owner}' through '{named.Label}", schema, problems, allowStatus: action);
+            CheckFlow(named.Graph, store, types, where, $"{owner}' through '{named.Label}", schema, problems);
             return;
         }
-        CheckFlow(flow, store, types, where, owner, schema, problems, allowStatus: action);
+        CheckFlow(flow, store, types, where, owner, schema, problems);
     }
 
     static void CheckFlow(JsonNode? flow, string store, string[] types, string where, string owner,
-                          RecordSchema.Schema schema, List<Problem> problems, bool allowStatus)
+                          RecordSchema.Schema schema, List<Problem> problems)
     {
         if (flow is null) return;
         if (flow is not JsonObject f || f["nodes"] is not JsonArray nodes) { problems.Add(new(where, $"the flow of '{owner}' is not a graph.")); return; }
@@ -291,11 +299,6 @@ static class RecordWorkflow
                 }
                 case "set-status":
                 {
-                    if (!allowStatus)
-                    {
-                        problems.Add(new(where, $"'{owner}': step '{id}' moves to a status, which only an action's flow may do: the move itself is the status change.", id));
-                        break;
-                    }
                     var status = Str(cfg?["status"]);
                     if (!statuses.Contains(status))
                         problems.Add(new(where, $"'{owner}': step '{id}' moves to '{status}', which is not a status here.", id));

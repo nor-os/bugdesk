@@ -147,12 +147,17 @@ export function liftInlineFlows(wf) {
     return n;
 }
 
-/** A move's flow that asks for its message — what "needs a message" did. */
-export const askFlow = (prompt = '') => ({
-    nodes: [{ id: 'start', type: 'start', label: 'Start', config: {}, position: { x: 0, y: 0 } },
-            { id: 'message', type: 'require-message', label: 'Ask for the message', config: prompt ? { prompt } : {}, position: { x: 0, y: 0 } }],
-    connections: [{ source: 'start', sourcePort: 'out', target: 'message', targetPort: 'in' }],
-});
+/**
+ * A transition's flow as the built-in move makes it: ask for the message, when
+ * the move needs one (with the move's own question), then change the status.
+ */
+export function transitionFlow({ to, message = false, prompt = '', toLabel = to }) {
+    const P = { x: 0, y: 0 };
+    const nodes = [{ id: 'start', type: 'start', label: 'Start', config: {}, position: P }];
+    if (message) nodes.push({ id: 'message', type: 'require-message', label: 'Ask for the message', config: prompt ? { prompt } : {}, position: P });
+    nodes.push({ id: 'status', type: 'set-status', label: `Change status to ${toLabel}`, config: { status: to }, position: P });
+    return { nodes, connections: nodes.slice(1).map((n, i) => ({ source: nodes[i].id, sourcePort: 'out', target: n.id, targetPort: 'in' })) };
+}
 
 /** The move table a `{store, type}` holds in a workflow, or null. */
 const movesOf = (wf, store, type) => (store === 'bugs' ? wf?.bugs?.moves : wf?.backlog?.[type]?.moves);
@@ -170,10 +175,11 @@ export function movesWithoutFlow(wf, tables) {
  * Give every move a flow, in place (an editor's draft): a table that moves the
  * built-in way is written down first, from `builtin`; then each move without a
  * flow gets one named after it that does what the move did — asks for its
- * message, with the move's own question, or nothing yet. The asking moves INTO
- * the flow, so it is asked once, there. The same steps under the same name are
- * one flow every such move shares; they name no field, so they are for any
- * record. Returns how many moves got a flow.
+ * message, with the move's own question, when it needs one, and changes the
+ * status (transitionFlow). The asking moves INTO the flow, so it is asked once,
+ * there. The same steps under the same name are one flow every such move
+ * shares, for the move's store (a status is one store's). Returns how many
+ * moves got a flow.
  *
  * @param {object} wf
  * @param {Array<{store: string, type?: string, builtin: Array}>} tables
@@ -192,18 +198,18 @@ export function seedMoveFlows(wf, tables) {
             const { prompt = '' } = m;
             delete m.prompt;
             if (m.flow) continue;
-            const graph = m.message ? askFlow(prompt) : emptyFlow();
+            const graph = transitionFlow({ to: m.to, message: !!m.message, prompt });
             const label = String(m.label || '').trim() || 'Move';
             const same = JSON.stringify(graph);
-            const twin = wf.flows.find((f) => (f.label || '') === label && JSON.stringify(f.flow) === same
-                && (f.store === ANY_STORE || f.store === store));
+            const twin = wf.flows.find((f) => (f.label || '') === label && JSON.stringify(f.flow) === same && f.store === store);
             // Two that share a name but not their steps (a bug's Reopen asks
             // why, an item's does not) are told apart by where they are from.
             const named = !twin && wf.flows.some((f) => (f.label || '') === label)
                 ? `${label} — ${String(where).split(' › ')[0] || store}` : label;
-            const twin2 = twin || wf.flows.find((f) => (f.label || '') === named && JSON.stringify(f.flow) === same);
+            const twin2 = twin || wf.flows.find((f) => (f.label || '') === named && JSON.stringify(f.flow) === same && f.store === store);
             const id = twin2 ? twin2.id : newFlowId(named, wf.flows);
-            if (!twin2) wf.flows.push({ id, label: named, store: ANY_STORE, flow: graph });
+            // For the store: a status is one store's.
+            if (!twin2) wf.flows.push({ id, label: named, store, flow: graph });
             m.flow = id;
             m.message = false;
             n++;
@@ -393,10 +399,12 @@ export const CATEGORIES = [
 ];
 
 /**
- * The step types for a flow over one store and its types. `actions: true` adds
- * "Move to a status", which a move does not need — the move IS the status change.
+ * The step types for a flow over one store and its types. "Change the status"
+ * is one of them for a move's flow and an action's alike: a transition's flow
+ * SHOWS its status change as a step (STORY-0028). (`actions` is kept for the
+ * callers that pass it; nothing differs by it any more.)
  */
-export function stepTypes(store, types, { actions = false } = {}) {
+export function stepTypes(store, types, { actions: _actions = false } = {}) {
     const fields = fieldChoices(store, types);
     const readable = fieldChoices(store, types, { readable: true });
     const statuses = statusesFor(store, types);
@@ -442,9 +450,10 @@ export function stepTypes(store, types, { actions = false } = {}) {
           config_schema: { type: 'object', required: ['body'], properties: {
               body: { type: 'string', minLength: 1, title: 'Comment', 'x-ui-widget': 'template', 'x-ui-multiline': true },
               tag: { type: 'string', title: 'Tag', 'x-ui-placeholder': 'e.g. blocked — shown on the comment' } } } },
-        ...(actions ? [{ type_id: 'set-status', label: 'Move to a status', category: 'record', icon: 'swap_horiz',
+        { type_id: 'set-status', label: 'Change the status', category: 'record', icon: 'swap_horiz',
+          description: 'Moves the record to this status when the flow is done. In a move\'s flow it is the move itself: the status the move goes to.',
           ports: [IN, OUT],
-          config_schema: { type: 'object', required: ['status'], properties: { status: enumOf(statuses.map((s) => [s, s]), 'Status') } } }] : []),
+          config_schema: { type: 'object', required: ['status'], properties: { status: enumOf(statuses.map((s) => [s, s]), 'To') } } },
     ];
 }
 
