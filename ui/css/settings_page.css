@@ -665,3 +665,11 @@
 
 .bd-autosave-setting { display: flex; align-items: center; gap: 6px; }
 .bd-autosave-setting .settings-number { width: 64px; }
+
+/* Settings in its dialog (STORY-0044): the page reaches the dialog's edges. The
+   modal body's own 14px margin would frame it a second time. */
+/* More specific than FlexDesk's own `.twm-managed-window--modal .twm-modal__body…`
+   margins (its stylesheet loads after this one, so a tie would lose). */
+.twm-managed-window--modal .twm-modal__body.twm-modal__body--rich:has(> .bd-settings-dialog) {
+    margin: 0;
+}
