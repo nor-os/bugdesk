@@ -2,10 +2,10 @@
 id: 28
 type: story
 title: "Manage flows on their own, and pick them from a move or an action"
-status: in-progress
+status: review
 parent: 17
 phase:
-assignee: norman_agent
+assignee: norman
 reporter: norman
 due:
 points: 5
@@ -13,7 +13,7 @@ subsystem: workflow
 labels: [workflow, settings]
 links: [relates-to STORY-0018, relates-to STORY-0007]
 created: 2026-10-14
-updated: 2026-10-14T08:08Z
+updated: 2026-10-14T08:19Z
 ---
 
 ## Description
@@ -47,6 +47,8 @@ taking the fixed release.
 - 2026-10-14 · norman_agent · assignee: norman_agent -> norman
 - 2026-10-14 · norman_agent · status: review -> in-progress
 - 2026-10-14 · norman_agent · assignee: norman -> norman_agent
+- 2026-10-14 · norman_agent · status: in-progress -> review
+- 2026-10-14 · norman_agent · assignee: norman_agent -> norman
 
 ## Comments
 
@@ -97,3 +99,14 @@ are met.
 ### 2026-10-14T08:08Z · norman_agent (status: review -> in-progress)
 
 Review feedback from norman: in Settings › Flows the flows should be managed on the page itself, without managed windows. Taking it back: the Flows page will list the flows and edit the selected one in place (name, steps, remove, new), with one Save for the lot. Edit workflow's pencil keeps its window, since that already lives in one.
+
+### 2026-10-14T08:19Z · norman_agent (status: in-progress -> review)
+
+Done: Settings › Flows now manages the flows on the page itself, with no windows (commit d604638 on main).
+
+- The list is on the left, with search, *New bugs flow* / *New backlog flow*, each flow's store, steps and how many rows use it. The selected flow's name and steps are edited on the right in the outline editor, with *Remove* (disabled while something uses it; the tooltip says what) and a line naming its users.
+- One *Save* writes them all; *Discard changes* goes back. "Unsaved changes" shows meanwhile, and unsaved edits are still there when you come back to the page (unless the workflow was saved elsewhere meanwhile, which the page then says). Problems from the checks or the server are listed above the split, with a link to the flow, and marked on the flow in the list.
+- Searching Settings for it offers *Go to Flows*.
+- Edit workflow's pencil still opens the flow in a window, since that page is itself a window. Both use the same editor (mountFlowEditor).
+
+Checked in Edge on a scratch store: list, select, rename, add-a-step menu on top, new flow, remove, save (project.json written), leave and come back with changes kept, and search. No managed window opens. Suites: DOM 176 passed plus 1 failing, "right-click a board cell and filter the board by it", which fails the same way on a clean checkout of main before this commit; UI 218, tracker 34, check-graph OK, eslint 0 errors.
