@@ -2,10 +2,10 @@
 id: 40
 type: story
 title: "Windows installer and portable build of the desktop app"
-status: refined
+status: in-progress
 parent: 21
 phase:
-assignee:
+assignee: norman_agent
 reporter: norman
 due:
 points: 3
@@ -13,7 +13,7 @@ subsystem: desktop
 labels: [desktop]
 links: [requires 25]
 created: 2026-10-14
-updated: 2026-10-14T14:31Z
+updated: 2026-10-14T15:25Z
 ---
 
 ## Description
@@ -31,6 +31,8 @@ Ship the Windows desktop app (STORY-0025) two ways: a per-user MSI built with Wi
 ## History
 
 - 2026-10-14 · norman_agent · status: draft -> refined
+- 2026-10-14 · norman_agent · status: refined -> in-progress
+- 2026-10-14 · norman_agent · assignee: (unset) -> norman_agent
 
 ## Comments
 
