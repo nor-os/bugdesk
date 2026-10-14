@@ -58,6 +58,31 @@ The server is `BugDeskServer.Run(args, built)` in `server/Program.cs`; the
 console server's entry point (`server/Entry.cs`) calls it, and so does the app,
 which keeps the `WebApplication` that `built` hands it in order to stop it.
 
+## Packaging (Windows)
+
+```
+powershell -ExecutionPolicy Bypass -File desktop\build-windows.ps1 [-Version 0.2.1]
+```
+
+builds, into `desktop/out/` (git-ignored):
+
+| File | What it is |
+|---|---|
+| `BugDesk-<version>-win-x64.msi` | per-user install to `%LocalAppData%\Programs\BugDesk`, no administrator prompt; a Start-menu shortcut with the app's AppUserModelID; an entry in Installed apps |
+| `BugDesk-<version>-win-x64-portable.zip` | one self-contained `BugDesk.exe` (Photino's native libraries inside, compressed) and `ui\` beside it; unzip anywhere and run |
+
+Both carry the .NET runtime, so nothing has to be installed first; both
+leave out `ui/`'s source maps. The version defaults to `package.json`'s; the
+MSI's `MajorUpgrade` replaces an older install in place, so a new MSI needs a
+higher version. Uninstalling removes the program folder and the shortcut, and
+leaves the user's `%AppData%\BugDesk` alone. The script also publishes the
+framework-dependent app once and prints its size (about 1.4 MB without `ui/`).
+
+The MSI is `desktop/installer/` (WiX 5, as `../SixShare/Installer`). It
+suppresses the ICEs that want every per-user component keyed on an HKCU value
+(ICE38, ICE64, ICE91) and ICE60 (versioned non-font files). Neither package is
+signed, so SmartScreen warns on the first run.
+
 ## The icon
 
 `ui/assets/icons/bugdesk.ico` (16–256 px) and `bugdesk-256.png` (Linux) are

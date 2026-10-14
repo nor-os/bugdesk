@@ -31,6 +31,9 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `ui/assets/icons/bugdesk.ico`) and its own AppUserModelID. The server's
   startup is now `BugDeskServer.Run`, which the console server calls too. See
   `docs/desktop.md`.
+  `desktop/build-windows.ps1` packages it as a per-user MSI (no administrator
+  prompt; a newer one upgrades in place) and a portable zip, both
+  self-contained (STORY-0040).
 
 - **Alerts** (STORY-0005). Settings › Alerts holds rules: a name, a store, a
   condition built in the filter editor (any field, custom ones included), a

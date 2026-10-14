@@ -15,3 +15,6 @@ node_modules/
 # Per-user config lives beside the bug store, not here, and ignores itself.
 # This entry only matters when BugDesk is pointed at its own repo.
 .bugdesk/
+
+# The desktop app's packages (desktop/build-windows.ps1, build-linux.sh).
+desktop/out/

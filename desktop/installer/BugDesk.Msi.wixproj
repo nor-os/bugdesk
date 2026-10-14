@@ -1,0 +1,18 @@
+<Project Sdk="WixToolset.Sdk/5.0.2">
+
+  <!-- BugDesk's per-user MSI. Built by desktop/build-windows.ps1, which publishes
+       the app first and passes its folder in as PublishDir. -->
+  <PropertyGroup>
+    <OutputType>Package</OutputType>
+    <InstallerPlatform>x64</InstallerPlatform>
+    <OutputName>BugDesk</OutputName>
+    <Version Condition="'$(Version)' == ''">0.0.0</Version>
+    <DefineConstants>Version=$(Version);PublishDir=$(PublishDir);IconFile=$(MSBuildThisFileDirectory)..\..\ui\assets\icons\bugdesk.ico</DefineConstants>
+    <!-- A per-user package installs under the user's profile, and these ICEs
+         want every such component keyed on an HKCU value and every folder named
+         in a RemoveFolder. Uninstall removes the files and the folders they
+         emptied regardless (build-windows.ps1 -Verify checks it). -->
+    <SuppressIces>ICE38;ICE60;ICE64;ICE91</SuppressIces>
+  </PropertyGroup>
+
+</Project>

@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  BugDesk, installed for the current user: %LocalAppData%\Programs\BugDesk, a
+  Start-menu shortcut, an Installed-apps entry. No administrator prompt.
+  The user's own folder (%AppData%\BugDesk) is the app's, not the installer's,
+  and is left alone on uninstall.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+
+  <Package Name="BugDesk" Manufacturer="BugDesk" Version="$(var.Version)"
+           UpgradeCode="a515a161-ffe3-4a16-98b8-be0695f39e87"
+           Scope="perUser" Language="1033">
+
+    <!-- A newer MSI replaces the older one in place: one entry in Installed apps. -->
+    <MajorUpgrade DowngradeErrorMessage="A newer version of BugDesk is already installed." />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <Icon Id="BugDeskIcon" SourceFile="$(var.IconFile)" />
+    <Property Id="ARPPRODUCTICON" Value="BugDeskIcon" />
+
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="UserProgramsFolder" Name="Programs">
+        <Directory Id="INSTALLFOLDER" Name="BugDesk" />
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder" />
+
+    <Feature Id="BugDesk">
+      <ComponentGroupRef Id="AppFiles" />
+      <ComponentRef Id="StartMenuShortcut" />
+    </Feature>
+  </Package>
+
+  <Fragment>
+    <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
+      <Files Include="$(var.PublishDir)\**" />
+    </ComponentGroup>
+
+    <Component Id="StartMenuShortcut" Directory="ProgramMenuFolder" Guid="b931e79a-117b-4e6f-a1af-5a94893c19aa">
+      <!-- The same AppUserModelID the app sets on itself (WindowsShell.cs), so
+           the shortcut, the window and a pinned button are one app. -->
+      <Shortcut Id="BugDeskShortcut" Name="BugDesk" Description="Bugs and backlog, in markdown"
+                Target="[INSTALLFOLDER]BugDesk.exe" WorkingDirectory="INSTALLFOLDER" Icon="BugDeskIcon">
+        <ShortcutProperty Key="System.AppUserModel.ID" Value="BugDesk.Desktop" />
+      </Shortcut>
+      <RemoveFolder Id="RemoveInstallFolder" Directory="INSTALLFOLDER" On="uninstall" />
+      <RegistryValue Root="HKCU" Key="Software\BugDesk\Desktop" Name="installed" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+  </Fragment>
+
+</Wix>
