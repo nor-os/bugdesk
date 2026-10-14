@@ -2,7 +2,7 @@
 id: 32
 type: story
 title: "Settings sorted by who a change affects: You, and This project"
-status: draft
+status: refined
 parent: 19
 phase:
 assignee:
@@ -13,7 +13,7 @@ subsystem: settings
 labels: [settings]
 links: [relates-to STORY-0030]
 created: 2026-10-14
-updated: 2026-10-14T09:51Z
+updated: 2026-10-14T09:52Z
 ---
 
 ## Description
@@ -37,5 +37,7 @@ Sort the sidebar by who a change affects, then by topic, and edit everything on 
 - [ ] Filtering the Settings sidebar still finds every row by its name.
 
 ## History
+
+- 2026-10-14 · norman_agent · status: draft -> refined
 
 ## Comments
