@@ -1729,7 +1729,7 @@ await t('right-click a board cell and filter the board by it', async () => {
     const statusCol = headers.findIndex((h) => h.startsWith('Status'));
     const titleCol = headers.findIndex((h) => h.startsWith('Title'));
     const row = host.querySelector('tbody tr');
-    const ref = row.children[0].textContent.trim();
+    const ref = row.querySelector('td:not(.twm-dt-select-cell)').textContent.trim();
     const item = backlogData.ITEMS.find((i) => i.ref === ref);
 
     const menuFor = async (col) => {
