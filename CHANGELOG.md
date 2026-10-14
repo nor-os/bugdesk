@@ -88,6 +88,18 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   They show on the record page and in the right-click menus, and, like a move,
   are saved once or not at all.
 
+- **Flows of their own** (STORY-0028). Settings has a *Flows* entry in its
+  sidebar: *Manage flows…* lists the project's named flows — what each is for,
+  its steps, and which moves and actions use it — to make, rename, edit and
+  remove (one in use is not removed). In Edit workflow a move or an action picks
+  its flow from a searchable list, makes a new one with *New flow…* or by typing
+  a name that is not a flow yet, and opens the chosen one with its edit button.
+  A flow's window is titled *Flow — <name>*, with the name editable in it. Flows
+  stored inside a move or action keep working, and become named flows the first
+  time the workflow is saved. Saving refuses a flow that moves to a status when
+  a move uses it — only an action may — and checks each flow against every table
+  that uses it.
+
 - **Record types: your own fields and statuses** (EPIC-0003). Settings ›
   Record types gives each record type — Bug, Regression, Chore, and each
   backlog or ticket type — its own fields (text, number, date, yes/no, choice;

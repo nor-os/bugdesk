@@ -2958,6 +2958,42 @@ console.log('\nWorkflow');
         wf.setWorkflow(null);
     });
 
+    await t('a move names a flow by id, and a flow stored inside a row still runs (STORY-0028)', async () => {
+        const ask = flow([{ id: 'why', type: 'prompt', config: { question: 'Why?' } },
+            { id: 'note', type: 'add-comment', config: { body: 'Because ${input.why}' } }], [['start', 'why'], ['why', 'note']]);
+        wf.setWorkflow({ flows: [{ id: 'ask-why', label: 'Ask why', store: 'bugs', flow: ask }],
+            bugs: { moves: [{ from: 'open', label: 'Close', to: 'closed', flow: 'ask-why' }] } });
+        assert.equal(wf.flowGraph('ask-why'), ask);
+        assert.equal(wf.flowGraph('gone'), null, 'a name that is no flow runs nothing');
+        assert.equal(wf.flowGraph(ask), ask, 'a graph stored the old way is itself');
+        const move = wf.movesFor('bugs', 'bug', 'open')[0];
+        const patch = await wf.planMove({ store: 'bugs', record: { status: 'open' }, move,
+            ask: async () => ({ answer: 'done' }), askMessage: async () => null });
+        assert.deepEqual(patch, { status: 'closed', comment: 'Because done' });
+        assert.deepEqual(wf.configuredFlows('backlog'), [], 'flows are per store');
+        wf.setWorkflow(null);
+    });
+
+    await t('an editor lifts flows stored inside rows out into named ones, and finds what uses each', () => {
+        const g = flow([{ id: 'c', type: 'clear-field', config: { field: 'assignee' } }], [['start', 'c']]);
+        const draft = {
+            flows: [{ id: 'close', label: 'Taken', store: 'bugs', flow: g }],
+            bugs: { moves: [{ from: 'open', label: 'Close', to: 'closed', flow: JSON.parse(JSON.stringify(g)) },
+                            { from: 'testing', label: 'Close', to: 'closed', flow: 'close' }] },
+            actions: { backlog: { story: [{ id: 'park', label: 'Park', flow: JSON.parse(JSON.stringify(g)) }] } },
+        };
+        assert.equal(wf.liftInlineFlows(draft), 2);
+        assert.deepEqual(draft.flows.map((f) => [f.id, f.label, f.store]),
+            [['close', 'Taken', 'bugs'], ['close-2', 'Close', 'bugs'], ['park', 'Park', 'backlog']], 'named after the row, ids unique');
+        assert.equal(draft.bugs.moves[0].flow, 'close-2');
+        assert.equal(draft.actions.backlog.story[0].flow, 'park');
+        assert.deepEqual(wf.flowUses(draft, 'close').map((u) => u.owner), ['Bugs › Close']);
+        assert.deepEqual(wf.flowUses(draft, 'park').map((u) => [u.owner, u.actions]), [['Story › Park (action)', true]]);
+        assert.equal(wf.liftInlineFlows(draft), 0, 'nothing left to lift');
+        assert.equal(wf.newFlowId('  Ask: why? ', [{ id: 'ask-why' }]), 'ask-why-2');
+        assert.equal(wf.newFlowId('', []), 'flow');
+    });
+
     await t('the built-in table is what an unconfigured store already does', () => {
         const story = wf.builtinMoves('backlog', 'story');
         assert.ok(story.some((m) => m.from === 'refined' && m.to === 'in-progress' && m.label === 'Start work'));

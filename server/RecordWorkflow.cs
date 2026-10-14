@@ -8,9 +8,19 @@ using System.Text.Json.Nodes;
 /// "workflow": {
 ///   "bugs":    { "moves": [ { "from": "testing", "label": "Close", "to": "closed", "message": true, "flow": {...} } ] },
 ///   "backlog": { "story": { "moves": [...] }, "task": { "moves": [...] } },
-///   "actions": { "bugs": { "bug": [ { "id": "blocked", "label": "Blocked", "when": ["open"], "flow": {...} } ] } }
+///   "actions": { "bugs": { "bug": [ { "id": "blocked", "label": "Blocked", "when": ["open"], "flow": "ask-why" } ] } },
+///   "flows":   [ { "id": "ask-why", "label": "Ask why", "store": "bugs", "flow": {...} } ]
 /// }
 /// </code>
+///
+/// <para>
+/// A move's or an action's <c>flow</c> names one of the project's FLOWS by id
+/// (STORY-0028): flows are managed on their own and shared. A graph stored
+/// inline, the way it was before, is still read and checked. A named flow is
+/// checked on its own against every type of its store, and again for each row
+/// that uses it, against that row's types — and only an action's flow may move
+/// to a status, since a move IS the status change.
+/// </para>
 ///
 /// <para>
 /// The bug store has ONE move table, as it has one lifecycle; each backlog type
@@ -30,6 +40,9 @@ using System.Text.Json.Nodes;
 static class RecordWorkflow
 {
     public record Problem(string Where, string Message, string? NodeId = null);
+
+    /// <summary>The named flows of one workflow, by id.</summary>
+    sealed class Flows : Dictionary<string, (string Store, string Label, JsonNode? Graph)> { }
 
     /// <summary>The step types a flow may hold — the catalogue's ids.</summary>
     public static readonly HashSet<string> StepTypes = new()
@@ -81,13 +94,34 @@ static class RecordWorkflow
         if (node is null) return problems;
         if (node is not JsonObject root) { problems.Add(new("workflow", "workflow is not an object.")); return problems; }
 
+        var flows = new Flows();
+        if (root["flows"] is JsonNode flowsNode)
+        {
+            if (flowsNode is not JsonArray list) problems.Add(new("workflow.flows", "flows is not a list."));
+            else
+                for (var i = 0; i < list.Count; i++)
+                {
+                    var f = list[i];
+                    var w = $"workflow.flows[{i}]";
+                    var id = Str(f?["id"]);
+                    var label = Str(f?["label"]);
+                    var store = Str(f?["store"]);
+                    if (label.Length == 0) problems.Add(new(w, "a flow needs a name."));
+                    if (!FlowId.IsMatch(id)) { problems.Add(new(w, $"'{label}': the flow id '{id}' must start with a letter or digit and use only a-z, 0-9 and -.")); continue; }
+                    if (!RecordSchema.TypesOf.ContainsKey(store)) { problems.Add(new(w, $"'{label}' is for '{store}', which is not bugs or backlog.")); continue; }
+                    if (flows.ContainsKey(id)) { problems.Add(new(w, $"two flows have the id '{id}'.")); continue; }
+                    flows[id] = (store, label.Length > 0 ? label : id, f?["flow"]);
+                    CheckFlow(f?["flow"], store, RecordSchema.TypesOf[store], w, label, schema, problems, allowStatus: true);
+                }
+        }
+
         if (root["bugs"] is JsonObject bugs)
-            CheckMoves(bugs["moves"], "bugs", RecordSchema.TypesOf["bugs"], "workflow.bugs", schema, problems);
+            CheckMoves(bugs["moves"], "bugs", RecordSchema.TypesOf["bugs"], "workflow.bugs", schema, problems, flows);
         if (root["backlog"] is JsonObject backlog)
             foreach (var (type, spec) in backlog)
             {
                 if (!RecordSchema.TypesOf["backlog"].Contains(type)) { problems.Add(new($"workflow.backlog.{type}", $"unknown backlog type '{type}'.")); continue; }
-                CheckMoves(spec?["moves"], "backlog", new[] { type }, $"workflow.backlog.{type}", schema, problems);
+                CheckMoves(spec?["moves"], "backlog", new[] { type }, $"workflow.backlog.{type}", schema, problems, flows);
             }
         if (root["actions"] is JsonObject actions)
             foreach (var (store, byType) in actions)
@@ -111,7 +145,7 @@ static class RecordWorkflow
                         if (a?["when"] is JsonArray when)
                             foreach (var s in when.Select(Str))
                                 if (s != "*" && !known.Contains(s)) problems.Add(new(w, $"'{label}' is offered in '{s}', which is not a status of a {type}."));
-                        CheckFlow(a?["flow"], store, new[] { type }, w, label, schema, problems);
+                        CheckRef(a?["flow"], store, new[] { type }, w, label, schema, problems, action: true, flows);
                     }
                 }
             }
@@ -119,7 +153,7 @@ static class RecordWorkflow
     }
 
     static void CheckMoves(JsonNode? movesNode, string store, string[] types, string where,
-                           RecordSchema.Schema schema, List<Problem> problems)
+                           RecordSchema.Schema schema, List<Problem> problems, Flows flows)
     {
         if (movesNode is null) return;
         if (movesNode is not JsonArray moves) { problems.Add(new(where, "moves is not a list.")); return; }
@@ -139,12 +173,39 @@ static class RecordWorkflow
                     ? $"'{label}' goes to '{to}', which is not on a {types[0]}'s ladder ({string.Join(" → ", BacklogItem.LadderFor(types[0]))}) or among its custom statuses."
                     : $"'{label}' goes to '{to}', which is not a status here."));
             if (from == to && from != "*") problems.Add(new(w, $"'{label}' goes from '{from}' to itself."));
-            CheckFlow(m?["flow"], store, types, w, label, schema, problems);
+            CheckRef(m?["flow"], store, types, w, label, schema, problems, action: false, flows);
         }
     }
 
+    static readonly System.Text.RegularExpressions.Regex FlowId = new("^[a-z0-9][a-z0-9-]{0,63}$");
+
+    /// <summary>A row's <c>flow</c>: a named flow's id, or a graph stored inline.</summary>
+    static void CheckRef(JsonNode? flow, string store, string[] types, string where, string owner,
+                         RecordSchema.Schema schema, List<Problem> problems, bool action, Flows flows)
+    {
+        if (flow is null) return;
+        if (flow is JsonValue v && v.TryGetValue<string>(out var id))
+        {
+            id = id.Trim();
+            if (id.Length == 0) return;
+            if (!flows.TryGetValue(id, out var named))
+            {
+                problems.Add(new(where, $"'{owner}' uses the flow '{id}', which does not exist."));
+                return;
+            }
+            if (named.Store != store)
+            {
+                problems.Add(new(where, $"'{owner}' uses '{named.Label}', a flow for {named.Store}, not {store}."));
+                return;
+            }
+            CheckFlow(named.Graph, store, types, where, $"{owner}' through '{named.Label}", schema, problems, allowStatus: action);
+            return;
+        }
+        CheckFlow(flow, store, types, where, owner, schema, problems, allowStatus: action);
+    }
+
     static void CheckFlow(JsonNode? flow, string store, string[] types, string where, string owner,
-                          RecordSchema.Schema schema, List<Problem> problems)
+                          RecordSchema.Schema schema, List<Problem> problems, bool allowStatus)
     {
         if (flow is null) return;
         if (flow is not JsonObject f || f["nodes"] is not JsonArray nodes) { problems.Add(new(where, $"the flow of '{owner}' is not a graph.")); return; }
@@ -175,6 +236,11 @@ static class RecordWorkflow
                 }
                 case "set-status":
                 {
+                    if (!allowStatus)
+                    {
+                        problems.Add(new(where, $"'{owner}': step '{id}' moves to a status, which only an action's flow may do: the move itself is the status change.", id));
+                        break;
+                    }
                     var status = Str(cfg?["status"]);
                     if (!statuses.Contains(status))
                         problems.Add(new(where, $"'{owner}': step '{id}' moves to '{status}', which is not a status here.", id));

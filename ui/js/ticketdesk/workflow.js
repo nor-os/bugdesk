@@ -9,6 +9,12 @@
  * flows too, offered beside the moves. With nothing configured, every move is
  * exactly the built-in one.
  *
+ * FLOWS ARE NAMED, AND SHARED (STORY-0028). They live in `workflow.flows` —
+ * `{id, label, store, flow}` — managed in Settings › Flows, and a move or an
+ * action names one by its id. A flow stored INSIDE a move or action (before
+ * STORY-0028) still runs; the editors lift it out into a named flow, so the next
+ * save stores it the new way.
+ *
  * THE EDITOR ONLY EDITS. This module supplies what it edits with — the step
  * catalogue — and runs what it made:
  *
@@ -47,6 +53,83 @@ export function setWorkflow(next) {
 export function configuredMoves(store, type) {
     const t = store === 'bugs' ? W.bugs : W.backlog?.[type];
     return Array.isArray(t?.moves) ? t.moves : null;
+}
+
+/** The project's named flows, of one store or of all (STORY-0028). */
+export const configuredFlows = (store = null, flows = W.flows) =>
+    (Array.isArray(flows) ? flows : []).filter((f) => f && (!store || f.store === store));
+
+/**
+ * A move's or an action's `flow` as a graph: the named flow its id names, or —
+ * stored before flows had names — the graph itself. `null` when there is none,
+ * or the name is not (or no longer) a flow.
+ */
+export function flowGraph(ref, flows = W.flows) {
+    if (!ref) return null;
+    if (typeof ref === 'object') return ref;
+    return configuredFlows(null, flows).find((f) => f.id === ref)?.flow || null;
+}
+
+/** An id for a new flow named `label`, unique among `flows`. */
+export function newFlowId(label, flows = []) {
+    const base = String(label || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'flow';
+    const taken = new Set(configuredFlows(null, flows).map((f) => f.id));
+    if (!taken.has(base)) return base;
+    let n = 2;
+    while (taken.has(`${base}-${n}`)) n++;
+    return `${base}-${n}`;
+}
+
+/**
+ * Every place in a workflow that has a flow: the move tables' rows and the
+ * actions, as `{ref, store, types, actions, owner, where, holder}` — `holder` is
+ * the row itself, so a caller can rewrite its `flow`.
+ */
+export function flowSlots(wf) {
+    const out = [];
+    const typeLabel = (store, t) => (store === 'bugs' ? { bug: 'Bug', regression: 'Regression', task: 'Chore' } : {})[t]
+        || t.charAt(0).toUpperCase() + t.slice(1);
+    for (const [i, m] of (wf?.bugs?.moves || []).entries()) {
+        out.push({ holder: m, store: 'bugs', types: ['bug', 'regression', 'task'], actions: false,
+            owner: `Bugs › ${m.label || 'move'}`, where: `workflow.bugs.moves[${i}]` });
+    }
+    for (const [t, spec] of Object.entries(wf?.backlog || {})) {
+        for (const [i, m] of (spec?.moves || []).entries()) {
+            out.push({ holder: m, store: 'backlog', types: [t], actions: false,
+                owner: `${typeLabel('backlog', t)} › ${m.label || 'move'}`, where: `workflow.backlog.${t}.moves[${i}]` });
+        }
+    }
+    for (const [store, byType] of Object.entries(wf?.actions || {})) {
+        for (const [t, list] of Object.entries(byType || {})) {
+            for (const [i, a] of (list || []).entries()) {
+                out.push({ holder: a, store, types: [t], actions: true,
+                    owner: `${typeLabel(store, t)} › ${a.label || 'action'} (action)`, where: `workflow.actions.${store}.${t}[${i}]` });
+            }
+        }
+    }
+    return out.map((x) => ({ ...x, ref: x.holder.flow || null }));
+}
+
+/** What uses the named flow `id`: the slots that name it. */
+export const flowUses = (wf, id) => flowSlots(wf).filter((x) => x.ref === id);
+
+/**
+ * Lift every flow stored inside a move or action out into a named flow, in
+ * place — an editor's draft, so a cancel changes nothing. Named after the row.
+ * Returns how many were lifted.
+ */
+export function liftInlineFlows(wf) {
+    let n = 0;
+    for (const slot of flowSlots(wf)) {
+        if (!slot.ref || typeof slot.ref !== 'object') continue;
+        wf.flows = Array.isArray(wf.flows) ? wf.flows : [];
+        const label = String(slot.holder.label || '').trim() || 'Flow';
+        const id = newFlowId(label, wf.flows);
+        wf.flows.push({ id, label, store: slot.store, flow: slot.ref });
+        slot.holder.flow = id;
+        n++;
+    }
+    return n;
 }
 
 /** The custom actions of a store and type (STORY-0007). */
@@ -404,7 +487,8 @@ export async function runFlow(graph, { store, record, ask, message }) {
  * @param {object} o
  * @param {'bugs'|'backlog'} o.store
  * @param {object} o.record     the full record (fetched fresh by the caller)
- * @param {object} o.move       `{to?, message, flow}` — an action has no `to`
+ * @param {object} o.move       `{to?, message, flow}` — an action has no `to`;
+ *                              `flow` is a named flow's id, or a graph
  * @param {Function} o.ask      openForm
  * @param {Function} o.askMessage  `(prompt) => Promise<{comment}|{tagRecentComment}|null>`
  */
@@ -419,8 +503,10 @@ export async function planMove({ store, record, move, ask, askMessage }) {
     if (move.message) {
         if ((await message('')) == null) return null;
     }
-    const run = move.flow ? await runFlow(move.flow, { store, record, ask, message: msg ? null : message }) : null;
-    if (move.flow && !run) return null;
+    // A named flow (STORY-0028), or one stored inside the move the old way.
+    const graph = flowGraph(move.flow);
+    const run = graph ? await runFlow(graph, { store, record, ask, message: msg ? null : message }) : null;
+    if (graph && !run) return null;
     const patch = {};
     const status = run?.status || move.to;
     if (status && status !== record.status) patch.status = status;

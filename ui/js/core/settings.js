@@ -121,6 +121,7 @@ export const VISIBLE_SETTINGS = new Set([
     'bugdesk.collaborators',
     'bugdesk.recordTypes',
     'bugdesk.workflow',
+    'bugdesk.flows',
     'bugdesk.numbering',
     'bugdesk.git',
     'bugdesk.alerts',
@@ -154,6 +155,13 @@ export const HIDDEN_SETTINGS = new Set([
 // next to the settings documentation above, matching where this data used
 // to live before the extraction.
 export const BUGDESK_SETTINGS_SLICE = {
+    // Flows get a sidebar entry of their own (STORY-0028): they are managed
+    // apart from the move tables that use them. Right under General.
+    categories: [
+        { id: 'flows', label: 'Flows', icon: 'account_tree',
+          description: 'Reusable flows for moves and actions', order: 15 },
+    ],
+
     defaults: {
         // Only auto-create-defaults survives; the modules directory / addon /
         // ETL-plugin loaders were EcoSim's node-graph plugin system.
@@ -175,6 +183,7 @@ export const BUGDESK_SETTINGS_SLICE = {
             collaborators: null,
             recordTypes: null,
             workflow: null,
+            flows: null,
             numbering: null,
             git: null,
             alerts: null,
@@ -230,13 +239,27 @@ export const BUGDESK_SETTINGS_SLICE = {
         'bugdesk.workflow': {
             type: 'action', category: 'general', group: 'Project',
             label: 'Workflow',
-            description: 'Which moves each status offers, what they are called, which need a message, and what a move does on the side (clear the assignee, ask a question, add a comment) — per record type. Saved in the shared project.json beside the stores. With nothing set, records move the built-in way.',
+            description: 'Which moves each status offers, what they are called, which need a message, and which flow a move runs on the side (clear the assignee, ask a question, add a comment) — per record type. The flows themselves are under Flows. Saved in the shared project.json beside the stores. With nothing set, records move the built-in way.',
             buttonLabel: 'Edit workflow…',
             icon: 'account_tree',
             defaultValue: null,
             onClick: async () => {
                 const { openWorkflowEditor } = await import('../ticketdesk/workflow_editor.js');
                 return openWorkflowEditor({ eventBus: window.__ecoagent?.eventBus });
+            },
+        },
+
+        // The named flows the moves and actions use (STORY-0028).
+        'bugdesk.flows': {
+            type: 'action', category: 'flows', group: 'Flows',
+            label: 'Flows',
+            description: 'What a move or a custom action does on the side — ask a question, set or clear a field, add a comment, check a field and branch — as named flows, shared by every move and action that picks them in Edit workflow. Saved in the shared project.json beside the stores.',
+            buttonLabel: 'Manage flows…',
+            icon: 'account_tree',
+            defaultValue: null,
+            onClick: async () => {
+                const { openFlowsEditor } = await import('../ticketdesk/flows_editor.js');
+                return openFlowsEditor({ eventBus: window.__ecoagent?.eventBus });
             },
         },
 

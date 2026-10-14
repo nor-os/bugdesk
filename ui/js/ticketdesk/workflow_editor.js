@@ -8,11 +8,14 @@
  * as it always has; "Customise" starts a table from those built-in moves, so
  * changing one label does not mean retyping the rest.
  *
- * WHAT A MOVE DOES is a flow, opened from its row in FlexDesk's outline editor
- * (`@flexdesk/flow`). The editor only edits: the steps, the checks and the
- * runner are ./workflow.js's. A flow is checked as it is edited, and its
- * problems are drawn on the step in the editor's findings strip with Go to it;
- * the bridge checks again on save and refuses the whole workflow on any problem.
+ * WHAT A MOVE DOES is a flow: one of the project's NAMED flows (STORY-0028),
+ * managed in Settings › Flows (./flows_editor.js) and picked on the row from a
+ * searchable list — or made there and then, by "New flow" or by typing a name
+ * that is not a flow yet. A flow opens in FlexDesk's outline editor
+ * (`@flexdesk/flow`), which only edits: the steps, the checks and the runner
+ * are ./workflow.js's. A flow is checked as it is edited, and its problems are
+ * drawn on the step in the editor's findings strip with Go to it; the bridge
+ * checks again on save and refuses the whole workflow on any problem.
  *
  * Saved in `.bugdesk/project.json`'s `workflow`, committed and shared.
  */
@@ -28,8 +31,8 @@ import { CONFIG } from './instance.js';
 import { customFields, STORE_TYPES } from './schema.js';
 import { attachSelect } from './select_field.js';
 import {
-    BLOCKS, CATEGORIES, SETTABLE, builtinMoves, checkFlow, emptyFlow, saveWorkflow,
-    statusesOf, stepTypes, workflowConfig,
+    BLOCKS, CATEGORIES, SETTABLE, builtinMoves, checkFlow, configuredFlows, emptyFlow, liftInlineFlows,
+    newFlowId, saveWorkflow, statusesOf, stepTypes, workflowConfig,
 } from './workflow.js';
 
 const icon = (name) => `<span class="material-symbols-outlined">${name}</span>`;
@@ -90,7 +93,47 @@ const setTable = (draft, key, moves) => {
 };
 
 const statusLabel = (s) => (s === '*' ? 'Any status' : s);
-const stepCount = (flow) => (flow?.nodes || []).filter((n) => n.type !== 'start').length;
+export const stepCount = (flow) => (flow?.nodes || []).filter((n) => n.type !== 'start').length;
+export const stepsWord = (flow) => { const n = stepCount(flow); return `${n} step${n === 1 ? '' : 's'}`; };
+
+/** The stores flows can be made for here, `{store, types, label}` — the types a
+ *  named flow is checked against are every type of its store offered here. */
+export function flowStoresHere() {
+    const out = [];
+    for (const [key, store, types, label] of tablesHere()) {
+        if (isActions(key)) continue;
+        const have = out.find((x) => x.store === store);
+        if (have) { for (const t of types) if (!have.types.includes(t)) have.types.push(t); continue; }
+        out.push({ store, types: [...types], label: store === 'bugs' ? 'Bugs' : label.split(' › ')[0] });
+    }
+    return out;
+}
+
+const NEW_FLOW = '__new__';
+
+/**
+ * A row's flow picker: the store's named flows, searchable, plus "New flow" —
+ * and typing a name that is no flow yet makes one by that name.
+ */
+function attachFlowPicker(el, { draft, store, holder, onNew, onPick }) {
+    return attachSelect(el, {
+        value: typeof holder.flow === 'string' ? holder.flow : '',
+        allowNew: true,
+        placeholder: 'Find a flow, or name a new one',
+        emptyLabel: 'No flow',
+        newLabel: (typed) => `New flow “${typed}”`,
+        optionsFor: () => [
+            { value: '', label: 'No flow', hint: 'the move does nothing more' },
+            ...configuredFlows(store, draft.flows).map((f) => ({ value: f.id, label: f.label || f.id, icon: 'account_tree', hint: stepsWord(f.flow) })),
+            { value: NEW_FLOW, label: 'New flow…', icon: 'add' },
+        ],
+        onChange: (v) => {
+            if (v === NEW_FLOW) onNew(String(holder.label || '').trim() || 'New flow');
+            else if (!v || configuredFlows(store, draft.flows).some((f) => f.id === v)) onPick(v);
+            else onNew(v);                                   // a typed name: a new flow called that
+        },
+    });
+}
 
 /**
  * Open the workflow editor. Resolves true once saved.
@@ -100,6 +143,9 @@ const stepCount = (flow) => (flow?.nodes || []).filter((n) => n.type !== 'start'
 export function openWorkflowEditor({ eventBus = null } = {}) {
     const tables = tablesHere();
     const draft = workflowConfig();
+    // Flows stored inside a row (before STORY-0028) become named ones in the draft.
+    liftInlineFlows(draft);
+    draft.flows = Array.isArray(draft.flows) ? draft.flows : [];
     for (const byType of Object.values(draft.actions || {})) {
         for (const list of Object.values(byType || {})) for (const a of list || []) a.saved = true;
     }
@@ -122,12 +168,50 @@ export function openWorkflowEditor({ eventBus = null } = {}) {
         </button>`;
     }).join('');
 
+    /** A row's flow: the picker, and the button that opens the chosen flow. */
+    const flowCell = (kind, i, row) => `<span class="bd-workflow__flowcell">
+            <select data-flowsel="${kind}:${i}"></select>
+            <button type="button" class="bd-workflow__flowedit" data-editflow="${kind}:${i}" ${row.flow ? '' : 'disabled'}
+                    title="${row.flow ? 'Edit this flow' : 'Choose or make a flow first'}">${icon('edit')}</button>
+        </span>`;
+
+    const holderOf = (kind, i) => (kind === 'action' ? actionsOf(draft, cur) : tableOf(draft, cur))[i];
+    const whereOf = (kind, i) => {
+        if (kind === 'action') return `workflow.${cur}[${i}]`;
+        return cur === 'bugs' ? `workflow.bugs.moves[${i}]` : `workflow.backlog.${cur.split('.')[1]}.moves[${i}]`;
+    };
+
+    const flowUseCount = (id) => tables.reduce((n, [key]) => n
+        + (isActions(key) ? actionsOf(draft, key) : (tableOf(draft, key) || [])).filter((r) => r.flow === id).length, 0);
+
+    /** Open a row's flow in the outline editor; a new one is added on Done. */
+    const editFlow = async (kind, i, { create = null } = {}) => {
+        const [, store, types] = curSpec();
+        const holder = holderOf(kind, i);
+        const entry = create ? null : configuredFlows(store, draft.flows).find((f) => f.id === holder.flow);
+        if (!create && !entry) return;
+        const fi = entry ? draft.flows.indexOf(entry) : -1;
+        const result = await openFlowEditor({
+            name: create ?? entry.label, store, types, graph: entry?.flow || null, actions: kind === 'action',
+            serverFindings: problems.filter((p) => (p.where === whereOf(kind, i) || p.where === `workflow.flows[${fi}]`) && p.node_id),
+            usedElsewhere: entry ? Math.max(0, flowUseCount(entry.id) - 1) : 0,
+        });
+        if (result === undefined) { render(); return; }      // cancelled: the picker shows what it showed
+        if (entry) { entry.flow = result.graph; entry.label = result.name; }
+        else {
+            const id = newFlowId(result.name, draft.flows);
+            draft.flows.push({ id, label: result.name, store, flow: result.graph });
+            holder.flow = id;
+        }
+        render();
+    };
+
     /** One record type's custom actions: a name, where it is offered, a flow. */
     const actionRows = () => {
         const [, store, types] = curSpec();
         const list = actionsOf(draft, cur);
         const head = list.length ? `<div class="bd-workflow__ahdr"><span></span><span>Action</span>
-            <span title="The statuses it is offered in, comma-separated; empty means every status">Offered in</span><span>Flow</span><span></span></div>` : '';
+            <span title="The statuses it is offered in, comma-separated; empty means every status">Offered in</span><span title="What the action does: one of the flows in Settings › Flows">Flow</span><span></span></div>` : '';
         return `<p class="td-dim bd-workflow__lede">An action is a button beside the moves — <i>Blocked</i>, say — that runs
                 a flow: ask why, add it as a comment, move to a status. Like a move, it is saved once, and
                 cancelling a question saves nothing. Statuses here: ${statusesOf(store, types[0]).map((x) => `<code>${esc(x)}</code>`).join(' ')}</p>`
@@ -139,7 +223,7 @@ export function openWorkflowEditor({ eventBus = null } = {}) {
                 </span>
                 <input type="text" data-k="label" value="${esc(a.label || '')}" placeholder="Blocked" aria-label="Action name">
                 <input type="text" class="td-mono" data-k="when" value="${esc((a.when || []).join(', '))}" placeholder="every status" aria-label="Offered in">
-                <button type="button" class="ea-btn bd-workflow__flow${a.flow ? ' bd-workflow__flow--on' : ''}" data-aflow="${i}">${icon('account_tree')}${a.flow ? `${stepCount(a.flow)} step${stepCount(a.flow) === 1 ? '' : 's'}` : 'Add'}</button>
+                ${flowCell('action', i, a)}
                 <button type="button" class="bd-schema__rm" data-arm="${i}" title="Remove this action">${icon('close')}</button>
             </div>`).join('')
             + `<div class="bd-workflow__foot"><button type="button" class="ea-btn" data-act="addaction">${icon('add')} Add action</button></div>`;
@@ -158,7 +242,7 @@ export function openWorkflowEditor({ eventBus = null } = {}) {
         }
         const statuses = [...new Set(types.flatMap((t) => statusesOf(store, t)))];
         const head = `<div class="bd-workflow__hdr"><span></span><span>From</span><span>Move</span><span>To</span>
-                        <span title="A message is asked for, and saved as the comment on the move">Message</span><span>Flow</span><span></span></div>`;
+                        <span title="A message is asked for, and saved as the comment on the move">Message</span><span title="What the move does on the side: one of the flows in Settings › Flows">Flow</span><span></span></div>`;
         return head + moves.map((m, i) => `
             <div class="ea-modal__row bd-workflow__row" data-move="${i}">
                 <span class="bd-schema__move">
@@ -171,8 +255,7 @@ export function openWorkflowEditor({ eventBus = null } = {}) {
                 <select data-k="to" data-sel="to:${i}">${statuses.map((s) =>
                     `<option value="${esc(s)}"${s === m.to ? ' selected' : ''}>${esc(s)}</option>`).join('')}</select>
                 <label class="bd-schema__req"><input type="checkbox" data-k="message" ${m.message ? 'checked' : ''}></label>
-                <button type="button" class="ea-btn bd-workflow__flow${m.flow ? ' bd-workflow__flow--on' : ''}" data-flow="${i}"
-                        title="What this move does on the side">${icon('account_tree')}${m.flow ? `${stepCount(m.flow)} step${stepCount(m.flow) === 1 ? '' : 's'}` : 'Add'}</button>
+                ${flowCell('move', i, m)}
                 <button type="button" class="bd-schema__rm" data-rm="${i}" title="Remove this move">${icon('close')}</button>
             </div>`).join('')
             + `<div class="bd-workflow__foot">
@@ -201,6 +284,16 @@ export function openWorkflowEditor({ eventBus = null } = {}) {
                 <button type="button" class="ea-btn" data-act="cancel">Cancel</button>
                 <button type="button" class="ea-btn ea-btn--primary" data-act="save">Save</button>
             </div>`;
+        for (const el of body.querySelectorAll('select[data-flowsel]')) {
+            const [kind, idx] = el.dataset.flowsel.split(':');
+            const i = Number(idx);
+            const holder = holderOf(kind, i);
+            selects.push(attachFlowPicker(el, {
+                draft, store: curSpec()[1], holder,
+                onNew: (name) => editFlow(kind, i, { create: name }),
+                onPick: (id) => { if (id) holder.flow = id; else delete holder.flow; render(); },
+            }));
+        }
         for (const el of body.querySelectorAll('select[data-sel]')) {
             const [k, idx] = el.dataset.sel.split(':');
             selects.push(attachSelect(el, {
@@ -238,6 +331,11 @@ export function openWorkflowEditor({ eventBus = null } = {}) {
         if (!b) return;
         const moves = tableOf(draft, cur);
         if (b.dataset.table) { cur = b.dataset.table; render(); return; }
+        if (b.dataset.editflow) {
+            const [kind, idx] = b.dataset.editflow.split(':');
+            await editFlow(kind, Number(idx));
+            return;
+        }
         if (isActions(cur)) {
             const list = actionsOf(draft, cur);
             if (b.dataset.act === 'addaction') {
@@ -253,17 +351,6 @@ export function openWorkflowEditor({ eventBus = null } = {}) {
                 render(); return;
             }
             if (b.dataset.arm) { list.splice(Number(b.dataset.arm), 1); setActions(draft, cur, list); render(); return; }
-            if (b.dataset.aflow) {
-                const i = Number(b.dataset.aflow);
-                const [, store, types] = curSpec();
-                const result = await openFlowEditor({
-                    title: `${list[i].label || 'Action'} — what it does`, store, types, graph: list[i].flow, actions: true,
-                    serverFindings: problems.filter((p) => p.where === `workflow.${cur}[${i}]` && p.node_id),
-                });
-                if (result === undefined) return;
-                if (result) list[i].flow = result; else delete list[i].flow;
-                render(); return;
-            }
         }
         if (b.dataset.act === 'customise') {
             const [, store, types] = curSpec();
@@ -285,19 +372,6 @@ export function openWorkflowEditor({ eventBus = null } = {}) {
             render(); return;
         }
         if (b.dataset.rm) { moves.splice(Number(b.dataset.rm), 1); render(); return; }
-        if (b.dataset.flow) {
-            const i = Number(b.dataset.flow);
-            const [, store, types] = curSpec();
-            const where = cur === 'bugs' ? `workflow.bugs.moves[${i}]` : `workflow.backlog.${types[0]}.moves[${i}]`;
-            const result = await openFlowEditor({
-                title: `${moves[i].label || 'Move'} — what it does`,
-                store, types, graph: moves[i].flow,
-                serverFindings: problems.filter((p) => p.where === where && p.node_id),
-            });
-            if (result === undefined) return;          // cancelled
-            if (result) moves[i].flow = result; else delete moves[i].flow;
-            render(); return;
-        }
         if (b.dataset.act === 'cancel') { close(false); return; }
         if (b.dataset.act === 'save') await save();
     });
@@ -345,32 +419,42 @@ export function openWorkflowEditor({ eventBus = null } = {}) {
     return done;
 }
 
+/** A flow window's title. */
+export const flowTitle = (name) => `Flow — ${String(name || '').trim() || 'Untitled'}`;
+
 /**
- * One flow in FlexDesk's outline editor, in a window of its own over the table.
- * Resolves the edited graph, `null` when the flow was removed, or `undefined`
- * when cancelled. Done is refused while the flow has problems.
+ * One named flow in FlexDesk's outline editor, in a window of its own, titled
+ * "Flow — <name>", with the name editable above the steps. Resolves
+ * `{name, graph}`, or `undefined` when cancelled. Done is refused while the
+ * flow has problems, or has no name.
  *
  * @param {object} o
- * @param {string} o.title
+ * @param {string} o.name
  * @param {'bugs'|'backlog'} o.store
- * @param {string[]} o.types
+ * @param {string[]} o.types      what it is checked against: the row's type(s), or every type of the store
  * @param {object} [o.graph]
- * @param {boolean} [o.actions]   a custom action's flow: "Move to a status" is offered
+ * @param {boolean} [o.actions]   "Move to a status" is offered: an action's flow, or one edited on its own
  * @param {Array} [o.serverFindings]  the bridge's problems for this flow
+ * @param {number} [o.usedElsewhere]  other rows using it — said in the footer, since an edit changes them too
  */
-export function openFlowEditor({ title, store, types, graph = null, actions = false, serverFindings = [] }) {
+export function openFlowEditor({ name = '', store, types, graph = null, actions = false, serverFindings = [], usedElsewhere = 0 }) {
     const catalogue = createStepCatalogue(stepTypes(store, types, { actions }), { categories: CATEGORIES });
     const body = document.createElement('div');
     body.className = 'bd-flowedit';
+    const note = usedElsewhere
+        ? `Also used by ${usedElsewhere} other move${usedElsewhere === 1 ? '' : 's'} or action${usedElsewhere === 1 ? '' : 's'}: a change here changes ${usedElsewhere === 1 ? 'it' : 'them'} too.`
+        : 'Runs in the page when the move is made; nothing is saved until it has finished.';
     body.innerHTML = `
+        <label class="bd-flowedit__name"><span>Name</span>
+            <input type="text" data-k="name" value="${esc(name)}" placeholder="Ask why it is blocked" aria-label="Flow name"></label>
         <div class="bd-flowedit__host"></div>
         <div class="ea-modal__actions bd-schema__actions">
-            <span class="td-dim bd-schema__path" data-slot="note">Runs in the page when the move is made; nothing is saved until it has finished.</span>
-            <button type="button" class="ea-btn ea-btn--danger" data-act="remove">Remove the flow</button>
+            <span class="td-dim bd-schema__path" data-slot="note">${esc(note)}</span>
             <button type="button" class="ea-btn" data-act="cancel">Cancel</button>
             <button type="button" class="ea-btn ea-btn--primary" data-act="done">Done</button>
         </div>`;
     const host = body.querySelector('.bd-flowedit__host');
+    const nameInput = body.querySelector('[data-k="name"]');
 
     // Insert a value: what earlier prompts answered, and the record's fields.
     const fieldGroup = {
@@ -416,7 +500,7 @@ export function openFlowEditor({ title, store, types, graph = null, actions = fa
     const done = new Promise((r) => { settle = r; });
     let closed = false;
     const win = new ManagedWindow({
-        id: `bd-flow-${_seq++}`, title, icon: 'account_tree', content: body,
+        id: `bd-flow-${_seq++}`, title: flowTitle(name), icon: 'account_tree', content: body,
         modal: true, canMinimize: false, canMaximize: true, canResize: true, canDrag: true,
         defaultWidth: 860, defaultHeight: 600, onClose: () => close(undefined),
     });
@@ -427,19 +511,19 @@ export function openFlowEditor({ title, store, types, graph = null, actions = fa
         try { win.close({ force: true }); } catch { /* closing */ }
         settle(value);
     }
+    nameInput.addEventListener('input', () => win.setTitle(flowTitle(nameInput.value)));
     body.addEventListener('click', (e) => {
         const act = e.target.closest('[data-act]')?.dataset.act;
         if (act === 'cancel') close(undefined);
-        else if (act === 'remove') close(null);
         else if (act === 'done') {
+            const slot = body.querySelector('[data-slot="note"]');
+            if (!nameInput.value.trim()) { slot.textContent = 'Give the flow a name first.'; nameInput.focus(); return; }
             const findings = refresh();
             if (findings.length) {
-                body.querySelector('[data-slot="note"]').textContent =
-                    `${findings.length} thing${findings.length === 1 ? '' : 's'} to fix first — see the list above the flow.`;
+                slot.textContent = `${findings.length} thing${findings.length === 1 ? '' : 's'} to fix first — see the list above the flow.`;
                 return;
             }
-            const g = editor.getGraph();
-            close(stepCount(g) ? g : null);
+            close({ name: nameInput.value.trim(), graph: editor.getGraph() });
         }
     });
     win.show();

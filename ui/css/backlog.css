@@ -1079,7 +1079,7 @@ tr[draggable="true"]:active,
    The record types editor's layout, with a move table for a body. */
 .bd-workflow__hdr, .bd-schema .bd-workflow__row {
     display: grid;
-    grid-template-columns: 44px 140px 1fr 140px 64px 92px 26px;
+    grid-template-columns: 44px 140px 1fr 140px 64px 200px 26px;
     align-items: center;
     gap: 6px;
     margin: 0 0 4px;
@@ -1087,20 +1087,26 @@ tr[draggable="true"]:active,
 .bd-workflow__hdr { font-size: 10.5px; color: var(--text-dim, #666); }
 .bd-workflow__builtin { padding: 10px 0; line-height: 1.6; }
 .bd-workflow__builtin p { margin: 0 0 10px; max-width: 60ch; }
-.bd-workflow__builtin .ea-btn, .bd-workflow__foot .ea-btn, .bd-workflow__flow { display: inline-flex; align-items: center; gap: 4px; }
-.bd-workflow__builtin .material-symbols-outlined, .bd-workflow__foot .material-symbols-outlined,
-.bd-workflow__flow .material-symbols-outlined { font-size: 15px; }
-.bd-workflow__flow { justify-content: center; font-size: 11px; }
-.bd-workflow__flow--on { color: #fff; background: var(--accent, #0e639c); border-color: var(--accent-hover, #1177bb); }
+.bd-workflow__builtin .ea-btn, .bd-workflow__foot .ea-btn { display: inline-flex; align-items: center; gap: 4px; }
+.bd-workflow__builtin .material-symbols-outlined, .bd-workflow__foot .material-symbols-outlined { font-size: 15px; }
 .bd-workflow__foot { display: flex; gap: 8px; margin-top: 8px; }
 
 /* The outline editor's window: the editor fills it, the actions sit under it. */
 .bd-flowedit { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; background: var(--surface-1, #252526); }
 .bd-flowedit__host { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .bd-flowedit__host > * { flex: 1 1 auto; min-height: 0; }
+.bd-flowedit__name { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border-subtle, #2a2a2a); font-size: 11px; color: var(--text-secondary, #9a9a9a); }
+.bd-flowedit__name input { flex: 0 1 360px; }
+/* A row's flow: the picker, and the button that opens the chosen flow (STORY-0028). */
+.bd-workflow__flowcell { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.bd-workflow__flowcell .bd-sel { flex: 1 1 auto; min-width: 0; }
+.bd-workflow__flowedit { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; border: 0; background: none; color: var(--text-secondary, #9a9a9a); cursor: pointer; }
+.bd-workflow__flowedit:hover:not(:disabled) { color: var(--text-primary, #ddd); }
+.bd-workflow__flowedit:disabled { opacity: .35; cursor: default; }
+.bd-workflow__flowedit .material-symbols-outlined { font-size: 15px; }
 .bd-workflow__ahdr, .bd-schema .bd-workflow__arow {
     display: grid;
-    grid-template-columns: 44px 1fr 1fr 92px 26px;
+    grid-template-columns: 44px 1fr 1fr 200px 26px;
     align-items: center;
     gap: 6px;
     margin: 0 0 4px;
@@ -1108,6 +1114,28 @@ tr[draggable="true"]:active,
 .bd-workflow__ahdr { font-size: 10.5px; color: var(--text-dim, #666); }
 .bd-workflow__lede { margin: 0 0 10px; line-height: 1.6; max-width: 70ch; }
 .bd-workflow__lede code { font-size: 10.5px; }
+
+/* ── Settings › Flows (flows_editor.js, STORY-0028) ──────────────── */
+.bd-flows { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; background: var(--surface-1, #252526); }
+.bd-flows__main { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 10px 16px 16px; }
+.bd-flows__bar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.bd-flows__bar .ea-btn { display: inline-flex; align-items: center; gap: 4px; }
+.bd-flows__bar .ea-btn .material-symbols-outlined { font-size: 15px; }
+.bd-flows__search { display: flex; align-items: center; gap: 6px; flex: 1 1 auto; color: var(--text-secondary, #9a9a9a); }
+.bd-flows__search .material-symbols-outlined { font-size: 16px; }
+.bd-flows__search input { flex: 1 1 auto; max-width: 320px; }
+.bd-flows__hdr, .bd-flows .bd-flows__row {
+    display: grid;
+    grid-template-columns: minmax(160px, 1.2fr) 80px 64px 2fr 26px 26px;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 4px;
+}
+.bd-flows__hdr { font-size: 10.5px; color: var(--text-dim, #666); }
+.bd-flows__uses { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; }
+.bd-flows__empty { margin: 8px 0; line-height: 1.6; max-width: 70ch; }
+.bd-flows .bd-schema__problems { margin-top: 10px; }
+.bd-flows .bd-schema__rm:disabled { opacity: .3; cursor: default; }
 
 /* ── Changes pane (changes_pane.js) ─────────────────────────────── */
 .twm-bp__body[hidden] { display: none !important; }

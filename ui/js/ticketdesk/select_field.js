@@ -51,6 +51,7 @@ const norm = (o) => (typeof o === 'string' || typeof o === 'number')
  * @param {Array}    o.options
  * @param {string}   [o.value]        initial value; defaults to `el.value`
  * @param {boolean}  [o.allowNew]     typing a value not in the list is allowed
+ * @param {Function} [o.newLabel]     `(typed) => text` for that row; "Use “…”" by default
  * @param {string}   [o.placeholder]
  * @param {string}   [o.emptyLabel]   what an empty value reads as
  * @param {Function} [o.onChange]     `(value) => void`
@@ -60,7 +61,7 @@ const norm = (o) => (typeof o === 'string' || typeof o === 'number')
  */
 export function attachSelect(el, {
     options = [], value = null, allowNew = false, placeholder = 'Select…',
-    emptyLabel = '—', onChange = null, optionsFor = null,
+    emptyLabel = '—', onChange = null, optionsFor = null, newLabel = null,
 } = {}) {
     if (!el || !el.parentNode) return { value: () => '', set() {}, destroy() {}, el };
 
@@ -146,7 +147,8 @@ export function attachSelect(el, {
 
         const rowsEl = panel.querySelector('.bd-sel__list');
         const typed = query.trim();
-        const isNew = allowNew && typed && !all.some((o) => o.value.toLowerCase() === typed.toLowerCase());
+        const isNew = allowNew && typed && !all.some((o) => o.value.toLowerCase() === typed.toLowerCase()
+            || String(o.label || '').toLowerCase() === typed.toLowerCase());
 
         rowsEl.innerHTML = filtered.map((o, i) => `
             <li class="bd-sel__opt${i === cursor ? ' bd-sel__opt--on' : ''}${o.value === current ? ' bd-sel__opt--current' : ''}"
@@ -159,7 +161,7 @@ export function attachSelect(el, {
                 ? `<li class="bd-sel__opt bd-sel__opt--new${filtered.length === 0 ? ' bd-sel__opt--on' : ''}"
                        role="option" data-new="${esc(typed)}">
                        <span class="material-symbols-outlined bd-sel__icon">add</span>
-                       <span class="bd-sel__optlabel">Use “${esc(typed)}”</span>
+                       <span class="bd-sel__optlabel">${esc(newLabel ? newLabel(typed) : `Use “${typed}”`)}</span>
                    </li>`
                 : '')
             + (filtered.length === 0 && !isNew
