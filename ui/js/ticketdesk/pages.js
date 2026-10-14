@@ -7,7 +7,7 @@
  *   ticket         one mask, three modes: edit (default) / new / search
  *   panel:left     filter rail (builtin filters + the user's own)
  *   panel:right    Inspector — TEAM only
- *   panel:bottom   Console (hidden by default)
+ *   panel:bottom   Alerts and Changes (hidden by default)
  *
  * Lifecycle: open → investigation ⇄ testing → closed. `open` is entry-only
  * (nothing returns to it); `closed` only from `testing`.
@@ -2293,55 +2293,103 @@ function mountTicketInspector(host, props, ctx) {
     };
 }
 
-/* ── panel:bottom — Console (hidden by default) ─────────────────── */
+/* ── panel:bottom — Alerts and Changes (hidden by default) ──────── */
 
+/**
+ * The store copies the bottom panel covers: the page's own, and on a project
+ * page that shows the global tracker, the tracker's too — its records live in
+ * that copy's modules and its own repo (instance.js). Standalone TicketDesk is
+ * one copy whose store IS the tracker.
+ */
+async function bottomSources() {
+    const [inst, alerts] = await Promise.all([import('./instance.js'), import('./alerts.js')]);
+    const out = [{ inst, alerts }];
+    if (MERGED_TRACKER) {
+        try {
+            const [ti, ta] = await Promise.all([trackerModule('instance.js'), trackerModule('alerts.js')]);
+            out.push({ inst: ti, alerts: ta });
+        } catch (err) {
+            console.warn('[bugdesk] the tracker is not in the bottom panel', err);
+        }
+    }
+    return out;
+}
+
+const BOTTOM_TABS = { alerts: 'Alerts', changes: 'Changes' };
+const BOTTOM_TAB_KEY = 'bugdesk.bottomTab';
+
+/**
+ * Two tabs, each with a count: Alerts (unread, in the worst unread level's
+ * colour) and Changes (uncommitted records). The panel's title is the tab in
+ * front — FlexDesk's `ctx.setTitle`. Both panes are mounted at once, so the
+ * counts are right before either tab is opened; the last tab used is
+ * remembered per browser. `bottompanel:show` with `{ tab }` brings a tab to the
+ * front (the toasts' "+N more" asks for Alerts).
+ */
 function mountTicketBottomPanel(host, props, ctx) {
-    const byStatus = {};
-    for (const t of TICKETS) byStatus[t.rawStatus] = (byStatus[t.rawStatus] || 0) + 1;
-    const line = ['open', 'investigation', 'testing', 'closed']
-        .map((s) => `${humanizeStatus(s)}: ${byStatus[s] || 0}`).join(' · ');
-    const needs = TICKETS.filter((t) => t.lastCommentAuthor === AGENT_AUTHOR).length;
+    let tab = 'alerts';
+    let changes = null;
+    let alertsPane = null;
+    let destroyed = false;
+    try { if (BOTTOM_TABS[localStorage.getItem(BOTTOM_TAB_KEY)]) tab = localStorage.getItem(BOTTOM_TAB_KEY); } catch { /* no storage */ }
     host.innerHTML = `
         <div class="twm-bp">
             <div class="twm-bp__tabs" role="tablist">
-                <button class="twm-bp__tab twm-bp__tab--on" role="tab" data-bptab="console" aria-selected="true">Console</button>
-                <button class="twm-bp__tab" role="tab" data-bptab="alerts" aria-selected="false">Alerts</button>
-                <button class="twm-bp__tab" role="tab" data-bptab="changes" aria-selected="false">Changes</button>
+                ${Object.entries(BOTTOM_TABS).map(([k, label]) => `
+                    <button class="twm-bp__tab" role="tab" data-bptab="${k}" aria-selected="false">${label}<span class="twm-bp__badge" data-badge="${k}" hidden></span></button>`).join('')}
             </div>
-            <div class="twm-bp__body" role="tabpanel" data-bppanel="alerts" hidden></div>
-            <div class="twm-bp__body" role="tabpanel" data-bppanel="changes" hidden></div>
-            <div class="twm-bp__body" role="tabpanel" data-bppanel="console">
-                <div class="td-audit">
-                    <div><span class="td-dim td-mono">—</span> <span class="td-link">bugdesk</span> — markdown bug store is the source of truth (BUGDESK_BUGS)</div>
-                    <div><span class="td-dim td-mono">—</span> <span class="td-link">store</span> — ${esc(line)}</div>
-                    <div><span class="td-dim td-mono">—</span> <span class="td-link">needs my reply</span> — ${needs} bug${needs === 1 ? '' : 's'} awaiting ${esc(HUMAN_AUTHOR)}</div>
-                </div>
-            </div>
+            ${Object.keys(BOTTOM_TABS).map((k) => `<div class="twm-bp__body" role="tabpanel" data-bppanel="${k}" hidden></div>`).join('')}
         </div>`;
-    // Changes: the store's uncommitted records, mounted when first shown.
-    let changes = null;
-    let alertsPane = null;
-    host.addEventListener('click', async (e) => {
-        const tab = e.target.closest('[data-bptab]');
-        if (!tab) return;
+    const show = (k) => {
+        if (!BOTTOM_TABS[k]) return;
+        tab = k;
         for (const t of host.querySelectorAll('[data-bptab]')) {
-            const on = t === tab;
+            const on = t.dataset.bptab === k;
             t.classList.toggle('twm-bp__tab--on', on);
             t.setAttribute('aria-selected', String(on));
         }
-        for (const p of host.querySelectorAll('[data-bppanel]')) p.hidden = p.dataset.bppanel !== tab.dataset.bptab;
-        if (tab.dataset.bptab === 'alerts' && !alertsPane) {
-            const { mountAlertsPane } = await import('./alerts.js');
-            alertsPane = mountAlertsPane(host.querySelector('[data-bppanel="alerts"]'), { eventBus: _eventBus });
-        }
-        if (tab.dataset.bptab === 'changes') {
-            if (!changes) {
-                const { mountChangesPane } = await import('./changes_pane.js');
-                changes = mountChangesPane(host.querySelector('[data-bppanel="changes"]'), { eventBus: _eventBus });
-            } else changes.refresh();
-        }
+        for (const p of host.querySelectorAll('[data-bppanel]')) p.hidden = p.dataset.bppanel !== k;
+        ctx?.setTitle?.(BOTTOM_TABS[k]);
+        try { localStorage.setItem(BOTTOM_TAB_KEY, k); } catch { /* no storage */ }
+        if (k === 'changes') changes?.refresh();
+    };
+    const setBadge = (k, n, level = null) => {
+        const el = host.querySelector(`[data-badge="${k}"]`);
+        if (!el) return;
+        el.hidden = !(n > 0);
+        el.textContent = n > 99 ? '99+' : String(n);
+        el.className = `twm-bp__badge${level ? ` twm-bp__badge--${level}` : ''}`;
+    };
+
+    bottomSources().then(async (sources) => {
+        if (destroyed) return;
+        const [{ mountChangesPane }, { mountAlertsPane }] = await Promise.all([import('./changes_pane.js'), import('./alerts.js')]);
+        if (destroyed) return;
+        alertsPane = mountAlertsPane(host.querySelector('[data-bppanel="alerts"]'), {
+            eventBus: _eventBus, sources,
+            onBadge: ({ unread, level }) => setBadge('alerts', unread, level),
+            onEditRules: () => sources[0].alerts.openAlertsEditor({ eventBus: _eventBus }),
+        });
+        changes = mountChangesPane(host.querySelector('[data-bppanel="changes"]'), {
+            eventBus: _eventBus, sources,
+            onCount: (n) => setBadge('changes', n),
+        });
     });
-    return { title: 'Console', destroy: () => { changes?.destroy(); alertsPane?.destroy(); } };
+    host.addEventListener('click', (e) => {
+        const t = e.target.closest('[data-bptab]');
+        if (t) show(t.dataset.bptab);
+    });
+    const sub = _eventBus?.on?.('bottompanel:show', (p) => show(p?.tab || 'alerts'));
+    show(tab);
+    return {
+        title: BOTTOM_TABS[tab],
+        destroy: () => {
+            destroyed = true;
+            changes?.destroy();
+            alertsPane?.destroy();
+            try { sub?.dispose?.(); sub?.(); } catch { /* gone */ }
+        },
+    };
 }
 
 /* ── the Tracker section, inside a project page ──────────────────── */

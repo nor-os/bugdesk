@@ -31,6 +31,9 @@
  *
  * Values from earlier prompts reach later steps through the editor's template
  * references: `${input.<step id>}`, and `${record.<field>}` for the record.
+ * Nobody types those: the editor's { } button inserts them, and draws each as
+ * a chip named after its question (./workflow_editor.js). The message a move
+ * asks for is an answer too, under its step's id.
  */
 
 import { CONFIG, apiUrl } from './instance.js';
@@ -181,7 +184,7 @@ export function liftInlineFlows(wf) {
 export function transitionFlow({ to, message = false, prompt = '', toLabel = to }) {
     const P = { x: 0, y: 0 };
     const nodes = [{ id: 'start', type: 'start', label: 'Start', config: {}, position: P }];
-    if (message) nodes.push({ id: 'message', type: 'require-message', label: 'Ask for the message', config: prompt ? { prompt } : {}, position: P });
+    if (message) nodes.push({ id: 'message', type: 'require-message', label: 'Ask for the comment', config: prompt ? { prompt } : {}, position: P });
     nodes.push({ id: 'status', type: 'set-status', label: `Change status to ${toLabel}`, config: { status: to }, position: P });
     return { nodes, connections: nodes.slice(1).map((n, i) => ({ source: nodes[i].id, sourcePort: 'out', target: n.id, targetPort: 'in' })) };
 }
@@ -320,13 +323,13 @@ export function stepTypes(store, types, { actions: _actions = false } = {}) {
                           ['is_empty', 'is empty'], ['is_not_empty', 'is not empty']], 'Test', { default: 'is' }),
               value: { type: 'string', title: 'Value', 'x-ui-widget': 'template',
                        'x-ui-when': { field: 'op', in: ['is', 'is_not', 'contains'] } } } } },
-        { type_id: 'require-message', label: 'Require a message', category: 'ask', icon: 'chat',
-          description: 'Asks for the message the move is saved with. A comment you wrote in the last five minutes counts.',
+        { type_id: 'require-message', label: 'Ask for the comment', category: 'ask', icon: 'chat',
+          description: 'Asks for a comment, saved on the record with the move. A comment you wrote in the last five minutes counts. Later steps can insert what was written with the { } button.',
           ports: [IN, OUT],
           config_schema: { type: 'object', properties: {
               prompt: { type: 'string', title: 'Question', 'x-ui-placeholder': 'Why is it moving?' } } } },
         { type_id: 'prompt', label: 'Ask for input', category: 'ask', icon: 'help',
-          description: 'Asks a question. Later steps use the answer as ${input.<this step>}.',
+          description: 'Asks a question. Later steps insert the answer with the { } button beside their text.',
           ports: [IN, OUT],
           config_schema: { type: 'object', required: ['question'], properties: {
               question: { type: 'string', minLength: 1, title: 'Question' },
@@ -458,9 +461,10 @@ function test(record, { field, op, value }, ctx) {
  * @param {'bugs'|'backlog'} o.store
  * @param {object} o.record   the record as the bridge sends it (`fields` included)
  * @param {Function} o.ask    `(form) => Promise<object|null>` — openForm's shape
- * @param {Function} [o.message]  `(prompt) => Promise<string|null>` for "Require a message"
+ * @param {Function} [o.message]  `(prompt) => Promise<string|null>` for "Ask for the comment"
+ * @param {string} [o.said]  the comment the move asked for before the flow ran
  */
-export async function runFlow(graph, { store, record, ask, message }) {
+export async function runFlow(graph, { store, record, ask, message, said = '' }) {
     const nodes = new Map((graph?.nodes || []).map((n) => [n.id, n]));
     const next = (id, port = 'out') => (graph?.connections || [])
         .find((c) => c.source === id && (c.sourcePort || 'out') === port)?.target;
@@ -485,11 +489,12 @@ export async function runFlow(graph, { store, record, ask, message }) {
             case 'condition': port = test(view(), c, ctx) ? 'true' : 'false'; break;
             case 'require-message': {
                 // The move already asked (its table row says it needs a message):
-                // one message per move, not two.
-                if (!message) break;
+                // one message per move, not two. Either way later steps may use it.
+                if (!message) { inputs[n.id] = said; break; }
                 const text = await message(c.prompt || '');
                 if (text == null) return null;
                 out.message = text;
+                inputs[n.id] = text;
                 break;
             }
             case 'prompt': {
@@ -555,7 +560,7 @@ export async function planMove({ store, record, move, ask, askMessage }) {
     }
     // A named flow (STORY-0028), or one stored inside the move the old way.
     const graph = flowGraph(move.flow);
-    const run = graph ? await runFlow(graph, { store, record, ask, message: msg ? null : message }) : null;
+    const run = graph ? await runFlow(graph, { store, record, ask, message: msg ? null : message, said: msg?.comment || '' }) : null;
     if (graph && !run) return null;
     const patch = {};
     const status = run?.status || move.to;

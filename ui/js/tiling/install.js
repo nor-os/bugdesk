@@ -371,12 +371,18 @@ export async function installTilingShell({ eventBus, logger } = {}) {
         const { NotificationCenter, NotificationHistory } = await import('@flexdesk/widgets');
         const center = new NotificationCenter({
             eventBus, logger: log, maxVisible: 3, overflow: 'collapse',
-            summaryAction: () => wm.showPanel?.('bottom'),
+            // "+N more": the bottom panel, on its Alerts tab.
+            summaryAction: () => {
+                if (!wm.isPanelOpen?.('bottom')) wm.togglePanel?.('bottom');
+                eventBus.emit('bottompanel:show', { tab: 'alerts' });
+            },
         });
         center.mount(document.body);
         new NotificationHistory({ notificationCenter: center, eventBus, logger: log }).mount();
         const { installAlerts } = await import('../ticketdesk/alerts.js');
         await installAlerts({ eventBus });
+        // The tracker's own rules, over the tracker's records, on a project page.
+        if (trackerCopy) await trackerCopy.alerts.installAlerts({ eventBus });
     } catch (err) {
         log.warn?.('notifications could not be installed', { err });
     }
@@ -579,10 +585,10 @@ async function _loadTrackerCopy({ eventBus }) {
         tracker: cfg.tracker || { available: true },
     };
     const T = '../ticketdesk@t/';
-    const [data, pages, backlogPages, newItem, trackerPages, live, links] = await Promise.all([
+    const [data, pages, backlogPages, newItem, trackerPages, live, links, alerts] = await Promise.all([
         import(`${T}backlog_data.js`), import(`${T}pages.js`), import(`${T}backlog_pages.js`),
         import(`${T}new_item.js`), import(`${T}tracker_pages.js`), import(`${T}live.js`),
-        import(`${T}ref_autolink.js`),
+        import(`${T}ref_autolink.js`), import(`${T}alerts.js`),
     ]);
     await data.loadBacklog();
     pages.useEventBus(eventBus);
@@ -597,6 +603,7 @@ async function _loadTrackerCopy({ eventBus }) {
         },
         live,
         links,
+        alerts,
     };
 }
 

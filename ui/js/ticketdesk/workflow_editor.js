@@ -10,7 +10,7 @@
  */
 
 import {
-    createOutlineEditor, createStepCatalogue, createWidgetRegistry, TEMPLATE_REFERENCES,
+    createOutlineEditor, createReferenceSyntax, createStepCatalogue, createWidgetRegistry, TEMPLATE_REFERENCES,
 } from '@flexdesk/flow';
 
 import { CONFIG } from './instance.js';
@@ -69,18 +69,40 @@ export function mountFlowEditor(host, { store, types, graph = null, actions = fa
             .map(([n, l]) => ({ label: l, type: 'field', ref: `\${record.${n}}` })),
     };
     let editor = null;
+    const stepsById = () => new Map((editor?.getGraph()?.nodes || []).map((n) => [n.id, n]));
     const values = async ({ before }) => {
-        const graphNow = editor?.getGraph() || {};
-        const byId = new Map((graphNow.nodes || []).map((n) => [n.id, n]));
-        const prompts = (before || []).map((b) => (typeof b === 'string' ? byId.get(b) : b))
-            .filter((n) => n && n.type === 'prompt');
+        const byId = stepsById();
+        const asked = (before || []).map((b) => (typeof b === 'string' ? byId.get(b) : b))
+            .filter((n) => n && ASKS.has(n.type));
         return [
             { id: 'input', label: 'Answers', sub: 'from the questions asked before this step',
               empty: 'No question is asked before this step.',
-              items: prompts.map((n) => ({ label: n.label || n.config?.question || n.id, type: 'answer', ref: `\${input.${n.id}}` })) },
+              items: asked.map((n) => ({ label: answerName(n), type: 'answer', ref: `\${input.${n.id}}` })) },
             fieldGroup,
         ];
     };
+
+    // A reference reads as what it stands for — "Answer: Why?", "Severity" —
+    // not as the step id it is stored by, which the editor never shows.
+    const fieldLabels = new Map([...fieldChoices(store, types, { readable: true }), ['id', 'Id']]);
+    const references = createReferenceSyntax({
+        name: TEMPLATE_REFERENCES.name, pattern: TEMPLATE_REFERENCES.pattern, format: TEMPLATE_REFERENCES.format,
+        stepScope: 'input',
+        describe: (match) => {
+            const [scope, name] = String(match.path || '').split('.');
+            if (scope === 'input') {
+                const n = stepsById().get(name);
+                // Before the editor has its graph, every step is still unknown.
+                if (!editor) return { label: 'Answer', tone: 'amber' };
+                return n && ASKS.has(n.type) ? { label: `Answer: ${answerName(n)}`, tone: 'amber' }
+                    : { label: `Answer: ${name}`, tone: 'amber', known: false };
+            }
+            if (scope === 'record') {
+                return fieldLabels.has(name) ? { label: fieldLabels.get(name) } : { label: name, known: false };
+            }
+            return null;
+        },
+    });
 
     const check = () => {
         if (!editor) return [];
@@ -91,10 +113,14 @@ export function mountFlowEditor(host, { store, types, graph = null, actions = fa
     };
 
     editor = createOutlineEditor(host, {
-        catalogue, widgets: createWidgetRegistry(), references: { template: TEMPLATE_REFERENCES },
+        catalogue, widgets: createWidgetRegistry(), references: { template: references },
         blocks: BLOCKS, values,
         valuesNote: 'Only questions asked before this step, on every path, are listed.',
-        summarise: (node) => summariseStep(node),
+        // The outline's one line reads its references as the chips do.
+        summarise: (node) => summariseStep(node).replace(references.pattern, (text, path) => {
+            const d = references.describe({ text, path });
+            return d ? `‹${d.label}›` : text;
+        }),
         onChange: () => { serverFindings = []; check(); onChange?.(); },
     });
     editor.load({ graph: graph ? JSON.parse(JSON.stringify(graph)) : emptyFlow() });
@@ -107,12 +133,22 @@ export function mountFlowEditor(host, { store, types, graph = null, actions = fa
     };
 }
 
+/** The steps whose answer later steps may use: a question, and the move's comment. */
+const ASKS = new Set(['prompt', 'require-message']);
+
+/** What an answer is called in the { } list and on its chip. */
+function answerName(n) {
+    const c = n.config || {};
+    if (n.type === 'require-message') return c.prompt || 'the comment';
+    return c.question || n.label || n.id;
+}
+
 /** A step's one line in the outline. */
 function summariseStep(node) {
     const c = node.config || {};
     switch (node.type) {
         case 'condition': return `${c.field || '?'} ${String(c.op || 'is').replace(/_/g, ' ')}${c.value ? ` ${c.value}` : ''}`;
-        case 'require-message': return c.prompt || 'Ask for the message';
+        case 'require-message': return `${c.prompt || 'Ask for a comment'} — saved as the move's comment`;
         case 'prompt': return c.question || 'Ask a question';
         case 'set-field': return `${c.field || '?'} = ${c.value || '(empty)'}`;
         case 'clear-field': return `clear ${c.field || '?'}`;

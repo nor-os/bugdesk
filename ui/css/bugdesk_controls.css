@@ -1,0 +1,228 @@
+/* ════════════════════════════════════════════════════════════════════
+ * bugdesk_controls.css — BugDesk's basic controls: the density and depth tokens,
+ * the flat text input (.ea-tin), the button (.ea-btn and its variants),
+ * and the label/field rows and action strip of the older dialogs
+ * (.ea-modal__*).
+ *
+ * These are what was still in use of the stylesheet BugDesk inherited
+ * from the EcoAgent shell (ecoagent_extra_modes.css, 13 000 lines, almost
+ * all of it for screens BugDesk never had). The `ea-` prefix and the
+ * `--ea-*` names stay: FlexDesk's tokens.css and BugDesk's own sheets
+ * refer to them.
+ *
+ * Loaded where that sheet was — before FlexDesk's flexdesk.css and the
+ * tiling-shell sheets — so everything after it still wins the cascade.
+ * ════════════════════════════════════════════════════════════════════ */
+
+:root {
+    /* Dark native controls: <select> popups, scrollbars and other UA
+     * widgets render dark to match the theme. */
+    color-scheme: dark;
+
+    /* Density: a dense tool, not a website. */
+    --ea-pad-tight:    2px;
+    --ea-pad-snug:     6px;
+    --ea-pad-loose:   10px;
+    /* Text-input padding, shared by .ea-tin and the dialog rows. */
+    --ea-input-pad:   4px 8px;
+    --ea-row-h:       18px;
+    --ea-font-body:   11px;
+    --ea-font-mono:   10.5px;
+    --ea-font-title:  11px;
+
+    /* Depth: chrome, lifted content, recessed wells (inputs, code). */
+    --ea-bg-chrome:   #1a1a1a;
+    --ea-bg-content:  #212121;
+    --ea-bg-well:     #0d0d0d;
+    --ea-border:      #333;
+    --ea-border-soft: #2a2a2a;
+
+    --ea-text:        var(--text-body);
+    --ea-text-muted:  var(--text-muted);
+    --ea-text-dim:    var(--text-dim);
+    --ea-accent:      #1177b3;
+}
+
+/* FlexDesk's SortableList on a page: flat, joined rows. */
+.twm-page-shell .sortable-list__row {
+    background: var(--ea-bg-content, #212121);
+    border: 1px solid var(--ea-border, #333);
+    border-radius: 0;
+    border-bottom-width: 0;
+    padding: 3px 6px;
+    gap: 6px;
+}
+.twm-page-shell .sortable-list__row:last-child {
+    border-bottom-width: 1px;
+}
+.twm-page-shell .sortable-list__row:hover { border-color: var(--ea-border, #555); }
+
+/* The flat text input's box model. Where it sits (a page, a dialog, a
+ * panel) its look comes from ticketdesk.css; this is only what every
+ * one of them shares. */
+.ea-tin {
+    box-sizing: border-box;
+    padding: var(--ea-input-pad);
+    color: var(--ea-text);
+    font: inherit;
+    border-radius: 0;
+}
+
+/* ─── Buttons ──────────────────────────────────────────────────────
+ * One button: one height (--ea-row-h) so toolbars line up with rows,
+ * 2px corners, variants that change colour, not size.
+ */
+.ea-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--ea-pad-tight);
+    background: #2e2e2e;
+    color: var(--ea-text);
+    border: 1px solid var(--ea-border);
+    padding: 0 var(--ea-pad-snug);
+    border-radius: 2px;
+    cursor: pointer;
+    font: inherit;
+    font-size: var(--ea-font-body);
+    line-height: 1;
+    min-height: var(--ea-row-h);
+    white-space: nowrap;
+    transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+}
+.ea-btn .material-symbols-outlined { font-size: var(--font-size-lg); }
+.ea-btn:hover:not(:disabled) {
+    background: #3a3a3a;
+    border-color: #444;
+}
+.ea-btn:active:not(:disabled) { background: #262626; }
+.ea-btn:focus-visible {
+    outline: none;
+    border-color: var(--ea-accent);
+    box-shadow: 0 0 0 1px var(--ea-accent);
+}
+.ea-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+.ea-btn--primary {
+    background: var(--ea-accent);
+    border-color: var(--ea-accent);
+    color: var(--text-bright);
+}
+.ea-btn--primary:hover:not(:disabled) {
+    background: #1486cf;
+    border-color: #1486cf;
+}
+
+/* Number inputs without the browser's spinner arrows: the values are
+ * typed, and the arrows are browser chrome in a dark theme. */
+input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    appearance: none;
+    margin: 0;
+}
+
+/* Sidebar tree rows (Settings' category list) at row density. */
+.sidebar-body .tree-item {
+    min-height: var(--ea-row-h);
+    padding-top: var(--ea-pad-tight);
+    padding-bottom: var(--ea-pad-tight);
+    font-size: var(--ea-font-body);
+}
+
+.ea-btn--danger {
+    background: #4a2424;
+    border-color: #6a2e2e;
+    color: #e8b0b0;
+}
+.ea-btn--danger:hover:not(:disabled) {
+    background: #6a2e2e;
+    color: var(--text-bright);
+}
+
+/* ─── Dialog rows: a label and its field, side by side ─────────── */
+.ea-modal__row {
+    display: grid;
+    grid-template-columns: minmax(120px, 32%) 1fr;
+    align-items: center;
+    gap: var(--ea-pad-loose);
+    margin-bottom: var(--ea-pad-snug);
+    font-size: var(--ea-font-body);
+    color: var(--ea-text);
+}
+.ea-modal__row > span {
+    color: var(--ea-text-dim);
+    font-size: var(--ea-font-body);
+    padding-top: 1px;
+}
+.ea-modal__row input[type="text"],
+.ea-modal__row input[type="number"],
+.ea-modal__row input[type="password"],
+.ea-modal__row input[type="search"],
+.ea-modal__row input[type="email"],
+.ea-modal__row select,
+.ea-modal__row textarea {
+    background: var(--ea-bg-well);
+    color: var(--ea-text);
+    border: 1px solid var(--ea-border);
+    padding: 0 var(--ea-pad-snug);
+    border-radius: 0;
+    font: inherit;
+    font-size: var(--ea-font-body);
+    width: 100%;
+    box-sizing: border-box;
+}
+.ea-modal__row textarea {
+    padding: var(--ea-pad-snug);
+    min-height: calc(var(--ea-row-h) * 3);
+    line-height: 1.45;
+    resize: vertical;
+    font-family: inherit;
+}
+.ea-modal__row input:focus,
+.ea-modal__row select:focus,
+.ea-modal__row textarea:focus {
+    outline: none;
+    border-color: var(--ea-accent);
+    box-shadow: 0 0 0 1px var(--ea-accent);
+}
+
+/* The dialog's button strip. */
+.ea-modal__actions {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: var(--ea-pad-snug);
+    background: var(--ea-bg-chrome);
+    padding: var(--ea-pad-snug) var(--ea-pad-loose);
+    border-top: 1px solid #555;
+    min-height: calc(var(--ea-row-h) + 4px);
+}
+.ea-modal__actions .ea-btn {
+    border-radius: 0;
+    min-height: calc(var(--ea-row-h) + 4px);
+    padding: 0 var(--ea-pad-loose);
+}
+[data-section][hidden],
+[data-section-body][hidden] { display: none; }
+
+/* A dense button: same height, tighter padding and type. */
+.ea-btn.ea-btn--small {
+    padding: 0 var(--ea-pad-tight);
+    font-size: var(--ea-font-mono);
+}
+
+/* A hint under a dialog's fields. */
+.ea-modal__hint {
+    color: var(--ea-text-dim);
+    font-size: var(--ea-font-body);
+    line-height: 1.45;
+    margin: 0 0 8px;
+    padding: 0 var(--ea-pad-loose) var(--ea-pad-snug);
+}

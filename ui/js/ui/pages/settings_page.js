@@ -242,6 +242,7 @@ export class SettingsPage extends PageBase {
                         <span>${cat.shared === true ? 'Changes here apply to everyone who pulls this repo.' : cat.shared}</span>
                     </p>` : ''}
                 </div>
+                ${onlyPanels ? '<div class="settings-page__actions" data-slot="page-actions"></div>' : ''}
                 ${onlyPanels || cat.noReset ? '' : `<button class="settings-page__reset-btn" data-action="reset-category" data-category="${categoryId}" type="button">
                     <span class="material-symbols-outlined">restart_alt</span>
                     <span>Reset</span>
@@ -284,7 +285,9 @@ export class SettingsPage extends PageBase {
             this._panels.push(entry);
             const props = this._panelProps[def.category] || {};
             delete this._panelProps[def.category];
-            Promise.resolve(def.mount(el, { ...props, eventBus: this.eventBus }))
+            // A project editor puts its Discard / Save in the header, on the title's line.
+            const actions = this._contentEl.querySelector('[data-slot="page-actions"]');
+            Promise.resolve(def.mount(el, { ...props, eventBus: this.eventBus, actions }))
                 .then((fn) => {
                     if (typeof fn !== 'function') return;
                     if (entry.gone) fn(); else entry.cleanup = fn;

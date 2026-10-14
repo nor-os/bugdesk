@@ -478,7 +478,7 @@ tr:hover .twm-row-action { opacity: 1; }
     gap: 4px;
 }
 
-/* Modal dialog styling lives in ecoagent_extra_modes.css under
+/* Modal dialog styling lives in FlexDesk's flexdesk.css under
  * `.managed-window--modal`. Removed legacy in-host block — was a
  * competing `display: flex; flex-direction: column` that stacked
  * labels above fields and fought the canonical grid layout. */
@@ -863,6 +863,18 @@ tr:hover .twm-row-action { opacity: 1; }
     color: var(--text-bright);
     border-bottom-color: #fff;
 }
+/* A tab's count (Alerts: unread, in the worst unread level's colour;
+   Changes: uncommitted records). */
+.twm-bp__badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 16px; height: 16px; margin-left: 6px; padding: 0 4px; box-sizing: border-box;
+    border-radius: 8px; background: var(--accent, #0e639c); color: #fff;
+    font-size: 10.5px; line-height: 16px; text-transform: none;
+}
+.twm-bp__badge[hidden] { display: none; }
+.twm-bp__badge--alert { background: #5a2a24; color: #ffb4a6; }
+.twm-bp__badge--warning { background: #4d3f1f; color: #f0d79c; }
+.twm-bp__badge--info { background: #173f57; color: #a8dcff; }
 .twm-bp__body {
     flex: 1 1 auto;
     min-height: 0;
@@ -908,36 +920,6 @@ tr:hover .twm-row-action { opacity: 1; }
 .twm-bp-log__row--error .twm-bp-log__level,
 .twm-bp-log__row--error .twm-bp-log__msg { color: var(--color-danger); }
 .twm-bp-log__msg { color: var(--text-body); white-space: pre-wrap; word-break: break-word; }
-
-/* Adapt the legacy BottomPanel chrome to the tiling-shell design
- * language — square corners on every input / button / chip inside the
- * .twm-bp tile, narrower padding around the inspector panes. Scoped
- * so the legacy panel rendered elsewhere keeps its original look. */
-.twm-bp .ea-bp__filter,
-.twm-bp .ea-bp__filter:focus,
-.twm-bp .ea-btn,
-.twm-bp .ea-bp-flows-picker__add,
-.twm-bp .ea-bp-flows-picker__item,
-.twm-bp .ea-bp-query__editor,
-.twm-bp .ea-bp-query__input,
-.twm-bp input[type="text"],
-.twm-bp input[type="number"],
-.twm-bp input[type="search"],
-.twm-bp select,
-.twm-bp textarea {
-    border-radius: 0;
-}
-.twm-bp .ea-bp__head {
-    background: var(--ea-bg-chrome, #1a1a1a);
-    border-bottom-color: var(--ea-border, #333);
-}
-/* The legacy `.ea-bp-flows-split` 2-col layout (editor | picker) was
- * sized for the chunky old chrome — give the picker rail a denser
- * width so the inspector doesn't crowd the editor at typical tile
- * widths. */
-.twm-bp .ea-bp-flows-split {
-    grid-template-columns: 1fr 220px;
-}
 
 /* Pager strip — used by every paginated surface in the bottom panel
  * (run console, registries, query log, watch rows, population).

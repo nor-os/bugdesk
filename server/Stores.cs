@@ -39,7 +39,7 @@ sealed class Store : IDisposable
     public string UrlBase => IsTracker ? "/t/" : $"/p/{Uri.EscapeDataString(Name)}/";
 
     /// <summary>Git for this store's record files (GitService.cs), found once.</summary>
-    public GitService Git => _git ??= new GitService(BugsDir, BacklogDir);
+    public GitService Git => _git ??= new GitService(BugsDir, BacklogDir) { ConfigDir = ConfigDir };
     GitService? _git;
 
     /// <summary>

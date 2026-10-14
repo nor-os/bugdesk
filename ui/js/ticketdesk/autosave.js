@@ -3,7 +3,6 @@
  *
  * Settings › Saving and git (`git.autosave` in project.json) picks the mode:
  *   off       — as before: Save saves
- *   interval  — an edited record is saved every N seconds while it has edits
  *   debounce  — N seconds after the last keystroke
  *
  * WHAT IS SHOWN IS WHAT IS ON DISK: Unsaved, Saving…, Saved at hh:mm, Save
@@ -26,11 +25,11 @@ import { CONFIG, apiUrl } from './instance.js';
 const SETTLE_AFTER_MS = 5 * 60 * 1000;
 const BACKOFF = [2, 4, 8, 16, 32, 60];
 
-/** The configured mode: `{ mode: 'off'|'interval'|'debounce', seconds }`. */
+/** The configured mode: `{ mode: 'off'|'debounce', seconds }`. */
 export function autosaveMode() {
     const s = CONFIG.saving || {};
-    const mode = s.autosave === 'interval' || s.autosave === 'debounce' ? s.autosave : 'off';
-    return { mode, seconds: Math.max(1, Number(s.autosaveSeconds) || (mode === 'interval' ? 30 : 2)) };
+    const mode = s.autosave === 'debounce' ? 'debounce' : 'off';
+    return { mode, seconds: Math.max(1, Number(s.autosaveSeconds) || 2) };
 }
 
 const hhmm = (d) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
@@ -102,13 +101,13 @@ export function attachAutosave({ statusEl, isDirty, save, ref }) {
             saving = false;
         }
         // Edits typed while that save was on the wire get their own.
-        if (!stopped && isDirty() && mode === 'debounce' && !retryTimer) schedule();
+        if (!stopped && isDirty() && !retryTimer) schedule();
     };
 
     function schedule() {
         if (!enabled || stopped) return;
-        if (mode === 'debounce') { clearTimeout(timer); timer = setTimeout(run, seconds * 1000); return; }
-        if (!timer) timer = setTimeout(run, seconds * 1000);
+        clearTimeout(timer);
+        timer = setTimeout(run, seconds * 1000);
     }
 
     if (enabled) show('Auto-save on', '');

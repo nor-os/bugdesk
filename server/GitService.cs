@@ -32,6 +32,12 @@ sealed class GitService
 
     public string? Root { get; }
 
+    /// <summary>The store's settings folder (<c>.bugdesk/</c>). Its changed files
+    /// are NAMED in the Changes pane — project.json is shared settings, and a
+    /// pane that hid it would leave somebody wondering why git is dirty — but
+    /// never committed from there.</summary>
+    public string? ConfigDir { get; init; }
+
     /// <summary>The last push: when, whether it worked, and what git said.</summary>
     public (DateTime At, bool Ok, string Message)? LastPush { get; private set; }
     public bool Pushing { get; private set; }
@@ -77,6 +83,66 @@ sealed class GitService
             list.Add((rel.Replace('\\', '/'), status));
         }
         return list;
+    }
+
+    /// <summary>
+    /// Changed files in the store's folders and its settings folder that are NOT
+    /// records — repo-relative. The pane names them; BugDesk does not commit them.
+    /// </summary>
+    public List<string> Others()
+    {
+        var list = new List<string>();
+        if (Root is null) return list;
+        var args = new List<string> { "status", "--porcelain=v1", "-uall", "--" };
+        args.AddRange(_dirs.Select(d => Path.GetRelativePath(Root, d)));
+        if (ConfigDir is { Length: > 0 } cfg && Directory.Exists(cfg)) args.Add(Path.GetRelativePath(Root, Path.GetFullPath(cfg)));
+        var (ok, output, _) = Run(Root, Timeout, args.ToArray());
+        if (!ok) return list;
+        foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (line.Length < 4) continue;
+            var rel = line[3..].Trim().Trim('"');
+            if (rel.Contains(" -> ")) rel = rel[(rel.IndexOf(" -> ", StringComparison.Ordinal) + 4)..];
+            if (IsRecord(System.IO.Path.Combine(Root, rel))) continue;
+            list.Add(rel.Replace('\\', '/'));
+        }
+        return list.Distinct().ToList();
+    }
+
+    /// <summary>A record file's text as last committed; "" when HEAD does not have it.</summary>
+    public string Committed(string rel)
+    {
+        if (Root is null || !IsRecord(System.IO.Path.Combine(Root, rel))) return "";
+        var (ok, output, _) = Run(Root, Timeout, "show", $"HEAD:{rel.Replace('\\', '/')}");
+        return ok ? output : "";
+    }
+
+    /// <summary>
+    /// Throw away the uncommitted changes to one record file. A file HEAD has is
+    /// put back as committed (an edit undone, a deletion restored); a file HEAD
+    /// never had is moved to <paramref name="trashDir"/> rather than unlinked, as
+    /// every other removal in BugDesk is. Returns null on success, else why not.
+    /// </summary>
+    public string? Discard(string rel, string trashDir)
+    {
+        if (Root is null) return "the store is not in a git repository";
+        var full = System.IO.Path.Combine(Root, rel);
+        if (!IsRecord(full)) return $"'{rel}' is not a record file of this store; BugDesk only discards records.";
+        rel = System.IO.Path.GetRelativePath(Root, Path.GetFullPath(full)).Replace('\\', '/');
+        lock (_gate)
+        {
+            var (inHead, _, _) = Run(Root, Timeout, "cat-file", "-e", $"HEAD:{rel}");
+            if (inHead)
+            {
+                var (ok, _, err) = Run(Root, Timeout, "checkout", "HEAD", "--", rel);
+                return ok ? null : err.Trim();
+            }
+            Run(Root, Timeout, "rm", "--cached", "-q", "--ignore-unmatch", "--", rel);
+            if (!File.Exists(full)) return null;
+            Directory.CreateDirectory(trashDir);
+            File.Move(full, System.IO.Path.Combine(trashDir, $"{DateTime.Now:yyyyMMdd-HHmmss}-{System.IO.Path.GetFileName(full)}"));
+            return null;
+        }
     }
 
     /// <summary>The diff of one record file against HEAD (a new file: all of it).</summary>
@@ -204,11 +270,12 @@ record GitSettings(bool CommitAfterSave, bool PushAfterCommit, string Autosave =
         n?["autosave"] is JsonValue a && a.TryGetValue<string>(out var av) ? av : "off",
         n?["autosaveSeconds"] is JsonValue s && s.TryGetValue<int>(out var sv) ? sv : 0).Normalised();
 
-    /// <summary>Unknown modes are off; seconds default to 30 (interval) or 2 (debounced).</summary>
+    /// <summary>Unknown modes are off; `interval`, a mode no longer offered, is read as
+    /// debounced. Seconds default to 2.</summary>
     public GitSettings Normalised()
     {
-        var mode = Autosave is "interval" or "debounce" ? Autosave : "off";
-        var secs = mode == "off" ? 0 : Math.Clamp(AutosaveSeconds > 0 ? AutosaveSeconds : (mode == "interval" ? 30 : 2), 1, 3600);
+        var mode = Autosave is "interval" or "debounce" ? "debounce" : "off";
+        var secs = mode == "off" ? 0 : Math.Clamp(AutosaveSeconds > 0 ? AutosaveSeconds : 2, 1, 3600);
         return this with { Autosave = mode, AutosaveSeconds = secs };
     }
 
@@ -217,6 +284,7 @@ record GitSettings(bool CommitAfterSave, bool PushAfterCommit, string Autosave =
         ["commitAfterSave"] = CommitAfterSave, ["pushAfterCommit"] = PushAfterCommit,
         ["autosave"] = Autosave, ["autosaveSeconds"] = AutosaveSeconds,
     };
+
     /// <summary>
     /// What one person's pages do. Auto-save is a habit, not a team policy, so it
     /// is theirs to choose (STORY-0032): <c>autosave</c>/<c>autosaveSeconds</c> in

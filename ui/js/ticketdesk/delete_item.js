@@ -29,6 +29,8 @@
 import { ITEMS, TRACKER, itemRef, loadBacklog, typeLabelOf } from './backlog_data.js';
 import { appName } from '../core/app_identity.js';
 import { apiUrl } from './instance.js';
+import { esc } from './data.js';
+import { openModal } from '@flexdesk/widgets';
 
 /** Everything below `id`, at any depth — the same set the bridge computes. */
 export function descendantsOf(id) {
@@ -61,34 +63,45 @@ export async function confirmDelete(item, { onStatus } = {}) {
     const kids = descendantsOf(item.id);
     const noun = typeLabelOf(item.type).toLowerCase();
 
-    let children = '';
+    const body = document.createElement('div');
+    let actions;
+    let height;
     if (kids.length === 0) {
-        if (!window.confirm(
-            `Delete ${ref} — ${item.title}?\n\n`
-            + (TRACKER ? `This ${noun} is not in a git repository, so the only copy is the one on disk. ` : '')
-            + `${appName()} moves it to a trash folder beside the store rather than removing it.`
-            + (TRACKER ? '' : `\n\nTo keep the decision on record instead, drop it.`)
-        )) return null;
+        body.innerHTML = `<p>Delete <b>${esc(ref)} — ${esc(item.title || '')}</b>?</p>
+            <p class="td-dim">${TRACKER ? `This ${esc(noun)} is not in a git repository, so the only copy is the one on disk. ` : ''}
+            ${esc(appName())} moves it to a trash folder beside the store rather than removing it.
+            ${TRACKER ? '' : 'To keep the decision on record instead, drop it.'}</p>`;
+        actions = [
+            { label: 'Cancel', value: null },
+            { label: 'Delete', value: 'delete', danger: true },
+        ];
+        height = 175;
     } else {
-        // Three-way, and window.confirm only says yes or no — so it is asked as
-        // two questions, the destructive one second and named explicitly.
-        const keep = window.confirm(
-            `${ref} has ${kids.length} item${kids.length === 1 ? '' : 's'} under it.\n\n`
-            + `OK — keep them, and move them up to where this ${noun} sat.\n`
-            + `Cancel — choose whether to delete them too.`
-        );
-        if (keep) children = 'promote';
-        else {
-            const all = window.confirm(
-                `Delete ${ref} AND all ${kids.length} item${kids.length === 1 ? '' : 's'} under it?\n\n`
-                + kids.slice(0, 8).map((k) => `  ${k.ref}  ${k.title}`).join('\n')
-                + (kids.length > 8 ? `\n  …and ${kids.length - 8} more` : '')
-                + '\n\nThey are moved to a .trash folder beside the store.'
-            );
-            if (!all) return null;
-            children = 'cascade';
-        }
+        // One three-way question, the destructive answer named explicitly and
+        // never the default — Esc, the X and Cancel all leave everything alone.
+        const n = kids.length;
+        const s = n === 1 ? '' : 's';
+        const shown = kids.slice(0, 8);
+        body.innerHTML = `<p><b>${esc(ref)} — ${esc(item.title || '')}</b> has ${n} item${s} under it:</p>
+            <ul class="td-dim bd-delete-kids">
+                ${shown.map((k) => `<li><span class="td-mono">${esc(k.ref || itemRef(k))}</span> ${esc(k.title || '')}</li>`).join('')}
+                ${n > shown.length ? `<li>…and ${n - shown.length} more</li>` : ''}
+            </ul>
+            <p><b>Keep them</b> moves them up to where this ${esc(noun)} sat.
+            <b>Delete all</b> removes them with it.</p>
+            <p class="td-dim">Either way the files are moved to a .trash folder beside the store.</p>`;
+        actions = [
+            { label: 'Cancel', value: null },
+            { label: `Delete all ${n + 1}`, value: 'cascade', danger: true },
+            { label: 'Keep them', value: 'promote', primary: true },
+        ];
+        height = 185 + (shown.length + (n > shown.length ? 1 : 0)) * 18;
     }
+    const choice = await openModal({
+        title: `Delete ${ref}`, icon: 'delete', content: body, actions, width: 480, height,
+    });
+    if (!choice) return null;
+    const children = choice === 'delete' ? '' : choice;
 
     try {
         const url = apiUrl(`/backlog/${item.id}${children ? `?children=${children}` : ''}`);

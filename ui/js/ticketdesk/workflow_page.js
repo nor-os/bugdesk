@@ -35,6 +35,7 @@ import { esc } from './data.js';
 import { appName } from '../core/app_identity.js';
 import { CONFIG, IS_TRACKER_COPY, trackerModule } from './instance.js';
 import { attachSelect } from './select_field.js';
+import { pageBar, projectFoot } from './page_bar.js';
 import * as WF from './workflow.js';
 import * as MODEL from './workflow_model.js';
 import * as ED from './workflow_editor.js';
@@ -78,7 +79,7 @@ async function loadSources() {
  * @param {object} [o]
  * @param {object} [o.eventBus]
  */
-export async function mountWorkflowPage(el, { eventBus = null } = {}) {
+export async function mountWorkflowPage(el, { eventBus = null, actions = null } = {}) {
     const sources = await loadSources();
     const ANY = { store: ANY_STORE, label: 'Any record', types: [] };
     for (const src of sources) {
@@ -115,21 +116,22 @@ export async function mountWorkflowPage(el, { eventBus = null } = {}) {
     const typeLabel = (store, type) => S().types.find((t) => t.store === store && t.type === type)?.label || S().model.typeWord(store, type);
 
     el.innerHTML = `
-        <div class="bd-wf">
-            <div class="bd-wf__bar">
-                <span class="bd-wf__state td-dim" data-slot="state" aria-live="polite"></span>
-                <button type="button" class="ea-btn" data-act="discard">Discard changes</button>
-                <button type="button" class="ea-btn ea-btn--primary" data-act="save">Save</button>
-            </div>
+        <div class="bd-wf bd-proj">
             <div data-slot="problems"></div>
-            <div class="bd-wf__split">
+            <div class="bd-wf__split bd-surface">
                 <nav class="bd-wf__types" data-slot="types" aria-label="Record types"></nav>
                 <div class="bd-wf__mid" data-slot="mid"></div>
                 <div class="bd-wf__detail" data-slot="detail"></div>
             </div>
-            <div class="td-dim bd-wf__foot">Saved to .bugdesk/project.json — commit it to share it. Only what differs from the built-in way is saved.</div>
+            ${projectFoot('Only what differs from the built-in way is saved.')}
         </div>`;
     const $ = (slot) => el.querySelector(`[data-slot="${slot}"]`);
+    let saving = false;
+    const bar = pageBar(actions, el.firstElementChild, async (act) => {
+        if (act === 'discard') { for (const src of sources) src.draft = JSON.parse(src.base); problems = []; note = ''; renderAll(); return; }
+        saving = true; renderState();
+        try { await save(); } finally { saving = false; renderState(); }
+    });
 
     /* ── reading the draft ─────────────────────────────────────────── */
 
@@ -151,12 +153,7 @@ export async function mountWorkflowPage(el, { eventBus = null } = {}) {
 
     /* ── rendering ─────────────────────────────────────────────────── */
 
-    const renderState = () => {
-        const changed = dirty();
-        $('state').textContent = note || (changed ? 'Unsaved changes' : '');
-        el.querySelector('[data-act="save"]').disabled = !changed;
-        el.querySelector('[data-act="discard"]').disabled = !changed;
-    };
+    const renderState = () => bar.sync({ dirty: dirty(), busy: saving, note });
 
     const renderProblems = () => {
         $('problems').innerHTML = problems.length
@@ -272,22 +269,25 @@ export async function mountWorkflowPage(el, { eventBus = null } = {}) {
         const uses = usersOf(f.id);
         const inUse = new Set(flowUses(f.id).flatMap((u) => u.types || []));
         return `
-            <div class="bd-wf__flowhead">
-                <label class="bd-flowedit__name"><span>Flow</span>
-                    <input type="text" data-k="flow-label" value="${esc(f.label || '')}" placeholder="Close" aria-label="Flow name"></label>
-                ${storeChoices().length > 1 ? `<label class="bd-flowsmgr__for"><span>For</span><select data-k="flow-store"></select></label>` : ''}
-                ${removable ? `<button type="button" class="ea-btn bd-flowsmgr__rm" data-act="remove-flow" ${uses.length ? 'disabled' : ''}
-                    title="${uses.length ? `Used by ${uses.length}: give ${uses.length === 1 ? 'that action' : 'those actions'} another flow first` : 'Remove this flow'}">${icon('delete')} Remove</button>` : ''}
+            <div class="bd-wf__block">
+                <div class="bd-schema__shead"><h4>Flow</h4>${removable ? '' : `<span class="bd-schema__cnt">${esc(f.label || '')}</span>`}
+                    ${removable ? `<button type="button" class="ea-btn bd-flowsmgr__rm" data-act="remove-flow" ${uses.length ? 'disabled' : ''}
+                        title="${uses.length ? `Used by ${uses.length}: give ${uses.length === 1 ? 'that action' : 'those actions'} another flow first` : 'Remove this flow'}">${icon('delete')} Remove</button>` : ''}</div>
+                <div class="bd-wf__form">
+                    <span>Name</span>
+                    <input type="text" data-k="flow-label" value="${esc(f.label || '')}" placeholder="Close" aria-label="Flow name">
+                    ${storeChoices().length > 1 ? '<span>For</span><select data-k="flow-store" aria-label="Which records"></select>' : ''}
+                    ${f.store === ANY_STORE ? '' : `<span>Available to</span><div class="bd-wf__pills">${storeTypes(f.store).map((x) => {
+                        const on = !Array.isArray(f.types) || !f.types.length || f.types.includes(x);
+                        const locked = on && inUse.has(x);
+                        return `<label class="bd-wf__chipcheck${on ? ' is-on' : ''}" title="${locked ? 'An action of this type runs it' : ''}">
+                            <input type="checkbox" data-avail="${esc(x)}" ${on ? 'checked' : ''} ${locked ? 'disabled' : ''}> ${esc(typeLabel(f.store, x))}</label>`;
+                    }).join('')}</div>`}
+                </div>
+                <div class="bd-wf__uses td-dim">${uses.length
+                    ? `Run by ${esc(uses.join(', '))}${uses.length > 1 ? ' — a change here changes them all' : ''}.`
+                    : 'Not run by any action yet.'}</div>
             </div>
-            ${f.store === ANY_STORE ? '' : `<div class="bd-wf__avail"><span class="td-dim">Available to</span>${storeTypes(f.store).map((x) => {
-                const on = !Array.isArray(f.types) || !f.types.length || f.types.includes(x);
-                const locked = on && inUse.has(x);
-                return `<label class="bd-wf__chipcheck${on ? ' is-on' : ''}" title="${locked ? 'An action of this type runs it' : ''}">
-                    <input type="checkbox" data-avail="${esc(x)}" ${on ? 'checked' : ''} ${locked ? 'disabled' : ''}> ${esc(typeLabel(f.store, x))}</label>`;
-            }).join('')}</div>`}
-            <div class="bd-flowsmgr__uses td-dim" title="${esc(uses.join('\n'))}">${uses.length
-                ? `Run by ${esc(uses.join(', '))}${uses.length > 1 ? ' — a change here changes them all' : ''}.`
-                : 'Not run by any action yet.'}</div>
             <div class="bd-flowedit__host bd-wf__editor"></div>`;
     };
 
@@ -336,17 +336,23 @@ export async function mountWorkflowPage(el, { eventBus = null } = {}) {
         const any = !Array.isArray(a.when) || !a.when.length || a.when.includes('*');
         const f = flowById(a.flow);
         $('detail').innerHTML = `
-            <div class="bd-wf__action">
-                <label class="bd-flowedit__name"><span>Action</span>
-                    <input type="text" data-k="action-label" value="${esc(a.label || '')}" placeholder="Close" aria-label="Action name"></label>
-                <div class="bd-wf__when"><span class="td-dim">Offered in</span>
+            <div class="bd-wf__block">
+                <div class="bd-schema__shead"><h4>Action</h4>
+                    <button type="button" class="ea-btn" data-act="remove-action" title="Remove this action">${icon('delete')} Remove</button></div>
+                <div class="bd-wf__form">
+                <span>Name</span>
+                <input type="text" data-k="action-label" value="${esc(a.label || '')}" placeholder="Close" aria-label="Action name">
+                <span>Offered in</span>
+                <div class="bd-wf__pills">
                     <label class="bd-wf__chipcheck${any ? ' is-on' : ''}"><input type="checkbox" data-when="*" ${any ? 'checked' : ''}> any status</label>
                     ${S().wf.statusesOf(t.store, t.type).map((s) => {
                         const on = !any && a.when.includes(s);
                         return `<label class="bd-wf__chipcheck${on ? ' is-on' : ''}"><input type="checkbox" data-when="${esc(s)}" ${on ? 'checked' : ''}> ${esc(s)}</label>`;
                     }).join('')}
                 </div>
-                <label class="bd-wf__flowpick"><span class="td-dim">Runs</span><select data-k="action-flow"></select></label>
+                <span>Runs</span>
+                <select data-k="action-flow" aria-label="The flow it runs"></select>
+                </div>
             </div>
             ${f ? flowPanel(f) : '<p class="td-dim bd-flowsmgr__none">This action runs no flow yet: pick one above, or make one.</p>'}`;
         handles.push(attachSelect($('detail').querySelector('[data-k="action-flow"]'), {
@@ -500,7 +506,6 @@ export async function mountWorkflowPage(el, { eventBus = null } = {}) {
             renderAll();
             return;
         }
-        el.querySelector('[data-act="save"]').disabled = true;
         // Each workflow that changed, into its own project.json.
         for (const src of sources.filter(dirtyOf)) {
             const sent = src.model.withoutTypeActions(src.draft, src.stored, src.types);
@@ -641,6 +646,19 @@ export async function mountWorkflowPage(el, { eventBus = null } = {}) {
             const n = el.querySelector('[data-k="flow-label"]'); n?.focus(); n?.select();
             return;
         }
+        if (act === 'remove-action') {
+            const t = typeOf(view);
+            const list = listOf(t);
+            const i = list.findIndex((a) => a.id === picked[view]);
+            if (i < 0) return;
+            const id = list[i].id;
+            list.splice(i, 1);
+            setMass(t, massOf(t).filter((v) => v !== `action:${id}`));
+            picked[view] = list[Math.min(i, list.length - 1)]?.id;
+            note = '';
+            renderAll();
+            return;
+        }
         if (act === 'remove-flow') {
             const flows = S().draft.flows || [];
             const i = flows.findIndex((f) => f.id === picked[flowsKey()]);
@@ -649,8 +667,6 @@ export async function mountWorkflowPage(el, { eventBus = null } = {}) {
             renderAll();
             return;
         }
-        if (act === 'discard') { for (const src of sources) src.draft = JSON.parse(src.base); problems = []; note = ''; renderAll(); return; }
-        if (act === 'save') await save();
     });
 
     el.addEventListener('contextmenu', (e) => {
@@ -668,6 +684,7 @@ export async function mountWorkflowPage(el, { eventBus = null } = {}) {
             _kept = { bases: Object.fromEntries(sources.map((x) => [x.id, x.base])),
                       drafts: Object.fromEntries(sources.map((x) => [x.id, x.draft])), view, picked: { ...picked } };
         }
+        bar.remove();
         destroyDetail();
     };
 }

@@ -107,8 +107,8 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (a saved roster, a saved schema), which nothing was drawing before.
 
 - **Auto-save** (STORY-0020). Settings › Saving and git can save record edits
-  without pressing Save: a few seconds after you stop typing, or every few
-  seconds while there are edits (off by default). Save becomes *Save now*, and
+  without pressing Save, a few seconds after you stop typing (off by default;
+  the seconds are configurable). Save becomes *Save now*, and
   the state beside it says Unsaved, Saving…, Saved at hh:mm or Save failed. A
   failed save is retried after 2, 4, 8 … up to 60 seconds, with nothing typed
   lost. An auto-save never overwrites a file that changed on disk since it was
@@ -299,6 +299,30 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   someone chooses, the project's existing value still applies to them. Commit
   and push stay shared, under Git.
 
+- **The bottom panel is Alerts and Changes; Console is gone.** Each tab
+  carries a count — unread alerts, in the worst unread level's colour, and
+  uncommitted records — and the panel's title is the tab in front (FlexDesk
+  0.12.1's `ctx.setTitle`). On a project page that shows the tracker, both tabs
+  cover the tracker's store as well; standalone TicketDesk shows its tickets.
+  - *Changes* lists records grouped by store as their ref and title with a
+    one-glance summary ("1 field", "+2 lines"). A checkbox per file decides what
+    the next commit takes ("Commit 2 of 3"); the tracker's files are committed
+    in the tracker's repo. A file opens on **Fields** — front-matter edits as
+    "Severity high → critical" — or **Text**, the body numbered as in the file
+    without git's header lines; **Raw git** is a click away. The header opens
+    the record and offers *Discard…* (asks first; a never-committed file goes
+    to the trash). Push says why it is off. Changed files that are not records,
+    such as `.bugdesk/project.json`, are named under the list, never committed
+    from there.
+  - *Alerts* has the rules on the left with how many records match each now;
+    a click filters the log. Level chips with counts, a ref-or-title filter,
+    unread dots, *Mark all read*, per-row *Dismiss* and *Clear*. Each row says
+    whether its record still matches. The log is kept per user and store across
+    restarts (`alerts-log.json` in the user's state), the last 300.
+  - Bridge: `GET /api/git` gives each file's store, ref and title and the
+    non-record changes (`others`); `GET /api/git/diff` adds the committed and
+    current text; `POST /api/git/discard` throws one record's changes away.
+
 - **BugDesk's copy of FlexDesk's table is gone** (STORY-0008). The bug queue,
   the backlog board and search results are FlexDesk's DataTable, through one
   small adapter (`bd_table.js`). The right-click menus, the record count, Enter,
@@ -327,6 +351,10 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   was opened on. An unprefixed `/api/…` call reaches the default project.
 
 ### Fixed
+
+- The toasts' "+N more" summary did nothing when clicked: it called a
+  `wm.showPanel` FlexDesk does not have. It now opens the bottom panel on its
+  Alerts tab.
 
 - **Stopping BugDesk no longer hangs on "Application is shutting down...".**
   Every open browser holds a live-update stream, and the server waited for each

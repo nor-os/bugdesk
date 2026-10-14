@@ -38,6 +38,7 @@ import {
     fieldTypes, hideableFields, saveSchema, schemaTypes, schemaWarnings, statusCategories,
 } from './schema.js';
 import { attachSelect } from './select_field.js';
+import { pageBar, projectFoot } from './page_bar.js';
 
 const icon = (name) => `<span class="material-symbols-outlined">${name}</span>`;
 
@@ -119,7 +120,7 @@ function numberingDraft() {
  * @param {string} [o.store]   preselect a store
  * @param {string} [o.type]    and a type
  */
-export function mountRecordTypes(el, { eventBus = null, store = null, type = null } = {}) {
+export function mountRecordTypes(el, { eventBus = null, store = null, type = null, actions = null } = {}) {
     const stores = storesHere();
     let draft = schemaDraft(stores);
     let num = numberingDraft();
@@ -140,19 +141,24 @@ export function mountRecordTypes(el, { eventBus = null, store = null, type = nul
     let selects = [];
     let saving = false;
 
+    const page = document.createElement('div');
+    page.className = 'bd-proj';
     const body = document.createElement('div');
-    body.className = 'bd-schema bd-schema--page';
+    body.className = 'bd-schema bd-schema--page bd-surface';
+    page.innerHTML = projectFoot();
+    page.prepend(body);
 
     const spec = () => draft[curStore][curType];
     const dirty = () => JSON.stringify({ draft, num }) !== base;
 
     /** The bar's state and Save/Discard, without redrawing the page under the caret. */
-    const syncBar = () => {
-        const changed = dirty();
-        const state = body.querySelector('[data-slot="state"]');
-        if (state) state.textContent = note || (changed ? 'Unsaved changes' : '');
-        for (const b of body.querySelectorAll('[data-act]')) b.disabled = saving || !changed;
-    };
+    const bar = pageBar(actions, page, (act) => {
+        if (act === 'save') { save(); return; }
+        ({ draft, num } = JSON.parse(base));
+        problems = []; note = ''; confirmRemove = null;
+        render();
+    });
+    const syncBar = () => bar.sync({ dirty: dirty(), busy: saving, note });
 
     const typeNav = () => stores.map((s) => `
         <div class="bd-schema__group">${esc(storeLabel(s))}</div>
@@ -264,7 +270,7 @@ export function mountRecordTypes(el, { eventBus = null, store = null, type = nul
             + row('pad', 'Zero-padding', n.pad, 'Digits the number is padded to; 0 for none.')
             + row('start', 'First number', n.start, 'No new record is numbered below this.')
             + row('step', 'Increment', n.step, 'How far each new number is above the highest ever used.')
-            + `<div class="td-dim bd-schema__hint">The next new one is named like <code data-slot="sample">${esc(sample)}</code>. Existing records keep their names, and references to them keep working.</div>`;
+            + `<div class="td-dim bd-schema__sample">Next new one: <code data-slot="sample">${esc(sample)}</code> · existing records keep their names, and references to them keep working.</div>`;
     };
 
     const render = () => {
@@ -273,11 +279,6 @@ export function mountRecordTypes(el, { eventBus = null, store = null, type = nul
         const warnings = schemaWarnings();
         const typeLabel = STORE_TYPES[curStore].find(([t]) => t === curType)?.[1] || curType;
         body.innerHTML = `
-            <div class="bd-schema__bar">
-                <span class="bd-schema__state td-dim" data-slot="state" aria-live="polite"></span>
-                <button type="button" class="ea-btn" data-act="discard">Discard changes</button>
-                <button type="button" class="ea-btn ea-btn--primary" data-act="save">Save</button>
-            </div>
             <nav class="bd-schema__nav" aria-label="Record types">${typeNav()}</nav>
             <div class="bd-schema__main">
                 ${warnings.length ? `<div class="bd-schema__warn">${icon('warning')}<div>
@@ -291,7 +292,7 @@ export function mountRecordTypes(el, { eventBus = null, store = null, type = nul
                     <div class="bd-schema__nums">${numberingRows()}</div>
                 </section>
                 <section>
-                    <div class="bd-schema__shead"><h4>Custom fields</h4>
+                    <div class="bd-schema__shead"><h4>Custom fields</h4><span class="bd-schema__cnt">${spec().fields.length}</span>
                         <button type="button" class="ea-btn" data-add="field">${icon('add')} Add field</button></div>
                     <div class="bd-schema__fields">${fieldRows()}</div>
                 </section>
@@ -301,12 +302,11 @@ export function mountRecordTypes(el, { eventBus = null, store = null, type = nul
                     <div class="bd-schema__hides">${hiddenRows()}</div>
                 </section>
                 <section>
-                    <div class="bd-schema__shead"><h4>Custom statuses</h4>
+                    <div class="bd-schema__shead"><h4>Custom statuses</h4><span class="bd-schema__cnt">${spec().statuses.length}</span>
                         <button type="button" class="ea-btn" data-add="status">${icon('add')} Add status</button></div>
                     <div class="bd-schema__statuses">${statusRows()}</div>
                 </section>
-            </div>
-            <div class="td-dim bd-schema__foot">Saved to .bugdesk/project.json — commit it to share it.</div>`;
+            </div>`;
         syncBar();
 
         for (const el of body.querySelectorAll('select[data-sel]')) {
@@ -415,13 +415,6 @@ export function mountRecordTypes(el, { eventBus = null, store = null, type = nul
             confirmRemove = null; render(); return;
         }
         if (t.dataset.no) { confirmRemove = null; render(); return; }
-        if (t.dataset.act === 'discard') {
-            ({ draft, num } = JSON.parse(base));
-            problems = []; note = ''; confirmRemove = null;
-            render();
-            return;
-        }
-        if (t.dataset.act === 'save') await save();
     });
 
     /** The draft as the bridge wants it: no `saved` markers, no empty rows. */
@@ -517,9 +510,10 @@ export function mountRecordTypes(el, { eventBus = null, store = null, type = nul
     };
 
     render();
-    el.replaceChildren(body);
+    el.replaceChildren(page);
     return () => {
         if (dirty()) _kept = { base, draft, num, curStore, curType };
+        bar.remove();
         for (const s of selects) { try { s.destroy(); } catch { /* gone */ } }
     };
 }

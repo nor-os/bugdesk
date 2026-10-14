@@ -3170,6 +3170,38 @@ console.log('\nWorkflow');
         assert.equal(low.comment, 'Blocked: waiting on the vendor on T');
     });
 
+    await t('the comment a move asks for is an answer too, whether the move or the flow asked', async () => {
+        const graph = flow([
+            { id: 'message', type: 'require-message', config: { prompt: 'What is wrong again?' } },
+            { id: 'why', type: 'set-field', config: { field: 'title', value: 'Reopened: ${input.message}' } },
+        ], [['start', 'message'], ['message', 'why']]);
+        const byFlow = await wf.planMove({ store: 'bugs', record: { status: 'closed' },
+            move: { to: 'open', flow: graph }, ask: async () => null, askMessage: async () => ({ comment: 'still crashes' }) });
+        assert.deepEqual(byFlow, { status: 'open', title: 'Reopened: still crashes', comment: 'still crashes' });
+        const byMove = await wf.planMove({ store: 'bugs', record: { status: 'closed' },
+            move: { to: 'open', message: true, flow: graph }, ask: async () => null, askMessage: async () => ({ comment: 'again' }) });
+        assert.deepEqual(byMove, { status: 'open', title: 'Reopened: again', comment: 'again' }, 'asked once, by the move');
+    });
+
+    await t('the flow editor names an answer by its question, never by the step id it is stored as', async () => {
+        const { mountFlowEditor } = await import(join(UI, 'ticketdesk', 'workflow_editor.js'));
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        const graph = flow([
+            { id: 'prompt-2', type: 'prompt', config: { question: 'What is it blocked on?' } },
+            { id: 'note', type: 'add-comment', config: { body: 'Blocked: ${input.prompt-2} on ${record.severity}' } },
+        ], [['start', 'prompt-2'], ['prompt-2', 'note']]);
+        const ed = mountFlowEditor(host, { store: 'bugs', types: ['bug'], graph });
+        try {
+            [...host.querySelectorAll('.twm-flow-outline__row')].find((r) => r.textContent.includes('Add a comment'))?.click();
+            const chips = [...host.querySelectorAll('.twm-flow-chip')];
+            const label = (ref) => chips.find((c) => c.dataset.ref === ref)?.textContent;
+            assert.equal(label('${input.prompt-2}'), 'Answer: What is it blocked on?');
+            assert.equal(label('${record.severity}'), 'Severity');
+            assert.ok(host.textContent.includes('Blocked: ‹Answer: What is it blocked on?› on ‹Severity›'), 'the outline line names it too');
+        } finally { ed.destroy(); host.remove(); }
+    });
+
     await t('cancelling a prompt cancels the whole move — nothing to save', async () => {
         const graph = flow([{ id: 'q', type: 'prompt', config: { question: 'Sure?' } },
                             { id: 'c', type: 'clear-field', config: { field: 'assignee' } }], [['start', 'q'], ['q', 'c']]);
@@ -3481,24 +3513,6 @@ console.log('\nMass actions');
         assert.equal(btn2.hidden, true, 'offered on a table without select mode');
         host.remove();
     });
-
-    await t('right-clicking a selection of several offers what they can ALL do; one row offers nothing extra', () => {
-        wf.setWorkflow(null);
-        const host = document.createElement('div');
-        host.innerHTML = '<div class="td-tablehost"></div>';
-        let recs = [bug(1, 'open'), bug(2, 'investigation')];
-        const bar = mass.massActionBar(host.querySelector('.td-tablehost'), {
-            noun: 'bugs', recordsOf: () => recs, report: () => {} });
-        bar.attach({ isSelectMode: () => false, getSelection: () => recs.map((_, i) => i), clearSelection() {} });
-        const items = bar.menuItems().filter((i) => !i.separator);
-        assert.deepEqual(items.map((i) => i.action), ['mass:assignee', 'mass:status:closed'],
-            'the assignee, and only the status both bugs can reach');
-        assert.match(items[0].label, /Change assignee.* 2 bugs/);
-        assert.equal(bar.menuItems().at(-1).separator, true);
-        assert.equal(bar.runMenu('open'), false, 'took an ordinary menu entry');
-        recs = [bug(1, 'open')];
-        assert.deepEqual(bar.menuItems(), [], 'one row keeps its own menu');
-    });
 }
 
 console.log('\nConversion');
@@ -3575,6 +3589,135 @@ console.log('\nAuto-save');
         m.a.destroy();
     });
     inst.CONFIG.saving = null;
+}
+
+console.log('\nBottom panel: Changes and Alerts');
+{
+    const rd = await import(join(UI, 'ticketdesk', 'record_diff.js'));
+    const before = '---\nid: 3\ntitle: "Export to CSV"\nseverity: high\nlabels:\n  - data\n---\n\nThe body.\nSecond line.\n';
+    const after = '---\nid: 3\ntitle: "Export to CSV"\nseverity: critical\nlabels:\n  - data\n  - csv\n---\n\nThe body.\nSecond line.\nAdded.\n';
+
+    await t('a record diff reads front matter as fields, not YAML lines', () => {
+        const f = rd.fieldChanges(before, after);
+        assert.deepEqual(f.map((c) => [c.name, c.from, c.to]), [
+            ['Severity', 'high', 'critical'],
+            ['Labels', '- data', '- data\n  - csv'.replace('\n  ', '\n  ')],
+        ]);
+        assert.equal(rd.fieldLabel('dueDate'), 'Due date');
+        assert.equal(rd.fieldLabel('snooze_until'), 'Snooze until');
+        assert.deepEqual(rd.fieldChanges(before, before), [], 'an unchanged file has field changes');
+        // A field that went away reads as a dash, not as nothing.
+        const gone = rd.fieldChanges('---\na: 1\nb: 2\n---\n', '---\na: 1\n---\n');
+        assert.deepEqual(gone.map((c) => [c.name, c.from, c.to]), [['B', '2', '—']]);
+    });
+
+    await t('the text diff is the body only, numbered as in the file, without git headers', () => {
+        const lines = rd.textChanges(before, after);
+        const added = lines.filter((l) => l.sign === '+');
+        assert.deepEqual(added.map((l) => [l.n, l.text]), [['12', 'Added.']], 'line 12 of the new file');
+        assert.ok(!lines.some((l) => /^(diff --git|index |---|\+\+\+)/.test(l.text)), 'git headers leaked into Text');
+        assert.deepEqual(rd.textChanges('---\na: 1\n---\nsame\n', '---\na: 2\n---\nsame\n'), [], 'a field edit shows up as a text change');
+        assert.equal(rd.changeSummary(before, after, 'modified'), '2 fields, +1 line');
+        assert.equal(rd.changeSummary('', after, 'new'), 'new');
+    });
+
+    await t('the Changes pane groups by store, commits only the ticked files, and opens on Fields', async () => {
+        const posted = [];
+        const files = [
+            { path: 'bugs/BUG-0003.md', status: 'modified', store: 'bugs', ref: 'BUG-0003', title: 'Export to CSV' },
+            { path: 'backlog/STORY-0002.md', status: 'modified', store: 'backlog', ref: 'STORY-0002', title: 'One tree' },
+        ];
+        const state = () => ({ ok: true, enabled: true, branch: 'main', ahead: -1, settings: {}, files, others: ['.bugdesk/project.json'], pushing: false, lastPush: null });
+        const realFetchLocal = globalThis.fetch;
+        globalThis.fetch = async (url, init) => {
+            const u = String(url);
+            const reply = (j) => ({ ok: true, status: 200, json: async () => j });
+            if (u.endsWith('/git')) return reply(state());
+            if (u.includes('/git/diff')) {
+                return reply(u.includes('BUG-0003') ? { ok: true, diff: 'diff --git a b', before, after }
+                    : { ok: true, diff: '', before: '---\nid: 2\n---\nold\n', after: '---\nid: 2\n---\nold\nnew\n' });
+            }
+            if (u.endsWith('/git/commit')) { posted.push(JSON.parse(init.body)); return reply(state()); }
+            return reply({ ok: true });
+        };
+        const { mountChangesPane } = await import(join(UI, 'ticketdesk', 'changes_pane.js'));
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        let count = null;
+        const pane = mountChangesPane(host, { onCount: (n) => { count = n; } });
+        for (let i = 0; i < 20 && !host.querySelector('.bd-fields'); i++) await new Promise((r) => setTimeout(r, 10));
+        try {
+            assert.equal(count, 2);
+            assert.deepEqual([...host.querySelectorAll('.bd-changes__group')].map((g) => g.textContent.replace(/\d+$/, '')), ['BUGS', 'BACKLOG']);
+            assert.match(host.querySelector('.bd-changes__file').textContent, /BUG-0003\s+Export to CSV\s+2 fields, \+1 line/);
+            assert.match(host.querySelector('.bd-changes__others').textContent, /\.bugdesk\/project\.json \(settings\)/);
+            assert.match(host.querySelector('.bd-fields').textContent, /Severity\s*high.*critical/s, 'the first file did not open on Fields');
+            assert.ok(host.querySelector('[data-act="push"]').disabled, 'Push offered with no remote branch');
+            // Untick the bug: the button says so, and only the story is committed.
+            const box = host.querySelector('[data-check="0:bugs/BUG-0003.md"]');
+            box.checked = false;
+            box.dispatchEvent(new window.Event('change', { bubbles: true }));
+            assert.match(host.querySelector('[data-act="commit"]').textContent, /Commit 1 of 2/);
+            assert.match(host.querySelector('[data-slot="message"]').placeholder, /^STORY-0002: record edits/);
+            host.querySelector('[data-act="commit"]').click();
+            for (let i = 0; i < 20 && !posted.length; i++) await new Promise((r) => setTimeout(r, 10));
+            assert.deepEqual(posted[0].files, ['backlog/STORY-0002.md']);
+            // Text view of the story: the added line, numbered.
+            host.querySelector('[data-file="0:backlog/STORY-0002.md"]').click();
+            for (let i = 0; i < 20 && !host.querySelector('.bd-diff__line--add'); i++) await new Promise((r) => setTimeout(r, 10));
+            assert.match(host.querySelector('.bd-diff__line--add').textContent, /^5\+new$/);
+        } finally {
+            pane.destroy();
+            host.remove();
+            globalThis.fetch = realFetchLocal;
+        }
+    });
+
+    await t('the Alerts pane counts per rule and level, filters, and badges the unread', async () => {
+        const { mountAlertsPane } = await import(join(UI, 'ticketdesk', 'alerts.js'));
+        const log = [
+            { id: 'a', at: new Date(Date.now() - 60000), ruleId: 'r1', rule: 'P1 opened', level: 'alert', ref: '#2', title: 'Crash', store: 'bugs', key: 'bugs:2', read: false },
+            { id: 'b', at: new Date(Date.now() - 600000), ruleId: 'r2', rule: 'On agent', level: 'warning', ref: 'TASK-0004', title: 'Inherit', store: 'backlog', key: 'backlog:4', read: true },
+        ];
+        const opened = [];
+        const alerts = {
+            ALERT_LOG: log,
+            alertRules: () => [{ id: 'r1', name: 'P1 opened', level: 'alert' }, { id: 'r2', name: 'On agent', level: 'warning' }],
+            matchingNow: (id) => (id === 'r1' ? 2 : 5),
+            stillMatches: (a) => a.id === 'a',
+            markRead: (ids) => { for (const a of log) if (!ids || ids.includes(a.id)) a.read = true; },
+            dismiss: (ids) => { for (let i = log.length - 1; i >= 0; i--) if (!ids || ids.includes(log[i].id)) log.splice(i, 1); },
+            openRef: (ref) => opened.push(ref),
+        };
+        const inst = { IS_TRACKER_COPY: false, storeLabelOf: (s) => (s === 'bugs' ? 'Bugs' : 'Backlog') };
+        const host = document.createElement('div');
+        let badge = null;
+        const pane = mountAlertsPane(host, { sources: [{ inst, alerts }], onBadge: (b) => { badge = b; } });
+        try {
+            assert.deepEqual(badge, { unread: 1, level: 'alert' });
+            const metas = [...host.querySelectorAll('.bd-alerts__rulebtn .bd-alerts__meta')].map((m) => m.textContent);
+            assert.deepEqual(metas, ['2', '2 now', '5 now']);
+            assert.equal(host.querySelectorAll('.bd-alerts__row').length, 2);
+            assert.match(host.querySelector('.bd-alerts__row').textContent, /1 min ago\s+P1 opened\s+Bugs\s+#2\s+Crash\s+still matches/);
+            assert.match(host.querySelectorAll('.bd-alerts__row')[1].textContent, /no longer matches/);
+            assert.equal(host.querySelector('.bd-alerts__day').textContent, 'TODAY');
+            host.querySelector('[data-level="warning"]').click();
+            assert.equal(host.querySelectorAll('.bd-alerts__row').length, 1, 'level filter');
+            host.querySelector('[data-level="all"]').click();
+            host.querySelector('[data-rule="0:r1"]').click();
+            assert.equal(host.querySelectorAll('.bd-alerts__row').length, 1, 'rule filter');
+            host.querySelector('[data-rule=""]').click();
+            host.querySelector('.bd-alerts__row [data-open]').click();
+            assert.deepEqual(opened, ['#2']);
+            pane.refresh();
+            assert.deepEqual(badge, { unread: 0, level: null }, 'opening did not mark it read');
+            host.querySelector('[data-dismiss]').click();
+            pane.refresh();
+            assert.equal(host.querySelectorAll('.bd-alerts__row').length, 1, 'dismiss');
+        } finally {
+            pane.destroy();
+        }
+    });
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

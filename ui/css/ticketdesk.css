@@ -536,7 +536,7 @@
 /* Flat EcoAgent-style inputs: recessed well, 1px border, 2px radius.
    Scoped overrides so shell controls.css can't round/pad them up. */
 .td-page .ea-tin, .td-modal .ea-tin, .td-nav .ea-tin,
-.td-rpanel .ea-tin {
+.td-rpanel .ea-tin, .twm-bp .ea-tin {
     background: var(--ea-bg-well, #0d0d0d);
     color: var(--ea-text, #d4d4d4);
     border: 1px solid var(--ea-border, #333);
@@ -550,9 +550,10 @@
 }
 .td-page select.ea-tin, .td-modal select.ea-tin { padding: 2px 4px; }
 .td-page .ea-tin:hover:not([readonly]):not(:disabled),
-.td-modal .ea-tin:hover:not([readonly]):not(:disabled) { border-color: var(--border-strong, #383838); }
+.td-modal .ea-tin:hover:not([readonly]):not(:disabled),
+.twm-bp .ea-tin:hover:not([readonly]):not(:disabled) { border-color: var(--border-strong, #383838); }
 .td-page .ea-tin:focus, .td-modal .ea-tin:focus,
-.td-rpanel .ea-tin:focus {
+.td-rpanel .ea-tin:focus, .twm-bp .ea-tin:focus {
     border-color: var(--ea-accent, #1177b3);
     box-shadow: 0 0 0 1px var(--ea-accent, #1177b3);
 }

@@ -1857,15 +1857,66 @@ object GitPayload(Store s) => new
     branch = s.Git.Branch(),
     ahead = s.Git.Ahead(),
     settings = GitSettings.Parse(s.Project.Document()["git"]).ToJson(),
-    files = s.Git.Changes().Select(c => new { path = c.Path, status = c.Status }),
+    files = s.Git.Changes().Select(c => GitFile(s, c.Path, c.Status)),
+    others = s.Git.Others(),
     pushing = s.Git.Pushing,
     lastPush = s.Git.LastPush is { } lp ? new { at = lp.At.ToString("O"), ok = lp.Ok, message = lp.Message } : null,
 };
 
+// One changed record as the pane lists it: which half of the store it is in, its
+// ref (the file's name, so it reads as the record does everywhere else) and its
+// title — from the file, or from HEAD when the change is its deletion.
+object GitFile(Store s, string rel, string status)
+{
+    var full = s.Git.Root is { } root ? Path.GetFullPath(Path.Combine(root, rel)) : rel;
+    var store = s.HasBugs && string.Equals(Path.GetDirectoryName(full), Path.GetFullPath(s.BugsDir), StringComparison.OrdinalIgnoreCase)
+        ? "bugs" : "backlog";
+    var text = File.Exists(full) ? File.ReadAllText(full) : s.Git.Committed(rel);
+    return new { path = rel, status, store, @ref = Path.GetFileNameWithoutExtension(full), title = FrontMatterTitle(text) };
+}
+
+// The `title:` line of a record's front matter, unquoted; "" when there is none.
+static string FrontMatterTitle(string text)
+{
+    var lines = text.Replace("\r\n", "\n").Split('\n');
+    if (lines.Length == 0 || lines[0].Trim() != "---") return "";
+    for (var i = 1; i < lines.Length && lines[i].Trim() != "---"; i++)
+    {
+        if (!lines[i].StartsWith("title:", StringComparison.Ordinal)) continue;
+        var v = lines[i]["title:".Length..].Trim();
+        if (v.Length >= 2 && (v[0] == '"' || v[0] == '\'') && v[^1] == v[0]) v = v[1..^1].Replace("\\\"", "\"");
+        return v;
+    }
+    return "";
+}
+
 app.MapGet("/api/git", () => Results.Json(GitPayload(Req.Store), json));
 
+// The diff, and both whole versions: the pane reads the front matter of each to
+// say "Severity: high → critical" rather than show two YAML lines.
 app.MapGet("/api/git/diff", (string? path) =>
-    Results.Json(new { ok = true, path, diff = Req.Store.Git.Diff(path ?? "") }, json));
+{
+    var git = Req.Store.Git;
+    var rel = path ?? "";
+    var full = git.Root is { } root ? Path.Combine(root, rel) : "";
+    var after = full.Length > 0 && git.IsRecord(full) && File.Exists(full) ? File.ReadAllText(full) : "";
+    return Results.Json(new { ok = true, path, diff = git.Diff(rel), before = git.Committed(rel), after }, json);
+});
+
+// Throw away one record's uncommitted changes (GitService.Discard). The page
+// asks first; a new file goes to the trash, not away.
+app.MapPost("/api/git/discard", async (HttpRequest req) =>
+{
+    var body = await JsonSerializer.DeserializeAsync<Dictionary<string, JsonElement>>(req.Body, json) ?? new();
+    var store = Req.Store;
+    if (!store.Git.Enabled) return Results.Json(new { ok = false, error = "this store is not in a git repository" }, json, statusCode: 409);
+    var rel = body.TryGetValue("path", out var pv) && pv.ValueKind == JsonValueKind.String ? pv.GetString() ?? "" : "";
+    if (rel.Length == 0) return Results.Json(new { ok = false, error = "path required" }, json, statusCode: 400);
+    var error = store.Git.Discard(rel, Path.Combine(store.ConfigDir, "trash"));
+    if (error is not null) return Results.Json(new { ok = false, error }, json, statusCode: 409);
+    store.Watcher.Broadcast("git", "{}");
+    return Results.Json(GitPayload(store), json);
+});
 
 // Commit the files the pane lists (or the ones named), with the message typed.
 app.MapPost("/api/git/commit", async (HttpRequest req) =>

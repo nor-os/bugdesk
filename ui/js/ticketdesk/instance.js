@@ -63,3 +63,12 @@ export function has(half) {
  *  side panels and has to show the tracker's rail and team when the Tracker
  *  section is in front. */
 export const trackerModule = (file) => import(new URL(`../ticketdesk@t/${file}`, import.meta.url).href);
+
+/** What a half of THIS copy's store is called where several stores share a
+ *  list (the bottom panel's Changes and Alerts): the tracker's copy is the
+ *  Tracker, standalone TicketDesk's records are Tickets. */
+export function storeLabelOf(store) {
+    if (IS_TRACKER_COPY) return 'Tracker';
+    if (store === 'bugs') return 'Bugs';
+    return CONFIG.mode === 'tracker' ? 'Tickets' : 'Backlog';
+}

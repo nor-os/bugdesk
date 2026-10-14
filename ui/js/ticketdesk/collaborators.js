@@ -32,9 +32,10 @@
  * that class also carries a two-column label/field template this does not want.
  */
 
-import { AGENTS_ASSIGNABLE, esc } from './data.js';
+import { AGENTS_ASSIGNABLE, HUMAN_AUTHOR, TEAM, esc, initials } from './data.js';
 import { appName } from '../core/app_identity.js';
 import { apiUrl } from './instance.js';
+import { pageBar, projectFoot } from './page_bar.js';
 
 const icon = (name) => `<span class="material-symbols-outlined">${name}</span>`;
 
@@ -59,8 +60,10 @@ async function fetchRoster() {
  * The roster editor, unattached: its element, and what to do with it.
  * @param {object} [o]
  * @param {() => void} [o.onChange]  after any edit, and once loaded
+ * @param {boolean} [o.page]  Settings › Team: a table with each person's work,
+ *                            the add field as its last row, no file path
  */
-function rosterEditor({ onChange = () => {} } = {}) {
+function rosterEditor({ onChange = () => {}, page = false } = {}) {
     let rows = [];
     let path = '.bugdesk/project.json';
     let loaded = '[]';
@@ -70,7 +73,20 @@ function rosterEditor({ onChange = () => {} } = {}) {
     // Offering a field that must stay empty is how a roster grows entries no
     // picker can use.
     body.className = `bd-collabs${AGENTS_ASSIGNABLE ? '' : ' bd-collabs--noagents'}`;
-    body.innerHTML = `
+    if (page) {
+        body.classList.add('bd-team__roster');
+        body.innerHTML = `
+        <div class="bd-schema__shead"><h4>People</h4><span class="bd-schema__cnt" data-slot="count"></span></div>
+        <div data-slot="rows"></div>
+        <div class="bd-team__add">
+            <span class="bd-team__av bd-team__av--add"><span class="material-symbols-outlined">add</span></span>
+            <input type="text" data-slot="newname" placeholder="Add someone: type a name, then Enter" aria-label="Add someone">
+            <button type="button" class="ea-btn" data-act="add">${icon('person_add')} Add person</button>
+        </div>
+        <p class="td-dim bd-team__hint">Removing someone does not change records already assigned to them.${AGENTS_ASSIGNABLE
+            ? ' The agent is the name an AI agent working for them is assigned as; leave it empty for the suggested one.' : ''}</p>
+        <div data-slot="path" hidden></div>`;
+    } else body.innerHTML = `
         <p class="ea-modal__hint bd-collabs__lede">
             Everyone who can be assigned work here. Shared and committed — your own
             name, filters and layout stay private.
@@ -85,7 +101,40 @@ function rosterEditor({ onChange = () => {} } = {}) {
     const rowsEl = body.querySelector('[data-slot="rows"]');
     const newEl = body.querySelector('[data-slot="newname"]');
 
+    /** Their bugs, open and closed, as the Inspector counts them; null where nothing is counted. */
+    const work = (name) => {
+        if (!TEAM.length) return null;
+        const t = TEAM.find((x) => x.name.toLowerCase() === String(name || '').trim().toLowerCase());
+        return t ? `<span><b>${t.inc} open</b> · ${t.other} closed</span>` : '<span class="td-dim">nothing yet</span>';
+    };
+
+    const renderPage = () => {
+        body.querySelector('[data-slot="count"]').textContent = rows.length || '';
+        const counted = TEAM.length > 0;
+        body.style.setProperty('--bd-team-cols', ['22px', 'minmax(0, 1fr)', ...(AGENTS_ASSIGNABLE ? ['minmax(0, 1fr)'] : []),
+            ...(counted ? ['130px'] : []), '26px'].join(' '));
+        rowsEl.innerHTML = rows.length
+            ? `<div class="bd-team__grid">
+                   <span></span><span class="bd-team__h">Name</span>${AGENTS_ASSIGNABLE ? '<span class="bd-team__h">Agent</span>' : ''}${
+                   counted ? '<span class="bd-team__h">Bugs now</span>' : ''}<span></span>
+                   ${rows.map((r, i) => {
+                       const me = String(r.name || '').trim().toLowerCase() === String(HUMAN_AUTHOR).toLowerCase();
+                       return `
+                       <span class="bd-team__c"><span class="bd-team__av">${esc(initials(r.name) || '?')}</span></span>
+                       <span class="bd-team__c bd-team__name"><input type="text" data-name="${i}" value="${esc(r.name)}" aria-label="Name">${
+                           me ? '<span class="bd-team__you">you</span>' : ''}</span>
+                       ${AGENTS_ASSIGNABLE ? `<span class="bd-team__c"><input type="text" class="td-mono" data-agent="${i}" value="${esc(r.agent || '')}"
+                           placeholder="${esc(agentNameFor(r.name))}" aria-label="Agent name"></span>` : ''}
+                       ${counted ? `<span class="bd-team__c bd-team__work">${work(r.name)}</span>` : ''}
+                       <span class="bd-team__c"><button type="button" class="bd-schema__rm" data-remove="${i}"
+                           title="Remove ${esc(r.name)}" aria-label="Remove ${esc(r.name)}">${icon('close')}</button></span>`;
+                   }).join('')}
+               </div>`
+            : '<div class="td-dim bd-schema__empty">Nobody yet: add the first person below.</div>';
+    };
+
     const render = () => {
+        if (page) { renderPage(); return; }
         body.querySelector('[data-slot="path"]').textContent = path;
         rowsEl.innerHTML = rows.length
             ? `<div class="bd-collabs__hdr">
@@ -141,14 +190,18 @@ function rosterEditor({ onChange = () => {} } = {}) {
         onChange();
     });
 
-    newEl.addEventListener('keydown', (e) => {
-        if (e.key !== 'Enter') return;
-        e.preventDefault();
+    const addTyped = () => {
         add(newEl.value);
         newEl.value = '';
         newEl.focus();
         onChange();
+    };
+    newEl.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        addTyped();
     });
+    body.querySelector('[data-act="add"]')?.addEventListener('click', addTyped);
     newEl.addEventListener('input', () => onChange());
 
     /** The list as it would be saved: a name typed into the add box but never
@@ -235,28 +288,17 @@ export async function openCollaborators({ eventBus } = {}) {
  * @param {object} [o.eventBus]
  * @returns {() => void} cleanup
  */
-export function mountTeam(el, { eventBus = null } = {}) {
+export function mountTeam(el, { eventBus = null, actions = null } = {}) {
     let saving = false;
     let problem = '';
     const wrap = document.createElement('div');
-    wrap.className = 'bd-team';
-    wrap.innerHTML = `
-        <div class="bd-schema__bar">
-            <span class="bd-schema__state td-dim" data-slot="state" aria-live="polite"></span>
-            <button type="button" class="ea-btn" data-act="discard">Discard changes</button>
-            <button type="button" class="ea-btn ea-btn--primary" data-act="save">Save</button>
-        </div>`;
-    const sync = () => {
-        const changed = ed.dirty();
-        wrap.querySelector('[data-slot="state"]').textContent = problem || (changed ? 'Unsaved changes' : '');
-        for (const b of wrap.querySelectorAll('[data-act]')) b.disabled = saving || !changed;
-    };
-    const ed = rosterEditor({ onChange: () => sync() });
+    wrap.className = 'bd-proj bd-team';
+    const ed = rosterEditor({ page: true, onChange: () => sync() });
+    ed.body.classList.add('bd-surface');
     wrap.append(ed.body);
-    wrap.addEventListener('click', async (e) => {
-        const act = e.target.closest('[data-act]')?.dataset.act;
+    wrap.insertAdjacentHTML('beforeend', projectFoot());
+    const bar = pageBar(actions, wrap, async (act) => {
         if (act === 'discard') { problem = ''; ed.load(); return; }
-        if (act !== 'save') return;
         saving = true; problem = ''; sync();
         try {
             await ed.save();
@@ -268,8 +310,9 @@ export function mountTeam(el, { eventBus = null } = {}) {
         saving = false;
         sync();
     });
+    const sync = () => bar.sync({ dirty: ed.dirty(), busy: saving, note: problem });
     sync();
     ed.load();
     el.replaceChildren(wrap);
-    return () => {};
+    return () => bar.remove();
 }

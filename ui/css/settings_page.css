@@ -519,46 +519,144 @@
 }
 
 /* ── Project editors drawn on the page (STORY-0032) ───────────────────────
-   Record types, Team, Alerts and Git used to open windows; on the page they
-   share the Workflow page's bar (state, Discard, Save) and its foot line. */
+   Record types, Workflow, Team and Alerts share one frame: Discard / Save in
+   the page header (page_bar.js), the editor in one bordered surface, and a
+   line under it saying where it is saved. Every text field and select on
+   them is the Record types field: a dark well, 1px border, 11px. */
 
-.bd-schema__bar { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
-.bd-schema__bar .ea-btn:disabled { opacity: .45; cursor: default; }
-.bd-schema__state { margin-right: auto; font-size: 11.5px; }
+.settings-page__actions { flex: none; display: flex; align-items: center; padding-top: 2px; margin-left: 16px; }
+.bd-pagebar { display: flex; align-items: center; gap: 6px; }
+.bd-pagebar .ea-btn:disabled { opacity: .45; cursor: default; }
+.bd-pagebar__state { display: inline-flex; align-items: center; gap: 5px; margin-right: 6px; font-size: 11.5px; color: var(--text-muted); }
+.bd-pagebar__state.is-dirty { color: var(--twm-flow-amber-fg, #ecb27a); }
+.bd-pagebar__state.is-dirty::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+.bd-proj { display: flex; flex-direction: column; gap: 8px; }
+.bd-surface { min-width: 0; background: var(--surface-1); border: 1px solid var(--border-default); border-radius: 3px; }
+.bd-proj__foot { display: flex; align-items: center; gap: 5px; font-size: 10.5px; color: var(--text-dim); }
+.bd-proj__foot .material-symbols-outlined { font-size: 13px; }
+.bd-proj__foot code { font-family: "JetBrains Mono", "Cascadia Mono", Consolas, monospace; font-size: 10.5px; color: var(--text-muted); background: none; padding: 0; }
 .bd-schema__foot { font-size: 10.5px; }
 
-.bd-schema--page {
-    grid-template-rows: auto 1fr auto;
-    row-gap: 8px;
-    height: max(460px, calc(100vh - 330px));
-    background: none;
+/* The field. `.bd-sel` (select_field.js) draws its own button to match. */
+:is(.bd-proj, .bd-alerts-edit) :is(input[type="text"], input[type="search"], input[type="number"], input:not([type]), select) {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    height: 22px;
+    padding: 0 var(--ea-pad-snug, 6px);
+    background: var(--ea-bg-well, #0d0d0d);
+    color: var(--ea-text, #d4d4d4);
+    border: 1px solid var(--ea-border, #333);
+    border-radius: 0;
+    font: inherit;
+    font-size: var(--ea-font-body, 11px);
 }
-.bd-schema--page > .bd-schema__bar,
-.bd-schema--page > .bd-schema__foot { grid-column: 1 / -1; }
-.bd-schema--page > .bd-schema__nav,
-.bd-schema--page > .bd-schema__main {
-    grid-row: 2;
-    background: var(--surface-1, #252526);
-    border: 1px solid var(--border-default, #333);
+:is(.bd-proj, .bd-alerts-edit) :is(input, select):focus { outline: none; border-color: var(--ea-accent, #1177b3); box-shadow: 0 0 0 1px var(--ea-accent, #1177b3); }
+.bd-proj input.td-mono { font-family: "JetBrains Mono", "Cascadia Mono", Consolas, monospace; font-size: var(--ea-font-mono, 10.5px); }
+.bd-proj input::placeholder { color: var(--text-dim); }
+:is(.bd-proj, .bd-alerts-edit) input[type="checkbox"] { width: 13px; height: 13px; margin: 0; accent-color: var(--ea-accent, #1177b3); }
+
+/* Section headings and counts: one look on all four pages. */
+.bd-proj .bd-schema__shead { margin: 18px 0 6px; }
+.bd-proj .bd-schema__main > section:first-of-type > .bd-schema__shead,
+.bd-proj :is(.bd-team__roster, .bd-alerts-edit__main) > .bd-schema__shead:first-child { margin-top: 0; }
+.bd-proj .bd-schema__main section { margin-bottom: 0; }
+
+/* ── Record types: types | the type, as tall as its content, capped at the tile ── */
+.bd-schema.bd-schema--page {
+    display: flex;
+    max-height: max(420px, calc(100vh - 290px));
+    background: var(--surface-1);
 }
-.bd-schema--page > .bd-schema__nav { border-radius: 4px 0 0 4px; border-right-color: var(--border-subtle, #2a2a2a); }
-.bd-schema--page > .bd-schema__main { border-left: 0; border-radius: 0 4px 4px 0; }
+.bd-schema--page > .bd-schema__nav {
+    flex: 0 0 168px;
+    padding: 6px;
+    overflow-y: auto;
+    background: var(--surface-0);
+    border-right: 1px solid var(--border-subtle);
+    border-radius: 3px 0 0 3px;
+}
+.bd-schema--page > .bd-schema__main { flex: 1 1 auto; min-width: 0; overflow-y: auto; padding: 12px 18px 16px; }
+.bd-schema--page .bd-schema__type--on { background: var(--state-selected, rgba(0, 122, 204, .15)); }
+.bd-schema--page .bd-schema__count { background: none; color: var(--text-muted); font-size: 10.5px; font-variant-numeric: tabular-nums; }
 
 /* Name and number: label, field, what it does. */
 /* Two classes: `.ea-modal__row` (the field styling) sets a two-column grid of its own. */
 .bd-schema--page .bd-schema__num {
     display: grid;
-    grid-template-columns: 110px 120px 1fr;
+    grid-template-columns: 110px 140px 1fr;
     align-items: center;
     gap: 10px;
-    margin-bottom: 4px;
+    margin-bottom: 5px;
 }
+.bd-schema--page .bd-schema__num > span:first-child { color: var(--text-muted); }
 .bd-schema__num .td-dim { font-size: 11px; }
+.bd-schema--page .bd-schema__nums > .bd-schema__hint { margin: 2px 0 6px 120px; font-size: 11px; }
+.bd-schema__sample { margin-top: 8px; font-size: 11px; }
+.bd-schema__sample code { font-family: "JetBrains Mono", "Cascadia Mono", Consolas, monospace; font-size: 10.5px; color: var(--text-primary); background: var(--surface-2); padding: 0 5px; border-radius: 2px; }
+.bd-schema--page .bd-schema__hides { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 2px 16px; }
+.bd-schema--page .bd-schema__hide { align-items: flex-start; }
+.bd-schema--page .bd-schema__hide input { margin-top: 2px; }
+.bd-schema--page .bd-schema__builtin code { font-family: "JetBrains Mono", "Cascadia Mono", Consolas, monospace; color: var(--text-secondary); background: var(--surface-2); padding: 0 4px; border-radius: 2px; }
 
-.bd-team, .bd-alerts-page { display: flex; flex-direction: column; gap: 8px; }
-.bd-alerts-page .bd-schema { grid-template-rows: auto auto; background: none; }
-.bd-alerts-page .bd-schema__foot { grid-column: 1 / -1; padding-top: 6px; }
+/* ── Workflow: the detail pane as an Action block and a Flow block ── */
+.bd-wf__block { display: flex; flex-direction: column; padding: 12px 16px 10px; border-bottom: 1px solid var(--border-subtle); }
+.bd-wf__block .bd-schema__shead { margin: 0 0 8px; }
+.bd-wf__block .bd-schema__shead .ea-btn { margin-left: auto; }
+.bd-wf__form { display: grid; grid-template-columns: 80px minmax(0, 340px); align-items: center; gap: 6px 10px; font-size: 11px; }
+.bd-wf__form > span { color: var(--text-muted); }
+.bd-wf__pills { display: flex; flex-wrap: wrap; gap: 4px; }
+.bd-wf__pills .bd-wf__chipcheck { font-size: 11px; }
+.bd-wf__pills .bd-wf__chipcheck input { display: none; }
+.bd-wf__pills .bd-wf__chipcheck.is-on::before { content: '✓'; font-size: 10px; }
+.bd-wf__uses { margin-top: 8px; font-size: 11px; line-height: 1.5; }
+.bd-wf__subhead { font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-secondary); }
+.bd-wf__subhead .td-dim { text-transform: none; letter-spacing: 0; font-weight: 400; }
 
+/* ── Team: who, their agent, their bugs now ── */
+.bd-team__roster { max-width: 760px; padding: 12px 18px 14px; }
+.bd-team__grid { display: grid; grid-template-columns: var(--bd-team-cols, 22px 1fr 1fr 26px); align-items: center; column-gap: 8px; }
+.bd-team__h { padding-bottom: 3px; font-size: 10.5px; color: var(--text-dim); }
+.bd-team__c { display: flex; align-items: center; min-width: 0; padding: 3px 0; border-top: 1px solid var(--border-subtle); }
+.bd-team__name { gap: 6px; }
+.bd-team__you { flex: none; padding: 0 6px; border-radius: 8px; font-size: 10px; color: var(--twm-flow-teal-fg, #72d8c8); background: var(--twm-flow-teal-bg, rgba(45, 180, 165, .17)); }
+.bd-team__av { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 22px; height: 22px; border-radius: 50%;
+    background: var(--surface-2); color: var(--text-primary); font-size: 9.5px; font-weight: 600; }
+.bd-team__av--add { background: none; border: 1px dashed var(--border-default); color: var(--text-dim); }
+.bd-team__av .material-symbols-outlined { font-size: 13px; }
+.bd-team__work { font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.bd-team__work b { font-weight: 400; color: var(--twm-flow-amber-fg, #ecb27a); }
+.bd-team__add { display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 8px; margin-top: 3px; padding-top: 6px; border-top: 1px solid var(--border-subtle); }
+.bd-team__add .ea-btn { min-height: 22px; }
+.bd-team__add .ea-btn .material-symbols-outlined { font-size: 14px; }
+.bd-team__hint { margin: 12px 0 0; font-size: 11.5px; line-height: 1.5; max-width: 80ch; }
+
+/* ── Alerts: one row per rule ── */
+.bd-alerts-edit.bd-surface > .bd-alerts-edit__main { padding: 12px 18px 14px; overflow-x: auto; }
+.bd-alerts-edit__grid {
+    display: grid;
+    grid-template-columns: 22px minmax(110px, 1fr) 84px 92px minmax(160px, 2fr) 40px 40px 26px;
+    align-items: center;
+    column-gap: 6px;
+}
+.bd-alerts-edit__h { padding-bottom: 3px; font-size: 10.5px; color: var(--text-dim); }
+.bd-alerts-edit__c { display: flex; align-items: center; min-width: 0; padding: 3px 0; border-top: 1px solid var(--border-subtle); }
+.bd-alerts-edit__c--off > :not([data-k="enabled"]) { opacity: .5; }
+.bd-alerts-edit__cond { gap: 4px; }
+.bd-alerts-edit__expr { flex: 1; min-width: 0; padding: 2px 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: 11px; color: var(--text-secondary); background: var(--surface-0); border: 1px solid var(--border-subtle); border-radius: 2px; }
+.bd-alerts-edit__expr--none { font-style: italic; color: var(--text-dim); }
+.bd-alerts-edit__cond .ea-btn { min-height: 22px; flex: none; }
+.bd-alerts-edit__cond .material-symbols-outlined { font-size: 14px; }
+.bd-alerts-edit select.bd-alerts-edit__lvl--alert { color: #f48771; }
+.bd-alerts-edit select.bd-alerts-edit__lvl--warning { color: var(--twm-flow-amber-fg, #ecb27a); }
+.bd-alerts-edit select.bd-alerts-edit__lvl--info { color: var(--twm-flow-teal-fg, #72d8c8); }
+.bd-alerts-edit__how { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px 16px; margin-top: 14px; }
+.bd-alerts-edit__how > div { padding-top: 6px; border-top: 1px solid var(--border-subtle); font-size: 11px; line-height: 1.45; color: var(--text-muted); }
+.bd-alerts-edit__how b { display: block; margin-bottom: 1px; font-weight: 600; color: var(--text-secondary); }
+
+/* ── Git and Behaviour panels ── */
 .bd-git-settings { display: flex; flex-direction: column; gap: 12px; }
 .bd-git-settings__row { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; }
 .bd-git-settings__row input { margin-top: 3px; }
@@ -567,17 +665,3 @@
 
 .bd-autosave-setting { display: flex; align-items: center; gap: 6px; }
 .bd-autosave-setting .settings-number { width: 64px; }
-
-/* The roster on the page: the three columns its window gets (backlog.css),
-   which `.ea-modal__row` would otherwise turn into its two. */
-.bd-team .bd-collabs__hdr,
-.bd-team .bd-collabs__row {
-    display: grid;
-    grid-template-columns: 1fr 1fr 22px;
-    align-items: center;
-    column-gap: 8px;
-    margin-bottom: 5px;
-}
-.bd-team .bd-collabs--noagents .bd-collabs__hdr,
-.bd-team .bd-collabs--noagents .bd-collabs__row { grid-template-columns: 1fr 22px; }
-.bd-team .bd-collabs__addrow { grid-template-columns: 130px 1fr; }

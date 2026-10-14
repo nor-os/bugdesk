@@ -44,7 +44,7 @@ const legacyMoves = (wf, store, type) => {
 
 /**
  * A graph that changes the status: `graph` as it is when it already does,
- * else with "Ask for the message" (when `message`) and "Change status to …"
+ * else with "Ask for the comment" (when `message`) and "Change status to …"
  * put right after its start — a move's older flow ran beside the move, and
  * the move did both of those.
  */
