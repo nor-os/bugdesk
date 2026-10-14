@@ -21,12 +21,21 @@
  *   selectToggle (passes through) → FlexDesk's select mode (STORY-0029): while
  *                                  it is on, a click or Enter ticks, nothing opens
  *   (always)                     → resetPageOnSort: a sort goes back to page 1
+ *   (always)                     → showExportButton: "Download visible rows as
+ *                                  CSV" in the strip, through `host` (pass the
+ *                                  page's ctx.host) — the native Save dialog in
+ *                                  the desktop app, a download in a tab
  *
  * and it adds `getSort()` — `{column, ascending}` — which the board's tree
  * order reads and FlexDesk does not expose.
  */
 
 import { DataTable } from '@flexdesk/widgets';
+
+/** A view's label as a file name: "Open — P1/P2" → "open-p1-p2"; `fallback` when nothing is left. */
+export function fileSlug(label, fallback = 'export') {
+    return String(label || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || fallback;
+}
 
 /** The gesture a key means on a row, or null for a key that opens nothing. */
 export function howOf(ev) {
@@ -88,6 +97,9 @@ export function createTable(el, opts = {}) {
     table = new DataTable(el, {
         // BUG-0013: a new order starts on its first page — on every BugDesk list.
         resetPageOnSort: true,
+        // STORY-0026: every list exports what it shows (FlexDesk 0.14.1 draws the
+        // button on a one-page list too). `host` and `exportFilename` pass through.
+        showExportButton: true,
         ...rest,
         ...(rowKey ? { getRowKey: (row) => String(rowKey(row)) } : {}),
         ...(onRowOpen ? {

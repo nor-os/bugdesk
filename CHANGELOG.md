@@ -86,7 +86,13 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   self-contained (STORY-0040). `desktop/linux/build.sh` builds a `.deb` and a `.tar.gz`
   for Linux (STORY-0027). In the window, BugDesk uses FlexDesk 0.14.0's
   Photino host: the window comes back at its last size, place and maximised
-  state, and the native Save dialog is available to exports (STORY-0026).
+  state, and exports open the native Save dialog (STORY-0026, FlexDesk
+  0.14.1). Every list (a bug queue, a backlog board, the search results) has
+  a *Download visible rows as CSV* button in its strip, even when it fits on
+  one page, named after the view (`open-p1-p2.csv`); a dashboard chart's
+  *Download PNG* is named after its title. In a browser tab both download as
+  files do; in the desktop window they ask where to save, and a cancel saves
+  nothing.
 
 - **Alerts** (STORY-0005). Settings › Alerts holds rules: a name, a store, a
   condition built in the filter editor (any field, custom ones included), a

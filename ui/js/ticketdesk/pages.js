@@ -41,7 +41,7 @@
 import { mountTileBreadcrumb } from '@flexdesk/wm';
 import { activeTopNavKind, taxonomy } from '../tiling/kind_taxonomy.js';
 import { installRecordDragSource, markDragCell, openRecordAs } from './record_dnd.js';
-import { createTable } from './bd_table.js';
+import { createTable, fileSlug } from './bd_table.js';
 import { openConfirm, showContextMenu } from '@flexdesk/widgets';
 import {
     BUILTIN_FILTERS, FILTER_FIELDS, MODEL, SCOPE,
@@ -493,6 +493,9 @@ function mountQueues(host, props, ctx) {
     const table = createTable(host.querySelector('.td-tablehost'), {
         ...mass.tableOptions,
         ...(ctx?.tableStore ? { stateStore: ctx.tableStore, persistKey } : {}),
+        // The CSV button: the native Save dialog in the desktop app (STORY-0026).
+        host: ctx?.host,
+        exportFilename: () => `${fileSlug(resolved.label, 'bugs')}.csv`,
         // Priority is a short-badge column (an 8px swatch + "P3"): pinned narrow
         // until somebody drags it wider, when the remembered width wins.
         seedColWidths: { 0: 48 },
@@ -1242,6 +1245,8 @@ function mountTicket(host, props, ctx) {
                 // The results are rebuilt on every search, so this is how a sort
                 // you chose survives running the next one.
                 ...(ctx?.tableStore ? { stateStore: ctx.tableStore, persistKey: `bugs:search${SEARCH_SIG}` } : {}),
+                host: ctx?.host,
+                exportFilename: 'search-results.csv',
                 // A new search starts on its first page, not the last one's.
                 persistPage: false,
                 headers: ['Ref', 'Store', 'Type', 'Summary', 'Status', 'Updated', 'Assignee',

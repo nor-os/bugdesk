@@ -267,7 +267,11 @@ function mountDashboards(host, props, ctx, eventBus) {
             host: ctx.host,      // the desktop app's native Save dialog for a tile's PNG (STORY-0026)
             showToolbar: false,
             readonly: disabled,
-            eventBus: { emit: (name, payload) => { if (name === 'grid:config-modal-show') editTile(payload); } },
+            // The config modal is ours; a tile's toast ("Chart saved to …") goes to the app's.
+            eventBus: { emit: (name, payload) => {
+                if (name === 'grid:config-modal-show') editTile(payload);
+                else if (name === 'toast:show') eventBus?.emit?.(name, payload);
+            } },
             onLayoutChange: () => scheduleSave(),
         });
         grid.gridElement.addEventListener('tile:remove-request', (e) => removeTile(e.detail?.tileId));

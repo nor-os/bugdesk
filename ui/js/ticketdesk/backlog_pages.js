@@ -23,7 +23,7 @@
  * never answers. skills/backlog/SKILL.md applies the same rules.
  */
 
-import { createTable } from './bd_table.js';
+import { createTable, fileSlug } from './bd_table.js';
 import { showContextMenu } from '@flexdesk/widgets';
 import { renderMarkdown } from './markdown.js';
 import { attachMarkdownEditor } from './md_editor.js';
@@ -443,6 +443,9 @@ function mountBacklogBoard(host, props, ctx) {
         },
         ...(BOARD_CUSTOM_IDX.length ? { hiddenColumns: BOARD_CUSTOM_IDX, columnChooser: true } : {}),
         ...(ctx?.tableStore ? { stateStore: ctx.tableStore, persistKey } : {}),
+        // The CSV button: the native Save dialog in the desktop app (STORY-0026).
+        host: ctx?.host,
+        exportFilename: () => `${fileSlug(view.label, 'backlog')}.csv`,
         // Ad-hoc views share one slot; see the bug queue.
         persistPage: !!view.key,
         headers: BOARD_HEADERS,
