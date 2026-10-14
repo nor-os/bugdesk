@@ -1539,9 +1539,9 @@ await t('clicking a name opens that person\'s OPEN work in the main tile', async
     host.remove();
 });
 
-/* ── the collaborators editor ────────────────────────────────────── */
+/* ── the Team window ────────────────────────────────────── */
 
-console.log('\nCollaborators editor');
+console.log('\nTeam window');
 
 await t('it opens as a real managed window, not a hand-rolled overlay', async () => {
     const realFetchLocal = globalThis.fetch;
@@ -1559,18 +1559,22 @@ await t('it opens as a real managed window, not a hand-rolled overlay', async ()
     assert.ok(win.classList.contains('twm-managed-window--modal'));
     assert.ok(!document.querySelector('.bd-picker'), 'the old overlay is still being built');
 
-    const body = document.querySelector('.bd-collabs');
-    assert.ok(body, 'the roster body did not mount');
+    // The same editor as Settings › Team, not a second layout of its own.
+    assert.equal(win.querySelector('.twm-managed-window__title')?.textContent.trim(), 'Team');
+    const body = document.querySelector('.twm-managed-window .bd-proj .bd-team__roster');
+    assert.ok(body, 'the Team editor did not mount in the window');
+    assert.ok(body.querySelector('.bd-team__grid input[data-name]'), 'no roster rows');
+    assert.ok(body.querySelector('.bd-team__add [data-act="add"]'), 'no add row');
 
     // THE STYLING BUG: `.ea-tin` is scoped to .td-page/.td-modal/.td-nav/
     // .td-rpanel, so in a modal it styles nothing and the fields render as raw
-    // browser inputs. `ea-modal__row` is the class the modal stylesheet hangs
-    // its input styling off, so every field has to live inside one.
+    // browser inputs. `.bd-proj` is what the Settings editors' input styling
+    // hangs off, so every field has to live inside one.
     const fields = [...body.querySelectorAll('input')];
-    assert.ok(fields.length >= 3, `expected name, agent and add fields, got ${fields.length}`);
+    assert.ok(fields.length >= 2, `expected name and add fields, got ${fields.length}`);
     for (const f of fields) {
-        assert.ok(f.closest('.ea-modal__row'),
-            `an input is outside .ea-modal__row and will render unstyled: ${f.outerHTML}`);
+        assert.ok(f.closest('.bd-proj'),
+            `an input is outside .bd-proj and will render unstyled: ${f.outerHTML}`);
         assert.ok(!f.classList.contains('ea-tin'),
             'still using .ea-tin, which is scoped to surfaces this is not one of');
     }

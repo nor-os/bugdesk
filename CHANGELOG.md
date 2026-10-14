@@ -286,6 +286,12 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **The menu's Collaborators… is now Team…** and opens the Settings › Team
+  editor in a window: the same table, with each person's open and closed
+  bugs, the add row and the hint. The window's own plainer layout is gone.
+  The "Who is working here?" dialog (your name in the status bar) no longer
+  has an "Everyone else" field; it is only about you.
+
 - **`run.ps1` opens BugDesk in its own window.** By default it builds the desktop
   app from the checkout (into `desktop\BugDesk.Desktop\bin\dev`) and starts it
   on the checkout's `projects.toml` and `server\state`, the same ones the

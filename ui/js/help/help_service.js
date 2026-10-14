@@ -586,7 +586,7 @@ back to them.
 
 ## The team
 
-**Settings › Team** (or the menu's **Collaborators…**) is the project's
+**Settings › Team** (or the menu's **Team…**) is the project's
 roster, shared in \`.bugdesk/project.json\`: the people work can be
 assigned to. The right panel shows who is on what.
 `,

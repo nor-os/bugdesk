@@ -753,11 +753,11 @@ function _installHamburgerMenu() {
             icon: 'badge',
             action: 'twm-change-name',
         });
-        // Also in Settings › General › Authorship. Here too because "who can I
-        // assign this to" is a question you have while looking at a record, not
-        // while browsing settings.
+        // Settings › Team, as a window. Here too because "who can I assign this
+        // to" is a question you have while looking at a record, not while
+        // browsing settings.
         items.push({
-            label: 'Collaborators…',
+            label: 'Team…',
             icon: 'group',
             action: 'twm-collaborators',
         });
@@ -774,7 +774,7 @@ function _installHamburgerMenu() {
             if (action === 'twm-collaborators') {
                 import('../ticketdesk/collaborators.js')
                     .then((m) => m.openCollaborators({ eventBus: window.__bugdesk?.eventBus }))
-                    .catch((err) => console.error('[bugdesk] collaborators dialog failed', err));
+                    .catch((err) => console.error('[bugdesk] team dialog failed', err));
                 return;
             }
             if (action === 'twm-change-name') {

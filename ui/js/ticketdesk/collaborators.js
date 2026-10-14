@@ -12,24 +12,17 @@
  * BugDesk yet, a name spelled two ways, a person who has left.
  *
  * Drawn on the Settings page as Settings › Team (`mountTeam`, STORY-0032), and
- * opened as a window from the hamburger menu and the change-your-name dialog,
- * where it is a question you have while looking at something else. Both are the
- * same editor (`rosterEditor`).
+ * opened as the Team window from the hamburger menu, where it is a question you
+ * have while looking at something else.
+ * Both are the same editor (`rosterEditor`), drawn the same way: the window used
+ * to have a second, plainer layout of its own, and two looks for one list read
+ * as two different lists.
  *
- * The window is A REAL MANAGED WINDOW (openModal), not a hand-rolled overlay. The overlay it
- * replaced was written when this could open on top of another modal, which it
- * no longer can — every caller closes its own dialog first — and it cost more
- * than the stacking it bought: no drag, no resize, chrome that only looked like
- * the app's, and inputs that got no styling at all. `.ea-tin` is scoped to
- * `.td-page`/`.td-modal`/`.td-nav`/`.td-rpanel`, and a bare overlay is none of
- * those, so every field in here rendered as an unstyled browser input — white
- * box, wrong font, wrong size — in the middle of a dark app.
- *
- * The roster rows carry `ea-modal__row` for exactly that reason: it is the class
- * the modal stylesheet hangs its input styling off, so the fields look like the
- * fields in every other dialog rather than like a second opinion about what an
- * input is. The grid layout is put back over the top (see backlog.css), because
- * that class also carries a two-column label/field template this does not want.
+ * The window is A REAL MANAGED WINDOW (openModal), not a hand-rolled overlay.
+ * Its body sits in `.bd-proj`, the class the Settings editors' input styling
+ * hangs off — `.ea-tin` is scoped to `.td-page`/`.td-modal`/`.td-nav`/
+ * `.td-rpanel`, and a modal is none of those, so without it every field would
+ * render as an unstyled browser input in the middle of a dark app.
  */
 
 import { AGENTS_ASSIGNABLE, HUMAN_AUTHOR, TEAM, esc, initials } from './data.js';
@@ -60,22 +53,14 @@ async function fetchRoster() {
  * The roster editor, unattached: its element, and what to do with it.
  * @param {object} [o]
  * @param {() => void} [o.onChange]  after any edit, and once loaded
- * @param {boolean} [o.page]  Settings › Team: a table with each person's work,
- *                            the add field as its last row, no file path
  */
-function rosterEditor({ onChange = () => {}, page = false } = {}) {
+function rosterEditor({ onChange = () => {} } = {}) {
     let rows = [];
-    let path = '.bugdesk/project.json';
     let loaded = '[]';
 
     const body = document.createElement('div');
-    // No Agent column where nobody has one — see AGENTS_ASSIGNABLE in ./data.js.
-    // Offering a field that must stay empty is how a roster grows entries no
-    // picker can use.
-    body.className = `bd-collabs${AGENTS_ASSIGNABLE ? '' : ' bd-collabs--noagents'}`;
-    if (page) {
-        body.classList.add('bd-team__roster');
-        body.innerHTML = `
+    body.className = 'bd-team__roster';
+    body.innerHTML = `
         <div class="bd-schema__shead"><h4>People</h4><span class="bd-schema__cnt" data-slot="count"></span></div>
         <div data-slot="rows"></div>
         <div class="bd-team__add">
@@ -84,19 +69,7 @@ function rosterEditor({ onChange = () => {}, page = false } = {}) {
             <button type="button" class="ea-btn" data-act="add">${icon('person_add')} Add person</button>
         </div>
         <p class="td-dim bd-team__hint">Removing someone does not change records already assigned to them.${AGENTS_ASSIGNABLE
-            ? ' The agent is the name an AI agent working for them is assigned as; leave it empty for the suggested one.' : ''}</p>
-        <div data-slot="path" hidden></div>`;
-    } else body.innerHTML = `
-        <p class="ea-modal__hint bd-collabs__lede">
-            Everyone who can be assigned work here. Shared and committed — your own
-            name, filters and layout stay private.
-        </p>
-        <div class="bd-collabs__grid" data-slot="rows"></div>
-        <div class="ea-modal__row bd-collabs__addrow">
-            <span>Add someone</span>
-            <input type="text" data-slot="newname" placeholder="a name, then Enter">
-        </div>
-        <div class="td-dim bd-collabs__path" data-slot="path"></div>`;
+            ? ' The agent is the name an AI agent working for them is assigned as; leave it empty for the suggested one.' : ''}</p>`;
 
     const rowsEl = body.querySelector('[data-slot="rows"]');
     const newEl = body.querySelector('[data-slot="newname"]');
@@ -108,9 +81,12 @@ function rosterEditor({ onChange = () => {}, page = false } = {}) {
         return t ? `<span><b>${t.inc} open</b> · ${t.other} closed</span>` : '<span class="td-dim">nothing yet</span>';
     };
 
-    const renderPage = () => {
+    const render = () => {
         body.querySelector('[data-slot="count"]').textContent = rows.length || '';
         const counted = TEAM.length > 0;
+        // No Agent column where nobody has one — see AGENTS_ASSIGNABLE in ./data.js.
+        // Offering a field that must stay empty is how a roster grows entries no
+        // picker can use.
         body.style.setProperty('--bd-team-cols', ['22px', 'minmax(0, 1fr)', ...(AGENTS_ASSIGNABLE ? ['minmax(0, 1fr)'] : []),
             ...(counted ? ['130px'] : []), '26px'].join(' '));
         rowsEl.innerHTML = rows.length
@@ -131,26 +107,6 @@ function rosterEditor({ onChange = () => {}, page = false } = {}) {
                    }).join('')}
                </div>`
             : '<div class="td-dim bd-schema__empty">Nobody yet: add the first person below.</div>';
-    };
-
-    const render = () => {
-        if (page) { renderPage(); return; }
-        body.querySelector('[data-slot="path"]').textContent = path;
-        rowsEl.innerHTML = rows.length
-            ? `<div class="bd-collabs__hdr">
-                   <span>Name</span><span>Agent</span><span></span>
-               </div>`
-              + rows.map((r, i) => `
-                <div class="ea-modal__row bd-collabs__row">
-                    <input type="text" data-name="${i}" value="${esc(r.name)}"
-                           aria-label="Name">
-                    <input type="text" class="td-mono" data-agent="${i}" value="${esc(r.agent || '')}"
-                           placeholder="${esc(agentNameFor(r.name))}" aria-label="Agent name">
-                    <button type="button" class="bd-collabs__rm" data-remove="${i}"
-                            title="Remove ${esc(r.name)}"
-                            aria-label="Remove ${esc(r.name)}">${icon('close')}</button>
-                </div>`).join('')
-            : '<div class="td-dim bd-collabs__empty">Nobody yet — add the first person below.</div>';
     };
 
     const add = (name) => {
@@ -218,7 +174,6 @@ function rosterEditor({ onChange = () => {}, page = false } = {}) {
     const load = () => fetchRoster()
         .then((r) => {
             rows = r.collaborators.map((c) => ({ ...c }));
-            path = r.path || path;
             newEl.value = '';
             loaded = JSON.stringify(collect());
             render();
@@ -246,23 +201,26 @@ function rosterEditor({ onChange = () => {}, page = false } = {}) {
 
 const savedToast = (eventBus) => eventBus?.emit?.('toast:show', {
     type: 'info',
-    message: `Collaborators saved. Reload ${appName()} for the assignee lists to pick it up.`,
+    message: `Team saved. Reload ${appName()} for the assignee lists to pick it up.`,
 });
 
 /**
- * Open the roster editor in a window. Resolves to the saved list, or null if cancelled.
+ * Open Settings › Team's editor in a window. Resolves to the saved list, or null if cancelled.
  */
 export async function openCollaborators({ eventBus } = {}) {
     const { openModal } = await import('@flexdesk/widgets');
     const ed = rosterEditor();
+    const wrap = document.createElement('div');
+    wrap.className = 'bd-proj bd-team';
+    wrap.append(ed.body);
     ed.load();
 
     const choice = await openModal({
-        title: 'Collaborators',
+        title: 'Team',
         icon: 'group',
-        content: ed.body,
-        width: 560,
-        height: 420,
+        content: wrap,
+        width: 640,
+        height: 460,
         actions: [
             { label: 'Cancel', value: null },
             { label: 'Save', value: 'save', primary: true },
@@ -293,7 +251,7 @@ export function mountTeam(el, { eventBus = null, actions = null } = {}) {
     let problem = '';
     const wrap = document.createElement('div');
     wrap.className = 'bd-proj bd-team';
-    const ed = rosterEditor({ page: true, onChange: () => sync() });
+    const ed = rosterEditor({ onChange: () => sync() });
     ed.body.classList.add('bd-surface');
     wrap.append(ed.body);
     wrap.insertAdjacentHTML('beforeend', projectFoot());
