@@ -365,19 +365,26 @@ export async function installTilingShell({ eventBus, logger } = {}) {
     // `toast:show` on the bus — BugDesk emitted them long before anything drew
     // them — and past three it collapses the rest into "+N more" rather than
     // pushing an unread alert off the screen. The bell (NotificationHistory)
-    // keeps them. Then the alert rules start watching (alerts.js).
+    // counts the unread alerts of the same log the Alerts tab shows, in the
+    // worst unread level's colour (STORY-0031); it, and "+N more", open the
+    // bottom panel on that tab. Then the alert rules start watching (alerts.js).
     try {
-        const { NotificationCenter, NotificationHistory } = await import('@flexdesk/widgets');
+        const [{ NotificationCenter, NotificationHistory }, { sharedAlertLog }, { bottomSources }] = await Promise.all([
+            import('@flexdesk/widgets'), import('../ticketdesk/alerts.js'), import('../ticketdesk/pages.js'),
+        ]);
+        const openAlerts = () => {
+            if (!wm.isPanelOpen?.('bottom')) wm.togglePanel?.('bottom');
+            eventBus.emit('bottompanel:show', { tab: 'alerts' });
+        };
         const center = new NotificationCenter({
-            eventBus, logger: log, maxVisible: 3, overflow: 'collapse',
-            // "+N more": the bottom panel, on its Alerts tab.
-            summaryAction: () => {
-                if (!wm.isPanelOpen?.('bottom')) wm.togglePanel?.('bottom');
-                eventBus.emit('bottompanel:show', { tab: 'alerts' });
-            },
+            eventBus, logger: log, maxVisible: 3, overflow: 'collapse', summaryAction: openAlerts,
         });
         center.mount(document.body);
-        new NotificationHistory({ notificationCenter: center, eventBus, logger: log }).mount();
+        new NotificationHistory({
+            notificationCenter: center, eventBus, logger: log,
+            alertLog: sharedAlertLog({ eventBus, sources: await bottomSources() }),
+            onOpen: openAlerts,
+        }).mount();
         const { installAlerts } = await import('../ticketdesk/alerts.js');
         await installAlerts({ eventBus });
         // The tracker's own rules, over the tracker's records, on a project page.

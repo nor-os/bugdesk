@@ -22,11 +22,13 @@
  * lot, and asks `stillMatches` whether the record matches its rule today.
  *
  * Toasts are FlexDesk's (NotificationCenter, with `overflow: 'collapse'`: past
- * three, the rest wait behind "+N more"); the bell in the bottom bar is
- * FlexDesk's NotificationHistory. Nothing here is a copy of either.
+ * three, the rest wait behind "+N more"); the Alerts tab and the bell are
+ * FlexDesk's alert log, pane and NotificationHistory, on `sharedAlertLog`.
+ * Nothing here is a copy of any of them.
  */
 
-import { CONFIG, apiUrl, ev } from './instance.js';
+import { CONFIG, apiUrl, ev, storeLabelOf, IS_TRACKER_COPY } from './instance.js';
+import { createAlertLog, mountAlertsPane } from '@flexdesk/widgets';
 import { esc } from './data.js';
 import { appName } from '../core/app_identity.js';
 import { pageBar, projectFoot } from './page_bar.js';
@@ -218,39 +220,79 @@ export async function installAlerts({ eventBus } = {}) {
 
 /* ── the Alerts tab ──────────────────────────────────────────────── */
 
-/** This module's own copy, as a source for the Alerts tab. */
-const SELF = { alertRules, ALERT_LOG, matchingNow, stillMatches, markRead, dismiss, openRef, LEVEL };
-export { LEVEL };
+/*
+ * The tab is FlexDesk's (STORY-0031): its alert log (`createAlertLog`), its
+ * pane (`mountAlertsPane`) and the bell on the same log. What stays here is
+ * what only BugDesk has — the rules, which records match them now, and the log
+ * each store copy keeps — handed to FlexDesk as the log's SOURCE and the pane's
+ * rules column.
+ *
+ * One log covers every store copy the page shows (the page's own and, on a
+ * project page, the tracker's: `bottomSources` in pages.js). An entry's id and
+ * rule id are prefixed with its copy's index, so the two copies' ids never
+ * meet; read and dismiss go back to the copy the entry came from, and every
+ * `alerts:changed` — from either copy — re-reads the lot.
+ */
 
-/** "just now", "5 min ago", "3 h ago"; older than a day: the clock time (the day header has the date). */
-function ago(at, now) {
-    const s = Math.max(0, (now - at) / 1000);
-    if (s < 60) return 'just now';
-    if (s < 3600) return `${Math.floor(s / 60)} min ago`;
-    if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
-    return at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+/** This copy alone, when the caller names no sources. */
+const SELF = { inst: { storeLabelOf, IS_TRACKER_COPY }, alerts: { alertRules, ALERT_LOG, matchingNow, stillMatches, markRead, dismiss, openRef } };
+
+let _shared = null;
+let _sources = null;
+let _heard = false;
+
+const srcs = () => (_sources?.length ? _sources : [SELF]);
+
+/** The log's source: every copy's ALERT_LOG, newest first. */
+function mergedSource() {
+    const route = (verb, ids) => {
+        const list = srcs();
+        if (!ids) { for (const s of list) s.alerts[verb](); return; }
+        const by = new Map();
+        for (const id of ids) {
+            const cut = String(id).indexOf(':');
+            const si = Number(String(id).slice(0, cut));
+            if (!list[si]) continue;
+            if (!by.has(si)) by.set(si, []);
+            by.get(si).push(String(id).slice(cut + 1));
+        }
+        for (const [si, own] of by) list[si].alerts[verb](own);
+    };
+    return {
+        load() {
+            const entries = srcs().flatMap((s, si) => s.alerts.ALERT_LOG.map((a) => ({
+                id: `${si}:${a.id}`, at: a.at, level: a.level, title: a.title, ref: a.ref, read: a.read,
+                ruleId: `${si}:${a.ruleId}`, rule: a.rule, store: a.store, key: a.key, si, ownRuleId: a.ruleId,
+            }))).sort((x, y) => y.at - x.at);
+            return { entries, more: false };
+        },
+        markRead: (ids) => route('markRead', ids),
+        dismiss: (ids) => route('dismiss', ids),
+    };
 }
 
-function dayLabel(at, now) {
-    const d = new Date(at.getFullYear(), at.getMonth(), at.getDate());
-    const t = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const days = Math.round((t - d) / 86400000);
-    if (days === 0) return 'TODAY';
-    if (days === 1) return 'YESTERDAY';
-    return at.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }).toUpperCase();
-}
-
-/** The worst level among these entries — the badge's colour. */
-export function worstLevel(entries) {
-    if (entries.some((a) => a.level === 'alert')) return 'alert';
-    if (entries.some((a) => a.level === 'warning')) return 'warning';
-    return entries.length ? 'info' : null;
+/**
+ * The one alert log of this page, which the Alerts tab and the bell both read.
+ * @param {object} [o]
+ * @param {object} [o.eventBus]  its `alerts:changed` re-reads the log
+ * @param {Array<{inst: object, alerts: object}>} [o.sources]  store copies; this one by default
+ */
+export function sharedAlertLog({ eventBus = null, sources = null } = {}) {
+    if (sources) _sources = sources;
+    if (!_shared) _shared = createAlertLog({ source: mergedSource(), limit: LOG_LIMIT * 2 });
+    // The bus may arrive after the log (installAlerts sets `_bus`); hear it once.
+    const bus = eventBus || _bus;
+    if (bus && !_heard) {
+        _heard = true;
+        bus.on?.('alerts:changed', () => _shared.refresh());
+    }
+    if (sources) _shared.refresh();
+    return _shared;
 }
 
 /**
  * Mount the bottom panel's Alerts tab: the rules on the left with how many
- * records match each now, the log on the right, newest first, filtered by rule,
- * level and text. Returns `{ refresh, destroy }`.
+ * records match each now, the log on the right. Returns `{ refresh, destroy }`.
  *
  * @param {HTMLElement} host
  * @param {object} [o]
@@ -259,159 +301,40 @@ export function worstLevel(entries) {
  * @param {(b:{unread:number, level:string|null}) => void} [o.onBadge]
  * @param {() => void} [o.onEditRules]  Edit rules (Settings › Alerts)
  */
-export function mountAlertsPane(host, { eventBus = null, sources = null, onBadge = null, onEditRules = null } = {}) {
-    const srcs = sources?.length ? sources : [{ inst: { storeLabelOf: (s) => (s === 'bugs' ? 'Bugs' : 'Backlog') }, alerts: SELF }];
-    let rule = null;                // `${si}:${ruleId}` or null for all
-    let level = 'all';
-    let q = '';
-
-    const entries = () => srcs.flatMap((s, si) => s.alerts.ALERT_LOG.map((a) => ({ a, s, si, key: `${si}:${a.id}` })))
-        .sort((x, y) => y.a.at - x.a.at);
-    const ruleKey = (x) => `${x.si}:${x.a.ruleId}`;
-
-    const badge = () => {
-        const unread = entries().filter((x) => !x.a.read).map((x) => x.a);
-        onBadge?.({ unread: unread.length, level: worstLevel(unread) });
-    };
-
-    const render = () => {
-        const now = new Date();
-        const all = entries();
-        const byRule = rule ? all.filter((x) => ruleKey(x) === rule) : all;
-        const needle = q.trim().toLowerCase();
-        const shown = byRule
-            .filter((x) => level === 'all' || x.a.level === level)
-            .filter((x) => !needle || `${x.a.ref} ${x.a.title}`.toLowerCase().includes(needle));
-        const rules = srcs.flatMap((s, si) => s.alerts.alertRules().map((r) => ({ r, si, key: `${si}:${r.id}`, s })));
-        const ruleBtn = (key, dot, name, meta, off = false) => `
-            <button type="button" class="bd-alerts__rulebtn${rule === key ? ' bd-alerts__rulebtn--on' : ''}${off ? ' bd-alerts__rulebtn--off' : ''}" data-rule="${esc(key ?? '')}" aria-pressed="${rule === key}">
-                <span class="bd-alerts__dot${dot ? ` bd-alerts__dot--${esc(dot)}` : ''}"></span>
-                <span class="bd-alerts__rulename">${esc(name)}</span>
-                <span class="bd-alerts__meta">${esc(meta)}</span>
-            </button>`;
-        const chip = (k, label) => {
-            const n = byRule.filter((x) => k === 'all' || x.a.level === k).length;
-            return `<button type="button" class="bd-alerts__chip${level === k ? ' bd-alerts__chip--on' : ''}" data-level="${k}" aria-pressed="${level === k}">${label} <span>${n}</span></button>`;
-        };
-        let lastDay = '';
-        const rows = shown.map((x) => {
-            const { a, s } = x;
-            const lv = LEVEL[a.level] || LEVEL.info;
-            const still = s.alerts.stillMatches(a);
-            const day = dayLabel(a.at, now);
-            const head = day !== lastDay ? `<div class="bd-alerts__day">${esc(day)}</div>` : '';
-            lastDay = day;
-            return `${head}
-                <div class="bd-alerts__row bd-alerts__row--${esc(a.level)}${a.read ? '' : ' bd-alerts__row--unread'}">
-                    <span class="bd-alerts__unread" aria-label="${a.read ? 'Read' : 'Unread'}"></span>
-                    <span class="material-symbols-outlined bd-alerts__icon" title="${esc(lv.label)}">${lv.icon}</span>
-                    <span class="bd-alerts__time" title="${esc(a.at.toLocaleString())}">${esc(ago(a.at, now))}</span>
-                    <span class="bd-alerts__rule">${esc(a.rule)}</span>
-                    <span class="bd-alerts__store">${esc(s.inst.storeLabelOf(a.store))}</span>
-                    <a href="#" class="bd-alerts__ref" data-open="${esc(x.key)}">${esc(a.ref)}</a>
-                    <span class="bd-alerts__title">${esc(a.title)}</span>
-                    <span class="bd-alerts__state${still === false ? ' bd-alerts__state--gone' : ''}">${still === true ? 'still matches' : still === false ? 'no longer matches' : ''}</span>
-                    <span class="bd-alerts__acts">
-                        <button type="button" class="bd-alerts__icon-btn" data-open="${esc(x.key)}" aria-label="Open ${esc(a.ref)}" title="Open">${'<span class="material-symbols-outlined">open_in_new</span>'}</button>
-                        <button type="button" class="bd-alerts__icon-btn" data-dismiss="${esc(x.key)}" aria-label="Dismiss this alert" title="Dismiss">${'<span class="material-symbols-outlined">close</span>'}</button>
-                    </span>
-                </div>`;
-        }).join('');
-        const noRules = !rules.length;
-        const scroll = host.querySelector('.bd-alerts__log')?.scrollTop ?? 0;
-        const typing = document.activeElement?.dataset?.slot === 'alert-q' && host.contains(document.activeElement);
-        host.innerHTML = `
-            <div class="bd-alerts">
-                <div class="bd-alerts__rules">
-                    <div class="bd-alerts__head">
-                        <span class="bd-alerts__caps">RULES</span>
-                        <span class="td-spacer"></span>
-                        <a href="#" data-act="edit-rules">Edit rules</a>
-                    </div>
-                    <div class="bd-alerts__rulelist">
-                        ${ruleBtn(null, null, 'All alerts', `${all.length}`)}
-                        ${rules.map(({ r, s, key }) => {
-                            const n = s.alerts.matchingNow(r.id);
-                            const meta = r.enabled === false ? 'off' : n === null ? '' : `${n} now`;
-                            const name = srcs.length > 1 && s.inst.IS_TRACKER_COPY ? `${r.name} · Tracker` : r.name;
-                            return ruleBtn(key, r.level || 'info', name || 'Unnamed rule', meta, r.enabled === false);
-                        }).join('')}
-                        ${noRules ? '<div class="td-dim bd-alerts__empty">No rules yet.</div>' : ''}
-                    </div>
-                    <div class="bd-alerts__foot">Counts are records matching now. A rule fires when a record starts to match, while BugDesk is open.</div>
-                </div>
-                <div class="bd-alerts__main">
-                    <div class="bd-alerts__bar">
-                        <div class="bd-alerts__chips" role="group" aria-label="Level">
-                            ${chip('all', 'All')}${chip('alert', 'Alert')}${chip('warning', 'Warning')}${chip('info', 'Info')}
-                        </div>
-                        <input type="text" autocomplete="off" spellcheck="false" class="ea-tin bd-alerts__q" data-slot="alert-q" aria-label="Filter alerts" placeholder="Filter by ref or title" value="${esc(q)}">
-                        <span class="td-spacer"></span>
-                        <button type="button" class="ea-btn" data-act="read-all" ${all.some((x) => !x.a.read) ? '' : 'disabled'}>Mark all read</button>
-                        <button type="button" class="ea-btn" data-act="clear" ${all.length ? '' : 'disabled'}>Clear</button>
-                    </div>
-                    <div class="bd-alerts__log">
-                        ${rows || `<div class="td-dim bd-alerts__none">${noRules
-                            ? 'No alert rules yet. Edit rules to add one: an alert fires when a record starts matching it.'
-                            : all.length ? 'No alerts match.' : 'Nothing yet. Alerts appear here when a record starts matching a rule.'}</div>`}
-                    </div>
-                    <div class="bd-alerts__status">Kept across restarts · the last ${LOG_LIMIT} · toasts follow each rule's setting</div>
-                </div>
-            </div>`;
-        const log = host.querySelector('.bd-alerts__log');
-        if (log) log.scrollTop = scroll;
-        if (typing) {
-            const input = host.querySelector('[data-slot="alert-q"]');
-            input?.focus();
-            input?.setSelectionRange(q.length, q.length);
-        }
-        badge();
-    };
-
-    const find = (key) => entries().find((x) => x.key === key);
-
-    host.addEventListener('click', (e) => {
-        const r = e.target.closest('[data-rule]');
-        if (r) { rule = r.dataset.rule || null; render(); return; }
-        const lv = e.target.closest('[data-level]');
-        if (lv) { level = lv.dataset.level; render(); return; }
-        const open = e.target.closest('[data-open]');
-        if (open) {
-            e.preventDefault();
-            const x = find(open.dataset.open);
-            if (!x) return;
-            x.s.alerts.markRead([x.a.id]);
-            x.s.alerts.openRef(x.a.ref);
-            return;
-        }
-        const dis = e.target.closest('[data-dismiss]');
-        if (dis) {
-            const x = find(dis.dataset.dismiss);
-            if (x) x.s.alerts.dismiss([x.a.id]);
-            return;
-        }
-        const act = e.target.closest('[data-act]')?.dataset.act;
-        if (act === 'edit-rules') { e.preventDefault(); onEditRules?.(); }
-        else if (act === 'read-all') for (const s of srcs) s.alerts.markRead();
-        else if (act === 'clear') for (const s of srcs) s.alerts.dismiss();
-    });
-    host.addEventListener('input', (e) => {
-        if (e.target.dataset?.slot !== 'alert-q') return;
-        q = e.target.value;
-        render();
-    });
-
-    const subs = [eventBus?.on?.('alerts:changed', render)];
-    // "5 min ago" has to move on its own.
-    const timer = setInterval(render, 60000);
-    render();
-    return {
-        refresh: render,
-        destroy: () => {
-            clearInterval(timer);
-            for (const s of subs) { try { s?.dispose?.(); s?.(); } catch { /* gone */ } }
+export function mountAlertsTab(host, { eventBus = null, sources = null, onBadge = null, onEditRules = null } = {}) {
+    const log = sharedAlertLog({ eventBus, sources });
+    const copy = (entry) => srcs()[entry.si] ?? srcs()[0];
+    const noRules = () => !srcs().some((s) => s.alerts.alertRules().length);
+    return mountAlertsPane(host, {
+        log,
+        onBadge,
+        onOpen: (entry) => copy(entry).alerts.openRef(entry.ref),
+        rules: {
+            list: () => srcs().flatMap((s, si) => s.alerts.alertRules().map((r) => {
+                const n = s.alerts.matchingNow(r.id);
+                return {
+                    id: `${si}:${r.id}`,
+                    name: srcs().length > 1 && s.inst.IS_TRACKER_COPY ? `${r.name} · Tracker` : r.name,
+                    level: r.level || 'info',
+                    meta: r.enabled === false ? 'off' : n === null ? '' : `${n} now`,
+                    off: r.enabled === false,
+                };
+            })),
+            onEdit: onEditRules,
+            foot: 'Counts are records matching now. A rule fires when a record starts to match, while BugDesk is open.',
         },
-    };
+        stillMatches: (entry) => copy(entry).alerts.stillMatches({ ruleId: entry.ownRuleId, key: entry.key }),
+        describe: (entry) => copy(entry).inst.storeLabelOf(entry.store),
+        status: `Kept across restarts · the last ${LOG_LIMIT} · toasts follow each rule's setting`,
+        empty: {
+            get none() {
+                return noRules()
+                    ? 'No alert rules yet. Edit rules to add one: an alert fires when a record starts matching it.'
+                    : 'Nothing yet. Alerts appear here when a record starts matching a rule.';
+            },
+            filtered: 'No alerts match.',
+        },
+    });
 }
 
 /* ── Settings › Alerts ───────────────────────────────────────────── */

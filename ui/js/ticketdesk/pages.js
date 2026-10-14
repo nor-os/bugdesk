@@ -38,7 +38,7 @@
  * the open queue without a reload.
  */
 
-import { mountTileBreadcrumb } from '@flexdesk/wm';
+import { createBottomPanelTabs, mountTileBreadcrumb } from '@flexdesk/wm';
 import { activeTopNavKind, taxonomy } from '../tiling/kind_taxonomy.js';
 import { installRecordDragSource, markDragCell, openRecordAs } from './record_dnd.js';
 import { createTable, fileSlug } from './bd_table.js';
@@ -2301,7 +2301,7 @@ function mountTicketInspector(host, props, ctx) {
  * that copy's modules and its own repo (instance.js). Standalone TicketDesk is
  * one copy whose store IS the tracker.
  */
-async function bottomSources() {
+export async function bottomSources() {
     const [inst, alerts] = await Promise.all([import('./instance.js'), import('./alerts.js')]);
     const out = [{ inst, alerts }];
     if (MERGED_TRACKER) {
@@ -2315,79 +2315,72 @@ async function bottomSources() {
     return out;
 }
 
-const BOTTOM_TABS = { alerts: 'Alerts', changes: 'Changes' };
 const BOTTOM_TAB_KEY = 'bugdesk.bottomTab';
 
 /**
  * Two tabs, each with a count: Alerts (unread, in the worst unread level's
- * colour) and Changes (uncommitted records). The panel's title is the tab in
- * front — FlexDesk's `ctx.setTitle`. Both panes are mounted at once, so the
+ * colour) and Changes (uncommitted records), on FlexDesk's tab host
+ * (`createBottomPanelTabs`, STORY-0031). The panel's title is the tab in front
+ * — FlexDesk's `ctx.setTitle`. Both panes mount at once (`eager`), so the
  * counts are right before either tab is opened; the last tab used is
  * remembered per browser. `bottompanel:show` with `{ tab }` brings a tab to the
- * front (the toasts' "+N more" asks for Alerts).
+ * front (the bell, and the toasts' "+N more", ask for Alerts).
+ *
+ * The store copies arrive later than the panel (`bottomSources`), so each pane
+ * draws into its element once they have.
  */
 function mountTicketBottomPanel(host, props, ctx) {
-    let tab = 'alerts';
-    let changes = null;
-    let alertsPane = null;
     let destroyed = false;
-    try { if (BOTTOM_TABS[localStorage.getItem(BOTTOM_TAB_KEY)]) tab = localStorage.getItem(BOTTOM_TAB_KEY); } catch { /* no storage */ }
-    host.innerHTML = `
-        <div class="twm-bp">
-            <div class="twm-bp__tabs" role="tablist">
-                ${Object.entries(BOTTOM_TABS).map(([k, label]) => `
-                    <button class="twm-bp__tab" role="tab" data-bptab="${k}" aria-selected="false">${label}<span class="twm-bp__badge" data-badge="${k}" hidden></span></button>`).join('')}
-            </div>
-            ${Object.keys(BOTTOM_TABS).map((k) => `<div class="twm-bp__body" role="tabpanel" data-bppanel="${k}" hidden></div>`).join('')}
-        </div>`;
-    const show = (k) => {
-        if (!BOTTOM_TABS[k]) return;
-        tab = k;
-        for (const t of host.querySelectorAll('[data-bptab]')) {
-            const on = t.dataset.bptab === k;
-            t.classList.toggle('twm-bp__tab--on', on);
-            t.setAttribute('aria-selected', String(on));
-        }
-        for (const p of host.querySelectorAll('[data-bppanel]')) p.hidden = p.dataset.bppanel !== k;
-        ctx?.setTitle?.(BOTTOM_TABS[k]);
-        try { localStorage.setItem(BOTTOM_TAB_KEY, k); } catch { /* no storage */ }
-        if (k === 'changes') changes?.refresh();
+    const sourcesP = bottomSources();
+    const later = (mount) => (el, store, api) => {
+        let inner = null;
+        sourcesP.then(async (sources) => {
+            if (destroyed) return;
+            const made = await mount(el, sources, api);
+            if (destroyed) made?.destroy?.();
+            else inner = made;
+        }).catch((err) => console.warn('[bugdesk] a bottom-panel tab failed', err));
+        return {
+            onShow: () => inner?.refresh?.(),
+            destroy: () => inner?.destroy?.(),
+        };
     };
-    const setBadge = (k, n, level = null) => {
-        const el = host.querySelector(`[data-badge="${k}"]`);
-        if (!el) return;
-        el.hidden = !(n > 0);
-        el.textContent = n > 99 ? '99+' : String(n);
-        el.className = `twm-bp__badge${level ? ` twm-bp__badge--${level}` : ''}`;
-    };
-
-    bottomSources().then(async (sources) => {
-        if (destroyed) return;
-        const [{ mountChangesPane }, { mountAlertsPane }] = await Promise.all([import('./changes_pane.js'), import('./alerts.js')]);
-        if (destroyed) return;
-        alertsPane = mountAlertsPane(host.querySelector('[data-bppanel="alerts"]'), {
-            eventBus: _eventBus, sources,
-            onBadge: ({ unread, level }) => setBadge('alerts', unread, level),
-            onEditRules: () => sources[0].alerts.openAlertsEditor({ eventBus: _eventBus }),
-        });
-        changes = mountChangesPane(host.querySelector('[data-bppanel="changes"]'), {
-            eventBus: _eventBus, sources,
-            onCount: (n) => setBadge('changes', n),
-        });
+    const tabs = createBottomPanelTabs(host, {
+        eventBus: _eventBus,
+        remember: {
+            read: () => { try { return localStorage.getItem(BOTTOM_TAB_KEY); } catch { return null; } },
+            write: (id) => { try { localStorage.setItem(BOTTOM_TAB_KEY, id); } catch { /* no storage */ } },
+        },
+        onSelect: (id, pane) => ctx?.setTitle?.(pane.label),
+        panes: [
+            {
+                id: 'alerts', label: 'Alerts', eager: true,
+                mount: later(async (el, sources, api) => {
+                    const { mountAlertsTab } = await import('./alerts.js');
+                    return mountAlertsTab(el, {
+                        eventBus: _eventBus, sources,
+                        onBadge: ({ unread, level }) => api.setBadge('alerts', unread, level),
+                        onEditRules: () => sources[0].alerts.openAlertsEditor({ eventBus: _eventBus }),
+                    });
+                }),
+            },
+            {
+                id: 'changes', label: 'Changes', eager: true,
+                mount: later(async (el, sources, api) => {
+                    const { mountChangesPane } = await import('./changes_pane.js');
+                    return mountChangesPane(el, {
+                        eventBus: _eventBus, sources,
+                        onCount: (n) => api.setBadge('changes', n),
+                    });
+                }),
+            },
+        ],
     });
-    host.addEventListener('click', (e) => {
-        const t = e.target.closest('[data-bptab]');
-        if (t) show(t.dataset.bptab);
-    });
-    const sub = _eventBus?.on?.('bottompanel:show', (p) => show(p?.tab || 'alerts'));
-    show(tab);
     return {
-        title: BOTTOM_TABS[tab],
+        title: tabs.active() === 'changes' ? 'Changes' : 'Alerts',
         destroy: () => {
             destroyed = true;
-            changes?.destroy();
-            alertsPane?.destroy();
-            try { sub?.dispose?.(); sub?.(); } catch { /* gone */ }
+            tabs.destroy();
         },
     };
 }

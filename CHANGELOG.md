@@ -320,6 +320,14 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   someone chooses, the project's existing value still applies to them. Commit
   and push stay shared, under Git.
 
+- **The bell counts unread alerts, and the Alerts tab is FlexDesk's**
+  (STORY-0031). The bell in the bottom bar shows how many alerts are unread, in
+  the worst unread level's colour, and a click opens the bottom panel on Alerts.
+  The tab strip, the alert log and the Alerts pane are FlexDesk 0.14's shared
+  ones (`createBottomPanelTabs`, `createAlertLog`, `mountAlertsPane`), which
+  Tables uses too. BugDesk keeps its rules, the log it saves and the rules
+  editor, and plugs them in as the pane's rules column and the log's source.
+
 - **The bottom panel is Alerts and Changes; Console is gone.** Each tab
   carries a count — unread alerts, in the worst unread level's colour, and
   uncommitted records — and the panel's title is the tab in front (FlexDesk

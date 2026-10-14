@@ -3673,49 +3673,89 @@ console.log('\nBottom panel: Changes and Alerts');
         }
     });
 
-    await t('the Alerts pane counts per rule and level, filters, and badges the unread', async () => {
-        const { mountAlertsPane } = await import(join(UI, 'ticketdesk', 'alerts.js'));
-        const log = [
+    await t('the Alerts tab (FlexDesk\'s pane on one log over every copy) counts per rule and level, filters, and badges the unread', async () => {
+        const { mountAlertsTab, sharedAlertLog } = await import(join(UI, 'ticketdesk', 'alerts.js'));
+        const { NotificationHistory } = await import('@flexdesk/widgets');
+        const fake = (entries, rules, matching) => {
+            const opened = [];
+            return {
+                opened,
+                ALERT_LOG: entries,
+                alertRules: () => rules,
+                matchingNow: (id) => matching[id] ?? null,
+                stillMatches: (a) => a.key === 'bugs:2',
+                markRead: (ids) => { for (const a of entries) if (!ids || ids.includes(a.id)) a.read = true; },
+                dismiss: (ids) => { for (let i = entries.length - 1; i >= 0; i--) if (!ids || ids.includes(entries[i].id)) entries.splice(i, 1); },
+                openRef: (ref) => opened.push(ref),
+            };
+        };
+        const alerts = fake([
             { id: 'a', at: new Date(Date.now() - 60000), ruleId: 'r1', rule: 'P1 opened', level: 'alert', ref: '#2', title: 'Crash', store: 'bugs', key: 'bugs:2', read: false },
             { id: 'b', at: new Date(Date.now() - 600000), ruleId: 'r2', rule: 'On agent', level: 'warning', ref: 'TASK-0004', title: 'Inherit', store: 'backlog', key: 'backlog:4', read: true },
+        ], [{ id: 'r1', name: 'P1 opened', level: 'alert' }, { id: 'r2', name: 'On agent', level: 'warning' }], { r1: 2, r2: 5 });
+        // The tracker's copy, on a project page: the same ids, kept apart.
+        const tracker = fake([
+            { id: 'a', at: new Date(Date.now() - 120000), ruleId: 'r1', rule: 'New ticket', level: 'info', ref: 'T-1', title: 'Hello', store: 'bugs', key: 'bugs:1', read: false },
+        ], [{ id: 'r1', name: 'New ticket', level: 'info' }], { r1: 1 });
+        const sources = [
+            { inst: { IS_TRACKER_COPY: false, storeLabelOf: (s) => (s === 'bugs' ? 'Bugs' : 'Backlog') }, alerts },
+            { inst: { IS_TRACKER_COPY: true, storeLabelOf: () => 'Tracker' }, alerts: tracker },
         ];
-        const opened = [];
-        const alerts = {
-            ALERT_LOG: log,
-            alertRules: () => [{ id: 'r1', name: 'P1 opened', level: 'alert' }, { id: 'r2', name: 'On agent', level: 'warning' }],
-            matchingNow: (id) => (id === 'r1' ? 2 : 5),
-            stillMatches: (a) => a.id === 'a',
-            markRead: (ids) => { for (const a of log) if (!ids || ids.includes(a.id)) a.read = true; },
-            dismiss: (ids) => { for (let i = log.length - 1; i >= 0; i--) if (!ids || ids.includes(log[i].id)) log.splice(i, 1); },
-            openRef: (ref) => opened.push(ref),
-        };
-        const inst = { IS_TRACKER_COPY: false, storeLabelOf: (s) => (s === 'bugs' ? 'Bugs' : 'Backlog') };
         const host = document.createElement('div');
+        document.body.appendChild(host);
         let badge = null;
-        const pane = mountAlertsPane(host, { sources: [{ inst, alerts }], onBadge: (b) => { badge = b; } });
+        const pane = mountAlertsTab(host, { sources, onBadge: (b) => { badge = b; } });
+        const rows = () => [...host.querySelectorAll('.twm-alerts__row')];
+        const settle = async () => { for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0)); };
         try {
-            assert.deepEqual(badge, { unread: 1, level: 'alert' });
-            const metas = [...host.querySelectorAll('.bd-alerts__rulebtn .bd-alerts__meta')].map((m) => m.textContent);
-            assert.deepEqual(metas, ['2', '2 now', '5 now']);
-            assert.equal(host.querySelectorAll('.bd-alerts__row').length, 2);
-            assert.match(host.querySelector('.bd-alerts__row').textContent, /1 min ago\s+P1 opened\s+Bugs\s+#2\s+Crash\s+still matches/);
-            assert.match(host.querySelectorAll('.bd-alerts__row')[1].textContent, /no longer matches/);
-            assert.equal(host.querySelector('.bd-alerts__day').textContent, 'TODAY');
+            await settle();
+            assert.deepEqual(badge, { unread: 2, level: 'alert' });
+            const metas = [...host.querySelectorAll('.twm-alerts__rulebtn .twm-alerts__meta')].map((m) => m.textContent);
+            assert.deepEqual(metas, ['3', '2 now', '5 now', '1 now']);
+            assert.match(host.querySelectorAll('.twm-alerts__rulename')[3].textContent, /New ticket · Tracker/);
+            assert.equal(rows().length, 3);
+            assert.match(rows()[0].textContent, /1 min ago\s*P1 opened\s*Bugs\s*#2\s*Crash\s*still matches/);
+            assert.match(rows()[1].textContent, /2 min ago\s*New ticket\s*Tracker\s*T-1/);
+            assert.match(rows()[2].textContent, /no longer matches/);
+            assert.equal(host.querySelector('.twm-alerts__day').textContent, 'TODAY');
             host.querySelector('[data-level="warning"]').click();
-            assert.equal(host.querySelectorAll('.bd-alerts__row').length, 1, 'level filter');
+            assert.equal(rows().length, 1, 'level filter');
             host.querySelector('[data-level="all"]').click();
             host.querySelector('[data-rule="0:r1"]').click();
-            assert.equal(host.querySelectorAll('.bd-alerts__row').length, 1, 'rule filter');
+            assert.equal(rows().length, 1, 'rule filter: the tracker\'s r1 is another rule');
             host.querySelector('[data-rule=""]').click();
-            host.querySelector('.bd-alerts__row [data-open]').click();
-            assert.deepEqual(opened, ['#2']);
-            pane.refresh();
-            assert.deepEqual(badge, { unread: 0, level: null }, 'opening did not mark it read');
-            host.querySelector('[data-dismiss]').click();
-            pane.refresh();
-            assert.equal(host.querySelectorAll('.bd-alerts__row').length, 1, 'dismiss');
+            rows()[0].querySelector('[data-open]').click();
+            assert.deepEqual(alerts.opened, ['#2']);
+            await settle();
+            assert.equal(alerts.ALERT_LOG[0].read, true, 'Open marks the entry read in its own copy');
+            assert.equal(tracker.ALERT_LOG[0].read, false, '…and not the tracker\'s entry with the same id');
+            assert.deepEqual(badge, { unread: 1, level: 'info' });
+            rows()[1].querySelector('[data-open]').click();
+            assert.deepEqual(tracker.opened, ['T-1'], 'a tracker entry opens in the tracker\'s copy');
+            await settle();
+
+            // The bell reads the same log: nothing unread, no badge.
+            const bellHost = document.createElement('div');
+            document.body.appendChild(bellHost);
+            const bell = new NotificationHistory({ notificationCenter: { history: [] }, alertLog: sharedAlertLog(), mountPoint: bellHost, onOpen: () => {} });
+            bell.mount();
+            const bellBadge = () => bellHost.querySelector('.twm-notification-history__badge');
+            assert.equal(bellBadge().style.display, 'none', 'all read: the bell has no count');
+            tracker.ALERT_LOG.push({ id: 'c', at: new Date(), ruleId: 'r1', rule: 'New ticket', level: 'warning', ref: 'T-2', title: 'Again', store: 'bugs', key: 'bugs:3', read: false });
+            await sharedAlertLog().refresh();
+            assert.equal(bellBadge().textContent, '1', 'a new alert in either copy counts on the bell');
+            assert.ok(bellBadge().classList.contains('twm-notification-history__badge--warning'));
+            bell.unmount();
+            bellHost.remove();
+
+            assert.match(rows()[0].textContent, /T-2/, 'the newest row is the tracker\'s new alert');
+            rows()[0].querySelector('[data-dismiss]').click();
+            await settle();
+            assert.equal(rows().length, 3, 'dismiss');
+            assert.equal(tracker.ALERT_LOG.length, 1, 'dismissed in its own copy');
         } finally {
             pane.destroy();
+            host.remove();
         }
     });
 }
