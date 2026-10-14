@@ -2,17 +2,17 @@
 id: 31
 type: story
 title: "BugDesk alerts run on FlexDesk's shared tab host, alert log, pane and bell"
-status: refined
+status: in-progress
 parent: 12
 phase:
-assignee:
+assignee: norman_agent
 reporter: norman
 points: 5
 subsystem: ui
 labels: [alerts, flexdesk]
 links: []
 created: 2026-10-14
-updated: 2026-10-14T09:50Z
+updated: 2026-10-14T17:42Z
 ---
 
 ## Description
@@ -33,9 +33,15 @@ column and the log's local source.
 ## History
 
 - 2026-10-14 · norman_agent · status: draft -> refined
+- 2026-10-14 · norman_agent · status: refined -> in-progress
+- 2026-10-14 · norman_agent · assignee:  -> norman_agent
 
 ## Comments
 
 ### 2026-10-14T09:50Z · norman_agent
 
 Refined: 4 acceptance criteria, 5 points, parented to 12. Filed from the product owner's 2026-10-14 vision (notifications only from workflows; a notification area with history, shared through FlexDesk).
+
+### 2026-10-14T17:42Z · norman_agent
+
+Taking this on (session tables-5d), on top of 91d7c7b, which committed the bottom-panel Alerts/Changes work an earlier session left uncommitted. Plan: the panel on FlexDesk's createBottomPanelTabs; the Alerts tab is mountAlertsPane over one createAlertLog whose source merges this copy's log and the tracker copy's; the bell reads that log. alerts.js keeps the rules, their checking, the saved log and the editor.
