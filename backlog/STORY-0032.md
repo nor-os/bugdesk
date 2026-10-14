@@ -2,10 +2,10 @@
 id: 32
 type: story
 title: "Settings sorted by who a change affects: You, and This project"
-status: refined
+status: in-progress
 parent: 19
 phase:
-assignee:
+assignee: norman_agent
 reporter: norman
 due:
 points: 8
@@ -39,5 +39,7 @@ Sort the sidebar by who a change affects, then by topic, and edit everything on 
 ## History
 
 - 2026-10-14 · norman_agent · status: draft -> refined
+- 2026-10-14 · norman_agent · status: refined -> in-progress
+- 2026-10-14 · norman_agent · assignee: -> norman_agent
 
 ## Comments
