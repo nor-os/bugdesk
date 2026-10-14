@@ -33,6 +33,8 @@ OPTIONS
   --seed            Copy the bundled examples into any store that is still
                     empty. Never overwrites: a store that already holds records
                     is skipped, and the two stores are considered separately.
+                    Seeding either also adds the example's shared Bugs and
+                    Backlog dashboards (an id already there is left alone).
   --tracker         Tracker mode - follow up work you handed to other people.
                     Its records live under %APPDATA%\BugDesk\<project>\, NOT in
                     this repo, and the port is chosen automatically.
@@ -176,6 +178,9 @@ function Seed-Store {
     New-Item -ItemType Directory -Path $Dir -Force | Out-Null
     Copy-Item -Path $incoming.FullName -Destination $Dir
     Write-Host "BugDesk: seeded $Dir with $($incoming.Count) example $What."
+    # The example dashboards go into the project's config, which the server
+    # resolves, so it adds them on start (STORY-0039).
+    $env:BUGDESK_SEED_DASHBOARDS = '1'
 }
 
 # -- the .NET SDK --------------------------------------------------------------
@@ -244,6 +249,9 @@ if ($env:BUGDESK_MODE -eq 'tracker') {
 }
 
 # Seed each store INDEPENDENTLY - see Seed-Store above.
+# $env: outlives the script in the calling PowerShell session; clear the
+# dashboards flag so a later plain run does not re-add deleted examples.
+$env:BUGDESK_SEED_DASHBOARDS = $null
 if ($seed) {
     Seed-Store $bugsDir    'BUG-*.md' (Join-Path $root 'examples\bugs')    'bug(s)'
     Seed-Store $backlogDir '*-*.md'   (Join-Path $root 'examples\backlog') 'backlog item(s)'

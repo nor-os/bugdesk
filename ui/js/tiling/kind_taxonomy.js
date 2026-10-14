@@ -164,6 +164,11 @@ export const taxonomy = createTaxonomy({
             'tracker-new': { label: 'New ticket', icon: 'add_circle', topNav: 'tracker' },
         } : {}),
 
+        // EPIC-0033. Charts over this project's records, in every mode. Before
+        // the merged Tracker chip (40), which belongs to no project and so stays
+        // last. Which dashboard is open is `props.dashboard`, not a sub-kind.
+        dashboards: { label: 'Dashboards', icon: 'monitoring', isTopNav: true, order: TRACKER ? 20 : 35 },
+
         backlog: TRACKER
             ? { label: 'Tickets', icon: 'workspaces', topNav: 'tracker' }
             : HAS_BACKLOG

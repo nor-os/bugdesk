@@ -7,6 +7,53 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Dashboards** (STORY-0034, EPIC-0033). A Dashboards chip in the top bar of
+  every project, in bugs and tracker mode. A dashboard is a FlexDesk tile grid
+  of chart and KPI tiles that can be added, removed, moved, resized and
+  configured. Shared dashboards are saved in the committed
+  `.bugdesk/project.json` under `dashboards` (`GET/POST /api/project/dashboards`,
+  `DELETE /api/project/dashboards/{id}`, one dashboard per save), so a change
+  shows in the Changes pane. An entry the UI cannot read is shown as broken
+  with the reason and is never rewritten. Plotly 2.35.2 is vendored under
+  `ui/vendor/plotly/` and loads only when a dashboard opens. In merged mode the
+  Tracker chip moves one place right, after Dashboards.
+  A tile charts bugs or backlog items (STORY-0036): one or more types, the
+  views' own filters (a saved filter is copied into the tile), then a count per
+  value of any field, labels and custom fields included, as a bar, pie or donut;
+  a sum or average per value, a histogram or a KPI over a number field (points
+  or a custom number field; `M` and `?` are left out and counted in the tile's
+  note); or items created and finished per week over a date range, finished
+  read from History (`GET /api/dashboards/status_history`). A click on a bar or
+  slice opens those records in the list; tiles redraw when records change here
+  or on disk; a tile over a field removed from the schema says which field.
+  Personal dashboards (STORY-0035) are listed under the shared ones, marked
+  Personal, and stored per profile in the git-ignored
+  `.bugdesk/state-<user>/dashboards.json`. A shared dashboard can be copied to
+  a personal one; sharing a personal one moves it into `project.json` under a
+  new id, and asks for another name when a shared one already has it.
+  A burndown tile (STORY-0037) shows remaining points or items of an epic and
+  everything under it, a phase, or the whole backlog (bugs: the open bugs of a
+  filter), day by day from History, with a dashed ideal line, a Today marker and
+  a Scope line that falls when an item is dropped (dropped is not burned down).
+  The range defaults to earliest created through the due date or today. Points
+  are current estimates, which the tile's footer says.
+  Tracker records (STORY-0038) are a third source wherever the tracker is
+  available: in tracker mode, and on a project page with the tracker on, where
+  they are read from the tracker's own copy (`/t/api`) and never mixed into the
+  backlog. Their own fields, custom fields and views apply. A count can be split
+  by a second field, so "Due (week)" (overdue, due this week, later, no date,
+  closed, from the record's due state) per assignee is one stacked bar chart; a
+  click opens the tracker's ticket list. A burndown can scope to a PROJ record
+  and everything under it. With the tracker off the source is not offered, and a
+  saved tracker tile says the tracker is not available.
+  The example project (STORY-0039) ships shared Bugs and Backlog dashboards in
+  `examples/dashboards.json`: open bugs by status, severity and assignee,
+  created vs closed per week and a bugs burndown; points by status, items per
+  epic, a draft count and the EPIC-0001 burndown. `run.sh --seed` /
+  `run.ps1 --seed` set `BUGDESK_SEED_DASHBOARDS` when they seed a store, and the
+  server adds the example dashboards to that project's `project.json` (an id it
+  already has is left alone).
+
 - **Mass actions** (STORY-0029). The bug queue, the backlog board and the
   search results have a select-mode toggle in their header (FlexDesk 0.12.0's
   `selectToggle`): while it is on, a click ticks a row instead of opening it,

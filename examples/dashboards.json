@@ -1,0 +1,44 @@
+[
+  {
+    "id": "example-bugs",
+    "name": "Bugs",
+    "version": 1,
+    "tiles": [
+      { "id": "open-by-status", "type": "flexdesk.chart", "x": 0, "y": 0, "w": 4, "h": 4,
+        "config": { "title": "Open bugs by status", "chart_type": "bar",
+          "binding": { "source": "bugs", "filter": { "key": "active" }, "plot": "count", "field": "status" } } },
+      { "id": "open-by-severity", "type": "flexdesk.chart", "x": 4, "y": 0, "w": 4, "h": 4,
+        "config": { "title": "Open bugs by severity", "chart_type": "pie",
+          "binding": { "source": "bugs", "filter": { "key": "active" }, "plot": "count", "field": "severity" } } },
+      { "id": "open-by-assignee", "type": "flexdesk.chart", "x": 8, "y": 0, "w": 4, "h": 4,
+        "config": { "title": "Open bugs by assignee", "chart_type": "bar",
+          "binding": { "source": "bugs", "filter": { "key": "active" }, "plot": "count", "field": "assignee" } } },
+      { "id": "created-closed", "type": "flexdesk.chart", "x": 0, "y": 4, "w": 6, "h": 4,
+        "config": { "title": "Created vs closed per week", "chart_type": "bar",
+          "binding": { "source": "bugs", "plot": "perWeek", "from": "2026-06-15", "to": "2026-08-02" } } },
+      { "id": "bugs-burndown", "type": "flexdesk.chart", "x": 6, "y": 4, "w": 6, "h": 4,
+        "config": { "title": "Bugs burndown", "chart_type": "line",
+          "binding": { "source": "bugs", "plot": "burndown", "unit": "items", "from": "2026-06-15", "to": "2026-08-02" } } }
+    ]
+  },
+  {
+    "id": "example-backlog",
+    "name": "Backlog",
+    "version": 1,
+    "tiles": [
+      { "id": "points-by-status", "type": "flexdesk.chart", "x": 0, "y": 0, "w": 5, "h": 4,
+        "config": { "title": "Points by status", "chart_type": "bar",
+          "binding": { "source": "backlog", "types": ["story", "task"], "plot": "sum", "field": "status", "valueField": "points" } } },
+      { "id": "items-per-epic", "type": "flexdesk.chart", "x": 5, "y": 0, "w": 4, "h": 4,
+        "config": { "title": "Items per epic", "chart_type": "donut",
+          "binding": { "source": "backlog", "types": ["story", "task"], "plot": "count", "field": "epic" } } },
+      { "id": "drafts", "type": "flexdesk.kpi", "x": 9, "y": 0, "w": 3, "h": 2,
+        "config": { "title": "Drafts",
+          "binding": { "source": "backlog", "filter": { "key": "unrefined" }, "plot": "count" } } },
+      { "id": "epic-burndown", "type": "flexdesk.chart", "x": 0, "y": 4, "w": 12, "h": 4,
+        "config": { "title": "EPIC-0001 burndown", "chart_type": "line",
+          "binding": { "source": "backlog", "plot": "burndown", "unit": "points", "scope": { "kind": "epic", "id": 1 },
+            "from": "2026-09-01", "to": "2026-09-14" } } }
+    ]
+  }
+]

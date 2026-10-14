@@ -245,6 +245,89 @@ class ProjectConfig
         }
     }
 
+    /// <summary>
+    /// The shared dashboards (EPIC-0033) — the raw <c>dashboards</c> array, never
+    /// interpreted here: the UI decides which entries it can read and shows the
+    /// rest as broken. <c>Broken</c> says why the whole key cannot be read (the
+    /// file does not parse, or the key is not a list); it is null otherwise.
+    /// </summary>
+    public (JsonArray List, string? Broken) Dashboards()
+    {
+        if (!TryReadStrict(out var doc, out var why)) return (new JsonArray(), why);
+        var node = doc?["dashboards"];
+        if (node is null) return (new JsonArray(), null);
+        if (node is not JsonArray arr) return (new JsonArray(), "`dashboards` in project.json is not a list");
+        return ((JsonArray)arr.DeepClone(), null);
+    }
+
+    /// <summary>
+    /// Add or replace ONE dashboard, matched on its string <c>id</c>. Every other
+    /// element — including ones nobody can read — is written back untouched, so a
+    /// hand edit gone wrong is never dropped by somebody else's save. Refuses
+    /// (returns the reason) rather than writing when the file or the key cannot
+    /// be read: overwriting would lose whatever is in them.
+    /// </summary>
+    public string? UpsertDashboard(JsonObject entry)
+    {
+        lock (_gate)
+        {
+            if (!TryReadStrict(out var doc, out var why)) return why;
+            doc ??= new JsonObject();
+            var node = doc["dashboards"];
+            if (node is not null && node is not JsonArray) return "`dashboards` in project.json is not a list";
+            var list = node as JsonArray ?? new JsonArray();
+            var id = entry["id"]?.GetValue<string>();
+            var at = IndexOfDashboard(list, id);
+            if (at >= 0) list[at] = entry.DeepClone();
+            else list.Add(entry.DeepClone());
+            doc["dashboards"] = list;
+            Write(doc);
+            return null;
+        }
+    }
+
+    /// <summary>Remove the dashboard with this id. Null on success (also when
+    /// there was none), else why the file could not be changed.</summary>
+    public string? RemoveDashboard(string id)
+    {
+        lock (_gate)
+        {
+            if (!TryReadStrict(out var doc, out var why)) return why;
+            if (doc?["dashboards"] is not JsonArray list) return doc?["dashboards"] is null ? null : "`dashboards` in project.json is not a list";
+            var at = IndexOfDashboard(list, id);
+            if (at < 0) return null;
+            list.RemoveAt(at);
+            Write(doc!);
+            return null;
+        }
+    }
+
+    static int IndexOfDashboard(JsonArray list, string? id)
+    {
+        if (string.IsNullOrEmpty(id)) return -1;
+        for (var i = 0; i < list.Count; i++)
+        {
+            if (list[i] is JsonObject o && o["id"] is JsonValue v
+                && v.TryGetValue<string>(out var s) && s == id) return i;
+        }
+        return -1;
+    }
+
+    /// <summary>Like <see cref="Read"/>, but tells "absent" (true, null) from
+    /// "present and unreadable" (false, with the reason).</summary>
+    bool TryReadStrict(out JsonObject? doc, out string? why)
+    {
+        doc = null; why = null;
+        if (!File.Exists(Path)) return true;
+        try
+        {
+            doc = JsonNode.Parse(File.ReadAllText(Path)) as JsonObject;
+            if (doc is null) { why = "project.json is not a JSON object"; return false; }
+            return true;
+        }
+        catch (JsonException e) { why = $"project.json does not parse: {e.Message}"; return false; }
+    }
+
     /// <summary>Set one top-level key of the document (a settings block).</summary>
     public void SetKey(string key, JsonNode value)
     {

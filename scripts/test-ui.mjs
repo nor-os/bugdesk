@@ -547,17 +547,19 @@ t('every page declares the section it lives in', () => {
     // beside — makes openInPrimary a cross-page swap, which archives the tabs
     // and DROPS the props it was handed. That is invisible until something
     // routes by props, and then it looks like a click doing nothing.
-    for (const kind of ['home', 'queues', 'ticket', 'backlog', 'item', 'new-item']) {
+    for (const kind of ['home', 'queues', 'ticket', 'backlog', 'item', 'new-item', 'dashboards']) {
         assert.ok(taxonomyDefault.topNavFor(kind), `${kind} declares no section`);
     }
     assert.equal(taxonomyDefault.topNavFor('home'), 'queues', 'home is not with the page it renders');
     assert.equal(taxonomyDefault.topNavFor('item'), taxonomyDefault.topNavFor('backlog'));
     assert.equal(taxonomyDefault.topNavFor('ticket'), taxonomyDefault.topNavFor('queues'));
 });
-t('the default mode has no Tracker chip', () =>
+t('the default mode has no Tracker chip, and has Dashboards after the stores', () =>
     // The tracker-mode counterpart of this lives in test-tracker.mjs, which
     // runs in its own process — the mode is read once, at module load.
-    assert.deepEqual(taxonomyDefault.topNavEntries().map((e) => e.kind), ['queues', 'backlog']));
+    // Dashboards (STORY-0034) is a section of every project in every mode; it
+    // sits after the two stores it charts.
+    assert.deepEqual(taxonomyDefault.topNavEntries().map((e) => e.kind), ['queues', 'backlog', 'dashboards']));
 
 /* ── the comment-header regex ────────────────────────────────────────
  *

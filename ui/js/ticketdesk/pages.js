@@ -2345,6 +2345,9 @@ const MERGED_TRACKER = CONFIG.mode !== 'tracker' && !!CONFIG.tracker?.available;
 /** Which body a side panel shows for the section in front. */
 function panelSection(topNav) {
     if (topNav === 'tracker' && MERGED_TRACKER) return 'tracker';
+    // Dashboards (EPIC-0033) keeps the rail of a store this project HAS: never
+    // the bug rail in tracker mode or over a project without a bug store.
+    if (topNav === 'dashboards') return CONFIG.mode === 'tracker' || CONFIG.store?.hasBugs === false ? 'backlog' : 'bugs';
     return topNav === 'backlog' || topNav === 'tracker' ? 'backlog' : 'bugs';
 }
 

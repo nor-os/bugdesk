@@ -1,0 +1,137 @@
+/* ════════════════════════════════════════════════════════════════════
+   dashboards.css — the Dashboards page (EPIC-0033): the list on the
+   left and the chosen dashboard's header. The grid and the tiles are
+   FlexDesk's and styled by flexdesk.css.
+
+   Theme tokens only, so the page follows whatever theme the tokens
+   carry; BugDesk itself is dark-only today.
+   ──────────────────────────────────────────────────────────────────── */
+
+.bd-dash {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.bd-dash__list {
+    flex: 0 0 220px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px;
+    border-right: 1px solid var(--border-subtle, #2a2a2a);
+    background: var(--surface-1, #1e1e1e);
+    overflow-y: auto;
+}
+
+.bd-dash__heading {
+    padding: 4px 6px;
+    font-size: 10px;
+    font-weight: var(--font-weight-semibold, 600);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-dim, #666);
+}
+
+.bd-dash__item {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    width: 100%;
+    padding: 5px 6px;
+    border: 0;
+    border-radius: var(--radius-sm, 4px);
+    background: transparent;
+    color: var(--text-primary, #ddd);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.bd-dash__item:hover { background: var(--state-hover, rgb(255 255 255 / 6%)); }
+.bd-dash__item.is-selected { background: var(--state-selected, rgb(255 255 255 / 10%)); }
+.bd-dash__item .material-symbols-outlined { font-size: 16px; color: var(--text-muted, #888); }
+.bd-dash__item.is-broken .material-symbols-outlined { color: var(--color-danger, #f07178); }
+
+.bd-dash__item-text { display: flex; flex-direction: column; min-width: 0; }
+.bd-dash__item-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bd-dash__item-reason { font-size: 11px; color: var(--text-muted, #888); }
+
+.bd-dash__list > .bd-dash__btn { margin-top: 8px; }
+
+.bd-dash__main {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    background: var(--surface-0, var(--surface-1, #1e1e1e));
+}
+
+.bd-dash__head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border-subtle, #2a2a2a);
+}
+.bd-dash__title {
+    margin: 0;
+    font-size: var(--font-size-md, 14px);
+    font-weight: var(--font-weight-semibold, 600);
+    color: var(--text-bright, #fff);
+}
+.bd-dash__status { font-size: 11px; color: var(--text-muted, #888); }
+.bd-dash__status--error { color: var(--color-danger, #f07178); }
+.bd-dash__actions { display: flex; gap: 6px; margin-left: auto; }
+.bd-dash__btn { display: inline-flex; align-items: center; gap: 4px; }
+.bd-dash__btn .material-symbols-outlined { font-size: 16px; }
+
+.bd-dash__grid {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    padding: 8px;
+}
+
+.bd-dash__banner {
+    margin: 8px 12px;
+    padding: 6px 10px;
+    border: 1px solid var(--color-danger, #f07178);
+    border-radius: var(--radius-sm, 4px);
+    color: var(--text-primary, #ddd);
+    font-size: 12px;
+}
+.bd-dash__list > .bd-dash__banner { margin: 4px 0; }
+
+.bd-dash__empty,
+.bd-dash__dim { color: var(--text-muted, #888); }
+.bd-dash__empty { padding: 16px; }
+
+.bd-dash__broken { padding: 16px; color: var(--text-primary, #ddd); }
+.bd-dash__broken h3 { margin: 0 0 8px; font-size: var(--font-size-md, 14px); }
+
+/* Shared or personal (STORY-0035): the list's heading and icon, and a badge by the title. */
+.bd-dash__list > .bd-dash__heading:not(:first-child) { margin-top: 12px; }
+.bd-dash__item--personal .material-symbols-outlined { color: var(--color-info, #2196f3); }
+.bd-dash__scope {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 1px 6px;
+    border: 1px solid var(--border-subtle, #2a2a2a);
+    border-radius: var(--radius-sm, 4px);
+    font-size: 11px;
+    color: var(--text-muted, #888);
+}
+.bd-dash__scope .material-symbols-outlined { font-size: 14px; }
+.bd-dash__scope--personal { color: var(--color-info, #2196f3); border-color: currentColor; }
+
+/* A chart's marks must not catch the pointer: main_new.css gives every `path`
+   `pointer-events: all`, which puts a bar above Plotly's drag layer, so hover
+   and click (STORY-0036: a click opens the records behind a bar) never reach
+   it. Plotly's own default is to inherit `none` from its svg; a pie slice sets
+   `all` inline and keeps it. */
+.bd-dash__grid .js-plotly-plot .main-svg path {
+    pointer-events: inherit;
+}

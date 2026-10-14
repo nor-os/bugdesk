@@ -2,10 +2,10 @@
 id: 36
 type: story
 title: "Chart tiles over any bug or backlog attribute, custom fields included"
-status: refined
+status: review
 parent: 33
 phase:
-assignee:
+assignee: norman
 reporter: norman
 due:
 points: 5
@@ -13,7 +13,7 @@ subsystem: ui
 labels: [dashboards, charts, custom-fields]
 links: [blocked-by 34]
 created: 2026-10-14
-updated: 2026-10-14T10:25Z
+updated: 2026-10-14T16:30Z
 ---
 
 ## Description
@@ -35,21 +35,33 @@ turns records into the series those tiles take, and re-renders on `bugs:changed`
 
 ## Acceptance criteria
 
-- [ ] A tile's field picker lists every field of the chosen source, custom fields included, and offers numeric aggregates only for numeric fields
-- [ ] A bar, pie or donut tile shows counts per value of the chosen field, and clicking a bar or slice opens the matching records in the list view
-- [ ] A KPI tile shows a count, sum or average over the filtered records
-- [ ] A histogram or sum/average tile works over points and over a custom number field
-- [ ] A created/finished-per-week tile shows the trend over a chosen date range
-- [ ] Editing a record (in BugDesk or on disk) updates the tiles that show it without a reload
-- [ ] Non-numeric points values (`M`, `?`) are left out of numeric aggregates and counted in a note on the tile instead of breaking it
-- [ ] A tile whose field was since removed from the schema shows an explanatory empty state naming the field, not an error or a blank chart
+- [x] A tile's field picker lists every field of the chosen source, custom fields included, and offers numeric aggregates only for numeric fields
+- [x] A bar, pie or donut tile shows counts per value of the chosen field, and clicking a bar or slice opens the matching records in the list view
+- [x] A KPI tile shows a count, sum or average over the filtered records
+- [x] A histogram or sum/average tile works over points and over a custom number field
+- [x] A created/finished-per-week tile shows the trend over a chosen date range
+- [x] Editing a record (in BugDesk or on disk) updates the tiles that show it without a reload
+- [x] Non-numeric points values (`M`, `?`) are left out of numeric aggregates and counted in a note on the tile instead of breaking it
+- [x] A tile whose field was since removed from the schema shows an explanatory empty state naming the field, not an error or a blank chart
 
 ## History
 
 - 2026-10-14 · norman_agent · status: draft -> refined
+- 2026-10-14 · norman_agent · status: refined -> review
+- 2026-10-14 · norman_agent · assignee: (unset) -> norman
 
 ## Comments
 
 ### 2026-10-14T10:25Z · norman_agent
 
 Refined: 5 points, parented to EPIC-0033, blocked by STORY-0034 here and by FlexDesk STORY-0022 (`../FlexDesk/backlog/STORY-0022.md`, still draft) for the tiles themselves. Added an eighth criterion: a tile over a field that has since been removed from the schema degrades to an empty state with an explanation. Eight is the upper limit. If it grows further, split the over-time tile out.
+
+### 2026-10-14T16:30Z · norman_agent (status: refined -> review)
+
+Built, not yet committed. All eight criteria are ticked.
+
+- Tiles cover bugs and backlog: count per any field (custom fields included) as bar, pie or donut; sum, average and histogram over number fields; KPI; created/finished per week.
+- A click on a bar opens the matching list. Tiles redraw on record changes; on a real instance an edit on disk changed the bars without a reload.
+- `M` and `?` are counted in the tile's note, and a removed field gives an empty state naming it.
+- New endpoint: `GET /api/dashboards/status_history`.
+- Limits: weeks are counted in UTC, and a saved filter is copied into the tile when chosen.

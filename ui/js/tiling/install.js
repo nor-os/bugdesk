@@ -129,10 +129,19 @@ export async function installTilingShell({ eventBus, logger } = {}) {
     // tabs come back with nothing to draw. Say why, rather than FlexDesk's bare
     // "no factory registered".
     if (!MERGED_TRACKER && !trackerMode) trackerContent = _trackerOffContent();
+    // EPIC-0033. Its own try, like the tracker's: a dashboards page that cannot
+    // be registered must not take the other sections down. page.js imports
+    // nothing heavy; FlexDesk's tiles and charts load on its first mount.
+    let dashboardsContent = {};
+    try {
+        dashboardsContent = (await import('../dashboards/page.js')).createDashboardsContent({ eventBus });
+    } catch (err) {
+        console.error('[bugdesk] the dashboards page could not be registered', err);
+    }
     // Order is the override order. Tracker last: it deliberately re-points
     // `home` at the dashboard (see createTrackerContent).
     const content = createContentRegistry({
-        ...settingsContent, ...ticketDeskContent, ...backlogContent, ...trackerContent,
+        ...settingsContent, ...ticketDeskContent, ...backlogContent, ...dashboardsContent, ...trackerContent,
     });
 
     // The host port (see @flexdesk/host's createPywebviewHost doc comment —

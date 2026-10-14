@@ -20,7 +20,7 @@ see its own `LICENSE` and `THIRD_PARTY_LICENSES.md`, copied alongside it in
 | [style-mod](https://github.com/marijnh/style-mod) | — | MIT | Marijn Haverbeke and others |
 | [w3c-keyname](https://github.com/marijnh/w3c-keyname) | — | MIT | Marijn Haverbeke and others |
 | [KaTeX](https://github.com/KaTeX/KaTeX) | 0.16.10 | MIT | Khan Academy and other contributors |
-| [Plotly.js](https://github.com/plotly/plotly.js) | 2.35.2 | MIT | Plotly, Inc. |
+| [Plotly.js](https://github.com/plotly/plotly.js) (`ui/vendor/plotly/`, loaded only when a dashboard opens; licence alongside it) | 2.35.2 | MIT | Plotly, Inc. |
 | [Material Symbols (Outlined)](https://github.com/google/material-design-icons) | — | Apache-2.0 | Google LLC |
 | [Marck Script](https://fonts.google.com/specimen/Marck+Script) (Latin subset, `ui/vendor/marck-script/`) | v22 | OFL-1.1 | Denis Masharov & Marck Fogel |
 | [Sonsie One](https://fonts.google.com/specimen/Sonsie+One) (Latin subset, `ui/vendor/sonsie-one/`) | v22 | OFL-1.1 | Sorkin Type Co |

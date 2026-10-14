@@ -165,6 +165,36 @@ if (mode == "tracker" && Env("BUGDESK_SEED_TRACKER") is not null && stores.Track
     }
 }
 
+// The example's shared dashboards (STORY-0039). run.sh / run.ps1 copy the example
+// records and set BUGDESK_SEED_DASHBOARDS when they copied any; the dashboards go
+// HERE because only the server knows which project.json that store reads (a
+// legacy bugdesk.json, a [config] in projects.toml). Never overwrites: an id the
+// file already has is left as it is.
+if (mode != "tracker" && Env("BUGDESK_SEED_DASHBOARDS") is not null)
+{
+    var def = stores.Definitions.FirstOrDefault(d =>
+        (d.Bugs is { } b && SamePath(projectsFile.Resolve(b), cliBugsDir))
+        || (d.Backlog is { } k && SamePath(projectsFile.Resolve(k), cliBacklogDir)));
+    var file = FindNear(Path.Combine("examples", "dashboards.json"),
+                        builder.Environment.ContentRootPath, AppContext.BaseDirectory);
+    var target = def is null ? null : stores.Project(def.Name);
+    if (target is null || file is null)
+        app.Logger.LogInformation("BugDesk: no example dashboards or no seeded project — dashboards not seeded");
+    else
+    {
+        var (have, broken) = target.Project.Dashboards();
+        var ids = have.OfType<JsonObject>().Select(o => o["id"] is JsonValue v && v.TryGetValue<string>(out var s) ? s : null).ToHashSet();
+        var added = 0;
+        foreach (var entry in (JsonNode.Parse(File.ReadAllText(file)) as JsonArray ?? new JsonArray()).OfType<JsonObject>())
+        {
+            if (broken is not null || ids.Contains(entry["id"]?.GetValue<string>())) continue;
+            if (target.Project.UpsertDashboard(entry) is null) added++;
+        }
+        app.Logger.LogInformation("BugDesk: seeded {file} with {n} example dashboard(s){why}", target.Project.Path, added,
+            broken is null ? "" : $" ({broken})");
+    }
+}
+
 // ---- Authorship (configurable — see README "Authorship") ------------------
 // BugDesk's lifecycle assumes exactly two roles: a human who files/triages/tests
 // records through this UI, and an agent who investigates them (typically an AI
@@ -1942,6 +1972,50 @@ app.MapPost("/api/project/workflow", async (HttpRequest req) =>
         }, json, statusCode: 400);
     Req.Store.Project.SetWorkflow(node);
     return Results.Json(new { ok = true, workflow = Req.Store.Project.Workflow() }, json);
+});
+
+// The shared dashboards (EPIC-0033), in the committed project.json beside the
+// schema and the workflow. Saved ONE dashboard at a time, so every other entry —
+// a hand-edited one the UI cannot read included — stays exactly as it is.
+app.MapGet("/api/project/dashboards", () =>
+{
+    var (list, broken) = Req.Store.Project.Dashboards();
+    return Results.Json(new { ok = true, dashboards = list, broken }, json);
+});
+app.MapPost("/api/project/dashboards", async (HttpRequest req) =>
+{
+    var body = await JsonSerializer.DeserializeAsync<Dictionary<string, JsonElement>>(req.Body, json) ?? new();
+    if (!body.TryGetValue("dashboard", out var dv) || dv.ValueKind != JsonValueKind.Object)
+        return Results.Json(new { ok = false, error = "dashboard object required" }, json, statusCode: 400);
+    var entry = JsonNode.Parse(dv.GetRawText())!.AsObject();
+    var id = entry["id"] is JsonValue iv && iv.TryGetValue<string>(out var s) ? s : "";
+    var name = entry["name"] is JsonValue nv && nv.TryGetValue<string>(out var n) ? n.Trim() : "";
+    if (!System.Text.RegularExpressions.Regex.IsMatch(id, "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$") || name.Length == 0
+        || (entry["tiles"] is not null && entry["tiles"] is not JsonArray))
+        return Results.Json(new { ok = false, error = "a dashboard needs an id, a name and a list of tiles" }, json, statusCode: 400);
+    var refused = Req.Store.Project.UpsertDashboard(entry);
+    return refused is null
+        ? Results.Json(new { ok = true, dashboard = entry }, json)
+        : Results.Json(new { ok = false, error = refused }, json, statusCode: 409);
+});
+app.MapDelete("/api/project/dashboards/{id}", (string id) =>
+{
+    var refused = Req.Store.Project.RemoveDashboard(id);
+    return refused is null
+        ? Results.Json(new { ok = true }, json)
+        : Results.Json(new { ok = false, error = refused }, json, statusCode: 409);
+});
+// Every record's status changes (its History section), by id — what a dashboard
+// tile needs to say WHEN something was finished. One request for the store
+// rather than one per record; the summaries carry only a count.
+app.MapGet("/api/dashboards/status_history", (string? store) =>
+{
+    static object Rows(List<HistoryEntry> h) =>
+        h.Where(e => e.Field == "status").Select(e => new { date = e.Date, from = e.From, to = e.To }).ToList();
+    var history = store == "backlog"
+        ? LoadBacklog(Req.Store.BacklogDir).GroupBy(i => i.Id).ToDictionary(g => g.Key.ToString(), g => Rows(g.First().History))
+        : LoadAll(Req.Store.BugsDir).GroupBy(b => b.Id).ToDictionary(g => g.Key.ToString(), g => Rows(g.First().History));
+    return Results.Json(new { ok = true, history }, json);
 });
 
 // Add or update ONE person without having to send the whole roster — what an

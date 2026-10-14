@@ -2,10 +2,10 @@
 id: 37
 type: story
 title: "Burndown: remaining points or items for an epic, phase or project"
-status: refined
+status: review
 parent: 33
 phase:
-assignee:
+assignee: norman
 reporter: norman
 due:
 points: 5
@@ -13,7 +13,7 @@ subsystem: ui
 labels: [dashboards, charts, burndown]
 links: [blocked-by 34]
 created: 2026-10-14
-updated: 2026-10-14T10:25Z
+updated: 2026-10-14T16:30Z
 ---
 
 ## Description
@@ -39,20 +39,31 @@ Note: `categoryOf` in `ui/js/ticketdesk/schema.js` puts `dropped` in the `finish
 
 ## Acceptance criteria
 
-- [ ] For an epic with dated History, the burndown's remaining value on each day matches a hand count from the records' History sections
-- [ ] The tile switches between points and item count, and between epic, phase and all-backlog scopes
-- [ ] The ideal line runs from the starting total to zero at the scope's due date, or at the chosen end date
-- [ ] Items added to the scope mid-range show as an upward step on their `created` date; dropped items leave the scope instead of burning down
-- [ ] A custom status with category `finished` counts as burned down
-- [ ] A bugs burndown shows the open-bug count of a filter over a date range
-- [ ] The footer states that points are current estimates
+- [x] For an epic with dated History, the burndown's remaining value on each day matches a hand count from the records' History sections
+- [x] The tile switches between points and item count, and between epic, phase and all-backlog scopes
+- [x] The ideal line runs from the starting total to zero at the scope's due date, or at the chosen end date
+- [x] Items added to the scope mid-range show as an upward step on their `created` date; dropped items leave the scope instead of burning down
+- [x] A custom status with category `finished` counts as burned down
+- [x] A bugs burndown shows the open-bug count of a filter over a date range
+- [x] The footer states that points are current estimates
 
 ## History
 
 - 2026-10-14 · norman_agent · status: draft -> refined
+- 2026-10-14 · norman_agent · status: refined -> review
+- 2026-10-14 · norman_agent · assignee: (unset) -> norman
 
 ## Comments
 
 ### 2026-10-14T10:25Z · norman_agent
 
 Refined: 7 criteria, 5 points, parented to EPIC-0033, blocked by STORY-0034 (and, through the tiles, FlexDesk STORY-0022). Added a description note: `schema.js` classes `dropped` as `finished`, so the criterion that dropped items leave the scope means special-casing it. Otherwise it would quietly count as burned down.
+
+### 2026-10-14T16:30Z · norman_agent (status: refined -> review)
+
+Built, not yet committed. All seven criteria are ticked.
+
+- EPIC-0001's daily remaining points (5, 8, 8, 11 … 11, then 9 from 09-09) match a hand count from the History sections.
+- Scopes are epic, phase and all-backlog, in points or items. A dropped item leaves the Scope line instead of burning down.
+- The footer says points are current estimates.
+- Limit: in epic scope, a story's points and its tasks' points are both counted, as the story's wording asks.

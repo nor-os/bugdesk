@@ -27,6 +27,8 @@ OPTIONS
   --seed            Copy the bundled examples into any store that is still
                     empty. Never overwrites: a store that already holds records
                     is skipped, and the two stores are considered separately.
+                    Seeding either also adds the example's shared Bugs and
+                    Backlog dashboards (an id already there is left alone).
   --tracker         Tracker mode — follow up work you handed to other people.
                     Its records live under ~/.bugdesk/<project>/, NOT in this
                     repo, and the port is chosen automatically.
@@ -179,6 +181,9 @@ seed_store() {
     mkdir -p "$dir"
     cp "${incoming[@]}" "$dir/"
     echo "BugDesk: seeded $dir with ${#incoming[@]} example $what."
+    # The example dashboards go into the project's config, which the server
+    # resolves, so it adds them on start (STORY-0039).
+    export BUGDESK_SEED_DASHBOARDS=1
 }
 
 # ── the .NET SDK ────────────────────────────────────────────────────────────
@@ -266,6 +271,7 @@ if [ "$BUGDESK_MODE" = "tracker" ]; then
 fi
 
 # Seed each store INDEPENDENTLY — see seed_store above.
+unset BUGDESK_SEED_DASHBOARDS   # only seed_store sets it, never the caller's env
 if [ "$seed" = "1" ]; then
     seed_store "$bugs_dir"    'BUG-*.md'    "$root/examples/bugs"    "bug(s)"
     seed_store "$backlog_dir" '*-[0-9]*.md' "$root/examples/backlog" "backlog item(s)"

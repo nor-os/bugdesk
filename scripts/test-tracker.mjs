@@ -139,11 +139,13 @@ t('no <name>_agent is assignable', () => {
 
 console.log('\ntracker mode: chrome');
 
-t('Tracker is the ONLY top-level section', () =>
-    // Everything else is reached from the dashboard. A second chip read as a
-    // competing place to be, and moved the user out of the section they were
-    // working in the moment they opened a ticket.
-    assert.deepEqual(taxonomy.topNavEntries().map((e) => e.kind), ['tracker']));
+t('Tracker and Dashboards are the top-level sections', () =>
+    // Tickets stay UNDER Tracker: a Tickets chip read as a competing place to
+    // be, and moved the user out of the section they were working in the moment
+    // they opened a ticket. Dashboards (STORY-0034) is different in kind — a
+    // section of every project in every mode, charts rather than a second way
+    // into the same records — so it is the one chip beside Tracker.
+    assert.deepEqual(taxonomy.topNavEntries().map((e) => e.kind), ['tracker', 'dashboards']));
 t('the bug store is absent, not empty', () => {
     // A tracker does not live in a code repo, so there is no bug store for a
     // Bugs chip to lead to.
