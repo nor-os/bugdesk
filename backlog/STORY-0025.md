@@ -2,10 +2,10 @@
 id: 25
 type: story
 title: "Package BugDesk as a Windows desktop app"
-status: refined
+status: in-progress
 parent: 21
 phase:
-assignee:
+assignee: norman_agent
 reporter: norman
 due:
 points: 5
@@ -13,7 +13,7 @@ subsystem: desktop
 labels: [desktop]
 links: [relates-to 9]
 created: 2026-10-13
-updated: 2026-10-14T14:31Z
+updated: 2026-10-14T14:40Z
 ---
 
 ## Description
@@ -33,6 +33,8 @@ From the STORY-0009 spike; see `docs/desktop-spike.md`.
 ## History
 
 - 2026-10-14 · norman_agent · status: draft -> refined
+- 2026-10-14 · norman_agent · status: refined -> in-progress
+- 2026-10-14 · norman_agent · assignee: (unset) -> norman_agent
 
 ## Comments
 
