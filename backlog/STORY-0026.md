@@ -13,7 +13,7 @@ subsystem: desktop
 labels: [desktop]
 links: [requires 25]
 created: 2026-10-13
-updated: 2026-10-14T17:38Z
+updated: 2026-10-14T18:33Z
 ---
 
 ## Description
@@ -26,7 +26,7 @@ From the STORY-0009 spike; see `docs/desktop-spike.md`.
 
 - [x] In the desktop app, exporting a table or chart to CSV/PNG opens the native Save dialog and writes the file where you chose; cancelling writes nothing and says nothing was saved
 - [x] The desktop window comes back at its last size, position and maximised state; if that position is on a monitor that is gone, it opens centred on the primary one
-- [x] FlexDesk draws no window buttons of its own in the desktop window (the native title bar is the only one)
+- [x] FlexDesk draws no window buttons of its own in the desktop window (the native title bar is the only one) — superseded by STORY-0042: on Windows the window now draws its own frame; `BUGDESK_DESKTOP_FRAME=native` gives this behaviour back
 - [x] In a browser tab nothing changes: exports download as before, and no host error reaches the console
 
 ## History
@@ -103,3 +103,9 @@ Checked in the real desktop app (bin/e26, scratch project, CDP). A real save wor
 - Browser tab (headless Edge on the same server): `isPhotinoWindow()` is false. The CSV and the PNG download as files, with no console errors or warnings.
 
 Two changes for browser tabs too: every list now has the CSV button, which downloads as before, and a one-page list shows a thin strip that holds only that button. Suites: FlexDesk 94/94; BugDesk DOM 193, UI 221 and check-graph, run in a clean worktree at b2198c0. This was the last open criterion in EPIC-0021. Only STORY-0041 (macOS) is left there, still in draft until there is a Mac.
+
+### 2026-10-14T18:33Z · norman_agent
+
+Amended the "native title bar only" criterion, as STORY-0042 asked. That story
+gives the Windows window its own frame (FlexDesk's buttons and resize handles).
+The native frame is still there with `BUGDESK_DESKTOP_FRAME=native`, and on Linux.

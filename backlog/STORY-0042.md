@@ -5,7 +5,7 @@ title: "The desktop window draws its own chrome: frameless, with BugDesk's top b
 status: review
 parent: 21
 phase:
-assignee: norman_agent
+assignee: norman
 reporter: norman
 due:
 points: 5
@@ -13,7 +13,7 @@ subsystem: desktop
 labels: [desktop]
 links: []
 created: 2026-10-14
-updated: 2026-10-14T18:32Z
+updated: 2026-10-14T18:33Z
 ---
 
 ## Description
@@ -68,7 +68,7 @@ and the drag area no longer depending on EcoSim's class names.
 - [x] The window keeps its shadow and, on Windows 11, its rounded corners; maximised, it fills the work area without covering the taskbar or losing a strip of pixels at any edge
 - [x] Alt+F4 and the close button both shut down cleanly, as closing does today. Clicking the taskbar button minimises and restores the window, and the size, position and maximised state still come back on the next start
 - [ ] In a browser tab, and in the Linux desktop window, the top bar is exactly what it is today, with no window buttons
-- [ ] `docs/desktop.md` describes the frameless window and why Linux keeps its frame, and STORY-0026's "native title bar only" criterion is amended to point here
+- [x] `docs/desktop.md` describes the frameless window and why Linux keeps its frame, and STORY-0026's "native title bar only" criterion is amended to point here
 
 ## History
 
@@ -76,6 +76,7 @@ and the drag area no longer depending on EcoSim's class names.
 - 2026-10-14 · norman_agent · status: refined -> in-progress
 - 2026-10-14 · norman_agent · assignee: (unset) -> norman_agent
 - 2026-10-14 · norman · status: in-progress -> review
+- 2026-10-14 · norman_agent · assignee: norman_agent -> norman
 
 ## Comments
 
@@ -126,3 +127,44 @@ STORY-0026: the controller only finds BugDesk's top bar once it carries the
 Snap layouts on hovering the maximise button look out of reach, because the
 WebView2 covers the window and Windows never sees the hover. I'll confirm or
 drop that criterion with norman.
+
+### 2026-10-14T18:33Z · norman_agent
+
+Built: fdf2598 on main, on FlexDesk 0.15.0 (FlexDesk STORY-0026, released and
+on npm). You had already moved this to review and ticked the first six
+criteria in the UI. My handback commit (5352548) picked those edits up before
+mine were written, so that commit is yours, not a handback. This one assigns
+the story to you and ticks the docs criterion.
+
+- `desktop/BugDesk.Desktop/CustomFrame.cs` (from the trial): the window keeps
+  `WS_CAPTION | WS_THICKFRAME`, the subclass returns the whole window from
+  `WM_NCCALCSIZE` (the work area while maximised), and DWM keeps the shadow and
+  rounded corners. `startDrag` / `startResize` hand gestures to Windows with
+  `WM_NCLBUTTONDOWN`. `host.describe` says `frame: "custom"`; with
+  `BUGDESK_DESKTOP_FRAME=native` it says `"native"` and the standard frame is
+  back. Photino's `SetChromeless` is not used.
+- `install.js` starts FlexDesk's `WindowChromeController` in a Photino window,
+  with BugDesk's top bar and its `.bar-right` for the buttons. The trial's
+  script and CSS are not on main; the local branch `story-0042-trial` is no
+  longer needed.
+- `.\run.ps1` builds this app, so it now opens the frameless window.
+
+Verified on the final build:
+- The default window has the buttons and 8 handles, and its edges hit-test to
+  the handles.
+- Maximised, it fills exactly the work area.
+- A browser tab on the same server has no buttons, no handles and no body
+  class.
+- `BUGDESK_DESKTOP_FRAME=native` has the Windows title bar back and nothing
+  from FlexDesk.
+
+All suites pass, also on the commit alone in a clean worktree.
+
+Left for you:
+- **The criterion you ticked mentions snap layouts on hover over maximise.**
+  That part doesn't work: Windows never sees the pointer over the page's
+  button. Dragging to an edge, Win+arrows and Win+Z all work.
+- **Criterion 7 is unticked.** A browser tab is verified unchanged. Linux keeps
+  its native frame by construction (the custom frame is Windows-only), but I
+  didn't run the Linux build.
+- STORY-0026's "native title bar only" criterion now points here.
