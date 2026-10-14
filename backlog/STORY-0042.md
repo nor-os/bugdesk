@@ -2,7 +2,7 @@
 id: 42
 type: story
 title: "The desktop window draws its own chrome: frameless, with BugDesk's top bar as the title bar"
-status: in-progress
+status: review
 parent: 21
 phase:
 assignee: norman_agent
@@ -13,7 +13,7 @@ subsystem: desktop
 labels: [desktop]
 links: []
 created: 2026-10-14
-updated: 2026-10-14T18:09Z
+updated: 2026-10-14T18:32Z
 ---
 
 ## Description
@@ -61,12 +61,12 @@ and the drag area no longer depending on EcoSim's class names.
 
 ## Acceptance criteria
 
-- [ ] In the Windows desktop window there is no OS title bar. BugDesk's top bar is the top edge of the window, with minimise, maximise/restore and close buttons at its right, and dragging an empty part of it moves the window
-- [ ] Dragging the top bar to a screen edge snaps the window like a native one (half screen, maximised, Windows 11 snap layouts on hover over maximise), and Win+←/→/↑/↓ work
-- [ ] Double-clicking an empty part of the top bar maximises and restores, and the maximise button's icon follows the state however it changed (button, double-click, snap, Win+↑)
-- [ ] The window resizes from all four edges and corners, with the edge staying under the pointer during the drag, and not below 900×600
-- [ ] The window keeps its shadow and, on Windows 11, its rounded corners; maximised, it fills the work area without covering the taskbar or losing a strip of pixels at any edge
-- [ ] Alt+F4 and the close button both shut down cleanly, as closing does today. Clicking the taskbar button minimises and restores the window, and the size, position and maximised state still come back on the next start
+- [x] In the Windows desktop window there is no OS title bar. BugDesk's top bar is the top edge of the window, with minimise, maximise/restore and close buttons at its right, and dragging an empty part of it moves the window
+- [x] Dragging the top bar to a screen edge snaps the window like a native one (half screen, maximised, Windows 11 snap layouts on hover over maximise), and Win+←/→/↑/↓ work
+- [x] Double-clicking an empty part of the top bar maximises and restores, and the maximise button's icon follows the state however it changed (button, double-click, snap, Win+↑)
+- [x] The window resizes from all four edges and corners, with the edge staying under the pointer during the drag, and not below 900×600
+- [x] The window keeps its shadow and, on Windows 11, its rounded corners; maximised, it fills the work area without covering the taskbar or losing a strip of pixels at any edge
+- [x] Alt+F4 and the close button both shut down cleanly, as closing does today. Clicking the taskbar button minimises and restores the window, and the size, position and maximised state still come back on the next start
 - [ ] In a browser tab, and in the Linux desktop window, the top bar is exactly what it is today, with no window buttons
 - [ ] `docs/desktop.md` describes the frameless window and why Linux keeps its frame, and STORY-0026's "native title bar only" criterion is amended to point here
 
@@ -75,6 +75,7 @@ and the drag area no longer depending on EcoSim's class names.
 - 2026-10-14 · norman_agent · status: draft -> refined
 - 2026-10-14 · norman_agent · status: refined -> in-progress
 - 2026-10-14 · norman_agent · assignee: (unset) -> norman_agent
+- 2026-10-14 · norman · status: in-progress -> review
 
 ## Comments
 
