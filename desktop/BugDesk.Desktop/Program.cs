@@ -79,6 +79,9 @@ static class Desktop
             .SetDevToolsEnabled(Environment.GetEnvironmentVariable("BUGDESK_DESKTOP_DEVTOOLS") == "1");
         var icon = FindIcon();
         if (icon is not null) window.SetIconFile(icon);
+        // No SetChromeless: Photino's frameless window is a bare popup (no
+        // snapping, no shadow, and it reports itself fullscreen). CustomFrame
+        // keeps the native frame and stops drawing it instead.
         // Where it was last time (WindowPlacement): set before the window
         // exists, so it opens there rather than jumping; checked against the
         // monitors once it does.
@@ -96,6 +99,7 @@ static class Desktop
         window.RegisterWindowCreatedHandler((_, _) =>
         {
             if (OperatingSystem.IsWindows() && icon is not null) WindowsShell.SetWindowIcon(window.WindowHandle, icon);
+            if (OperatingSystem.IsWindows() && Frame.Custom) CustomFrame.Install(window.WindowHandle);
             // The minimum only once the window exists: set before, Photino
             // opens the window AT the minimum, wherever the OS puts it, and
             // ignores the size and place it was given.
@@ -233,4 +237,17 @@ static class Desktop
                 if (Path.Combine(dir.FullName, name) is var p && File.Exists(p)) return p;
         return null;
     }
+}
+
+/// <summary>
+/// Who draws the window's title bar and borders. On Windows the page does
+/// (CustomFrame, and FlexDesk's WindowChromeController in the page);
+/// BUGDESK_DESKTOP_FRAME=native keeps the standard Windows frame. Linux and
+/// macOS always keep the native one. The page learns which from host.describe.
+/// </summary>
+static class Frame
+{
+    public static readonly bool Custom = OperatingSystem.IsWindows()
+        && !string.Equals(Environment.GetEnvironmentVariable("BUGDESK_DESKTOP_FRAME")?.Trim(), "native", StringComparison.OrdinalIgnoreCase);
+    public static string Name => Custom ? "custom" : "native";
 }

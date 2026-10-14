@@ -31,7 +31,7 @@ import {
     WindowManager, createContentRegistry, installKeymap, mountZoomControl,
 } from '@flexdesk/wm';
 import { createPhotinoHost, createPywebviewHost, isPhotinoWindow } from '@flexdesk/host';
-import { HelpModal, createTableStateStore, installAutoScrollbars, openForm, showContextMenu } from '@flexdesk/widgets';
+import { HelpModal, WindowChromeController, createTableStateStore, installAutoScrollbars, openForm, showContextMenu } from '@flexdesk/widgets';
 
 export async function installTilingShell({ eventBus, logger } = {}) {
     const log = logger ?? { info(){}, warn(){}, error(){}, debug(){} };
@@ -301,6 +301,18 @@ export async function installTilingShell({ eventBus, logger } = {}) {
     _syncPageShortcuts(wm);
 
     window.__twm = { wm, palette };
+
+    // The desktop window's own chrome (STORY-0042): on Windows the app makes its
+    // window frameless and says so (`frame` in host.describe), and FlexDesk
+    // then draws minimise/maximise/close at the right of the top bar, places
+    // the resize handles and lets the top bar drag the window, handing every
+    // drag and resize to Windows. With a native frame, and in a browser tab,
+    // the controller adds nothing at all.
+    if (isPhotinoWindow()) {
+        void new WindowChromeController({
+            host, logger: log, topBar: '.global-top-bar', controls: '.global-top-bar .bar-right',
+        }).initialize();
+    }
 
     // Drag a record from any list onto any tile to display it there. One
     // document-level listener pair rather than per-tile wiring: tiles are

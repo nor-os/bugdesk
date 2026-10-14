@@ -7,6 +7,16 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **The desktop window draws its own frame on Windows** (STORY-0042). The
+  Windows title bar is gone: BugDesk's top bar is the top edge of the window,
+  with minimise, maximise/restore and close at its right, and the window can be
+  dragged by it. It snaps to screen edges, takes Win+arrows, resizes from every
+  edge and corner, maximises on a double-click of the top bar, and keeps its
+  shadow and rounded corners, because every drag and resize is handed to
+  Windows (`desktop/BugDesk.Desktop/CustomFrame.cs`). The buttons, the resize
+  handles and the drag are FlexDesk's `WindowChromeController` (FlexDesk
+  0.15.0), which adds nothing in a browser tab. `BUGDESK_DESKTOP_FRAME=native`
+  keeps the standard Windows frame, and Linux keeps its native frame.
 - **Dashboards** (STORY-0034, EPIC-0033). A Dashboards chip in the top bar of
   every project, in bugs and tracker mode. A dashboard is a FlexDesk tile grid
   of chart and KPI tiles that can be added, removed, moved, resized and

@@ -55,6 +55,13 @@ page to CDP on Windows, the way the app is tested.
   the window, its taskbar button and a pinned shortcut group as one app, and
   the window's small and large icons are set from `ui/assets/icons/bugdesk.ico`.
   The executable carries the same icon.
+- **Its own frame, on Windows.** The window has no Windows title bar: BugDesk's
+  top bar is the top edge of the window, with minimise, maximise/restore and
+  close at its right. It still behaves like a native window: dragged by the top
+  bar it snaps to screen edges, Win+arrows work, it resizes from every edge and
+  corner, double-clicking the top bar maximises it, and it keeps its shadow and
+  rounded corners. `BUGDESK_DESKTOP_FRAME=native` brings back the standard
+  Windows frame. Linux keeps its native frame. See *The frame* below.
 
 The server is `BugDeskServer.Run(args, built)` in `server/Program.cs`; the
 console server's entry point (`server/Entry.cs`) calls it, and so does the app,
@@ -137,8 +144,9 @@ its `photino_host.md` is the contract `desktop/BugDesk.Desktop/NativeBridge.cs`
 answers:
 
 - `window`: minimize, close, isMaximized, setMaximized, isFullscreen,
-  toggleFullscreen, getBounds, setBounds. `chrome()` is `native`, so FlexDesk
-  draws no window buttons of its own.
+  toggleFullscreen, getBounds, setBounds, and on Windows `startDrag` and
+  `startResize` (below). `host.describe` says `frame: "custom"` or `"native"`,
+  and FlexDesk's `chrome()` answers with it.
 - `dialogs.saveFile`: the native Save dialog, then the write (text for csv,
   base64 bytes for png). Photino's dialog starts in a folder (Documents) and
   cannot suggest a file name, so the name is in its title, and the extension is
@@ -149,6 +157,24 @@ answers:
 
 `install.js` picks the Photino host only when `isPhotinoWindow()` is true; in a
 browser tab nothing changes.
+
+**The frame** (STORY-0042, FlexDesk 0.15.0). On Windows the app keeps the
+normal window styles, so Windows still snaps it, moves it with Win+arrows, and
+draws its shadow and rounded corners. `CustomFrame.cs` subclasses the window and
+answers `WM_NCCALCSIZE` with the whole window as client area, so no frame is
+drawn. While maximised, the client area is clamped to the monitor's work area so
+the taskbar stays visible. Photino's own `SetChromeless` was tried and dropped:
+its window is a bare popup that loses all of that, and Photino reports it as
+fullscreen. In the page, `install.js` starts FlexDesk's `WindowChromeController`
+in a Photino window. With `frame: "custom"` it draws the three buttons into the
+top bar's `.bar-right` and places eight resize handles. Because the WebView
+covers the window, Windows never sees the mouse there, so a press on the top bar
+or a handle asks for `startDrag` / `startResize(edge)`. The app then hands the
+gesture to Windows (`ReleaseCapture`, `WM_NCLBUTTONDOWN` with `HTCAPTION` or the
+edge), and Windows runs its own move or size loop. In a browser tab, and with
+`BUGDESK_DESKTOP_FRAME=native`, the controller adds nothing to the page.
+Windows 11's snap-layout menu doesn't open on hovering the maximise button
+(Windows never sees the hover); Win+Z opens it.
 
 **The window's place** (`WindowPlacement.cs`) is kept in `window.json` in the
 app's folder: the normal bounds, followed as the window moves, and whether it was

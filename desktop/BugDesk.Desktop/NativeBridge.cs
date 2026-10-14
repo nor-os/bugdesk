@@ -42,8 +42,16 @@ static class NativeBridge
         switch (cap, op)
         {
             case ("host", "describe"):
-                return new { host = "photino", version = typeof(PhotinoWindow).Assembly.GetName().Version?.ToString(), capabilities = new[] { "window", "dialogs" } };
+                return new { host = "photino", version = typeof(PhotinoWindow).Assembly.GetName().Version?.ToString(), capabilities = new[] { "window", "dialogs" }, frame = Frame.Name };
             case ("window", "minimize"): w.SetMinimized(true); return null;
+            // A drag on the page's top bar, or a press on a resize handle, handed
+            // to Windows (CustomFrame). The reply comes on mouse-up.
+            case ("window", "startDrag") when OperatingSystem.IsWindows() && Frame.Custom:
+                CustomFrame.Gesture(CustomFrame.Drag); return null;
+            case ("window", "startResize") when OperatingSystem.IsWindows() && Frame.Custom:
+                CustomFrame.Gesture(CustomFrame.Edge(Arg(0).ValueKind == JsonValueKind.String ? Arg(0).GetString() : null)
+                    ?? throw new ArgumentException("startResize needs an edge: n, s, e, w, ne, nw, se or sw"));
+                return null;
             case ("window", "close"): w.Close(); return null;
             case ("window", "isMaximized"): return w.Maximized;
             case ("window", "setMaximized"): w.SetMaximized(Arg(0).ValueKind == JsonValueKind.True); return w.Maximized;
