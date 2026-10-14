@@ -780,7 +780,9 @@ function _installHamburgerMenu() {
                 return;
             }
             if (action === 'twm-open-settings') {
-                window.__twm?.wm?.openInPrimary?.('settings');
+                import('../ticketdesk/settings_content.js')
+                    .then((m) => m.openSettings())
+                    .catch((err) => console.error('[bugdesk] settings dialog failed', err));
                 return;
             }
             if (action === 'twm-collaborators') {

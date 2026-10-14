@@ -296,6 +296,14 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Settings opens in a dialog** (STORY-0044), like Help but larger (up to
+  1280×860, maximisable), instead of as a tab in the main tile. Every button that
+  sends you to a Settings page opens the dialog on that page, or switches the open
+  dialog to it. The dialog is FlexDesk's managed modal, so the top bar and the
+  status bar stay clickable and unblurred while it is open, and it closes with
+  Esc, its X or Close, not with a stray click beside it, which would lose unsaved
+  edits on Record types or Workflow. A layout saved with a Settings tab still
+  opens it. Help's overlay now also leaves the two bars free.
 - **The menu's Collaborators… is now Team…** and opens the Settings › Team
   editor in a window: the same table, with each person's open and closed
   bugs, the add row and the hint. The window's own plainer layout is gone.
