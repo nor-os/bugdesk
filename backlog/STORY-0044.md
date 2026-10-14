@@ -2,10 +2,10 @@
 id: 44
 type: story
 title: "Settings opens in a large modal dialog, like Help, instead of a tab"
-status: refined
+status: in-progress
 parent: 19
 phase:
-assignee:
+assignee: norman_agent
 reporter: norman
 due:
 points: 2
@@ -36,6 +36,8 @@ than a help article.
 ## History
 
 - 2026-10-14 · norman_agent · status: draft -> refined
+- 2026-10-14 · norman_agent · status: refined -> in-progress
+- 2026-10-14 · norman_agent · assignee: (unset) -> norman_agent
 
 ## Comments
 
