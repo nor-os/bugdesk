@@ -1,0 +1,35 @@
+---
+id: 31
+type: story
+title: "BugDesk alerts run on FlexDesk's shared tab host, alert log, pane and bell"
+status: draft
+parent: 12
+phase:
+assignee:
+reporter: norman
+points: 5
+subsystem: ui
+labels: [alerts, flexdesk]
+links: []
+created: 2026-10-14
+updated: 2026-10-14T09:43Z
+---
+
+## Description
+
+FlexDesk EPIC-0017 (`../FlexDesk/backlog/EPIC-0017.md`) moves bugdesk's bottom-panel tab strip
+(`ui/js/ticketdesk/pages.js:2306-2390`), alert log and Alerts pane (`ui/js/ticketdesk/alerts.js:39-178`, `223-413`)
+into FlexDesk so Tables can use them too (Tables EPIC-0292). bugdesk then uses FlexDesk's versions and keeps only
+its own parts: the alert rules, their evaluation and the rules editor, plugged in as the pane's optional rules
+column and the log's local source.
+
+## Acceptance criteria
+
+- [ ] The Alerts and Changes tabs, badges and remembered tab work as before, on FlexDesk's tab host
+- [ ] The Alerts tab looks and behaves as before (chips, filter, days, unread, Open/Dismiss, rules column, still matches)
+- [ ] The status-bar bell shows the unread count and opens the Alerts tab
+- [ ] The copies in pages.js and alerts.js are removed; the rules engine and editor remain
+
+## History
+
+## Comments
