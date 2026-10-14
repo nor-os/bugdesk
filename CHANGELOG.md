@@ -103,9 +103,12 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   are saved once or not at all.
 
 - **Flows of their own** (STORY-0028). Settings has a *Flows* entry in its
-  sidebar: *Manage flows…* lists the project's named flows — what each is for,
-  its steps, and which moves and actions use it — to make, rename, edit and
-  remove (one in use is not removed). In Edit workflow a move or an action picks
+  sidebar, and the flows are managed right on that page, no windows: the
+  project's named flows are listed on the left — what each is for, its steps,
+  and how many moves and actions use it — with a search and *New flow*, and the
+  selected one's name and steps are edited on the right. One *Save* writes them
+  all; changes left unsaved are still there when you come back to the page. A
+  flow in use is not removed, and the page says what uses it. In Edit workflow a move or an action picks
   its flow from a searchable list, makes a new one with *New flow…* or by typing
   a name that is not a flow yet, and opens the chosen one with its edit button.
   A flow's window is titled *Flow — <name>*, with the name editable in it. Flows

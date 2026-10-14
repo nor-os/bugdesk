@@ -251,15 +251,16 @@ export const BUGDESK_SETTINGS_SLICE = {
 
         // The named flows the moves and actions use (STORY-0028).
         'bugdesk.flows': {
-            type: 'action', category: 'flows', group: 'Flows',
+            type: 'panel', category: 'flows', group: 'Flows',
             label: 'Flows',
             description: 'What a move or a custom action does on the side — ask a question, set or clear a field, add a comment, check a field and branch — as named flows, shared by every move and action that picks them in Edit workflow. Saved in the shared project.json beside the stores.',
-            buttonLabel: 'Manage flows…',
+            buttonLabel: 'Go to Flows',
             icon: 'account_tree',
             defaultValue: null,
-            onClick: async () => {
-                const { openFlowsEditor } = await import('../ticketdesk/flows_editor.js');
-                return openFlowsEditor({ eventBus: window.__ecoagent?.eventBus });
+            // Drawn on the Settings page itself, not in a window (settings_page.js's `type: 'panel'`).
+            mount: async (el, { eventBus } = {}) => {
+                const { mountFlowsManager } = await import('../ticketdesk/flows_editor.js');
+                return mountFlowsManager(el, { eventBus: eventBus || window.__ecoagent?.eventBus });
             },
         },
 

@@ -159,6 +159,43 @@ await t('clicking the button reaches the schema onClick', async () => {
     }
 });
 
+await t('Settings › Flows is drawn on the page, and let go of when the page changes (STORY-0028)', async () => {
+    // A `type: 'panel'` row is mounted into the page, not opened in a window:
+    // the editor gets its element, and its cleanup runs on leaving the page.
+    const schema = settings.getSchema();
+    const original = schema['bugdesk.flows'].mount;
+    const seen = [];
+    schema['bugdesk.flows'].mount = (el) => { seen.push(el.dataset.panel); return () => seen.push('cleanup'); };
+    try {
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        const page = new SettingsPage({ embedded: true });
+        page.mount(host);
+        await tick();
+        page._switchCategory('flows');
+        await tick();
+        assert.ok(host.querySelector('[data-panel="bugdesk.flows"]'), 'no panel element on the Flows page');
+        assert.equal(host.querySelector('[data-action="setting-action"]'), null, 'the Flows page has no button to open a window');
+        assert.equal(host.querySelector('[data-action="reset-category"]'), null, 'nothing on it for Reset to reset');
+        assert.deepEqual(seen, ['bugdesk.flows']);
+        page._switchCategory('general');
+        await tick();
+        assert.deepEqual(seen, ['bugdesk.flows', 'cleanup'], 'the editor was not let go of');
+        page._handleSearch('as named flows');
+        const go = host.querySelector('[data-action="goto-category"][data-category="flows"]');
+        assert.ok(go, 'search finds the Flows page and offers to go there');
+        go.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+        await tick();
+        assert.equal(seen.length, 3, 'going there mounts it again');
+        page.dispose();
+        await tick();
+        assert.equal(seen.at(-1), 'cleanup', 'dispose lets go of it');
+        host.remove();
+    } finally {
+        schema['bugdesk.flows'].mount = original;
+    }
+});
+
 /* ── the choice control ──────────────────────────────────────────────
  *
  * It REPLACES the element it is given and keeps it as a hidden value carrier,
@@ -388,7 +425,7 @@ await t('every offered setting is read somewhere, or is a button', () => {
     for (const path of settings.VISIBLE_SETTINGS) {
         const def = schema[path];
         assert.ok(def, `${path} is offered but not in the schema`);
-        if (def.type === 'action') continue;      // a button, not a value
+        if (def.type === 'action' || def.type === 'panel') continue;      // a button or an editor, not a value
         assert.ok(source.includes(`getSetting('${path}'`) || source.includes(`getSetting("${path}"`),
             `${path} is offered in Settings but nothing reads it`);
     }

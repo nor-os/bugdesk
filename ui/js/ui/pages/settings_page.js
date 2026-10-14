@@ -53,6 +53,7 @@ export class SettingsPage extends PageBase {
         this._sidebarEl = null;
         this._contentEl = null;
         this._searchQuery = '';
+        this._panels = [];               // mounted `type: 'panel'` rows — see _mountPanels
     }
 
     /** Categories to show — the allow-list (in its given order) or all. */
@@ -130,6 +131,7 @@ export class SettingsPage extends PageBase {
         // the page that opened it.
         for (const h of this._selectHandles || []) { try { h.destroy(); } catch { /* gone */ } }
         this._selectHandles = [];
+        this._unmountPanels();
         for (const unsub of this._busSubscriptions) unsub();
         this._busSubscriptions = [];
         for (const timerId of this._debounceTimers.values()) clearTimeout(timerId);
@@ -198,6 +200,8 @@ export class SettingsPage extends PageBase {
         if (!cat) return;
 
         const settings = this._visibleSettings(categoryId);
+        this._unmountPanels();
+        const onlyPanels = settings.length > 0 && settings.every(d => d.type === 'panel');
 
         // Group settings by their group field
         const groups = new Map();
@@ -213,17 +217,20 @@ export class SettingsPage extends PageBase {
                     <h2 class="settings-page__title">${cat.label}</h2>
                     <p class="settings-page__description">${cat.description}</p>
                 </div>
-                <button class="settings-page__reset-btn" data-action="reset-category" data-category="${categoryId}" type="button">
+                ${onlyPanels ? '' : `<button class="settings-page__reset-btn" data-action="reset-category" data-category="${categoryId}" type="button">
                     <span class="material-symbols-outlined">restart_alt</span>
                     <span>Reset</span>
-                </button>
+                </button>`}
             </div>`;
 
         for (const [groupName, groupSettings] of groups) {
-            html += `<div class="settings-page__group">
+            // A group that is one editor needs no heading over the page's own.
+            html += groupSettings.every(d => d.type === 'panel') ? '<div class="settings-page__group">' : `<div class="settings-page__group">
                 <h3 class="settings-page__group-title">${groupName}</h3>`;
             for (const def of groupSettings) {
-                html += this._renderSettingRow(def);
+                html += def.type === 'panel'
+                    ? `<div class="settings-page__panel" data-panel="${def.path}"></div>`
+                    : this._renderSettingRow(def);
             }
             html += '</div>';
         }
@@ -234,6 +241,40 @@ export class SettingsPage extends PageBase {
         this._contentEl.innerHTML = html;
         this._hydrateControls();
         this._hydrateBridgeControls(categoryId);
+        this._mountPanels(settings);
+    }
+
+    /**
+     * A `type: 'panel'` row is a whole editor drawn ON the page rather than a
+     * value or a button that opens a window: `mount(el, {eventBus})` fills the
+     * element and returns a cleanup (or a promise of one), run when the page
+     * shows something else. Search finds it like any row and offers to go there.
+     */
+    _mountPanels(settings) {
+        for (const def of settings) {
+            if (def.type !== 'panel' || typeof def.mount !== 'function') continue;
+            const el = this._contentEl.querySelector(`[data-panel="${def.path}"]`);
+            if (!el) continue;
+            const entry = { cleanup: null, gone: false };
+            this._panels.push(entry);
+            Promise.resolve(def.mount(el, { eventBus: this.eventBus }))
+                .then((fn) => {
+                    if (typeof fn !== 'function') return;
+                    if (entry.gone) fn(); else entry.cleanup = fn;
+                })
+                .catch((err) => {
+                    console.error('[settings] panel failed', def.path, err);
+                    el.textContent = `Could not open this page: ${err.message || err}`;
+                });
+        }
+    }
+
+    _unmountPanels() {
+        for (const entry of this._panels || []) {
+            entry.gone = true;
+            try { entry.cleanup?.(); } catch (err) { console.error('[settings] panel cleanup', err); }
+        }
+        this._panels = [];
     }
 
     // ── Render search results ────────────────────────────────────────────────
@@ -269,6 +310,7 @@ export class SettingsPage extends PageBase {
             return;
         }
 
+        this._unmountPanels();
         let html = `<div class="settings-page__search-results">
             <p class="settings-page__search-header">${matches.length} result${matches.length !== 1 ? 's' : ''} for "${query}"</p>`;
 
@@ -330,6 +372,11 @@ export class SettingsPage extends PageBase {
                 return this._renderColorList(def.path, value);
             case 'action':
                 return this._renderAction(def);
+            case 'panel':
+                return `<button class="ea-btn settings-action" data-action="goto-category"
+                                data-category="${def.category}" type="button">${
+                    def.icon ? `<span class="material-symbols-outlined">${def.icon}</span> ` : ''
+                }${def.buttonLabel || 'Open'}</button>`;
             default:
                 return `<span>${String(value)}</span>`;
         }
@@ -631,6 +678,13 @@ export class SettingsPage extends PageBase {
                 const resetBtn = e.target.closest('[data-action="reset-category"]');
                 if (resetBtn) {
                     this._handleResetCategory(resetBtn.dataset.category);
+                    return;
+                }
+
+                // A panel row found by search: go to its page.
+                const gotoBtn = e.target.closest('[data-action="goto-category"]');
+                if (gotoBtn) {
+                    this._switchCategory(gotoBtn.dataset.category);
                     return;
                 }
 

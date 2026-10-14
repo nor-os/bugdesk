@@ -1120,26 +1120,41 @@ tr[draggable="true"]:active,
 .bd-workflow__lede .material-symbols-outlined { font-size: 14px; vertical-align: -2px; }
 
 /* ── Settings › Flows (flows_editor.js, STORY-0028) ──────────────── */
-.bd-flows { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; background: var(--surface-1, #252526); }
-.bd-flows__main { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 10px 16px 16px; }
-.bd-flows__bar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
-.bd-flows__bar .ea-btn { display: inline-flex; align-items: center; gap: 4px; }
-.bd-flows__bar .ea-btn .material-symbols-outlined { font-size: 15px; }
 .bd-flows__search { display: flex; align-items: center; gap: 6px; flex: 1 1 auto; color: var(--text-secondary, #9a9a9a); }
 .bd-flows__search .material-symbols-outlined { font-size: 16px; }
 .bd-flows__search input { flex: 1 1 auto; max-width: 320px; }
-.bd-flows__hdr, .bd-flows .bd-flows__row {
-    display: grid;
-    grid-template-columns: minmax(160px, 1.2fr) 80px 64px 2fr 26px 26px;
-    align-items: center;
-    gap: 8px;
-    margin: 0 0 4px;
-}
-.bd-flows__hdr { font-size: 10.5px; color: var(--text-dim, #666); }
-.bd-flows__uses { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; }
 .bd-flows__empty { margin: 8px 0; line-height: 1.6; max-width: 70ch; }
-.bd-flows .bd-schema__problems { margin-top: 10px; }
-.bd-flows .bd-schema__rm:disabled { opacity: .3; cursor: default; }
+
+/* The page itself (STORY-0028 review): the list on the left, the selected
+   flow on the right, one Save — no windows. A panel row widens the settings
+   column, which is sized for label-and-control rows. */
+.settings-page__content-inner:has(.settings-page__panel) { max-width: 1280px; }
+.bd-flowsmgr { display: flex; flex-direction: column; gap: 8px; height: max(420px, calc(100vh - 360px)); }
+.bd-flowsmgr__bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.bd-flowsmgr__bar .ea-btn { display: inline-flex; align-items: center; gap: 4px; }
+.bd-flowsmgr__bar .ea-btn .material-symbols-outlined { font-size: 15px; }
+.bd-flowsmgr__bar .ea-btn:disabled { opacity: .45; cursor: default; }
+.bd-flowsmgr__state { margin-left: auto; font-size: 11.5px; }
+.bd-flowsmgr__split { display: flex; flex: 1 1 auto; min-height: 0; border: 1px solid var(--border-default, #333); border-radius: 4px; overflow: hidden; }
+.bd-flowsmgr__list { flex: 0 0 260px; overflow-y: auto; border-right: 1px solid var(--border-default, #333); background: var(--surface-0, #1e1e1e); padding: 4px; }
+.bd-flowsmgr__item { display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left; padding: 7px 10px; border: 0; border-radius: 3px; background: none; color: var(--text-primary, #ddd); cursor: pointer; font: inherit; }
+.bd-flowsmgr__item:hover { background: var(--state-hover, rgba(255,255,255,.05)); }
+.bd-flowsmgr__item.is-selected { background: var(--state-selected, rgba(0,122,204,.15)); }
+.bd-flowsmgr__name { display: flex; align-items: center; gap: 4px; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bd-flowsmgr__name .material-symbols-outlined { font-size: 14px; color: var(--status-error, #f48771); }
+.bd-flowsmgr__sub { font-size: 11px; }
+.bd-flowsmgr__detail { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; background: var(--surface-1, #252526); }
+.bd-flowsmgr__head { display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--border-subtle, #2a2a2a); padding-right: 12px; }
+.bd-flowsmgr__head .bd-flowedit__name { flex: 1 1 auto; border-bottom: 0; }
+.bd-flowsmgr__head .td-dim { font-size: 11.5px; white-space: nowrap; }
+.bd-flowsmgr__rm { display: inline-flex; align-items: center; gap: 4px; }
+.bd-flowsmgr__rm .material-symbols-outlined { font-size: 15px; }
+.bd-flowsmgr__rm:disabled { opacity: .4; cursor: default; }
+.bd-flowsmgr__uses { padding: 6px 12px; font-size: 11.5px; border-bottom: 1px solid var(--border-subtle, #2a2a2a); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bd-flowsmgr__none { margin: 16px; }
+.bd-flowsmgr__goto { border: 0; background: none; padding: 0; color: inherit; font: inherit; text-decoration: underline; cursor: pointer; }
+.bd-flowsmgr__foot { font-size: 11px; }
+.bd-flowsmgr .bd-flows__empty { margin: 10px; }
 
 /* ── Changes pane (changes_pane.js) ─────────────────────────────── */
 .twm-bp__body[hidden] { display: none !important; }

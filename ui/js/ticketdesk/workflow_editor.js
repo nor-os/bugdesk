@@ -510,7 +510,6 @@ export const flowTitle = (name) => `Flow — ${String(name || '').trim() || 'Unt
  * @param {number} [o.usedElsewhere]  other rows using it — said in the footer, since an edit changes them too
  */
 export function openFlowEditor({ name = '', store, types, graph = null, actions = false, serverFindings = [], usedElsewhere = 0 }) {
-    const catalogue = createStepCatalogue(stepTypes(store, types, { actions }), { categories: CATEGORIES });
     const body = document.createElement('div');
     body.className = 'bd-flowedit';
     const note = usedElsewhere
@@ -525,8 +524,52 @@ export function openFlowEditor({ name = '', store, types, graph = null, actions 
             <button type="button" class="ea-btn" data-act="cancel">Cancel</button>
             <button type="button" class="ea-btn ea-btn--primary" data-act="done">Done</button>
         </div>`;
-    const host = body.querySelector('.bd-flowedit__host');
     const nameInput = body.querySelector('[data-k="name"]');
+    const editor = mountFlowEditor(body.querySelector('.bd-flowedit__host'), { store, types, graph, actions, serverFindings });
+
+    let settle;
+    const done = new Promise((r) => { settle = r; });
+    let closed = false;
+    const win = new ManagedWindow({
+        id: `bd-flow-${_seq++}`, title: flowTitle(name), icon: 'account_tree', content: body,
+        modal: true, canMinimize: false, canMaximize: true, canResize: true, canDrag: true,
+        defaultWidth: 860, defaultHeight: 600, onClose: () => close(undefined),
+    });
+    function close(value) {
+        if (closed) return;
+        closed = true;
+        editor.destroy();
+        try { win.close({ force: true }); } catch { /* closing */ }
+        settle(value);
+    }
+    nameInput.addEventListener('input', () => win.setTitle(flowTitle(nameInput.value)));
+    body.addEventListener('click', (e) => {
+        const act = e.target.closest('[data-act]')?.dataset.act;
+        if (act === 'cancel') close(undefined);
+        else if (act === 'done') {
+            const slot = body.querySelector('[data-slot="note"]');
+            if (!nameInput.value.trim()) { slot.textContent = 'Give the flow a name first.'; nameInput.focus(); return; }
+            const findings = editor.check();
+            if (findings.length) {
+                slot.textContent = `${findings.length} thing${findings.length === 1 ? '' : 's'} to fix first — see the list above the flow.`;
+                return;
+            }
+            close({ name: nameInput.value.trim(), graph: editor.getGraph() });
+        }
+    });
+    win.show();
+    return done;
+}
+
+/**
+ * FlexDesk's outline editor over one flow, mounted into `host` — the window
+ * above, and Settings › Flows, which edits a flow on the page itself.
+ * Checked as it is edited; `serverFindings` are the bridge's refusals of the
+ * last save, drawn on their steps until the next edit.
+ * @returns {{getGraph: () => object, check: () => object[], destroy: () => void}}
+ */
+export function mountFlowEditor(host, { store, types, graph = null, actions = false, serverFindings = [], onChange = null }) {
+    const catalogue = createStepCatalogue(stepTypes(store, types, { actions }), { categories: CATEGORIES });
 
     // Insert a value: what earlier prompts answered, and the record's fields.
     const fieldGroup = {
@@ -550,8 +593,8 @@ export function openFlowEditor({ name = '', store, types, graph = null, actions 
         ];
     };
 
-    const refresh = () => {
-        if (!editor) return;
+    const check = () => {
+        if (!editor) return [];
         const findings = [...checkFlow(editor.getGraph(), store, types, { actions }),
             ...serverFindings.map((p) => ({ code: 'bridge', message: p.message, severity: 'error', node_id: p.node_id }))];
         editor.setFindings(findings);
@@ -563,43 +606,16 @@ export function openFlowEditor({ name = '', store, types, graph = null, actions 
         blocks: BLOCKS, values,
         valuesNote: 'Only questions asked before this step, on every path, are listed.',
         summarise: (node) => summariseStep(node),
-        onChange: () => { serverFindings = []; refresh(); },
+        onChange: () => { serverFindings = []; check(); onChange?.(); },
     });
     editor.load({ graph: graph ? JSON.parse(JSON.stringify(graph)) : emptyFlow() });
-    refresh();
-
-    let settle;
-    const done = new Promise((r) => { settle = r; });
-    let closed = false;
-    const win = new ManagedWindow({
-        id: `bd-flow-${_seq++}`, title: flowTitle(name), icon: 'account_tree', content: body,
-        modal: true, canMinimize: false, canMaximize: true, canResize: true, canDrag: true,
-        defaultWidth: 860, defaultHeight: 600, onClose: () => close(undefined),
-    });
-    function close(value) {
-        if (closed) return;
-        closed = true;
-        try { editor?.destroy(); } catch { /* gone */ }
-        try { win.close({ force: true }); } catch { /* closing */ }
-        settle(value);
-    }
-    nameInput.addEventListener('input', () => win.setTitle(flowTitle(nameInput.value)));
-    body.addEventListener('click', (e) => {
-        const act = e.target.closest('[data-act]')?.dataset.act;
-        if (act === 'cancel') close(undefined);
-        else if (act === 'done') {
-            const slot = body.querySelector('[data-slot="note"]');
-            if (!nameInput.value.trim()) { slot.textContent = 'Give the flow a name first.'; nameInput.focus(); return; }
-            const findings = refresh();
-            if (findings.length) {
-                slot.textContent = `${findings.length} thing${findings.length === 1 ? '' : 's'} to fix first — see the list above the flow.`;
-                return;
-            }
-            close({ name: nameInput.value.trim(), graph: editor.getGraph() });
-        }
-    });
-    win.show();
-    return done;
+    check();
+    let gone = false;
+    return {
+        getGraph: () => editor.getGraph(),
+        check,
+        destroy: () => { if (gone) return; gone = true; try { editor.destroy(); } catch { /* gone */ } },
+    };
 }
 
 /** A step's one line in the outline. */
