@@ -3004,6 +3004,109 @@ console.log('\nWorkflow');
 
 /* ── conversion between the stores (STORY-0001) ─────────────────────── */
 
+/* ── mass actions over ticked rows (STORY-0029) ───────────────────── */
+
+console.log('\nMass actions');
+{
+    const wf = await import(join(UI, 'ticketdesk', 'workflow.js'));
+    const mass = await import(join(UI, 'ticketdesk', 'mass_actions.js'));
+    const bug = (id, status, type = 'bug') => mass.bugRecord({ bugId: id, id: `#${id}`, rawStatus: status, rawType: type });
+    const story = (id, status, extra = {}) => mass.itemRecord({ id, ref: `STORY-${id}`, type: 'story', status,
+        title: 'A story with a title', description: 'Why', criteria: ['x'], points: '3', parent: 1, ...extra });
+    const io = (store) => ({
+        fetch: async (r) => ({ id: r.id, status: r.status, type: r.type, assignee: '', comments: [], fields: {} }),
+        save: async (r, patch) => { store.push([r.ref, patch]); },
+    });
+
+    await t('only targets EVERY ticked record can reach are offered', () => {
+        wf.setWorkflow(null);
+        const to = mass.commonTargets([bug(1, 'open'), bug(2, 'investigation')]).map((x) => x.to);
+        assert.deepEqual(to, ['closed'], 'open can start investigation, investigation cannot; only Close is shared');
+        assert.deepEqual(mass.commonTargets([bug(1, 'open'), bug(2, 'closed')]).map((x) => x.to), [], 'a closed bug can only reopen');
+        assert.deepEqual(mass.commonTargets([bug(1, 'open'), story(2, 'draft')]), [], 'two stores share no status');
+    });
+
+    await t('a gated move is not offered when any ticked item fails its checks', () => {
+        wf.setWorkflow(null);
+        const ok = mass.commonTargets([story(1, 'draft'), story(2, 'draft')]).map((x) => x.to);
+        assert.ok(ok.includes('refined'), `refined offered when both pass: ${ok}`);
+        const gap = mass.commonTargets([story(1, 'draft'), story(2, 'draft', { criteria: [] })]).map((x) => x.to);
+        assert.ok(!gap.includes('refined'), 'refined offered although one has no criteria');
+        assert.ok(gap.includes('dropped'));
+    });
+
+    await t('a configured move table decides, per record', () => {
+        wf.setWorkflow({ bugs: { moves: [
+            { from: 'open', label: 'Park', to: 'testing' },
+            { from: 'investigation', label: 'Ready', to: 'testing', message: true },
+        ] } });
+        const [x] = mass.commonTargets([bug(1, 'open'), bug(2, 'investigation')]);
+        assert.equal(x.to, 'testing');
+        assert.equal(x.label, 'Move to Testing', 'labels that differ give way to the status');
+        assert.equal(x.message, true, 'one of them needs a message');
+        wf.setWorkflow(null);
+    });
+
+    await t('the message is asked ONCE and saved on every record', async () => {
+        wf.setWorkflow(null);
+        const recs = [bug(1, 'open'), bug(2, 'testing'), bug(3, 'investigation')];
+        const target = mass.commonTargets(recs).find((x) => x.to === 'closed');
+        let asked = 0;
+        const saved = [];
+        const msg = await mass.massMove(recs, target, { ask: async () => { asked++; return { message: 'Fixed in 1.2' }; }, ...io(saved) });
+        assert.equal(asked, 1);
+        assert.deepEqual(saved, recs.map((r) => [r.ref, { status: 'closed', comment: 'Fixed in 1.2' }]));
+        assert.match(msg, /3 records changed/);
+    });
+
+    await t('cancelling the question saves nothing anywhere', async () => {
+        const recs = [bug(1, 'open'), bug(2, 'testing')];
+        const target = mass.commonTargets(recs).find((x) => x.to === 'closed');
+        const saved = [];
+        const msg = await mass.massMove(recs, target, { ask: async () => null, ...io(saved) });
+        assert.deepEqual(saved, []);
+        assert.match(msg, /cancelled, nothing changed/);
+    });
+
+    await t('a flow asks its questions once and runs per record', async () => {
+        const g = { nodes: [{ id: 'start', type: 'start', config: {} },
+            { id: 'why', type: 'prompt', config: { question: 'Why?' } },
+            { id: 'note', type: 'add-comment', config: { body: '${input.why} (#${record.id})' } }],
+            connections: [{ source: 'start', target: 'why', sourcePort: 'out' }, { source: 'why', target: 'note', sourcePort: 'out' }] };
+        wf.setWorkflow({ actions: { bugs: { bug: [{ id: 'park', label: 'Park', flow: g }] } } });
+        const recs = [bug(4, 'open'), bug(5, 'testing')];
+        let asked = 0;
+        const saved = [];
+        await mass.massAction(recs, 'park', { ask: async () => { asked++; return { answer: 'later' }; }, ...io(saved) });
+        assert.equal(asked, 1);
+        assert.deepEqual(saved, [['#4', { comment: 'later (#4)' }], ['#5', { comment: 'later (#5)' }]]);
+        wf.setWorkflow(null);
+    });
+
+    await t('the assignee is asked once, and a record already on them is left alone', async () => {
+        const saved = [];
+        const recs = [bug(1, 'open'), bug(2, 'open')];
+        const msg = await mass.massAssign(recs, { ask: async () => ({ assignee: 'alice' }), fetch: async (r) => ({ assignee: r.id === 2 ? 'alice' : 'bob' }),
+            save: async (r, patch) => { saved.push([r.ref, patch]); } });
+        assert.deepEqual(saved, [['#1', { assignee: 'alice' }]]);
+        assert.match(msg, /1 already so/);
+    });
+
+    await t('what a selection offers: every type\'s mass actions in common, defaults when unconfigured', () => {
+        wf.setWorkflow(null);
+        assert.deepEqual(mass.offeredMassActions([bug(1, 'open')]).map((a) => a.key), ['assignee', 'status']);
+        wf.setWorkflow({
+            actions: { bugs: { bug: [{ id: 'park', label: 'Park', when: ['open'] }], regression: [{ id: 'park', label: 'Park' }] } },
+            massActions: { bugs: { bug: ['assignee', 'action:park'], regression: ['status', 'assignee', 'action:park'] } },
+        });
+        assert.deepEqual(mass.offeredMassActions([bug(1, 'open'), bug(2, 'open', 'regression')]).map((a) => a.key), ['assignee', 'action:park']);
+        assert.deepEqual(mass.offeredMassActions([bug(1, 'testing'), bug(2, 'open', 'regression')]).map((a) => a.key), ['assignee'],
+            'an action is offered only where every record offers it in its status');
+        assert.deepEqual(mass.offeredMassActions([bug(3, 'open', 'task')]).map((a) => a.key), ['assignee', 'status'], 'an unlisted type has the defaults');
+        wf.setWorkflow(null);
+    });
+}
+
 console.log('\nConversion');
 {
     const { convertedBanner } = await import(join(UI, 'ticketdesk', 'convert.js'));

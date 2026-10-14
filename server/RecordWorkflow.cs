@@ -9,7 +9,8 @@ using System.Text.Json.Nodes;
 ///   "bugs":    { "moves": [ { "from": "testing", "label": "Close", "to": "closed", "message": true, "flow": {...} } ] },
 ///   "backlog": { "story": { "moves": [...] }, "task": { "moves": [...] } },
 ///   "actions": { "bugs": { "bug": [ { "id": "blocked", "label": "Blocked", "when": ["open"], "flow": "ask-why" } ] } },
-///   "flows":   [ { "id": "ask-why", "label": "Ask why", "store": "bugs", "flow": {...} } ]
+///   "flows":   [ { "id": "ask-why", "label": "Ask why", "store": "bugs", "flow": {...} } ],
+///   "massActions": { "bugs": { "bug": [ "assignee", "status", "action:blocked" ] } }
 /// }
 /// </code>
 ///
@@ -149,7 +150,45 @@ static class RecordWorkflow
                     }
                 }
             }
+        if (root["massActions"] is JsonNode mass) CheckMassActions(mass, root["actions"], problems);
         return problems;
+    }
+
+    /// <summary>
+    /// STORY-0029. <c>massActions.&lt;store&gt;.&lt;type&gt;</c>: what a multi-row
+    /// selection of that type offers — <c>"assignee"</c>, <c>"status"</c> and
+    /// <c>"action:&lt;id&gt;"</c>, one of that type's custom actions. A type not
+    /// listed offers the first two (ui/js/ticketdesk/mass_actions.js).
+    /// </summary>
+    static void CheckMassActions(JsonNode mass, JsonNode? actions, List<Problem> problems)
+    {
+        if (mass is not JsonObject stores) { problems.Add(new("workflow.massActions", "massActions is not an object.")); return; }
+        foreach (var (store, byType) in stores)
+        {
+            var where = $"workflow.massActions.{store}";
+            if (!RecordSchema.TypesOf.ContainsKey(store)) { problems.Add(new(where, $"'{store}' is not bugs or backlog.")); continue; }
+            if (byType is not JsonObject types) { problems.Add(new(where, "not an object of record types.")); continue; }
+            foreach (var (type, list) in types)
+            {
+                var w = $"{where}.{type}";
+                if (!RecordSchema.TypesOf[store].Contains(type)) { problems.Add(new(w, $"unknown {store} type '{type}'.")); continue; }
+                if (list is not JsonArray arr) { problems.Add(new(w, "not a list.")); continue; }
+                var ids = new HashSet<string>();
+                if (actions?[store]?[type] is JsonArray acts)
+                    foreach (var a in acts) { var id = Str(a?["id"]); if (id.Length > 0) ids.Add(id); }
+                var seen = new HashSet<string>();
+                for (var i = 0; i < arr.Count; i++)
+                {
+                    var entry = Str(arr[i]);
+                    if (!seen.Add(entry)) { problems.Add(new($"{w}[{i}]", $"'{entry}' is listed twice.")); continue; }
+                    if (entry is "assignee" or "status") continue;
+                    if (entry.StartsWith("action:") && ids.Contains(entry[7..])) continue;
+                    problems.Add(new($"{w}[{i}]", entry.StartsWith("action:")
+                        ? $"'{entry[7..]}' is not a custom action of a {type}."
+                        : $"'{entry}' is not a mass action (assignee, status or action:<id>)."));
+                }
+            }
+        }
     }
 
     static void CheckMoves(JsonNode? movesNode, string store, string[] types, string where,

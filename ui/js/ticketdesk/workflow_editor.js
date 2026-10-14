@@ -17,6 +17,10 @@
  * drawn on the step in the editor's findings strip with Go to it; the bridge
  * checks again on save and refuses the whole workflow on any problem.
  *
+ * MASS ACTIONS (STORY-0029) are a third group: per store and type, which of
+ * Change assignee, Change status and the type's custom actions a list offers
+ * over its ticked rows (./mass_actions.js). Unconfigured, the first two.
+ *
  * Saved in `.bugdesk/project.json`'s `workflow`, committed and shared.
  */
 
@@ -31,8 +35,8 @@ import { CONFIG } from './instance.js';
 import { customFields, STORE_TYPES } from './schema.js';
 import { attachSelect } from './select_field.js';
 import {
-    BLOCKS, CATEGORIES, SETTABLE, builtinMoves, checkFlow, configuredFlows, emptyFlow, liftInlineFlows,
-    newFlowId, saveWorkflow, statusesOf, stepTypes, workflowConfig,
+    BLOCKS, CATEGORIES, DEFAULT_MASS_ACTIONS, SETTABLE, builtinMoves, checkFlow, configuredFlows, emptyFlow,
+    liftInlineFlows, newFlowId, saveWorkflow, statusesOf, stepTypes, workflowConfig,
 } from './workflow.js';
 
 const icon = (name) => `<span class="material-symbols-outlined">${name}</span>`;
@@ -42,7 +46,7 @@ let _seq = 1;
  *  the move tables first, then one action list per record type. */
 function tablesHere() {
     const store = CONFIG.store || {};
-    const moves = [], actions = [];
+    const moves = [], actions = [], mass = [];
     const bugs = store.hasBugs !== false && CONFIG.mode !== 'tracker';
     const backlog = store.hasBacklog !== false;
     const offered = CONFIG.mode === 'tracker' ? ['project', 'epic', 'story', 'task'] : ['epic', 'story', 'task'];
@@ -59,8 +63,40 @@ function tablesHere() {
             if (offered.includes(t)) actions.push([`actions.backlog.${t}`, 'backlog', [t], label, 'Actions']);
         }
     }
-    return [...moves, ...actions];
+    if (bugs) for (const [t, label] of STORE_TYPES.bugs) mass.push([`mass.bugs.${t}`, 'bugs', [t], label, 'Mass actions']);
+    if (backlog) {
+        for (const [t, label] of STORE_TYPES.backlog) {
+            if (offered.includes(t)) mass.push([`mass.backlog.${t}`, 'backlog', [t], label, 'Mass actions']);
+        }
+    }
+    return [...moves, ...actions, ...mass];
 }
+
+/* STORY-0029: `massActions.<store>.<type>`, null while the type offers the defaults. */
+const isMass = (key) => key.startsWith('mass.');
+const massOf = (draft, key) => {
+    const [, store, type] = key.split('.');
+    const list = draft.massActions?.[store]?.[type];
+    return Array.isArray(list) ? list : null;
+};
+const setMass = (draft, key, list) => {
+    const [, store, type] = key.split('.');
+    draft.massActions = draft.massActions || {};
+    draft.massActions[store] = draft.massActions[store] || {};
+    if (list) draft.massActions[store][type] = list; else delete draft.massActions[store][type];
+    if (!Object.keys(draft.massActions[store]).length) delete draft.massActions[store];
+    if (!Object.keys(draft.massActions).length) delete draft.massActions;
+};
+/** What a type's mass actions may be: the two built-ins and its named custom actions. */
+const massChoices = (draft, key) => {
+    const [, store, type] = key.split('.');
+    return [
+        ['assignee', 'Change assignee', 'One person, set on every ticked record.'],
+        ['status', 'Change status to…', 'Only the statuses every ticked record can move to from where it is; a message the move needs is asked once and saved on each.'],
+        ...actionsOf(draft, `actions.${store}.${type}`).filter((a) => a.id && String(a.label || '').trim())
+            .map((a) => [`action:${a.id}`, a.label, 'This custom action, run on every ticked record; its questions are asked once.']),
+    ];
+};
 
 const isActions = (key) => key.startsWith('actions.');
 const actionsOf = (draft, key) => {
@@ -160,8 +196,9 @@ export function openWorkflowEditor({ eventBus = null } = {}) {
 
     const nav = () => tables.map(([key, , , label, group], i) => {
         const n = isActions(key) ? actionsOf(draft, key).length : 0;
-        const badge = isActions(key) ? (n ? `<span class="bd-schema__count">${n}</span>` : '')
-            : (tableOf(draft, key) ? '<span class="bd-schema__count">custom</span>' : '');
+        const badge = isMass(key) ? (massOf(draft, key) ? '<span class="bd-schema__count">custom</span>' : '')
+            : isActions(key) ? (n ? `<span class="bd-schema__count">${n}</span>` : '')
+                : (tableOf(draft, key) ? '<span class="bd-schema__count">custom</span>' : '');
         return `${i === 0 || tables[i - 1][4] !== group ? `<div class="bd-schema__group">${esc(group)}</div>` : ''}
         <button type="button" class="bd-schema__type${key === cur ? ' bd-schema__type--on' : ''}" data-table="${key}">
             ${esc(label)}${badge}
@@ -229,6 +266,22 @@ export function openWorkflowEditor({ eventBus = null } = {}) {
             + `<div class="bd-workflow__foot"><button type="button" class="ea-btn" data-act="addaction">${icon('add')} Add action</button></div>`;
     };
 
+    /** STORY-0029: one type's mass actions, a checklist. */
+    const massRows = () => {
+        const list = massOf(draft, cur);
+        const on = list || DEFAULT_MASS_ACTIONS;
+        return `<p class="td-dim bd-workflow__lede">Tick rows in a list (the ${icon('checklist')} button in its
+                header) and these are offered over them. One is offered only when every ticked record's type
+                offers it. ${list ? '' : 'This type offers the defaults.'}</p>`
+            + massChoices(draft, cur).map(([value, label, hint]) => `
+            <label class="ea-modal__row bd-workflow__mrow">
+                <input type="checkbox" data-mass="${esc(value)}" ${on.includes(value) ? 'checked' : ''}>
+                <span><b>${esc(label)}</b><br><span class="td-dim">${esc(hint)}</span></span>
+            </label>`).join('')
+            + (list ? `<div class="bd-workflow__foot"><button type="button" class="ea-btn" data-act="massdefault"
+                        title="Offer Change assignee and Change status, as an unconfigured type does">${icon('restart_alt')} Back to the defaults</button></div>` : '');
+    };
+
     const rows = () => {
         const [, store, types] = curSpec();
         const moves = tableOf(draft, cur);
@@ -268,13 +321,14 @@ export function openWorkflowEditor({ eventBus = null } = {}) {
         for (const s of selects) { try { s.destroy(); } catch { /* gone */ } }
         selects = [];
         const [, , , label] = curSpec() || [];
-        const prefix = isActions(cur) ? `workflow.${cur}` : (cur === 'bugs' ? 'workflow.bugs' : `workflow.backlog.${cur.split('.')[1]}`);
+        const prefix = isMass(cur) ? `workflow.massActions.${cur.slice(5)}`
+            : isActions(cur) ? `workflow.${cur}` : (cur === 'bugs' ? 'workflow.bugs' : `workflow.backlog.${cur.split('.')[1]}`);
         const mine = problems.filter((p) => p.where.startsWith(prefix));
         body.innerHTML = `
             <nav class="bd-schema__nav" aria-label="Move tables">${nav()}</nav>
             <div class="bd-schema__main">
-                <h3 class="bd-schema__h">${isActions(cur) ? 'Actions' : 'Moves'} › ${esc(label || '')}</h3>
-                <div class="bd-workflow__moves">${isActions(cur) ? actionRows() : rows()}</div>
+                <h3 class="bd-schema__h">${isMass(cur) ? 'Mass actions' : isActions(cur) ? 'Actions' : 'Moves'} › ${esc(label || '')}</h3>
+                <div class="bd-workflow__moves">${isMass(cur) ? massRows() : isActions(cur) ? actionRows() : rows()}</div>
                 ${problems.length ? `<div class="bd-schema__problems" role="alert">${icon('error')}<ul>${
                     (mine.length ? mine : problems).map((p) => `<li>${esc(p.message)}</li>`).join('')}${
                     mine.length && mine.length < problems.length ? `<li class="td-dim">… and ${problems.length - mine.length} on other tables</li>` : ''}</ul></div>` : ''}
@@ -322,6 +376,14 @@ export function openWorkflowEditor({ eventBus = null } = {}) {
         if (e.target.dataset.k === 'message') m.message = e.target.checked;
     });
     body.addEventListener('change', (e) => {
+        if (e.target.dataset.mass !== undefined && isMass(cur)) {
+            // In the checklist's order, so the bar's order follows it.
+            const on = new Set(massOf(draft, cur) || DEFAULT_MASS_ACTIONS);
+            if (e.target.checked) on.add(e.target.dataset.mass); else on.delete(e.target.dataset.mass);
+            setMass(draft, cur, massChoices(draft, cur).map(([v]) => v).filter((v) => on.has(v)));
+            render();
+            return;
+        }
         const row = e.target.closest('[data-move]');
         if (row && e.target.dataset.k === 'message') tableOf(draft, cur)[Number(row.dataset.move)].message = e.target.checked;
     });
@@ -331,6 +393,7 @@ export function openWorkflowEditor({ eventBus = null } = {}) {
         if (!b) return;
         const moves = tableOf(draft, cur);
         if (b.dataset.table) { cur = b.dataset.table; render(); return; }
+        if (b.dataset.act === 'massdefault') { setMass(draft, cur, null); render(); return; }
         if (b.dataset.editflow) {
             const [kind, idx] = b.dataset.editflow.split(':');
             await editFlow(kind, Number(idx));
@@ -386,8 +449,17 @@ export function openWorkflowEditor({ eventBus = null } = {}) {
                     .map(({ saved, ...a }) => ({ ...a, id: a.id || a.label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-') })));
                 continue;
             }
+            if (isMass(key)) continue;
             const m = tableOf(draft, key);
             if (m) setTable(draft, key, m.filter((x) => String(x.label || '').trim()));
+        }
+        // A mass action naming a custom action removed (or renamed) above.
+        for (const [key] of tables) {
+            const list = isMass(key) ? massOf(draft, key) : null;
+            if (!list) continue;
+            const [, store, type] = key.split('.');
+            const ids = new Set(actionsOf(draft, `actions.${store}.${type}`).map((a) => `action:${a.id}`));
+            setMass(draft, key, list.filter((v) => !v.startsWith('action:') || ids.has(v)));
         }
         try {
             await saveWorkflow(draft);

@@ -72,6 +72,7 @@ import { attachTagInput } from './tag_input.js';
 import { ITEMS, isClosedItem, loadBacklog } from './backlog_data.js';
 import { watchRecord } from './live.js';
 import { bugMovesFor, moveBug, planBugMove } from './bug_transitions.js';
+import { bugRecord, itemRecord, massActionBar } from './mass_actions.js';
 import { attachCommentEditing, editButtonHTML } from './comment_edit.js';
 import { paintRecordCount, publishRecordCount } from './record_count.js';
 import {
@@ -475,7 +476,17 @@ function mountQueues(host, props, ctx) {
         const notice = snoozeNotice('bugs', _eventBus);
         if (notice) host.querySelector('.td-tablehost').before(notice);
     }
+    // STORY-0029. The select-mode toggle in the table's header, and the bar of
+    // mass actions over the ticked bugs. See ./mass_actions.js.
+    const mass = massActionBar(host.querySelector('.td-tablehost'), {
+        noun: 'bugs',
+        recordsOf: (indices, t) => indices.map((i) => t.config.rows[i])
+            .map((r) => TICKETS.find((x) => x.id === r?.[QUEUE_ID_COL])).filter(Boolean).map(bugRecord),
+        report: statusLine,
+        afterChange: async () => { await loadData(); _eventBus?.emit?.('bugs:changed', { store: 'bugs' }); },
+    });
     const table = createTable(host.querySelector('.td-tablehost'), {
+        ...mass.tableOptions,
         ...(ctx?.tableStore ? { stateStore: ctx.tableStore, persistKey } : {}),
         // Priority is a short-badge column (an 8px swatch + "P3"): pinned narrow
         // until somebody drags it wider, when the remembered width wins.
@@ -551,6 +562,7 @@ function mountQueues(host, props, ctx) {
         return { shown, total: TICKETS.filter((t) => !isClosed(t)).length, noun: 'bugs' };
     });
     table.render();
+    mass.attach(table);
     requestAnimationFrame(() => { if (host.isConnected) table.focus(); });
 
     host.querySelector('[data-a="newbug"]').addEventListener('click', async () => {
@@ -591,7 +603,7 @@ function mountQueues(host, props, ctx) {
     // which is precisely how this leaked every queue mount before.
     return {
         title: resolved.label,
-        destroy: () => { unsub(); liveSub?.dispose?.(); drag.destroy(); table.dispose(); },
+        destroy: () => { unsub(); liveSub?.dispose?.(); drag.destroy(); mass.destroy(); table.dispose(); },
     };
 }
 
@@ -1127,7 +1139,10 @@ function mountTicket(host, props, ctx) {
         // with resultsEl.innerHTML, its listeners do not) leaks one set per
         // search. Keep the handle and dispose it before each replacement.
         let resultsTable = null;
+        let resultsMass = null;
         const disposeResults = () => {
+            resultsMass?.destroy();
+            resultsMass = null;
             resultsTable?.dispose();
             resultsTable = null;
         };
@@ -1200,7 +1215,24 @@ function mountTicket(host, props, ctx) {
                 if (ctx.wm?.navigate) ctx.wm.navigate(target.kind, target.props, { ctx, ...opts });
                 else ctx.wm?.openInTabFromContext?.(ctx, target.kind, target.props);
             };
+            // STORY-0029. Mass actions over the ticked results, of either store.
+            resultsMass = massActionBar(resultsEl.querySelector('.td-tablehost'), {
+                recordsOf: (indices, t) => indices.map((i) => byRef.get(t.config.rows[i]?.[0])).filter(Boolean).map((m) => {
+                    if (m.store === 'bugs') { const tk = TICKETS.find((x) => x.id === m.id); return tk ? bugRecord(tk) : null; }
+                    const it = ITEMS.find((x) => Number(x.id) === Number(m.bugId));
+                    return it ? itemRecord(it) : null;
+                }).filter(Boolean),
+                report: statusLine,
+                afterChange: async () => {
+                    await loadData();
+                    try { await loadBacklog(); } catch { /* backlog-less store */ }
+                    _eventBus?.emit?.('bugs:changed', { store: 'bugs' });
+                    _eventBus?.emit?.(ev('backlog:changed'), {});
+                    doSearch();
+                },
+            });
             resultsTable = createTable(resultsEl.querySelector('.td-tablehost'), {
+                ...resultsMass.tableOptions,
                 // The results are rebuilt on every search, so this is how a sort
                 // you chose survives running the next one.
                 ...(ctx?.tableStore ? { stateStore: ctx.tableStore, persistKey: `bugs:search${SEARCH_SIG}` } : {}),
@@ -1268,6 +1300,7 @@ function mountTicket(host, props, ctx) {
                 noun: 'records',
             }));
             resultsTable.render();
+            resultsMass.attach(resultsTable);
             resultsTable.focus();
             statusLine(`Search: ${matches.length} match${matches.length === 1 ? '' : 'es'} across both stores.`);
         };

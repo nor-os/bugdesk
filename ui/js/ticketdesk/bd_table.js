@@ -18,6 +18,8 @@
  *   contextMenuItems(ctx)        → FlexDesk's (row, rowIdx, ctx)
  *   onContextMenuAction(a, ctx)  → FlexDesk's (a, rowIdx, row, ctx)
  *   seedColWidths {col: px}      → a width used until somebody drags one
+ *   selectToggle (passes through) → FlexDesk's select mode (STORY-0029): while
+ *                                  it is on, a click or Enter ticks, nothing opens
  *   (always)                     → resetPageOnSort: a sort goes back to page 1
  *
  * and it adds `getSort()` — `{column, ascending}` — which the board's tree
@@ -97,11 +99,13 @@ export function createTable(el, opts = {}) {
                 clicking = true;
                 queueMicrotask(() => { clicking = false; });
                 if (ev?.shiftKey) return;
+                // In select mode a click ticks the row; FlexDesk does that.
+                if (table.isSelectMode?.()) return;
                 onRowOpen(idx, row, (ev?.ctrlKey || ev?.metaKey) ? 'modified' : 'default', ev);
             },
             onRowKeyDown: (idx, row, ev) => {
                 const how = howOf(ev);
-                if (!how) return false;
+                if (!how || table.isSelectMode?.()) return false;
                 // A Ctrl-click can take the row off the selection; the keys still
                 // mean the row the KEYBOARD was last on, as they always have.
                 if (!row && kbKey && rowKey) {
@@ -119,7 +123,8 @@ export function createTable(el, opts = {}) {
             onSort: (column, ascending) => { sort.column = column; sort.ascending = ascending; return onSort(column, ascending); },
         } : {}),
         onSelectionChange: (sel) => {
-            if (!clicking && rowKey) {
+            // Ticks (select mode) are not the keyboard's highlight: not remembered.
+            if (!clicking && rowKey && !table?.isSelectMode?.()) {
                 const keys = keysOf([...(sel || [])]);
                 if (keys.length) kbKey = keys[0];
                 if (store && selKey) store.set(selKey, keys);

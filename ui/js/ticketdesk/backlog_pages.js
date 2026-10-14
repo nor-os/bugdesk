@@ -44,6 +44,7 @@ import { confirmDelete } from './delete_item.js';
 import { attachCommentEditing, editButtonHTML } from './comment_edit.js';
 import { openFilterEditor } from './filter_editor.js';
 import { openNewItem } from './new_item.js';
+import { itemRecord, massActionBar } from './mass_actions.js';
 import { paintRecordCount, publishRecordCount } from './record_count.js';
 import { onFiltersChanged } from './filter_store.js';
 import { shell, statusLine } from './pages.js';
@@ -418,7 +419,17 @@ function mountBacklogBoard(host, props, ctx) {
         const notice = snoozeNotice('backlog', _eventBus);
         if (notice) host.querySelector('.td-tablehost').before(notice);
     }
+    // STORY-0029. The select-mode toggle in the table's header, and the bar of
+    // mass actions over the ticked items. See ./mass_actions.js.
+    const mass = massActionBar(host.querySelector('.td-tablehost'), {
+        noun: TRACKER ? 'tickets' : 'items',
+        recordsOf: (indices, t) => indices.map((i) => byRef.get(t.config.rows[i]?.[REF_COL])).filter(Boolean)
+            .map((m) => ITEMS.find((x) => Number(x.id) === Number(m.id)) || m).map(itemRecord),
+        report: statusLine,
+        afterChange: async () => { await loadBacklog(); _eventBus?.emit?.(ev('backlog:changed'), {}); },
+    });
     const table = createTable(host.querySelector('.td-tablehost'), {
+        ...mass.tableOptions,
         // Status sorts by position, custom statuses in their configured place;
         // custom fields by their type (dates as dates, numbers as numbers).
         sortValue: {
@@ -655,6 +666,7 @@ function mountBacklogBoard(host, props, ctx) {
         return { shown, total: ITEMS.filter((i) => !isClosedItem(i)).length, noun: TRACKER ? 'tickets' : 'items' };
     });
     table.render();
+    mass.attach(table);
     loadCollapsed().then(() => { if (host.isConnected) refresh(); });
     requestAnimationFrame(() => { if (host.isConnected) table.focus(); });
 
@@ -708,6 +720,7 @@ function mountBacklogBoard(host, props, ctx) {
             sub?.dispose?.();
             drag.destroy();
             host.removeEventListener('click', onCaret, true);
+            mass.destroy();
             table.dispose();
         },
     };

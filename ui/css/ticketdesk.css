@@ -43,6 +43,21 @@
     flex: 0 0 auto;
 }
 .td-page__bar--bottom { position: sticky; bottom: 0; background: var(--surface-0, #1e1e1e); padding: 6px 0 2px; z-index: 4; }
+/* STORY-0029: the mass actions over a list's ticked rows, shown while the
+ * table is in select mode (the toggle in its header). See ticketdesk/mass_actions.js. */
+.bd-massbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ea-pad-snug, 6px);
+    flex: 0 0 auto;
+    padding: 4px 8px;
+    border: 1px solid var(--accent-bright, #007acc);
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--accent-bright, #007acc) 10%, transparent);
+}
+.bd-massbar[hidden] { display: none; }
+.bd-massbar__count { font-weight: 600; margin-right: 4px; }
 .td-page__title {
     display: inline-flex;
     align-items: center;

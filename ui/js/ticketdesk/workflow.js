@@ -542,3 +542,18 @@ export async function saveWorkflow(next) {
     setWorkflow(j.workflow);
     return j.workflow;
 }
+
+/* ── mass actions (STORY-0029) ─────────────────────────────────────── */
+
+/** What every type offers on a multi-row selection when nothing is configured. */
+export const DEFAULT_MASS_ACTIONS = ['assignee', 'status'];
+
+/**
+ * The mass actions a store's type offers: `workflow.massActions.<store>.<type>`,
+ * a list of `"assignee"`, `"status"` and `"action:<custom action id>"`, else
+ * the defaults. See ./mass_actions.js.
+ */
+export function massActionsOf(store, type) {
+    const list = W.massActions?.[store]?.[type];
+    return Array.isArray(list) ? list.map(String) : [...DEFAULT_MASS_ACTIONS];
+}

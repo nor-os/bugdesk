@@ -7,6 +7,20 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Mass actions** (STORY-0029). The bug queue, the backlog board and the
+  search results have a select-mode toggle in their header (FlexDesk 0.12.0's
+  `selectToggle`): while it is on, a click ticks a row instead of opening it,
+  and a bar over the list offers *Change assignee* and *Change status to…* for
+  the ticked records. The status list holds only targets every ticked record
+  can move to from where it is now (its own moves, configured or built-in; a
+  gated move such as *Mark refined* only when every item passes its checks). A
+  message the move needs is asked once and saved on every record; a flow's
+  questions are asked once and the flow runs per record. Nothing is written
+  until every record's change is planned, so Cancel changes nothing. Which mass
+  actions a type offers, its custom actions included, is set per store and type
+  in Settings › Workflow › Mass actions (`workflow.massActions`); unconfigured,
+  every type offers the two.
+
 - **A desktop prototype** (STORY-0009, a spike). `desktop/BugDesk.Desktop`
   opens BugDesk in a native Photino.NET window on Windows, with the server
   running in the same process on a free loopback port. What it found (the host

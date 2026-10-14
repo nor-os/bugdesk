@@ -1114,6 +1114,10 @@ tr[draggable="true"]:active,
 .bd-workflow__ahdr { font-size: 10.5px; color: var(--text-dim, #666); }
 .bd-workflow__lede { margin: 0 0 10px; line-height: 1.6; max-width: 70ch; }
 .bd-workflow__lede code { font-size: 10.5px; }
+/* STORY-0029: a type's mass actions, one checkbox each. */
+.bd-schema .bd-workflow__mrow { display: flex; align-items: flex-start; gap: 8px; padding: 6px 0; cursor: pointer; }
+.bd-schema .bd-workflow__mrow input { margin-top: 2px; }
+.bd-workflow__lede .material-symbols-outlined { font-size: 14px; vertical-align: -2px; }
 
 /* ── Settings › Flows (flows_editor.js, STORY-0028) ──────────────── */
 .bd-flows { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; background: var(--surface-1, #252526); }
