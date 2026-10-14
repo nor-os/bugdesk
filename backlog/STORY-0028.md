@@ -13,7 +13,7 @@ subsystem: workflow
 labels: [workflow, settings]
 links: [relates-to STORY-0018, relates-to STORY-0007]
 created: 2026-10-14
-updated: 2026-10-14T08:43Z
+updated: 2026-10-14T09:11Z
 ---
 
 ## Description
@@ -129,3 +129,15 @@ Second review round from norman, done in 162a220 on main:
 Checked in Edge on a scratch store set up like the real one (three Blocked actions). Suites: DOM 180, UI 221, tracker 34, check-graph OK.
 
 Open question to norman: "flows for all transitions". This project configures no moves, so its transitions are the built-in ones, which only change the status (and ask for a message); there is no flow to show for them.
+
+### 2026-10-14T09:11Z · norman_agent
+
+norman chose option 1 for "flows for all transitions", done in 9dd8b31 on main:
+
+- The Flows page offers *Give every transition a flow* while any move has none. Each move gets a flow named after it that does what it does now. A move that needs a message gets an "Ask for the message" step with the move's own question ("Close message: what fixed it, or why it is closed"), and the asking moves into the flow, so it is asked once, there.
+- Identical flows are shared ("Close" used by 4, "Drop" by 9). Same name but different steps get the store's name ("Reopen — Backlog").
+- Types still on the built-in rules have their moves written down first, from the pages' own built-in moves, custom statuses included. *Customise the moves* now uses the same full list; before, it missed the "Move to <custom status>" moves.
+- Edit workflow shows Message as ticked and greyed out where the flow asks.
+- Nothing is kept until Save; *Discard changes* undoes it.
+
+Checked in Edge on a copy of the real project.json: 44 transitions became 19 flows, saved, and the moves in Edit workflow name their flows. A test runs a seeded Close and checks that it asks its old question. Suites: DOM 181, UI 221, tracker 34, check-graph OK on the committed tree.
