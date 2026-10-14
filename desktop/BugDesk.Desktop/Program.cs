@@ -74,14 +74,20 @@ static class Desktop
 
         var window = new PhotinoWindow()
             .SetTitle("BugDesk")
-            .SetSize(1400, 900)
-            .SetMinSize(900, 600)
-            .Center()
             .SetResizable(true)
             .SetTemporaryFilesPath(data.WebViewDir)
             .SetDevToolsEnabled(Environment.GetEnvironmentVariable("BUGDESK_DESKTOP_DEVTOOLS") == "1");
         var icon = FindIcon();
         if (icon is not null) window.SetIconFile(icon);
+        // Where it was last time (WindowPlacement): set before the window
+        // exists, so it opens there rather than jumping; checked against the
+        // monitors once it does.
+        var placementFile = Path.Combine(data.Root, "window.json");
+        var placement = WindowPlacement.Load(placementFile);
+        // Photino takes the OS's default size and place unless told not to.
+        window.SetUseOsDefaultSize(false).SetUseOsDefaultLocation(false);
+        if (placement is null) window.SetSize(1400, 900).Center();
+        else placement.Apply(window);
         // A test run (or a launch from a script) can start it out of the way.
         if (Environment.GetEnvironmentVariable("BUGDESK_DESKTOP_MINIMIZED") == "1") window.SetMinimized(true);
 
@@ -90,6 +96,12 @@ static class Desktop
         window.RegisterWindowCreatedHandler((_, _) =>
         {
             if (OperatingSystem.IsWindows() && icon is not null) WindowsShell.SetWindowIcon(window.WindowHandle, icon);
+            // The minimum only once the window exists: set before, Photino
+            // opens the window AT the minimum, wherever the OS puts it, and
+            // ignores the size and place it was given.
+            window.SetMinSize(900, 600);
+            placement?.KeepOnScreen(window);
+            WindowPlacement.Track(window, placementFile);
             instance.Listen(() => window.Invoke(() => BringForward(window)));
             if (data.FirstRun) new Thread(() => ChooseFirstProject(window, url)) { IsBackground = true }.Start();
             // The server can stop without the window: SIGTERM on Linux (a

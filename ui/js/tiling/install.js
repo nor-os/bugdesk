@@ -31,7 +31,7 @@ import { installRecordCount, paintRecordCount } from '../ticketdesk/record_count
 import {
     WindowManager, createContentRegistry, installKeymap, mountZoomControl,
 } from '@flexdesk/wm';
-import { createPywebviewHost } from '@flexdesk/host';
+import { createPhotinoHost, createPywebviewHost, isPhotinoWindow } from '@flexdesk/host';
 import { createTableStateStore, installAutoScrollbars, openForm, showContextMenu } from '@flexdesk/widgets';
 
 export async function installTilingShell({ eventBus, logger } = {}) {
@@ -142,10 +142,18 @@ export async function installTilingShell({ eventBus, logger } = {}) {
     // the checkout — and, unlike before, actually survives a reload: these two
     // calls used to fall through to the permissive catch-all, which answered a
     // read with `{ok:true}` and lost every layout ever saved.
-    const host = createPywebviewHost({
+    const serverHost = createPywebviewHost({
         resolvePath: (key) => `${key}.json`,
         logger: log,
     });
+    // In the desktop app (desktop/BugDesk.Desktop) the page runs in a Photino
+    // window, which answers for itself: its size and place, and the native
+    // Save dialog for exports. State still goes to the server, per user, as it
+    // does in a browser tab. In a tab, isPhotinoWindow() is false and nothing
+    // changes.
+    const host = isPhotinoWindow()
+        ? createPhotinoHost({ state: serverHost.state, logger: log })
+        : serverHost;
 
     // WHY A SORT DID NOT SURVIVE OPENING A BUG. FlexDesk keeps only a tile's
     // ACTIVE tab mounted: open a bug in a new tab and the queue's table is

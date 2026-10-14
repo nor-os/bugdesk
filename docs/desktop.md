@@ -129,7 +129,28 @@ with Pillow; re-render them the same way if the SVGs change.
 ## The native bridge
 
 The page talks to the window over Photino's web messages as JSON:
-`{id, cap, op, args}` in, `{id, ok, value | error}` out
-(`desktop/BugDesk.Desktop/NativeBridge.cs`). The protocol, and the FlexDesk host
-adapter on the page's side, are described in `desktop-spike.md` under
-*The host port*.
+`{id, cap, op, args}` in, `{id, ok, value | error}` out. FlexDesk's
+`createPhotinoHost` (`@flexdesk/host`, FlexDesk 0.14.0) is the page's side, and
+its `photino_host.md` is the contract `desktop/BugDesk.Desktop/NativeBridge.cs`
+answers:
+
+- `window`: minimize, close, isMaximized, setMaximized, isFullscreen,
+  toggleFullscreen, getBounds, setBounds. `chrome()` is `native`, so FlexDesk
+  draws no window buttons of its own.
+- `dialogs.saveFile`: the native Save dialog, then the write (text for csv,
+  base64 bytes for png). Photino's dialog starts in a folder (Documents) and
+  cannot suggest a file name, so the name is in its title, and the extension is
+  added when the one typed has none. Cancelling answers `{ok:false,
+  cancelled:true}`, and the page says nothing.
+- `state` is not offered. `ui/js/tiling/install.js` keeps the server's adapter
+  for it, so layouts and table state stay per user on the server, as in a tab.
+
+`install.js` picks the Photino host only when `isPhotinoWindow()` is true; in a
+browser tab nothing changes.
+
+**The window's place** (`WindowPlacement.cs`) is kept in `window.json` in the
+app's folder: the normal bounds, followed as the window moves, and whether it was
+maximised. A window whose title bar would be on no monitor's work area opens
+centred. Photino needs `UseOsDefaultSize`/`UseOsDefaultLocation` switched off
+before it uses a size or place, and a minimum set before the window exists makes
+it open at that minimum. So the minimum is set once the window is created.

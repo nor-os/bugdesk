@@ -34,7 +34,9 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `desktop/build-windows.ps1` packages it as a per-user MSI (no administrator
   prompt; a newer one upgrades in place) and a portable zip, both
   self-contained (STORY-0040). `desktop/linux/build.sh` builds a `.deb` and a `.tar.gz`
-  for Linux (STORY-0027).
+  for Linux (STORY-0027). In the window, BugDesk uses FlexDesk 0.14.0's
+  Photino host: the window comes back at its last size, place and maximised
+  state, and the native Save dialog is available to exports (STORY-0026).
 
 - **Alerts** (STORY-0005). Settings › Alerts holds rules: a name, a store, a
   condition built in the filter editor (any field, custom ones included), a
