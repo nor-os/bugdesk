@@ -13,7 +13,7 @@ subsystem: settings
 labels: []
 links: []
 created: 2026-10-14
-updated: 2026-10-14T18:43Z
+updated: 2026-10-14T18:48Z
 ---
 
 ## Description
@@ -88,3 +88,12 @@ Verified in a real desktop window (scratch config, CDP):
 - `openInPrimary('settings')` still shows Settings in a tile.
 - Help's overlay now spans 35 to 880 too.
 - All suites pass. The reload hint wasn't exercised; it's the same page code.
+
+### 2026-10-14T18:48Z · norman_agent
+
+Removed the gap you pointed out between the Settings page and the dialog's
+title bar and sides. It was FlexDesk's 14px margin on the modal's content
+area. `settings_page.css` drops it for this dialog only, with a selector more
+specific than FlexDesk's, since FlexDesk's stylesheet loads later. Measured
+in the desktop window: the page now starts exactly at the dialog's content
+edge on the top, left and right.
