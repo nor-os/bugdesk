@@ -2,7 +2,7 @@
 id: 36
 type: story
 title: "Chart tiles over any bug or backlog attribute, custom fields included"
-status: draft
+status: refined
 parent: 33
 phase:
 assignee:
@@ -13,7 +13,7 @@ subsystem: ui
 labels: [dashboards, charts, custom-fields]
 links: [blocked-by 34]
 created: 2026-10-14
-updated: 2026-10-14T10:21Z
+updated: 2026-10-14T10:25Z
 ---
 
 ## Description
@@ -42,7 +42,14 @@ turns records into the series those tiles take, and re-renders on `bugs:changed`
 - [ ] A created/finished-per-week tile shows the trend over a chosen date range
 - [ ] Editing a record (in BugDesk or on disk) updates the tiles that show it without a reload
 - [ ] Non-numeric points values (`M`, `?`) are left out of numeric aggregates and counted in a note on the tile instead of breaking it
+- [ ] A tile whose field was since removed from the schema shows an explanatory empty state naming the field, not an error or a blank chart
 
 ## History
 
+- 2026-10-14 · norman_agent · status: draft -> refined
+
 ## Comments
+
+### 2026-10-14T10:25Z · norman_agent
+
+Refined: 5 points, parented to EPIC-0033, blocked by STORY-0034 here and by FlexDesk STORY-0022 (`../FlexDesk/backlog/STORY-0022.md`, still draft) for the tiles themselves. Added an eighth criterion: a tile over a field that has since been removed from the schema degrades to an empty state with an explanation. Eight is the upper limit. If it grows further, split the over-time tile out.

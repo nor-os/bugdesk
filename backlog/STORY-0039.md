@@ -2,7 +2,7 @@
 id: 39
 type: story
 title: "The example project opens with a Bugs and a Backlog dashboard"
-status: draft
+status: refined
 parent: 33
 phase:
 assignee:
@@ -13,7 +13,7 @@ subsystem: ui
 labels: [dashboards, examples]
 links: [blocked-by 36, blocked-by 37]
 created: 2026-10-14
-updated: 2026-10-14T10:21Z
+updated: 2026-10-14T10:25Z
 ---
 
 ## Description
@@ -35,4 +35,10 @@ The example's records may need History lines and points to make the burndown mea
 
 ## History
 
+- 2026-10-14 · norman_agent · status: draft -> refined
+
 ## Comments
+
+### 2026-10-14T10:25Z · norman_agent
+
+Refined: 3 criteria, 2 points, parented to EPIC-0033, blocked by STORY-0036 and STORY-0037. No criteria changes. Confirmed that `examples/backlog/STORY-0005.md` "Burndown" is draft and is to stay that way.

@@ -2,7 +2,7 @@
 id: 38
 type: story
 title: "Dashboards can chart tracker records"
-status: draft
+status: refined
 parent: 33
 phase:
 assignee:
@@ -13,7 +13,7 @@ subsystem: ui
 labels: [dashboards, tracker]
 links: [blocked-by 36]
 created: 2026-10-14
-updated: 2026-10-14T10:21Z
+updated: 2026-10-14T10:25Z
 ---
 
 ## Description
@@ -35,4 +35,10 @@ read tracker records from there, without mixing them into the project's backlog.
 
 ## History
 
+- 2026-10-14 · norman_agent · status: draft -> refined
+
 ## Comments
+
+### 2026-10-14T10:25Z · norman_agent
+
+Refined: 4 criteria (the disabled-tracker empty state covers the unhappy path), 3 points, parented to EPIC-0033, blocked by STORY-0036. The burndown criterion also depends on STORY-0037. Checked the description against the code: tracker modules load via `trackerModule()` / `/js/ticketdesk@t/` and `/t/api` in `instance.js`, as stated.

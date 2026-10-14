@@ -2,7 +2,7 @@
 id: 37
 type: story
 title: "Burndown: remaining points or items for an epic, phase or project"
-status: draft
+status: refined
 parent: 33
 phase:
 assignee:
@@ -13,7 +13,7 @@ subsystem: ui
 labels: [dashboards, charts, burndown]
 links: [blocked-by 34]
 created: 2026-10-14
-updated: 2026-10-14T10:21Z
+updated: 2026-10-14T10:25Z
 ---
 
 ## Description
@@ -35,6 +35,8 @@ A burndown tile: how much of a scope is still unfinished, day by day, against an
 
 Points are the current estimates (History does not record points changes). The tile says so in its footer.
 
+Note: `categoryOf` in `ui/js/ticketdesk/schema.js` puts `dropped` in the `finished` category, so the burndown has to treat `dropped` separately. Otherwise a dropped item would count as burned down.
+
 ## Acceptance criteria
 
 - [ ] For an epic with dated History, the burndown's remaining value on each day matches a hand count from the records' History sections
@@ -47,4 +49,10 @@ Points are the current estimates (History does not record points changes). The t
 
 ## History
 
+- 2026-10-14 · norman_agent · status: draft -> refined
+
 ## Comments
+
+### 2026-10-14T10:25Z · norman_agent
+
+Refined: 7 criteria, 5 points, parented to EPIC-0033, blocked by STORY-0034 (and, through the tiles, FlexDesk STORY-0022). Added a description note: `schema.js` classes `dropped` as `finished`, so the criterion that dropped items leave the scope means special-casing it. Otherwise it would quietly count as burned down.
