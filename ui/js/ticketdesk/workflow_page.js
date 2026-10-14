@@ -20,26 +20,57 @@
  * are still there when you come back to the page.
  *
  * Right-click an action or a flow for what else can be done with it.
+ *
+ * THE TRACKER TOO. A project page that shows the global tracker shows its
+ * workflow here as well, under the project's: the tracker's types and its own
+ * flows, kept in the tracker's own project.json. Each is a SOURCE — the copy of
+ * these modules that serves that store (./instance.js), so a tracker type's
+ * statuses, checks and save are the tracker's — and one Save writes each
+ * source that changed.
  */
 
 import { showContextMenu } from '@flexdesk/widgets';
 
 import { esc } from './data.js';
 import { appName } from '../core/app_identity.js';
+import { CONFIG, IS_TRACKER_COPY, trackerModule } from './instance.js';
 import { attachSelect } from './select_field.js';
-import {
-    ANY_STORE, DEFAULT_MASS_ACTIONS, checkFlow, flowUses, newFlowId, saveWorkflow, statusStep, statusesOf, workflowConfig,
-} from './workflow.js';
-import { flowAvailable, newAction, newActionId, newFlow, typeWord, withTypeActions, withoutTypeActions } from './workflow_model.js';
-import { flowStoresHere, mountFlowEditor, stepsWord, typesHere } from './workflow_editor.js';
+import * as WF from './workflow.js';
+import * as MODEL from './workflow_model.js';
+import * as ED from './workflow_editor.js';
+
+const { ANY_STORE, DEFAULT_MASS_ACTIONS, statusStep } = WF;
 
 const icon = (name) => `<span class="material-symbols-outlined">${name}</span>`;
 const TONE = { [ANY_STORE]: 'violet', bugs: 'amber', backlog: 'teal' };
 const NEW_FLOW = '__new__';
-const keyOf = (t) => `${t.store}.${t.type}`;
 
-/** Unsaved changes, kept across leaving the page: `{base, draft, view, picked}`. */
+/** Unsaved changes, kept across leaving the page: `{bases, drafts, view, picked}`. */
 let _kept = null;
+
+/**
+ * The workflows this page edits: this store's, and — on a project page that
+ * shows the global tracker — the tracker's, through the tracker's copy of
+ * these modules.
+ */
+async function loadSources() {
+    const out = [{ id: 'p', label: null, wf: WF, model: MODEL, ed: ED }];
+    if (!IS_TRACKER_COPY && CONFIG.mode !== 'tracker' && typeof window !== 'undefined' && window.__BUGDESK_TRACKER_CONFIG__) {
+        try {
+            const [wf, model, ed] = await Promise.all(
+                ['workflow.js', 'workflow_model.js', 'workflow_editor.js'].map((f) => trackerModule(f)));
+            out[0].label = 'This project';
+            out.push({ id: 't', label: 'Tracker', wf, model, ed });
+        } catch (err) {
+            console.error('[workflow] the tracker\'s workflow could not be loaded', err);
+        }
+    }
+    for (const src of out) {
+        src.types = src.ed.typesHere();
+        src.stores = src.ed.flowStoresHere();
+    }
+    return out;
+}
 
 /**
  * Fill `el` with the workflow page. Returns its cleanup.
@@ -47,32 +78,41 @@ let _kept = null;
  * @param {object} [o]
  * @param {object} [o.eventBus]
  */
-export function mountWorkflowPage(el, { eventBus = null } = {}) {
-    const types = typesHere();
-    const stores = flowStoresHere();
+export async function mountWorkflowPage(el, { eventBus = null } = {}) {
+    const sources = await loadSources();
     const ANY = { store: ANY_STORE, label: 'Any record', types: [] };
-    const storeChoices = stores.length > 1 ? [ANY, ...stores] : stores;
-    const storeOf = (store) => (store === ANY_STORE ? ANY : stores.find((x) => x.store === store));
-    const storeTypes = (store) => (store === ANY_STORE ? [] : storeOf(store)?.types || []);
-    const typeLabel = (store, type) => types.find((t) => t.store === store && t.type === type)?.label || typeWord(store, type);
-
-    let stored = workflowConfig();
-    let base = JSON.stringify(withTypeActions(stored, types));
-    let draft = JSON.parse(base);
-    let view = types[0] ? keyOf(types[0]) : 'flows';     // a type's key, or 'flows'
+    for (const src of sources) {
+        src.stored = src.wf.workflowConfig();
+        src.base = JSON.stringify(src.model.withTypeActions(src.stored, src.types));
+        src.draft = JSON.parse(src.base);
+    }
+    const first = sources.find((x) => x.types.length) || sources[0];
+    let view = first.types[0] ? `${first.id}|${first.types[0].store}.${first.types[0].type}` : `${first.id}|flows`;
     const picked = {};                                     // view -> selected action id / flow id
     let query = '';
     let problems = [];
     let note = '';
     if (_kept) {
-        if (_kept.base === base) {
-            ({ draft, view } = _kept);
+        if (sources.every((x) => _kept.bases[x.id] === x.base)) {
+            for (const x of sources) x.draft = _kept.drafts[x.id];
+            view = _kept.view;
             Object.assign(picked, _kept.picked);
         } else note = 'Your unsaved workflow changes were dropped: the workflow was saved elsewhere meanwhile.';
         _kept = null;
     }
     let editor = null;
     let handles = [];
+
+    // The source, store and type a view is about.
+    const srcOf = (v = view) => sources.find((x) => x.id === v.split('|')[0]) || sources[0];
+    const isFlows = (v = view) => v.endsWith('|flows');
+    const keyOf = (src, t) => `${src.id}|${t.store}.${t.type}`;
+    const S = () => srcOf();
+    const flowsKey = (src = S()) => `${src.id}|flows`;
+    const storeChoices = () => (S().stores.length > 1 ? [ANY, ...S().stores] : S().stores);
+    const storeOf = (store) => (store === ANY_STORE ? ANY : S().stores.find((x) => x.store === store));
+    const storeTypes = (store) => (store === ANY_STORE ? [] : storeOf(store)?.types || []);
+    const typeLabel = (store, type) => S().types.find((t) => t.store === store && t.type === type)?.label || S().model.typeWord(store, type);
 
     el.innerHTML = `
         <div class="bd-wf">
@@ -93,16 +133,19 @@ export function mountWorkflowPage(el, { eventBus = null } = {}) {
 
     /* ── reading the draft ─────────────────────────────────────────── */
 
-    const typeOf = (key) => types.find((t) => keyOf(t) === key);
-    const listOf = (t) => {
-        draft.types = draft.types || {};
-        draft.types[t.store] = draft.types[t.store] || {};
-        draft.types[t.store][t.type] = draft.types[t.store][t.type] || [];
-        return draft.types[t.store][t.type];
+    const typeOf = (v = view) => { const src = srcOf(v); return src.types.find((t) => keyOf(src, t) === v); };
+    const listOf = (t, src = S()) => {
+        const d = src.draft;
+        d.types = d.types || {};
+        d.types[t.store] = d.types[t.store] || {};
+        d.types[t.store][t.type] = d.types[t.store][t.type] || [];
+        return d.types[t.store][t.type];
     };
-    const flowById = (id) => (draft.flows || []).find((f) => f.id === id) || null;
-    const dirty = () => JSON.stringify(draft) !== base;
-    const usersOf = (id) => flowUses(draft, id).map((u) => u.owner);
+    const flowById = (id, src = S()) => (src.draft.flows || []).find((f) => f.id === id) || null;
+    const dirtyOf = (src) => JSON.stringify(src.draft) !== src.base;
+    const dirty = () => sources.some(dirtyOf);
+    const flowUses = (id, src = S()) => src.wf.flowUses(src.draft, id);
+    const usersOf = (id) => flowUses(id).map((u) => u.owner);
     const whenWord = (a) => (!Array.isArray(a.when) || !a.when.length || a.when.includes('*') ? 'any status' : a.when.join(', '));
     const flowTypes = (f) => (f.store === ANY_STORE ? [] : (Array.isArray(f.types) && f.types.length ? f.types : storeTypes(f.store)));
 
@@ -124,25 +167,30 @@ export function mountWorkflowPage(el, { eventBus = null } = {}) {
 
     const renderTypes = () => {
         let html = '';
-        let last = null;
-        for (const t of types) {
-            if (t.storeLabel !== last) { html += `<div class="bd-wf__group">${esc(t.storeLabel)}</div>`; last = t.storeLabel; }
-            const n = listOf(t).length;
-            const bad = problems.some((p) => p.view === keyOf(t));
-            html += `<button type="button" class="bd-wf__type${view === keyOf(t) ? ' is-on' : ''}" data-view="${keyOf(t)}">
-                <span>${bad ? icon('error') : ''}${esc(t.label)}</span><span class="bd-wf__count">${n}</span></button>`;
+        for (const src of sources) {
+            if (src.label) html += `<div class="bd-wf__source">${esc(src.label)}</div>`;
+            let last = null;
+            for (const t of src.types) {
+                // The tracker's store is "Tickets" to itself; under its own heading here.
+                const group = src.id === 't' ? '' : t.storeLabel;
+                if (group && group !== last) { html += `<div class="bd-wf__group">${esc(group)}</div>`; last = group; }
+                const k = keyOf(src, t);
+                const bad = problems.some((p) => p.view === k);
+                html += `<button type="button" class="bd-wf__type${view === k ? ' is-on' : ''}" data-view="${esc(k)}">
+                    <span>${bad ? icon('error') : ''}${esc(t.label)}</span><span class="bd-wf__count">${listOf(t, src).length}</span></button>`;
+            }
+            const fk = flowsKey(src);
+            html += `<button type="button" class="bd-wf__type bd-wf__type--flows${view === fk ? ' is-on' : ''}" data-view="${esc(fk)}">
+                <span>${problems.some((p) => p.view === fk) ? icon('error') : icon('account_tree')} ${src.id === 't' ? 'Tracker flows' : 'Flows'}</span>
+                <span class="bd-wf__count">${(src.draft.flows || []).length}</span></button>`;
         }
-        const nf = (draft.flows || []).length;
-        html += `<div class="bd-wf__group">All flows</div>
-            <button type="button" class="bd-wf__type${view === 'flows' ? ' is-on' : ''}" data-view="flows">
-                <span>${problems.some((p) => p.view === 'flows') ? icon('error') : ''}${icon('account_tree')} Flows</span><span class="bd-wf__count">${nf}</span></button>`;
         $('types').innerHTML = html;
     };
 
     const actionItem = (t, a) => {
         const f = flowById(a.flow);
         const to = statusStep(f?.flow);
-        const bad = problems.some((p) => p.view === keyOf(t) && p.pick === a.id);
+        const bad = problems.some((p) => p.view === keyOf(S(), t) && p.pick === a.id);
         return `<button type="button" class="bd-wf__item${picked[view] === a.id ? ' is-selected' : ''}" data-pick="${esc(a.id)}"
                     data-tone="${to ? 'teal' : 'violet'}" title="Right-click for more">
             <span class="bd-wf__chip">${icon(bad ? 'error' : to ? 'swap_horiz' : 'bolt')}</span>
@@ -160,22 +208,22 @@ export function mountWorkflowPage(el, { eventBus = null } = {}) {
         ...listOf(t).filter((a) => a.id && !statusStep(flowById(a.flow)?.flow)).map((a) => [`action:${a.id}`, a.label || a.id]),
     ];
     const massOf = (t) => {
-        const list = draft.massActions?.[t.store]?.[t.type];
+        const list = S().draft.massActions?.[t.store]?.[t.type];
         return Array.isArray(list) ? list : DEFAULT_MASS_ACTIONS;
     };
     const setMass = (t, list) => {
         const same = list.length === DEFAULT_MASS_ACTIONS.length && DEFAULT_MASS_ACTIONS.every((x) => list.includes(x));
-        draft.massActions = draft.massActions || {};
-        draft.massActions[t.store] = draft.massActions[t.store] || {};
-        if (same) delete draft.massActions[t.store][t.type]; else draft.massActions[t.store][t.type] = list;
-        if (!Object.keys(draft.massActions[t.store]).length) delete draft.massActions[t.store];
-        if (!Object.keys(draft.massActions).length) delete draft.massActions;
+        S().draft.massActions = S().draft.massActions || {};
+        S().draft.massActions[t.store] = S().draft.massActions[t.store] || {};
+        if (same) delete S().draft.massActions[t.store][t.type]; else S().draft.massActions[t.store][t.type] = list;
+        if (!Object.keys(S().draft.massActions[t.store]).length) delete S().draft.massActions[t.store];
+        if (!Object.keys(S().draft.massActions).length) delete S().draft.massActions;
     };
 
     const renderMid = () => {
-        if (view === 'flows') {
+        if (isFlows()) {
             const q = query.trim().toLowerCase();
-            const all = draft.flows || [];
+            const all = S().draft.flows || [];
             const shown = all.filter((f) => !q || String(f.label || f.id).toLowerCase().includes(q));
             $('mid').innerHTML = `
                 <div class="bd-wf__head"><h3>Flows</h3>
@@ -186,14 +234,14 @@ export function mountWorkflowPage(el, { eventBus = null } = {}) {
                     : !shown.length ? '<p class="td-dim bd-flows__empty">No flow matches.</p>'
                     : shown.map((f) => {
                         const uses = usersOf(f.id).length;
-                        const bad = problems.some((p) => p.view === 'flows' && p.pick === f.id);
+                        const bad = problems.some((p) => p.view === flowsKey() && p.pick === f.id);
                         const forWord = f.store === ANY_STORE ? 'Any record'
                             : `${storeOf(f.store)?.label || f.store}${Array.isArray(f.types) && f.types.length ? ` › ${f.types.map((x) => typeLabel(f.store, x)).join(', ')}` : ''}`;
-                        return `<button type="button" class="bd-wf__item${picked.flows === f.id ? ' is-selected' : ''}" data-pick="${esc(f.id)}"
+                        return `<button type="button" class="bd-wf__item${picked[flowsKey()] === f.id ? ' is-selected' : ''}" data-pick="${esc(f.id)}"
                                     data-tone="${TONE[f.store] || 'grey'}" title="Right-click for more">
                             <span class="bd-wf__chip">${icon(bad ? 'error' : 'account_tree')}</span>
                             <span class="bd-wf__text"><span class="bd-wf__name">${esc(f.label || 'Untitled')}</span>
-                                <span class="bd-wf__sub">${esc(forWord)} · ${esc(stepsWord(f.flow))} · ${uses ? `used by ${uses}` : 'not used'}</span></span>
+                                <span class="bd-wf__sub">${esc(forWord)} · ${esc(S().ed.stepsWord(f.flow))} · ${uses ? `used by ${uses}` : 'not used'}</span></span>
                         </button>`;
                     }).join('')}</div>`;
             return;
@@ -222,12 +270,12 @@ export function mountWorkflowPage(el, { eventBus = null } = {}) {
     /** The flow part of the detail: name, what it is for, what uses it, its steps. */
     const flowPanel = (f, { removable = false } = {}) => {
         const uses = usersOf(f.id);
-        const inUse = new Set(flowUses(draft, f.id).flatMap((u) => u.types || []));
+        const inUse = new Set(flowUses(f.id).flatMap((u) => u.types || []));
         return `
             <div class="bd-wf__flowhead">
                 <label class="bd-flowedit__name"><span>Flow</span>
                     <input type="text" data-k="flow-label" value="${esc(f.label || '')}" placeholder="Close" aria-label="Flow name"></label>
-                ${storeChoices.length > 1 ? `<label class="bd-flowsmgr__for"><span>For</span><select data-k="flow-store"></select></label>` : ''}
+                ${storeChoices().length > 1 ? `<label class="bd-flowsmgr__for"><span>For</span><select data-k="flow-store"></select></label>` : ''}
                 ${removable ? `<button type="button" class="ea-btn bd-flowsmgr__rm" data-act="remove-flow" ${uses.length ? 'disabled' : ''}
                     title="${uses.length ? `Used by ${uses.length}: give ${uses.length === 1 ? 'that action' : 'those actions'} another flow first` : 'Remove this flow'}">${icon('delete')} Remove</button>` : ''}
             </div>
@@ -246,8 +294,8 @@ export function mountWorkflowPage(el, { eventBus = null } = {}) {
     const mountFlow = (f) => {
         const sel = $('detail').querySelector('[data-k="flow-store"]');
         if (sel) {
-            const used = new Set(flowUses(draft, f.id).map((u) => u.store));
-            const allowed = storeChoices.filter((x) => x.store === ANY_STORE || [...used].every((s) => s === x.store));
+            const used = new Set(flowUses(f.id).map((u) => u.store));
+            const allowed = storeChoices().filter((x) => x.store === ANY_STORE || [...used].every((s) => s === x.store));
             handles.push(attachSelect(sel, {
                 value: f.store,
                 options: allowed.map((x) => ({ value: x.store, label: x.label,
@@ -261,7 +309,7 @@ export function mountWorkflowPage(el, { eventBus = null } = {}) {
                 },
             }));
         }
-        editor = mountFlowEditor($('detail').querySelector('.bd-wf__editor'), {
+        editor = S().ed.mountFlowEditor($('detail').querySelector('.bd-wf__editor'), {
             store: f.store, types: flowTypes(f), graph: f.flow, actions: true,
             serverFindings: problems.filter((p) => p.flow === f.id && p.node_id),
             onChange: () => {
@@ -275,8 +323,8 @@ export function mountWorkflowPage(el, { eventBus = null } = {}) {
 
     const renderDetail = () => {
         destroyDetail();
-        if (view === 'flows') {
-            const f = flowById(picked.flows);
+        if (isFlows()) {
+            const f = flowById(picked[flowsKey()]);
             if (!f) { $('detail').innerHTML = '<p class="td-dim bd-flowsmgr__none">Pick a flow to edit its name, what it is for, and its steps.</p>'; return; }
             $('detail').innerHTML = flowPanel(f, { removable: true });
             mountFlow(f);
@@ -293,7 +341,7 @@ export function mountWorkflowPage(el, { eventBus = null } = {}) {
                     <input type="text" data-k="action-label" value="${esc(a.label || '')}" placeholder="Close" aria-label="Action name"></label>
                 <div class="bd-wf__when"><span class="td-dim">Offered in</span>
                     <label class="bd-wf__chipcheck${any ? ' is-on' : ''}"><input type="checkbox" data-when="*" ${any ? 'checked' : ''}> any status</label>
-                    ${statusesOf(t.store, t.type).map((s) => {
+                    ${S().wf.statusesOf(t.store, t.type).map((s) => {
                         const on = !any && a.when.includes(s);
                         return `<label class="bd-wf__chipcheck${on ? ' is-on' : ''}"><input type="checkbox" data-when="${esc(s)}" ${on ? 'checked' : ''}> ${esc(s)}</label>`;
                     }).join('')}
@@ -308,16 +356,16 @@ export function mountWorkflowPage(el, { eventBus = null } = {}) {
             emptyLabel: 'No flow',
             newLabel: (typed) => `New flow “${typed}”`,
             optionsFor: () => [
-                ...(draft.flows || []).filter((x) => flowAvailable(x, t.store, t.type))
-                    .map((x) => ({ value: x.id, label: x.label || x.id, icon: 'account_tree', hint: stepsWord(x.flow) })),
+                ...(S().draft.flows || []).filter((x) => S().model.flowAvailable(x, t.store, t.type))
+                    .map((x) => ({ value: x.id, label: x.label || x.id, icon: 'account_tree', hint: S().ed.stepsWord(x.flow) })),
                 { value: NEW_FLOW, label: 'New flow…', icon: 'add' },
             ],
             onChange: (v) => {
                 if (!v) return;
                 if (v !== NEW_FLOW && flowById(v)) a.flow = v;
                 else {
-                    const nf = newFlow(draft.flows = draft.flows || [], { label: v === NEW_FLOW ? (a.label || 'New flow') : v, store: t.store, types: [t.type] });
-                    draft.flows.push(nf);
+                    const nf = S().model.newFlow(S().draft.flows = S().draft.flows || [], { label: v === NEW_FLOW ? (a.label || 'New flow') : v, store: t.store, types: [t.type] });
+                    S().draft.flows.push(nf);
                     a.flow = nf.id;
                 }
                 note = '';
@@ -329,9 +377,9 @@ export function mountWorkflowPage(el, { eventBus = null } = {}) {
 
     const renderAll = () => {
         destroyDetail();
-        if (view !== 'flows' && !typeOf(view)) view = types[0] ? keyOf(types[0]) : 'flows';
-        if (view === 'flows' && !flowById(picked.flows)) picked.flows = draft.flows?.[0]?.id;
-        if (view !== 'flows' && !listOf(typeOf(view)).some((a) => a.id === picked[view])) picked[view] = listOf(typeOf(view))[0]?.id;
+        if (!isFlows() && !typeOf(view)) view = first.types[0] ? keyOf(first, first.types[0]) : flowsKey(first);
+        if (isFlows() && !flowById(picked[flowsKey()])) picked[flowsKey()] = S().draft.flows?.[0]?.id;
+        if (!isFlows() && !listOf(typeOf(view)).some((a) => a.id === picked[view])) picked[view] = listOf(typeOf(view))[0]?.id;
         renderTypes(); renderMid(); renderProblems(); renderDetail(); renderState();
     };
 
@@ -342,10 +390,10 @@ export function mountWorkflowPage(el, { eventBus = null } = {}) {
     const addAction = () => {
         const t = typeOf(view);
         const list = listOf(t);
-        const a = newAction(list);
+        const a = S().model.newAction(list);
         // A new action gets a flow of its own to fill in, made for this type.
-        const f = newFlow(draft.flows = draft.flows || [], { label: a.label, store: t.store, types: [t.type] });
-        draft.flows.push(f);
+        const f = S().model.newFlow(S().draft.flows = S().draft.flows || [], { label: a.label, store: t.store, types: [t.type] });
+        S().draft.flows.push(f);
         a.flow = f.id;
         list.push(a);
         picked[view] = a.id;
@@ -373,10 +421,10 @@ export function mountWorkflowPage(el, { eventBus = null } = {}) {
                 const j = i + (act === 'up' ? -1 : 1);
                 if (j >= 0 && j < list.length) [list[i], list[j]] = [list[j], list[i]];
             } else if (act === 'duplicate') {
-                const copy = { ...JSON.parse(JSON.stringify(list[i])), ...newAction(list, `${list[i].label} (copy)`), flow: list[i].flow, when: [...(list[i].when || ['*'])] };
+                const copy = { ...JSON.parse(JSON.stringify(list[i])), ...S().model.newAction(list, `${list[i].label} (copy)`), flow: list[i].flow, when: [...(list[i].when || ['*'])] };
                 list.splice(i + 1, 0, copy);
                 picked[view] = copy.id;
-            } else if (act === 'flow') { picked.flows = list[i].flow; view = 'flows'; }
+            } else if (act === 'flow') { const fk = flowsKey(); picked[fk] = list[i].flow; view = fk; }
             else if (act === 'delete') {
                 list.splice(i, 1);
                 // A mass action naming it goes with it.
@@ -397,19 +445,19 @@ export function mountWorkflowPage(el, { eventBus = null } = {}) {
             { separator: true },
             { label: uses ? `Delete — used by ${uses}` : 'Delete', icon: 'delete', action: 'delete', danger: true, disabled: !!uses },
         ], (act) => {
-            const flows = draft.flows || [];
+            const flows = S().draft.flows || [];
             const i = flows.findIndex((f) => f.id === id);
             if (i < 0) return;
-            if (act === 'open') picked.flows = id;
-            else if (act === 'rename') { picked.flows = id; renderAll(); const n = el.querySelector('[data-k="flow-label"]'); n?.focus(); n?.select(); return; }
+            if (act === 'open') picked[flowsKey()] = id;
+            else if (act === 'rename') { picked[flowsKey()] = id; renderAll(); const n = el.querySelector('[data-k="flow-label"]'); n?.focus(); n?.select(); return; }
             else if (act === 'duplicate') {
                 const label = `${flows[i].label || 'Flow'} (copy)`;
-                const copy = { ...JSON.parse(JSON.stringify(flows[i])), id: newFlowId(label, flows), label };
+                const copy = { ...JSON.parse(JSON.stringify(flows[i])), id: S().wf.newFlowId(label, flows), label };
                 flows.splice(i + 1, 0, copy);
-                picked.flows = copy.id;
+                picked[flowsKey()] = copy.id;
             } else if (act === 'delete' && !uses) {
                 flows.splice(i, 1);
-                picked.flows = flows[Math.min(i, flows.length - 1)]?.id;
+                picked[flowsKey()] = flows[Math.min(i, flows.length - 1)]?.id;
             }
             note = '';
             renderAll();
@@ -421,63 +469,74 @@ export function mountWorkflowPage(el, { eventBus = null } = {}) {
     const save = async () => {
         problems = [];
         note = '';
-        for (const t of types) {
-            for (const a of listOf(t)) {
-                const place = `${t.label} › ${a.label || 'untitled'}`;
-                if (!String(a.label || '').trim()) problems.push({ view: keyOf(t), pick: a.id, place, message: 'Every action needs a name.' });
-                const f = flowById(a.flow);
-                if (a.flow && !f) problems.push({ view: keyOf(t), pick: a.id, place, message: 'It runs a flow that is gone: pick another.' });
-                else if (f && !flowAvailable(f, t.store, t.type)) {
-                    problems.push({ view: keyOf(t), pick: a.id, place, message: `It runs “${f.label}”, which is not available to a ${t.label.toLowerCase()}.` });
+        for (const src of sources) {
+            const where = (text) => (src.label && sources.length > 1 ? `${src.label} › ${text}` : text);
+            for (const t of src.types) {
+                for (const a of listOf(t, src)) {
+                    const at = { view: keyOf(src, t), pick: a.id, place: where(`${t.label} › ${a.label || 'untitled'}`) };
+                    if (!String(a.label || '').trim()) problems.push({ ...at, message: 'Every action needs a name.' });
+                    const f = flowById(a.flow, src);
+                    if (a.flow && !f) problems.push({ ...at, message: 'It runs a flow that is gone: pick another.' });
+                    else if (f && !src.model.flowAvailable(f, t.store, t.type)) {
+                        problems.push({ ...at, message: `It runs “${f.label}”, which is not available to a ${t.label.toLowerCase()}.` });
+                    }
                 }
             }
-        }
-        for (const f of draft.flows || []) {
-            const place = f.label || f.id;
-            if (!String(f.label || '').trim()) problems.push({ view: 'flows', pick: f.id, flow: f.id, place, message: 'Every flow needs a name.' });
-            const found = checkFlow(f.flow, f.store, flowTypes(f), { actions: true });
-            if (found.length) {
-                problems.push({ view: 'flows', pick: f.id, flow: f.id, place,
-                    message: `${found.length} thing${found.length === 1 ? '' : 's'} to fix in its steps — see the list above the flow.` });
+            for (const f of src.draft.flows || []) {
+                const at = { view: flowsKey(src), pick: f.id, flow: f.id, place: where(f.label || f.id) };
+                if (!String(f.label || '').trim()) problems.push({ ...at, message: 'Every flow needs a name.' });
+                const types = f.store === ANY_STORE ? [] : (Array.isArray(f.types) && f.types.length ? f.types
+                    : src.stores.find((x) => x.store === f.store)?.types || []);
+                const found = src.wf.checkFlow(f.flow, f.store, types, { actions: true });
+                if (found.length) {
+                    problems.push({ ...at, message: `${found.length} thing${found.length === 1 ? '' : 's'} to fix in its steps — see the list above the flow.` });
+                }
             }
         }
         if (problems.length) {
-            const first = problems[0];
-            view = first.view;
-            if (first.pick) picked[view] = first.pick;
+            const p0 = problems[0];
+            view = p0.view;
+            if (p0.pick) picked[view] = p0.pick;
             renderAll();
             return;
         }
-        const sent = withoutTypeActions(draft, stored, types);
         el.querySelector('[data-act="save"]').disabled = true;
-        try {
-            await saveWorkflow(sent);
-            stored = workflowConfig();
-            base = JSON.stringify(withTypeActions(stored, types));
-            draft = JSON.parse(base);
-            renderAll();
-            eventBus?.emit?.('toast:show', { type: 'info', message: `Workflow saved to project.json. Reload ${appName()} for every page to use it.` });
-        } catch (err) {
-            // The bridge names a type's action, or a flow, by its place in what it was sent.
-            problems = (err.problems?.length ? err.problems : [{ where: '', message: err.message || String(err) }]).map((p) => {
-                const ta = /^workflow\.types\.([a-z]+)\.([a-z]+)\[(\d+)\]/.exec(p.where || '');
-                if (ta) {
-                    const [, store, type, i] = ta;
-                    const t = types.find((x) => x.store === store && x.type === type);
-                    const a = sent.types?.[store]?.[type]?.[Number(i)];
-                    return { ...p, view: t ? keyOf(t) : null, pick: a?.id, place: t ? `${t.label} › ${a?.label || ''}` : '', flow: p.node_id ? a?.flow : undefined };
-                }
-                const fl = /^workflow\.flows\[(\d+)\]/.exec(p.where || '');
-                if (fl) {
-                    const f = sent.flows?.[Number(fl[1])];
-                    return { ...p, view: 'flows', pick: f?.id, flow: f?.id, place: f?.label || '' };
-                }
-                return p;
-            });
-            const first = problems.find((p) => p.view);
-            if (first) { view = first.view; if (first.pick) picked[view] = first.pick; }
-            renderAll();
+        // Each workflow that changed, into its own project.json.
+        for (const src of sources.filter(dirtyOf)) {
+            const sent = src.model.withoutTypeActions(src.draft, src.stored, src.types);
+            try {
+                await src.wf.saveWorkflow(sent);
+                src.stored = src.wf.workflowConfig();
+                src.base = JSON.stringify(src.model.withTypeActions(src.stored, src.types));
+                src.draft = JSON.parse(src.base);
+            } catch (err) {
+                // The bridge names a type's action, or a flow, by its place in what it was sent.
+                const where = (text) => (src.label && sources.length > 1 ? `${src.label} › ${text}` : text);
+                problems.push(...(err.problems?.length ? err.problems : [{ where: '', message: err.message || String(err) }]).map((p) => {
+                    const ta = /^workflow\.types\.([a-z]+)\.([a-z]+)\[(\d+)\]/.exec(p.where || '');
+                    if (ta) {
+                        const [, store, type, i] = ta;
+                        const t = src.types.find((x) => x.store === store && x.type === type);
+                        const a = sent.types?.[store]?.[type]?.[Number(i)];
+                        return { ...p, view: t ? keyOf(src, t) : null, pick: a?.id, place: t ? where(`${t.label} › ${a?.label || ''}`) : '',
+                                 flow: p.node_id ? a?.flow : undefined };
+                    }
+                    const fl = /^workflow\.flows\[(\d+)\]/.exec(p.where || '');
+                    if (fl) {
+                        const f = sent.flows?.[Number(fl[1])];
+                        return { ...p, view: flowsKey(src), pick: f?.id, flow: f?.id, place: where(f?.label || '') };
+                    }
+                    return { ...p, message: where(p.message) };
+                }));
+            }
         }
+        if (problems.length) {
+            const p0 = problems.find((p) => p.view);
+            if (p0) { view = p0.view; if (p0.pick) picked[view] = p0.pick; }
+        } else {
+            eventBus?.emit?.('toast:show', { type: 'info', message: `Workflow saved to project.json. Reload ${appName()} for every page to use it.` });
+        }
+        renderAll();
     };
 
     /* ── events ────────────────────────────────────────────────────── */
@@ -500,17 +559,17 @@ export function mountWorkflowPage(el, { eventBus = null } = {}) {
             a.label = e.target.value;
             // Not saved yet: its id follows its name, and so does a flow of its
             // own that still has its name (the one Add action made for it).
-            const saved = JSON.parse(base).types?.[t.store]?.[t.type]?.some((x) => x.id === a.id);
+            const saved = JSON.parse(S().base).types?.[t.store]?.[t.type]?.some((x) => x.id === a.id);
             if (!saved) {
-                const id = newActionId(a.label, list.filter((x) => x !== a));
+                const id = S().model.newActionId(a.label, list.filter((x) => x !== a));
                 setMass(t, massOf(t).map((v) => (v === `action:${a.id}` ? `action:${id}` : v)));
                 a.id = id;
                 picked[view] = id;
                 const f = flowById(a.flow);
-                if (f && f.label === before && flowUses(draft, f.id).length === 1) {
+                if (f && f.label === before && flowUses(f.id).length === 1) {
                     f.label = a.label;
-                    if (!JSON.parse(base).flows?.some((x) => x.id === f.id)) {
-                        f.id = newFlowId(f.label, draft.flows.filter((x) => x !== f));
+                    if (!JSON.parse(S().base).flows?.some((x) => x.id === f.id)) {
+                        f.id = S().wf.newFlowId(f.label, S().draft.flows.filter((x) => x !== f));
                         a.flow = f.id;
                     }
                 }
@@ -519,7 +578,7 @@ export function mountWorkflowPage(el, { eventBus = null } = {}) {
             return;
         }
         if (k === 'flow-label') {
-            const id = view === 'flows' ? picked.flows : listOf(typeOf(view)).find((x) => x.id === picked[view])?.flow;
+            const id = isFlows() ? picked[flowsKey()] : listOf(typeOf(view)).find((x) => x.id === picked[view])?.flow;
             const f = flowById(id);
             if (f) { f.label = e.target.value; renderMid(); touch(); }
         }
@@ -539,7 +598,7 @@ export function mountWorkflowPage(el, { eventBus = null } = {}) {
             return;
         }
         if (tgt.dataset.avail !== undefined) {
-            const id = view === 'flows' ? picked.flows : listOf(typeOf(view)).find((x) => x.id === picked[view])?.flow;
+            const id = isFlows() ? picked[flowsKey()] : listOf(typeOf(view)).find((x) => x.id === picked[view])?.flow;
             const f = flowById(id);
             if (!f) return;
             const all = storeTypes(f.store);
@@ -573,9 +632,9 @@ export function mountWorkflowPage(el, { eventBus = null } = {}) {
         const act = b.dataset.act;
         if (act === 'new-action') { addAction(); return; }
         if (act === 'new-flow') {
-            const f = newFlow(draft.flows = draft.flows || [], { label: query.trim() || 'New flow', store: storeChoices[0].store });
-            draft.flows.push(f);
-            picked.flows = f.id;
+            const f = S().model.newFlow(S().draft.flows = S().draft.flows || [], { label: query.trim() || 'New flow', store: storeChoices()[0].store });
+            S().draft.flows.push(f);
+            picked[flowsKey()] = f.id;
             query = '';
             note = '';
             renderAll();
@@ -583,14 +642,14 @@ export function mountWorkflowPage(el, { eventBus = null } = {}) {
             return;
         }
         if (act === 'remove-flow') {
-            const flows = draft.flows || [];
-            const i = flows.findIndex((f) => f.id === picked.flows);
-            if (i >= 0 && !flowUses(draft, picked.flows).length) { flows.splice(i, 1); picked.flows = flows[Math.min(i, flows.length - 1)]?.id; }
+            const flows = S().draft.flows || [];
+            const i = flows.findIndex((f) => f.id === picked[flowsKey()]);
+            if (i >= 0 && !flowUses(picked[flowsKey()]).length) { flows.splice(i, 1); picked[flowsKey()] = flows[Math.min(i, flows.length - 1)]?.id; }
             note = '';
             renderAll();
             return;
         }
-        if (act === 'discard') { draft = JSON.parse(base); problems = []; note = ''; renderAll(); return; }
+        if (act === 'discard') { for (const src of sources) src.draft = JSON.parse(src.base); problems = []; note = ''; renderAll(); return; }
         if (act === 'save') await save();
     });
 
@@ -598,14 +657,17 @@ export function mountWorkflowPage(el, { eventBus = null } = {}) {
         const item = e.target.closest('.bd-wf__item[data-pick]');
         if (!item) return;
         e.preventDefault();
-        if (view === 'flows') flowMenu(e.clientX, e.clientY, item.dataset.pick);
+        if (isFlows()) flowMenu(e.clientX, e.clientY, item.dataset.pick);
         else actionMenu(e.clientX, e.clientY, item.dataset.pick);
     });
 
     renderAll();
 
     return () => {
-        if (dirty()) _kept = { base, draft, view, picked: { ...picked } };
+        if (dirty()) {
+            _kept = { bases: Object.fromEntries(sources.map((x) => [x.id, x.base])),
+                      drafts: Object.fromEntries(sources.map((x) => [x.id, x.draft])), view, picked: { ...picked } };
+        }
         destroyDetail();
     };
 }
