@@ -266,11 +266,12 @@ export function markHiddenFilterFields(store, fields) {
     return fields;
 }
 
-/* ── "Snooze until" — the ready-made example field (TASK-0004) ─────────
+/* ── "Snooze until" — the default example field (TASK-0004) ────────────
  * A date before which a record is left out of the open views: "don't show me
- * this until the 3rd". Not built in — it is a custom field like any other — but
- * offered ready-made in Settings › Record types, and the rail's "Snoozed" view
- * is built on it. A store whose types do not carry it behaves exactly as before. */
+ * this until the 3rd". Not built in — it is a custom field like any other, which
+ * every type has until the project configures its store (server/RecordSchema.cs)
+ * — and the rail's "Snoozed" view is built on it. A store whose types no longer
+ * carry it behaves as if snoozing did not exist. */
 
 export const SNOOZE_FIELD = Object.freeze({ name: 'not_before', label: 'Snooze until', type: 'date', required: false, values: [] });
 
@@ -290,8 +291,9 @@ export function isSnoozed(store, type, fields) {
 }
 
 /**
- * The notice the "Snoozed" view shows where no type carries the field, with the
- * button that sets it up — rather than an empty list that says nothing.
+ * The notice the "Snoozed" view shows where no type carries the field (it was
+ * removed in Settings), with the button that opens Record types to add it back —
+ * rather than an empty list that says nothing.
  * Returns the element, or null when the field is there.
  */
 export function snoozeNotice(store, eventBus = null) {
@@ -299,11 +301,11 @@ export function snoozeNotice(store, eventBus = null) {
     const el = document.createElement('div');
     el.className = 'td-snooze-notice';
     el.innerHTML = `<span class="material-symbols-outlined">snooze</span>
-        <span>Snoozing a record needs a <b>Snooze until</b> date on its type. Nothing here has one yet.</span>
-        <button type="button" class="ea-btn ea-btn--primary"><span class="material-symbols-outlined">tune</span> Set it up</button>`;
+        <span>Snoozing a record needs a <b>Snooze until</b> date field (named <code>not_before</code>) on its type. No type here has one.</span>
+        <button type="button" class="ea-btn ea-btn--primary"><span class="material-symbols-outlined">tune</span> Record types</button>`;
     el.querySelector('button').addEventListener('click', async () => {
         const { openSchemaEditor } = await import('./schema_editor.js');
-        openSchemaEditor({ eventBus, store, preset: 'snooze' });
+        openSchemaEditor({ eventBus, store });
     });
     return el;
 }

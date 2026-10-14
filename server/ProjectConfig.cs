@@ -196,9 +196,7 @@ class ProjectConfig
         lock (_gate)
         {
             var doc = Read() ?? new JsonObject();
-            var node = schema.ToJson();
-            if (node.Count == 0) doc.Remove("schema");
-            else doc["schema"] = node;
+            doc["schema"] = schema.ToJson();
             Write(doc);
             return Schema();
         }

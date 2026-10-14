@@ -12,7 +12,7 @@ using System.Text.RegularExpressions;
 ///   "bugs":    { "bug": { "fields": [...], "hidden": [...], "statuses": [...] }, "regression": {...}, "task": {...} },
 ///   "backlog": { "project": {...}, "epic": {...}, "story": {...}, "task": {...} }
 /// }
-/// field:  { "name": "not_before", "label": "Not before", "type": "date", "required": false, "values": [] }
+/// field:  { "name": "not_before", "label": "Snooze until", "type": "date", "required": false, "values": [] }
 /// status: { "name": "blocked", "label": "Blocked", "category": "waiting", "after": "investigation" }
 /// </code>
 ///
@@ -29,6 +29,14 @@ using System.Text.RegularExpressions;
 /// the same way it sets <c>assignee</c>. Nothing here ever rewrites a record:
 /// removing a field or hiding a built-in changes what is SHOWN, and the values
 /// stay in the files.
+/// </para>
+///
+/// <para>
+/// A store the schema does not mention gets the DEFAULTS: "Snooze until"
+/// (<c>not_before</c>, a date) on every type, as a ready-made example field the
+/// project can keep, rename or remove like any other. Once a store is in the
+/// file, what is written there is the whole story — a saved schema always names
+/// both stores, so removing the field sticks.
 /// </para>
 ///
 /// <para>
@@ -100,7 +108,14 @@ static class RecordSchema
     public record TypeSpec(List<Field> Fields, List<string> Hidden, List<Status> Statuses)
     {
         public static TypeSpec Empty => new(new(), new(), new());
+
+        /// <summary>What a type has while its store is not configured.</summary>
+        public static TypeSpec Default => new(new() { Snooze() }, new(), new());
     }
+
+    /// <summary>The default example field: a record whose date is still ahead is
+    /// left out of the open views until that day (TASK-0004).</summary>
+    public static Field Snooze() => new("not_before", "Snooze until", "date", false, new());
 
     /// <summary>A parsed schema: <c>Types[store][type]</c>, every store and type
     /// present (empty when unconfigured), plus what was wrong with the file.</summary>
@@ -126,6 +141,8 @@ static class RecordSchema
             return For(store, type).Statuses.FirstOrDefault(s => s.Name == status)?.Category;
         }
 
+        /// <summary>Every store is written, an unconfigured one as <c>{}</c>, so the
+        /// defaults never come back over a store the project has set up.</summary>
         public JsonObject ToJson()
         {
             var root = new JsonObject();
@@ -149,7 +166,7 @@ static class RecordSchema
                         }).ToArray()),
                     };
                 }
-                if (so.Count > 0) root[store] = so;
+                root[store] = so;
             }
             return root;
         }
@@ -165,8 +182,9 @@ static class RecordSchema
         var schema = new Schema();
         foreach (var (store, types) in TypesOf)
         {
+            var configured = node is JsonObject o && o[store] is JsonObject;
             schema.Types[store] = new();
-            foreach (var t in types) schema.Types[store][t] = TypeSpec.Empty;
+            foreach (var t in types) schema.Types[store][t] = configured ? TypeSpec.Empty : TypeSpec.Default;
         }
         if (node is null) return schema;
         if (node is not JsonObject root)

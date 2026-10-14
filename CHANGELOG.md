@@ -112,10 +112,13 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     and the filter editor, and its values stay in the files. Hiding `due` turns
     off overdue highlighting; hiding `points` drops the estimate check from
     refinement.
-  - **Snooze until** (TASK-0004), a ready-made date field one click away in
-    Record types: a record is left out of the open views until that day, and
-    each rail's *Snoozed* view lists what is waiting. Where no type has the
-    field, the view says so and offers to set it up.
+  - **Snooze until** (TASK-0004), the example custom field every type has by
+    default (`not_before`, a date): a record is left out of the open views
+    until that day, and each rail's *Snoozed* view lists what is waiting. It is
+    edited and removed in Record types like any other field. The default
+    applies to a store `project.json` does not configure; once its schema is
+    saved, the file says what each type has, so a removal sticks. Where no type
+    has the field, the view says so and opens Record types.
   - A custom status is offered as a move on the record page and in the
     right-click menu, gets its own view in the rail, and sorts in its place in
     the tree. A finished one leaves the open views like `closed` / `done`. A
