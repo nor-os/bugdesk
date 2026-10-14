@@ -2,10 +2,10 @@
 id: 30
 type: story
 title: "One workflow: a record type's actions run flows, and a flow makes the move"
-status: review
+status: in-progress
 parent: 17
 phase:
-assignee: norman
+assignee: norman_agent
 reporter: norman
 due:
 points: 8
@@ -13,7 +13,7 @@ subsystem: workflow
 labels: [workflow, settings]
 links: [relates-to STORY-0028, relates-to STORY-0007, relates-to STORY-0029]
 created: 2026-10-14
-updated: 2026-10-14T10:01Z
+updated: 2026-10-14T10:04Z
 ---
 
 ## Description
@@ -38,6 +38,8 @@ Today a record type has a move table (from, label, to, needs a message, flow) an
 - 2026-10-14 · norman_agent · assignee: norman -> norman_agent
 - 2026-10-14 · norman_agent · status: in-progress -> review
 - 2026-10-14 · norman_agent · assignee: norman_agent -> norman
+- 2026-10-14 · norman_agent · status: review -> in-progress
+- 2026-10-14 · norman_agent · assignee: norman -> norman_agent
 
 ## Comments
 
@@ -56,3 +58,7 @@ Built in 928b1db on main. Handing back to norman for review.
 - **Saving** writes only the types that differ, as `workflow.types.<store>.<type>`. An untouched type stays on the built-in moves, or on an older move table or custom actions. Records read a type's own list: actions that change the status are its moves (Action buttons, right-click, mass Change status), and the rest are custom actions. The server checks the new key, a flow's types, and mass actions naming a type's actions.
 
 Checked in Edge on a copy of the real project.json: the page opens with nothing to save. Renaming Story's Drop to Abandon wrote only `types.backlog.story` and its flows, and after a reload a draft story offers "Abandon". A new action on Task with its own flow saved as `ping-owner`, and the picker offers only flows available to Task. The real project's Blocked actions kept their older storage. Suites on a clean checkout of 928b1db: UI 221, DOM 185, check-graph OK. The working tree's DOM run (188) includes other sessions' uncommitted tests.
+
+### 2026-10-14T10:04Z · norman_agent (status: review -> in-progress)
+
+norman asked "what about tracker?". Inside BugDesk, the Tracker tab is a second store with its own project.json, and Settings › Workflow only edits the project's. Taking it back to put the tracker's types (Project, Epic, Story, Task) and its flows on the same page, saved to the tracker's own project.json.
