@@ -177,6 +177,21 @@ await t('they are seeded into the shared project config, not a personal file', a
     page.destroy();
 });
 
+await t('the example tracker ships a personal dashboard over its tickets', async () => {
+    // Seeded by the server with the example tickets (BUGDESK_SEED_TRACKER), into the
+    // seeding profile's own dashboards.json: personal, so never in config. Drawn over
+    // the tickets on a real tracker-mode instance; here: readable whole, tracker only.
+    const entries = model.readEntries(JSON.parse(readFileSync(join(ROOT, 'examples', 'tracker-dashboards.json'), 'utf8')));
+    assert.deepEqual(entries.map((e) => e.name), ['My tracker']);
+    const [e] = entries;
+    assert.ok(e.ok, e.reason);
+    assert.deepEqual(e.keptTiles, []);
+    assert.ok(e.tiles.every((x) => x.config.binding.source === 'tracker'), 'a tile reads something other than the tracker');
+    assert.ok(e.tiles.some((x) => x.config.binding.plot === 'burndown' && x.config.binding.scope?.kind === 'project'));
+    const program = readFileSync(join(ROOT, 'server', 'Program.cs'), 'utf8');
+    assert.match(program, /BUGDESK_SEED_TRACKER[\s\S]{0,2000}tracker-dashboards\.json[\s\S]{0,400}ReadState\("dashboards\.json"\) is null[\s\S]{0,400}WriteState\("dashboards\.json"/);
+});
+
 for (const [id, name] of [['example-bugs', 'Bugs'], ['example-backlog', 'Backlog']]) {
     await t(`every tile of ${name} shows data on the freshly seeded records`, async () => {
         const { page } = await open(id);

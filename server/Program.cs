@@ -162,6 +162,17 @@ if (mode == "tracker" && Env("BUGDESK_SEED_TRACKER") is not null && stores.Track
             n++;
         }
         app.Logger.LogInformation("BugDesk: seeded {dir} with {n} example ticket(s)", backlogDir, n);
+        // And a personal dashboard over them (EPIC-0033), for whoever seeded:
+        // personal dashboards live in the profile's state, never in config, and a
+        // profile that already has any is left alone.
+        var personal = FindNear(Path.Combine("examples", "tracker-dashboards.json"),
+                                builder.Environment.ContentRootPath, AppContext.BaseDirectory);
+        if (personal is not null && seedInto.Users.ReadState("dashboards.json") is null)
+        {
+            var doc = new JsonObject { ["version"] = 1, ["dashboards"] = JsonNode.Parse(File.ReadAllText(personal)) };
+            if (seedInto.Users.WriteState("dashboards.json", doc.ToJsonString(new JsonSerializerOptions { WriteIndented = true })))
+                app.Logger.LogInformation("BugDesk: seeded a personal example dashboard");
+        }
     }
 }
 

@@ -52,7 +52,10 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   epic, a draft count and the EPIC-0001 burndown. `run.sh --seed` /
   `run.ps1 --seed` set `BUGDESK_SEED_DASHBOARDS` when they seed a store, and the
   server adds the example dashboards to that project's `project.json` (an id it
-  already has is left alone).
+  already has is left alone). `run.sh --tracker --seed` also gives whoever seeds
+  a personal *My tracker* dashboard over the example tickets
+  (`examples/tracker-dashboards.json`, written to their profile's
+  `dashboards.json` unless they already have one).
 
 - **Mass actions** (STORY-0029). The bug queue, the backlog board and the
   search results have a select-mode toggle in their header (FlexDesk 0.12.0's

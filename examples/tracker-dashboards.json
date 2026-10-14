@@ -1,0 +1,25 @@
+[
+  {
+    "id": "example-tracker",
+    "name": "My tracker",
+    "version": 1,
+    "tiles": [
+      { "id": "due-by-assignee", "type": "flexdesk.chart", "x": 0, "y": 0, "w": 6, "h": 6,
+        "config": { "title": "Open work by assignee and due date", "chart_type": "bar",
+          "binding": { "source": "tracker", "filter": { "key": "board" }, "plot": "count", "field": "assignee", "split": "dueBucket" } } },
+      { "id": "overdue", "type": "flexdesk.kpi", "x": 6, "y": 0, "w": 3, "h": 2,
+        "config": { "title": "Overdue",
+          "binding": { "source": "tracker", "filter": { "key": "overdue" }, "plot": "count" } } },
+      { "id": "unassigned", "type": "flexdesk.kpi", "x": 9, "y": 0, "w": 3, "h": 2,
+        "config": { "title": "Nobody on it",
+          "binding": { "source": "tracker", "filter": { "key": "unassigned" }, "plot": "count" } } },
+      { "id": "points-by-status", "type": "flexdesk.chart", "x": 6, "y": 2, "w": 6, "h": 4,
+        "config": { "title": "Points by status", "chart_type": "pie",
+          "binding": { "source": "tracker", "plot": "sum", "field": "status", "valueField": "points" } } },
+      { "id": "proj-burndown", "type": "flexdesk.chart", "x": 0, "y": 6, "w": 12, "h": 4,
+        "config": { "title": "PROJ-0001 burndown", "chart_type": "line",
+          "binding": { "source": "tracker", "plot": "burndown", "unit": "points", "scope": { "kind": "project", "id": 1 },
+            "from": "2026-09-01", "to": "2026-09-14" } } }
+    ]
+  }
+]
