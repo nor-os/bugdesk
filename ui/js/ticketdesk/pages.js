@@ -1915,7 +1915,7 @@ function mountTicketNav(host, props, ctx) {
     // a mount that runs before that happens (the same fallback FlexDesk's breadcrumb uses).
     const getWm = () => ctx?.wm || window.__twm?.wm || null;
 
-    let shown = null;            // 'bugs' | 'backlog' | 'tracker' (see panelSection)
+    let shown = null;            // 'bugs' | 'backlog' | 'tracker' (see panelSection) | 'dashboards'
     let backlogRail = null;      // the Backlog body's controller, mounted lazily
     // Bumped by every show() and by destroy. The backlog rail mounts after an
     // await, and `wm:changed` fires in bursts: without this, a switch that
@@ -1940,6 +1940,14 @@ function mountTicketNav(host, props, ctx) {
         backlogRail = null;
         body.innerHTML = '';
         if (next === 'bugs') { renderFilters(); mounted = mine; return; }
+        if (next === 'dashboards') {
+            // The project's dashboards (EPIC-0033): a row opens one, like a filter.
+            const { mountDashboardsRail } = await import('../dashboards/rail.js');
+            if (mine !== generation) return;
+            backlogRail = mountDashboardsRail(body, ctx);
+            mounted = mine;
+            return;
+        }
         // Imported lazily so the bug rail — the thing on screen at boot — never
         // waits on the backlog module to parse.
         const { mountBacklogRail } = next === 'tracker'
@@ -1958,7 +1966,7 @@ function mountTicketNav(host, props, ctx) {
         // The Tracker dashboard is a view over the backlog store, so it gets the
         // backlog rail: its saved filters and its project tree are exactly what
         // you want one click away from "who has what".
-        show(panelSection(topNav));
+        show(topNav === 'dashboards' ? 'dashboards' : panelSection(topNav));
     };
     const renderFilters = () => {
         const custom = listFilters();
@@ -2345,8 +2353,9 @@ const MERGED_TRACKER = CONFIG.mode !== 'tracker' && !!CONFIG.tracker?.available;
 /** Which body a side panel shows for the section in front. */
 function panelSection(topNav) {
     if (topNav === 'tracker' && MERGED_TRACKER) return 'tracker';
-    // Dashboards (EPIC-0033) keeps the rail of a store this project HAS: never
-    // the bug rail in tracker mode or over a project without a bug store.
+    // Dashboards (EPIC-0033): the Navigator lists the dashboards (mountTicketNav);
+    // the team panel shows a store this project HAS — never the bugs' in tracker
+    // mode or over a project without a bug store.
     if (topNav === 'dashboards') return CONFIG.mode === 'tracker' || CONFIG.store?.hasBugs === false ? 'backlog' : 'bugs';
     return topNav === 'backlog' || topNav === 'tracker' ? 'backlog' : 'bugs';
 }

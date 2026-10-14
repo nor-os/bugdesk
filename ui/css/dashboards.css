@@ -1,6 +1,6 @@
 /* ════════════════════════════════════════════════════════════════════
-   dashboards.css — the Dashboards page (EPIC-0033): the list on the
-   left and the chosen dashboard's header. The grid and the tiles are
+   dashboards.css — the Dashboards page (EPIC-0033): the open
+   dashboard's header, and its rows in the Navigator. The grid and the tiles are
    FlexDesk's and styled by flexdesk.css.
 
    Theme tokens only, so the page follows whatever theme the tokens
@@ -13,50 +13,13 @@
     min-height: 0;
 }
 
-.bd-dash__list {
-    flex: 0 0 220px;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    padding: 8px;
-    border-right: 1px solid var(--border-subtle, #2a2a2a);
-    background: var(--surface-1, #1e1e1e);
-    overflow-y: auto;
-}
-
-.bd-dash__heading {
-    padding: 4px 6px;
-    font-size: 10px;
-    font-weight: var(--font-weight-semibold, 600);
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--text-dim, #666);
-}
-
-.bd-dash__item {
-    display: flex;
-    align-items: flex-start;
-    gap: 6px;
-    width: 100%;
-    padding: 5px 6px;
-    border: 0;
-    border-radius: var(--radius-sm, 4px);
-    background: transparent;
-    color: var(--text-primary, #ddd);
-    font: inherit;
-    text-align: left;
-    cursor: pointer;
-}
-.bd-dash__item:hover { background: var(--state-hover, rgb(255 255 255 / 6%)); }
-.bd-dash__item.is-selected { background: var(--state-selected, rgb(255 255 255 / 10%)); }
-.bd-dash__item .material-symbols-outlined { font-size: 16px; color: var(--text-muted, #888); }
-.bd-dash__item.is-broken .material-symbols-outlined { color: var(--color-danger, #f07178); }
-
-.bd-dash__item-text { display: flex; flex-direction: column; min-width: 0; }
-.bd-dash__item-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bd-dash__item-reason { font-size: 11px; color: var(--text-muted, #888); }
-
-.bd-dash__list > .bd-dash__btn { margin-top: 8px; }
+/* The Navigator while Dashboards is in front (rail.js). The rows are the
+   rail's own `.td-nav__item`s; these add the open one and the markers. */
+.bd-dash-nav__item.is-selected { background: var(--state-selected, rgb(255 255 255 / 10%)); }
+.bd-dash-nav__item--personal .material-symbols-outlined { color: var(--color-info, #2196f3); }
+.bd-dash-nav__item.is-broken .material-symbols-outlined,
+.bd-dash-nav__banner .material-symbols-outlined { color: var(--color-danger, #f07178); }
+.bd-dash-nav__banner { cursor: default; white-space: normal; }
 
 .bd-dash__main {
     flex: 1 1 auto;
@@ -102,7 +65,6 @@
     color: var(--text-primary, #ddd);
     font-size: 12px;
 }
-.bd-dash__list > .bd-dash__banner { margin: 4px 0; }
 
 .bd-dash__empty,
 .bd-dash__dim { color: var(--text-muted, #888); }
@@ -111,9 +73,7 @@
 .bd-dash__broken { padding: 16px; color: var(--text-primary, #ddd); }
 .bd-dash__broken h3 { margin: 0 0 8px; font-size: var(--font-size-md, 14px); }
 
-/* Shared or personal (STORY-0035): the list's heading and icon, and a badge by the title. */
-.bd-dash__list > .bd-dash__heading:not(:first-child) { margin-top: 12px; }
-.bd-dash__item--personal .material-symbols-outlined { color: var(--color-info, #2196f3); }
+/* Shared or personal (STORY-0035): a badge by the title. */
 .bd-dash__scope {
     display: inline-flex;
     align-items: center;

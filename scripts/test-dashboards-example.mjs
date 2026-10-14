@@ -164,10 +164,16 @@ await t('they are seeded into the shared project config, not a personal file', a
     }
     const program = readFileSync(join(ROOT, 'server', 'Program.cs'), 'utf8');
     assert.match(program, /BUGDESK_SEED_DASHBOARDS[\s\S]{0,1200}examples", "dashboards\.json"[\s\S]{0,1200}UpsertDashboard/);
-    const { host, page } = await open('example-bugs');
-    const rows = [...host.querySelectorAll('.bd-dash__item')];
-    assert.deepEqual(rows.map((r) => r.querySelector('.bd-dash__item-name').textContent), ['Bugs', 'Backlog']);
-    assert.match(host.textContent, /Shared/);
+    const { page } = await open('example-bugs');
+    const nav = document.createElement('div');
+    document.body.appendChild(nav);
+    const { mountDashboardsRail } = await import(join(UI, 'dashboards', 'rail.js'));
+    const rail = mountDashboardsRail(nav, ctx);
+    await tick(20);
+    const rows = [...nav.querySelectorAll('.bd-dash-nav__item[data-scope="shared"]')];
+    assert.deepEqual(rows.map((r) => r.querySelector('span:not(.material-symbols-outlined)').textContent), ['Bugs', 'Backlog']);
+    assert.match(nav.textContent, /Shared/);
+    rail.destroy();
     page.destroy();
 });
 

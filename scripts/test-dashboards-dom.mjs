@@ -138,31 +138,62 @@ async function answerConfirm() {
 /* ── the page ────────────────────────────────────────────────────── */
 
 const { createDashboardsContent, SAVE_DELAY_MS } = await import(join(UI, 'dashboards', 'page.js'));
+const { mountDashboardsRail } = await import(join(UI, 'dashboards', 'rail.js'));
 const { taxonomy } = await import(join(UI, 'tiling', 'kind_taxonomy.js'));
 const factory = createDashboardsContent({ eventBus: null }).dashboards;
 const props = [];
 const ctx = { leafId: 'L1', taxonomy, wm: { updateActiveTabProps: (leaf, patch) => props.push({ leaf, patch }) } };
 
+/**
+ * The page and the Navigator beside it, in one host. A Navigator row calls
+ * `openInPrimary`, which the window manager answers by mounting the page again
+ * with the new props; the fake does the same, so `m.page` is always the live one.
+ */
 function mount(p = {}) {
     const host = document.createElement('div');
+    const nav = document.createElement('div');
+    const body = document.createElement('div');
+    host.append(nav, body);
     document.body.appendChild(host);
-    const page = factory(host, p, ctx);
-    return { host, page };
+    const m = { host, nav, page: null, rail: null };
+    const mctx = { ...ctx, wm: {
+        ...ctx.wm,
+        openInPrimary: (kind, next) => {
+            assert.equal(kind, 'dashboards');
+            props.push({ leaf: 'L1', patch: next });
+            m.page.destroy();
+            body.innerHTML = '';
+            m.page = factory(body, next, mctx);
+        },
+    } };
+    m.page = factory(body, p, mctx);
+    m.rail = mountDashboardsRail(nav, mctx);
+    m.destroy = () => { m.page.destroy(); m.rail.destroy(); host.remove(); };
+    return m;
+}
+const rowName = (row) => row.querySelector('span:not(.material-symbols-outlined)').textContent;
+/** Click a Navigator row and wait for the page it opens. */
+async function pick(m, row) {
+    row.click();
+    await tick();
+    await m.page.ready;
+    await tick(10);
 }
 const settle = () => tick(SAVE_DELAY_MS + 100);
 
 console.log('\nDashboards page (STORY-0034)');
 
 let m;
-await t('the list shows the shared dashboards, the unreadable ones with their reason', async () => {
+await t('the Navigator lists the shared dashboards, the unreadable ones with their reason', async () => {
     m = mount();
     await m.page.ready;
-    const rows = [...m.host.querySelectorAll('.bd-dash__item')];
+    assert.ok(!m.page.grid || !m.host.querySelector('.bd-dash__main aside'), 'the page still has its own list');
+    const rows = [...m.nav.querySelectorAll('.bd-dash-nav__item')];
     assert.equal(rows.length, 3);
-    assert.equal(rows[0].querySelector('.bd-dash__item-name').textContent, 'Bugs');
+    assert.equal(rowName(rows[0]), 'Bugs');
     assert.ok(rows[1].classList.contains('is-broken'));
-    assert.match(rows[1].textContent, /Hand edit.*tiles is not a list/);
-    assert.match(rows[2].textContent, /not an object/);
+    assert.match(rowName(rows[1]) + rows[1].title, /Hand edit.*tiles is not a list/);
+    assert.match(rows[2].title, /not an object/);
     assert.ok(rows[0].classList.contains('is-selected'), 'the readable one is not the one opened');
     assert.equal(m.host.querySelectorAll('.tile').length, 1, 'the readable tile is not on the grid');
     assert.match(m.host.textContent, /1 tile could not be read/);
@@ -216,8 +247,8 @@ await t('a tile is configured through its settings dialog', async () => {
     assert.equal(m.host.querySelector('.tile .tile-title')?.textContent, 'Open by severity');
 });
 
-await t('a dashboard is created, opened, and remembered in the tab', async () => {
-    m.host.querySelector('[data-action="new"]').click();
+await t('a dashboard is created from the Navigator, opened, and remembered in the tab', async () => {
+    m.nav.querySelector('[data-new="shared"]').click();
     await answerForm({ name: 'Backlog' });
     await m.page.ready; await tick(10);
     const created = server.list.find((e) => e && e.name === 'Backlog');
@@ -243,7 +274,7 @@ await t('a dashboard is renamed and deleted', async () => {
     await tick(10);
     const id = props.at(-1).patch.dashboard;
     assert.equal(server.list.find((e) => e && e.id === id).name, 'Backlog health');
-    assert.match(m.host.querySelector('.bd-dash__list').textContent, /Backlog health/);
+    assert.match(m.nav.textContent, /Backlog health/, 'the Navigator still has the old name');
     m.host.querySelector('[data-action="delete"]').click();
     await answerConfirm();
     await tick(10);
@@ -253,8 +284,7 @@ await t('a dashboard is renamed and deleted', async () => {
 });
 
 await t('a broken entry, opened, is shown with its reason and never written', async () => {
-    m.host.querySelectorAll('.bd-dash__item')[1].click();
-    await tick(10);
+    await pick(m, m.nav.querySelectorAll('.bd-dash-nav__item')[1]);
     assert.match(m.host.querySelector('.bd-dash__broken').textContent, /tiles is not a list/);
     assert.equal(props.at(-1).patch.dashboard, 'hand-edit');
     for (const p of posts()) assert.notEqual(p.body.dashboard.id, 'hand-edit');
@@ -262,14 +292,14 @@ await t('a broken entry, opened, is shown with its reason and never written', as
 });
 
 await t('a change still pending when the page goes away is saved, not lost', async () => {
-    m.page.destroy();
+    m.destroy();
     const n = mount({ dashboard: 'bugs' });
     await n.page.ready;
     const before = posts().length;
     const g = n.page.grid;
     g.layout[0].y = 5;
     g._emitLayoutChanged();
-    n.page.destroy();
+    n.destroy();
     await tick(10);
     assert.equal(posts().length, before + 1);
     assert.equal(server.list[0].tiles[0].y, 5);
@@ -278,30 +308,30 @@ await t('a change still pending when the page goes away is saved, not lost', asy
 await t('the reopened page opens the dashboard its tab remembered', async () => {
     const n = mount({ dashboard: 'hand-edit' });
     await n.page.ready;
-    assert.ok(n.host.querySelector('.bd-dash__item.is-selected.is-broken'));
-    n.page.destroy();
+    assert.ok(n.nav.querySelector('.bd-dash-nav__item.is-selected.is-broken'));
+    n.destroy();
 });
 
 
 console.log('\nPersonal dashboards (STORY-0035)');
 
-const section = (host, scope) => [...host.querySelectorAll(`.bd-dash__item[data-scope="${scope}"]`)];
+const section = (host, scope) => [...host.querySelectorAll(`.bd-dash-nav__item[data-scope="${scope}"]`)];
 
 await t('the list has a Personal section under Shared, empty at first', async () => {
     m = mount({ dashboard: 'bugs' });
     await m.page.ready;
-    const headings = [...m.host.querySelectorAll('.bd-dash__heading')].map((h) => h.textContent);
+    const headings = [...m.nav.querySelectorAll('.td-nav__section')].map((h) => h.textContent);
     assert.deepEqual(headings, ['Shared', 'Personal']);
     assert.equal(section(m.host, 'personal').length, 0);
-    assert.match(m.host.querySelector('.bd-dash__list').textContent, /Only you see these; they are never committed/);
+    assert.match(m.nav.textContent, /Only you see these; they are never committed/);
     assert.equal(m.host.querySelector('.bd-dash__scope').textContent, 'groupShared');
 });
 
 await t('a personal dashboard is created in the profile state, never in project.json', async () => {
     const before = projectWrites().length;
-    m.host.querySelector('[data-action="new-personal"]').click();
+    m.nav.querySelector('[data-new="personal"]').click();
     await answerForm({ name: 'Mine' });
-    await tick(10);
+    await m.page.ready; await tick(10);
     assert.equal(projectWrites().length, before, 'project.json was written');
     const file = personalFile();
     assert.equal(file.version, 1);
@@ -310,7 +340,7 @@ await t('a personal dashboard is created in the profile state, never in project.
     const rows = section(m.host, 'personal');
     assert.equal(rows.length, 1);
     assert.ok(rows[0].classList.contains('is-selected'));
-    assert.ok(rows[0].classList.contains('bd-dash__item--personal'));
+    assert.ok(rows[0].classList.contains('bd-dash-nav__item--personal'));
     assert.equal(rows[0].querySelector('.material-symbols-outlined').textContent, 'person');
     assert.match(rows[0].title, /only you/i);
     assert.equal(m.host.querySelector('.bd-dash__scope--personal')?.textContent, 'personPersonal');
@@ -326,13 +356,13 @@ await t('editing a personal dashboard saves to the personal file only', async ()
 });
 
 await t('another user of the same repo does not see it', async () => {
-    m.page.destroy();
+    m.destroy();
     server.user = 'bob';
     const b = mount();
     await b.page.ready;
     assert.equal(section(b.host, 'personal').length, 0);
     assert.equal(section(b.host, 'shared').length, server.list.length);
-    b.page.destroy();
+    b.destroy();
     server.user = 'alice';
 });
 
@@ -345,8 +375,7 @@ await t('the tab reopens a personal dashboard it remembered', async () => {
 });
 
 await t('a shared dashboard is copied to a personal one, unreadable tiles and all', async () => {
-    section(m.host, 'shared')[0].click();
-    await tick(10);
+    await pick(m, section(m.host, 'shared')[0]);
     const before = projectWrites().length;
     const shared = JSON.parse(JSON.stringify(server.list[0]));
     m.host.querySelector('[data-action="copy-personal"]').click();
@@ -362,8 +391,7 @@ await t('a shared dashboard is copied to a personal one, unreadable tiles and al
     assert.equal(m.host.querySelector('.bd-dash__title').textContent, 'Bugs');
     assert.ok(m.host.querySelector('.bd-dash__scope--personal'), 'the copy is not the one opened');
     // A second copy gets a free name.
-    section(m.host, 'shared')[0].click();
-    await tick(10);
+    await pick(m, section(m.host, 'shared')[0]);
     m.host.querySelector('[data-action="copy-personal"]').click();
     await tick(10);
     assert.equal(personalFile().dashboards.at(-1).name, 'Bugs (copy)');
@@ -371,8 +399,7 @@ await t('a shared dashboard is copied to a personal one, unreadable tiles and al
 
 await t('sharing under a taken name asks for another, and never overwrites the shared one', async () => {
     const copy = personalFile().dashboards.find((d) => d.name === 'Bugs');
-    section(m.host, 'personal').find((r) => r.textContent.endsWith('Bugs')).click();
-    await tick(10);
+    await pick(m, section(m.host, 'personal').find((r) => rowName(r) === 'Bugs'));
     const shared = JSON.parse(JSON.stringify(server.list[0]));
     const before = projectWrites().length;
     m.host.querySelector('[data-action="share"]').click();
@@ -391,13 +418,13 @@ await t('sharing under a taken name asks for another, and never overwrites the s
     assert.deepEqual(added.tiles, copy.tiles);
     assert.ok(!personalFile().dashboards.some((d) => d.id === copy.id), 'still personal too');
     assert.equal(props.at(-1).patch.dashboard, added.id);
-    assert.ok(m.host.querySelector('.bd-dash__item.is-selected[data-scope="shared"]'));
+    assert.ok(m.nav.querySelector('.bd-dash-nav__item.is-selected[data-scope="shared"]'));
 });
 
 await t('a share after failed personal saves does not leave a personal copy behind', async () => {
-    m.host.querySelector('[data-action="new-personal"]').click();
+    m.nav.querySelector('[data-new="personal"]').click();
     await answerForm({ name: 'Flaky' });
-    await tick(10);
+    await m.page.ready; await tick(10);
     const id = personalFile().dashboards.find((d) => d.name === 'Flaky').id;
     server.failStateWrites = 2;                       // the autosave and the flush before sharing
     m.host.querySelector('[data-action="add-kpi"]').click();
@@ -412,15 +439,15 @@ await t('a share after failed personal saves does not leave a personal copy behi
 });
 
 await t('a personal file that does not parse is shown as broken and never written over', async () => {
-    m.page.destroy();
+    m.destroy();
     server.state['alice/dashboards.json'] = '{oops';
     const n = mount({ dashboard: 'bugs' });
     await n.page.ready;
-    assert.match(n.host.querySelector('.bd-dash__list').textContent, /Personal dashboards cannot be read: dashboards\.json is not valid JSON/);
-    assert.ok(n.host.querySelector('[data-action="new-personal"]').disabled);
+    assert.match(n.nav.textContent, /Personal dashboards cannot be read: dashboards\.json is not valid JSON/);
+    assert.ok(!n.nav.querySelector('[data-new="personal"]'), 'a new personal dashboard is still offered');
     assert.ok(n.host.querySelector('[data-action="copy-personal"]').disabled);
     assert.equal(server.state['alice/dashboards.json'], '{oops');
-    n.page.destroy();
+    n.destroy();
 });
 
 await t('without a profile, a personal save says so instead of pretending', async () => {
@@ -430,7 +457,7 @@ await t('without a profile, a personal save says so instead of pretending', asyn
     n.host.querySelector('[data-action="copy-personal"]').click();
     await tick(10);
     assert.match(n.host.querySelector('.bd-dash__status').textContent, /Not copied: no profile/);
-    n.page.destroy();
+    n.destroy();
     server.user = 'alice';
 });
 

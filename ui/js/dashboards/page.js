@@ -1,11 +1,12 @@
 /**
  * page.js — the `dashboards` content kind (EPIC-0033, STORY-0034).
  *
- * A list of the project's shared dashboards on the left; the chosen one on the
- * right as a FlexDesk `TileGrid` of chart and KPI tiles, which can be added,
- * removed, dragged, resized and configured. The grid, the tiles, the charts and
- * the Plotly loader are all FlexDesk's (`@flexdesk/tiles`, `@flexdesk/charts`);
- * this file is the section, the list and the saving.
+ * The open dashboard as a FlexDesk `TileGrid` of chart and KPI tiles, which can
+ * be added, removed, dragged, resized and configured. The project's dashboards
+ * are listed in the Navigator (rail.js), which opens one here; both share the
+ * lists in library.js. The grid, the tiles, the charts and the Plotly loader
+ * are all FlexDesk's (`@flexdesk/tiles`, `@flexdesk/charts`); this file is the
+ * page and the saving.
  *
  * NOTHING HEAVY AT BOOT. `@flexdesk/tiles` and `@flexdesk/charts` are imported
  * on the first mount of this page, never statically, and Plotly itself is
@@ -23,8 +24,8 @@
  * one's id, or `personal:<id>`), so the window manager's saved layout reopens
  * it after a reload.
  *
- * PERSONAL DASHBOARDS (STORY-0035) are listed under the shared ones, marked
- * with their own heading, icon and badge, and stored per profile in a
+ * PERSONAL DASHBOARDS (STORY-0035) are listed under the shared ones in the
+ * Navigator, marked with their own heading and icon, and here with a badge, and stored per profile in a
  * git-ignored file (store.js). A shared one can be copied to a personal one;
  * a personal one can be shared, which moves it into project.json under a new
  * id and a name no shared dashboard has, so it never replaces one.
@@ -38,9 +39,13 @@
  */
 
 import { makeLoadingOverlay, mountTileBreadcrumb } from '@flexdesk/wm';
-import { openConfirm, openForm } from '@flexdesk/widgets';
-import { loadShared, saveShared, deleteShared, loadPersonal, savePersonal, deletePersonal } from './store.js';
-import { freeName, newEntry, newId, nameTaken, readEntry, toEntry } from './model.js';
+import { openConfirm } from '@flexdesk/widgets';
+import { loadShared, saveShared, deleteShared, savePersonal, deletePersonal } from './store.js';
+import { freeName, newId, readEntry, toEntry } from './model.js';
+import {
+    SCOPES, askName, entryFor, firstKey, keyOf, lists, loadLibrary, notifyLibrary, readable,
+    setSelectedKey, trackWrite,
+} from './library.js';
 import { drillExpr, resolveTile } from './resolve.js';
 import { openTileSettings } from './tile_editor.js';
 
@@ -96,18 +101,11 @@ function mountDashboards(host, props, ctx, eventBus) {
         crumbSlot.appendChild(crumb.el);
     } catch { /* no breadcrumb is not a broken page */ }
 
-    const list = el('aside', 'bd-dash__list');
     const main = el('section', 'bd-dash__main');
     const page = el('div', 'bd-dash');
-    page.append(list, main);
+    page.append(main);
     contentSlot.append(page);
 
-    /** Both lists. `broken` is why that whole list cannot be read (nothing is
-     *  saved to it then), or null. */
-    const lists = {
-        shared: { entries: [], broken: null },
-        personal: { entries: [], broken: null },
-    };
     const store = {
         shared: { save: saveShared, remove: deleteShared },
         personal: { save: savePersonal, remove: deletePersonal },
@@ -160,8 +158,9 @@ function mountDashboards(host, props, ctx, eventBus) {
         const saved = readEntry(raw);
         if (current && current.id === saved.id && currentScope === scope) current = saved;
         lists[scope].entries = lists[scope].entries.map((e) => (e.ok && e.id === saved.id ? saved : e));
+        notifyLibrary();
         setStatus('Saving…');
-        return store[scope].save(raw).then(
+        return trackWrite(store[scope].save(raw)).then(
             () => { if (!disposed) setStatus('Saved'); },
             (err) => {
                 if (lastJson === json) lastJson = prev;
@@ -169,78 +168,6 @@ function mountDashboards(host, props, ctx, eventBus) {
                 else console.error('[dashboards] a pending save failed', err);
             });
     }
-
-    /* ── the list ───────────────────────────────────────────────── */
-
-    /** How a list row and `props.dashboard` name an entry: its id (a personal
-     *  one prefixed `personal:`), or its position when it has no usable id. */
-    const keyOf = (scope, e, i) => `${scope === 'personal' ? 'personal:' : ''}${e.id || `#${i}`}`;
-
-    const SCOPES = {
-        shared: { heading: 'Shared', icon: 'group', file: 'project.json',
-            tip: 'Shared: in project.json, committed, seen by everyone on the repo',
-            empty: 'No shared dashboards yet.' },
-        personal: { heading: 'Personal', icon: 'person', file: 'your personal dashboards.json',
-            tip: 'Personal: only you see it; kept with your profile and never committed',
-            empty: 'No personal dashboards. Only you see these; they are never committed.' },
-    };
-
-    function renderSection(scope) {
-        const s = SCOPES[scope];
-        const { entries, broken } = lists[scope];
-        list.append(el('div', 'bd-dash__heading', s.heading));
-        if (broken) list.append(el('div', 'bd-dash__banner', `${s.heading} dashboards cannot be read: ${broken}. Nothing is saved to them until ${s.file} is fixed.`));
-        entries.forEach((e, i) => {
-            const key = keyOf(scope, e, i);
-            const row = el('button', `bd-dash__item bd-dash__item--${scope}`);
-            row.type = 'button';
-            row.dataset.dashboard = key;
-            row.dataset.scope = scope;
-            row.title = s.tip;
-            row.classList.toggle('is-selected', key === selectedId);
-            row.classList.toggle('is-broken', !e.ok);
-            row.append(el('span', 'material-symbols-outlined', e.ok ? s.icon : 'warning'));
-            const text = el('span', 'bd-dash__item-text');
-            text.append(el('span', 'bd-dash__item-name', e.name || e.id || `Entry ${i + 1}`));
-            if (!e.ok) text.append(el('span', 'bd-dash__item-reason', e.reason));
-            row.append(text);
-            row.addEventListener('click', () => select(key, { remember: true }));
-            list.append(row);
-        });
-        if (!entries.length && !broken) list.append(el('div', 'bd-dash__empty', s.empty));
-        const add = button(scope === 'shared' ? 'New dashboard' : 'New personal dashboard', 'add',
-            () => create(scope), { primary: scope === 'shared' });
-        add.dataset.action = scope === 'shared' ? 'new' : 'new-personal';
-        add.disabled = !!broken;
-        list.append(add);
-    }
-
-    function renderList() {
-        list.innerHTML = '';
-        renderSection('shared');
-        renderSection('personal');
-    }
-
-    /** The first readable dashboard, else the first entry, else none. */
-    const firstKey = () => {
-        for (const scope of ['shared', 'personal']) {
-            const ok = lists[scope].entries.find((e) => e.ok);
-            if (ok) return keyOf(scope, ok);
-        }
-        for (const scope of ['shared', 'personal']) {
-            if (lists[scope].entries.length) return keyOf(scope, lists[scope].entries[0], 0);
-        }
-        return null;
-    };
-
-    /** `{scope, entry}` for a key, or null. */
-    const entryFor = (key) => {
-        for (const scope of ['shared', 'personal']) {
-            const entry = lists[scope].entries.find((e, i) => keyOf(scope, e, i) === key);
-            if (entry) return { scope, entry };
-        }
-        return null;
-    };
 
     /* ── the chosen dashboard ───────────────────────────────────── */
 
@@ -251,7 +178,7 @@ function mountDashboards(host, props, ctx, eventBus) {
         if (remember) {
             try { ctx.wm?.updateActiveTabProps?.(ctx.leafId, { dashboard: key }); } catch { /* best effort */ }
         }
-        renderList();
+        setSelectedKey(key);
         await renderMain();
     }
 
@@ -270,8 +197,8 @@ function mountDashboards(host, props, ctx, eventBus) {
         const found = entryFor(selectedId);
         if (!found) {
             main.append(el('div', 'bd-dash__empty', lists.shared.entries.length || lists.personal.entries.length
-                ? 'Choose a dashboard on the left.'
-                : 'This project has no dashboards yet. Create one with New dashboard; it is saved in the project config and shared with everyone on the repo. A personal dashboard is only yours.'));
+                ? 'Choose a dashboard in the Navigator.'
+                : 'This project has no dashboards yet. Create one with New dashboard in the Navigator; it is saved in the project config and shared with everyone on the repo. A personal dashboard is only yours.'));
             return;
         }
         const { scope, entry } = found;
@@ -337,6 +264,7 @@ function mountDashboards(host, props, ctx, eventBus) {
         lastJson = JSON.stringify(entry.raw);
         grid = new libs.tiles.TileGrid({
             container: body,
+            host: ctx.host,      // the desktop app's native Save dialog for a tile's PNG (STORY-0026)
             showToolbar: false,
             readonly: disabled,
             eventBus: { emit: (name, payload) => { if (name === 'grid:config-modal-show') editTile(payload); } },
@@ -426,35 +354,13 @@ function mountDashboards(host, props, ctx, eventBus) {
 
     /* ── dashboards ─────────────────────────────────────────────── */
 
-    const readable = (scope) => lists[scope].entries.filter((e) => e.ok);
-
-    /** Ask for a name no other `scope` dashboard has. */
-    async function askName(title, scope, { name = '', exceptId = null, hint, submitLabel = 'Save' } = {}) {
-        const r = await openForm({
-            title, submitLabel, defaults: { name },
-            fields: [{
-                name: 'name', label: 'Name', type: 'text', required: true, hint,
-                validator: (v) => (!String(v || '').trim() ? 'A dashboard needs a name.'
-                    : nameTaken(v, readable(scope), exceptId)
-                        ? `A ${scope} dashboard is already called "${String(v).trim()}". Choose a different name.` : null),
-            }],
-        });
-        return r ? String(r.name).trim() : null;
-    }
-
     /** Store a new raw entry in `scope` and open it. */
     async function add(scope, raw) {
-        await store[scope].save(raw);
+        await trackWrite(store[scope].save(raw));
         const entry = readEntry(raw);
         lists[scope].entries.push(entry);
+        notifyLibrary();
         await select(keyOf(scope, entry), { remember: true });
-    }
-
-    async function create(scope) {
-        const name = await askName(scope === 'shared' ? 'New dashboard' : 'New personal dashboard', scope);
-        if (!name || disposed) return;
-        try { await add(scope, newEntry(name, newId(scope === 'shared' ? 'd' : 'p')).raw); }
-        catch (err) { list.append(el('div', 'bd-dash__banner', `Not saved: ${err.message}`)); }
     }
 
     async function rename() {
@@ -463,7 +369,6 @@ function mountDashboards(host, props, ctx, eventBus) {
         if (!name || disposed || !current || name === current.name) return;
         current = { ...current, name };
         await flush();
-        renderList();
         main.querySelector('.bd-dash__title').textContent = name;
     }
 
@@ -487,10 +392,10 @@ function mountDashboards(host, props, ctx, eventBus) {
         await flush();
         const mine = current;
         try {
-            const fresh = await loadShared();
-            lists.shared = fresh;
+            Object.assign(lists.shared, await loadShared());
+            notifyLibrary();
         } catch (err) { setStatus(`Not shared: ${err.message}`, true); return; }
-        if (lists.shared.broken) { renderList(); setStatus(`Not shared: shared dashboards cannot be read (${lists.shared.broken})`, true); return; }
+        if (lists.shared.broken) { setStatus(`Not shared: shared dashboards cannot be read (${lists.shared.broken})`, true); return; }
         const name = await askName('Share dashboard', 'shared', {
             name: mine.name, submitLabel: 'Share',
             hint: 'It moves to the shared dashboards in project.json, for everyone on the repo once committed, and is no longer personal.',
@@ -507,6 +412,7 @@ function mountDashboards(host, props, ctx, eventBus) {
         if (!kept) lists.personal.entries = lists.personal.entries.filter((e) => e !== mine && !(e.ok && e.id === mine.id));
         const entry = readEntry(raw);
         lists.shared.entries.push(entry);
+        notifyLibrary();
         await select(keyOf('shared', entry), { remember: true });
         if (kept) setStatus(`Shared, but the personal copy could not be removed: ${kept.message}`, true);
     }
@@ -525,21 +431,21 @@ function mountDashboards(host, props, ctx, eventBus) {
         catch (err) { setStatus(`Not deleted: ${err.message}`, true); return; }
         if (current?.id === entry.id && currentScope === scope) { current = null; }
         lists[scope].entries = lists[scope].entries.filter((e) => e !== entry && !(e.ok && e.id === entry.id));
+        notifyLibrary();
         await select(firstKey(), { remember: true });
     }
 
     /* ── start ──────────────────────────────────────────────────── */
 
-    const unreadable = (err) => ({ entries: [], broken: `they could not be loaded (${err.message})` });
+    // Read the lists again on every open: another checkout's dashboards arrive
+    // with a pull. The Navigator repaints from the same read.
     const hideLoading = makeLoadingOverlay(contentSlot);
-    const ready = Promise.all([loadShared().catch(unreadable), loadPersonal().catch(unreadable)])
-        .then(([shared, personal]) => {
+    const ready = loadLibrary()
+        .then(() => {
             hideLoading();
             if (disposed) return;
-            lists.shared = shared;
-            lists.personal = personal;
             if (!entryFor(selectedId)) selectedId = firstKey();
-            renderList();
+            setSelectedKey(selectedId);
             return renderMain();
         });
 
