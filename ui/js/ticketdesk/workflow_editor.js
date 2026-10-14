@@ -32,10 +32,10 @@ import {
 import { esc } from './data.js';
 import { appName } from '../core/app_identity.js';
 import { CONFIG } from './instance.js';
-import { customFields, STORE_TYPES } from './schema.js';
+import { STORE_TYPES } from './schema.js';
 import { attachSelect } from './select_field.js';
 import {
-    BLOCKS, CATEGORIES, DEFAULT_MASS_ACTIONS, SETTABLE, builtinMoves, checkFlow, configuredFlows, emptyFlow,
+    BLOCKS, CATEGORIES, DEFAULT_MASS_ACTIONS, builtinMoves, checkFlow, configuredFlows, emptyFlow, fieldChoices,
     liftInlineFlows, newFlowId, saveWorkflow, statusesOf, stepTypes, workflowConfig,
 } from './workflow.js';
 
@@ -175,8 +175,9 @@ function attachFlowPicker(el, { draft, store, holder, onNew, onPick }) {
  * Open the workflow editor. Resolves true once saved.
  * @param {object} [o]
  * @param {object} [o.eventBus]
+ * @param {string} [o.start]  open on the first page whose key starts with this ('mass.')
  */
-export function openWorkflowEditor({ eventBus = null } = {}) {
+export function openWorkflowEditor({ eventBus = null, start = '' } = {}) {
     const tables = tablesHere();
     const draft = workflowConfig();
     // Flows stored inside a row (before STORY-0028) become named ones in the draft.
@@ -185,7 +186,7 @@ export function openWorkflowEditor({ eventBus = null } = {}) {
     for (const byType of Object.values(draft.actions || {})) {
         for (const list of Object.values(byType || {})) for (const a of list || []) a.saved = true;
     }
-    let cur = tables[0]?.[0];
+    let cur = (start && tables.find(([k]) => k.startsWith(start))?.[0]) || tables[0]?.[0];
     let problems = [];           // from the bridge: {where, message, node_id}
     let selects = [];
 
@@ -270,8 +271,8 @@ export function openWorkflowEditor({ eventBus = null } = {}) {
     const massRows = () => {
         const list = massOf(draft, cur);
         const on = list || DEFAULT_MASS_ACTIONS;
-        return `<p class="td-dim bd-workflow__lede">Tick rows in a list (the ${icon('checklist')} button in its
-                header) and these are offered over them. One is offered only when every ticked record's type
+        return `<p class="td-dim bd-workflow__lede">Press ${icon('checklist')} Select above a list, tick rows,
+                and these are offered over them. One is offered only when every ticked record's type
                 offers it. ${list ? '' : 'This type offers the defaults.'}</p>`
             + massChoices(draft, cur).map(([value, label, hint]) => `
             <label class="ea-modal__row bd-workflow__mrow">
@@ -574,9 +575,7 @@ export function mountFlowEditor(host, { store, types, graph = null, actions = fa
     // Insert a value: what earlier prompts answered, and the record's fields.
     const fieldGroup = {
         id: 'record', label: 'This record', sub: 'its value when the move is made',
-        items: [...SETTABLE[store], ['status', 'Status'], ['type', 'Type'], ['reporter', 'Reporter'], ['id', 'Id'],
-                ...types.flatMap((t) => customFields(store, t).map((f) => [f.name, f.label || f.name]))]
-            .filter(([n], i, a) => a.findIndex(([m]) => m === n) === i)
+        items: [...fieldChoices(store, types, { readable: true }), ['id', 'Id']]
             .map(([n, l]) => ({ label: l, type: 'field', ref: `\${record.${n}}` })),
     };
     let editor = null;

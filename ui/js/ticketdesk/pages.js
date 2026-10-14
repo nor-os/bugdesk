@@ -346,6 +346,7 @@ function mountQueues(host, props, ctx) {
                 ? esc(describeFilter(resolved.expr))
                 : 'Ctrl+K quick-searches bugs'}</span>
             <span class="td-spacer"></span>
+            <button class="ea-btn" data-a="select" aria-pressed="false" hidden></button>
             <button class="ea-btn" data-a="savefilter">${icon('filter_alt')} Save as filter</button>
             <span class="bd-newgroup">
                 <span class="td-dim">New</span>
@@ -480,6 +481,7 @@ function mountQueues(host, props, ctx) {
     // mass actions over the ticked bugs. See ./mass_actions.js.
     const mass = massActionBar(host.querySelector('.td-tablehost'), {
         noun: 'bugs',
+        toggle: host.querySelector('[data-a="select"]'),
         recordsOf: (indices, t) => indices.map((i) => t.config.rows[i])
             .map((r) => TICKETS.find((x) => x.id === r?.[QUEUE_ID_COL])).filter(Boolean).map(bugRecord),
         report: statusLine,
@@ -1193,7 +1195,7 @@ function mountTicket(host, props, ctx) {
             const heldBugs = closedWanted ? 0 : TICKETS.filter((tk) => isClosed(tk)).length;
             const heldItems = closedWanted ? 0 : ITEMS.filter(isClosedItem).length;
             const held = heldBugs + heldItems;
-            resultsEl.innerHTML = `<section class="td-group"><div class="td-group__title">Results — ${bugs.length} bug${bugs.length === 1 ? '' : 's'}${items.length ? `, ${items.length} backlog item${items.length === 1 ? '' : 's'}` : ''}${held ? ` <span class="td-dim">· ${held} closed not searched</span>` : ''}</div><div class="td-tablehost"></div></section>`;
+            resultsEl.innerHTML = `<section class="td-group"><div class="td-group__title">Results — ${bugs.length} bug${bugs.length === 1 ? '' : 's'}${items.length ? `, ${items.length} backlog item${items.length === 1 ? '' : 's'}` : ''}${held ? ` <span class="td-dim">· ${held} closed not searched</span>` : ''}<span class="td-spacer"></span><button class="ea-btn" data-a="select" aria-pressed="false" hidden></button></div><div class="td-tablehost"></div></section>`;
             // Bug id is column 0 here (no Pri column), so the menu's row →
             // id mapping differs from the queue's; the two share nothing but
             // the idea.
@@ -1217,6 +1219,7 @@ function mountTicket(host, props, ctx) {
             };
             // STORY-0029. Mass actions over the ticked results, of either store.
             resultsMass = massActionBar(resultsEl.querySelector('.td-tablehost'), {
+                toggle: resultsEl.querySelector('[data-a="select"]'),
                 recordsOf: (indices, t) => indices.map((i) => byRef.get(t.config.rows[i]?.[0])).filter(Boolean).map((m) => {
                     if (m.store === 'bugs') { const tk = TICKETS.find((x) => x.id === m.id); return tk ? bugRecord(tk) : null; }
                     const it = ITEMS.find((x) => Number(x.id) === Number(m.bugId));

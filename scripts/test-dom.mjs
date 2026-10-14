@@ -3142,6 +3142,36 @@ console.log('\nMass actions');
         assert.deepEqual(mass.offeredMassActions([bug(3, 'open', 'task')]).map((a) => a.key), ['assignee', 'status'], 'an unlisted type has the defaults');
         wf.setWorkflow(null);
     });
+
+    await t('the page bar\'s Select button turns the mode on and off, and says which', () => {
+        const host = document.createElement('div');
+        host.innerHTML = '<button data-a="select" hidden></button><div class="td-tablehost"></div>';
+        document.body.appendChild(host);
+        const btn = host.querySelector('[data-a="select"]');
+        const bar = mass.massActionBar(host.querySelector('.td-tablehost'), {
+            noun: 'bugs', toggle: btn, recordsOf: () => [], report: () => {} });
+        let on = false;
+        const table = { isSelectMode: () => on, getSelection: () => [], clearSelection() {},
+            setSelectMode(v) { on = v; bar.tableOptions.onSelectModeChange(v); } };
+        assert.equal(btn.hidden, true, 'shown before a table is attached');
+        bar.attach(table);
+        assert.equal(btn.hidden, false);
+        assert.match(btn.textContent, /Select/);
+        assert.equal(btn.getAttribute('aria-pressed'), 'false');
+        btn.click();
+        assert.equal(on, true, 'the button did not start select mode');
+        assert.match(btn.textContent, /Done selecting/);
+        assert.equal(btn.getAttribute('aria-pressed'), 'true');
+        assert.equal(bar.el.hidden, false, 'no mass action bar in select mode');
+        btn.click();
+        assert.equal(on, false);
+        assert.equal(bar.el.hidden, true);
+        const old = { getSelection: () => [], clearSelection() {} };   // a FlexDesk before 0.12.0
+        const btn2 = document.createElement('button');
+        mass.massActionBar(host.querySelector('.td-tablehost'), { toggle: btn2, recordsOf: () => [], report: () => {} }).attach(old);
+        assert.equal(btn2.hidden, true, 'offered on a table without select mode');
+        host.remove();
+    });
 }
 
 console.log('\nConversion');

@@ -121,6 +121,7 @@ export const VISIBLE_SETTINGS = new Set([
     'bugdesk.collaborators',
     'bugdesk.recordTypes',
     'bugdesk.workflow',
+    'bugdesk.massActions',
     'bugdesk.flows',
     'bugdesk.numbering',
     'bugdesk.git',
@@ -246,6 +247,21 @@ export const BUGDESK_SETTINGS_SLICE = {
             onClick: async () => {
                 const { openWorkflowEditor } = await import('../ticketdesk/workflow_editor.js');
                 return openWorkflowEditor({ eventBus: window.__ecoagent?.eventBus });
+            },
+        },
+
+        // STORY-0029: which mass actions each type offers. Its own entry, though
+        // it opens the workflow editor, so it can be found by name.
+        'bugdesk.massActions': {
+            type: 'action', category: 'general', group: 'Project',
+            label: 'Mass actions',
+            description: 'What the bar offers once you press Select in a list and tick several records: change the assignee, change the status (only to statuses every ticked record can reach, asking a needed message once), and your custom actions, per record type. Saved in the shared project.json beside the stores. With nothing set, every type offers the assignee and the status.',
+            buttonLabel: 'Edit mass actions…',
+            icon: 'checklist',
+            defaultValue: null,
+            onClick: async () => {
+                const { openWorkflowEditor } = await import('../ticketdesk/workflow_editor.js');
+                return openWorkflowEditor({ eventBus: window.__ecoagent?.eventBus, start: 'mass.' });
             },
         },
 

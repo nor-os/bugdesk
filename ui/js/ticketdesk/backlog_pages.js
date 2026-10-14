@@ -319,6 +319,7 @@ function mountBacklogBoard(host, props, ctx) {
             ${flat ? '' : `
             <button class="ea-btn" data-a="expand" title="Expand every item">${icon('unfold_more')}</button>
             <button class="ea-btn" data-a="collapse" title="Collapse every item">${icon('unfold_less')}</button>`}
+            <button class="ea-btn" data-a="select" aria-pressed="false" hidden></button>
             <button class="ea-btn" data-a="savefilter">${icon('filter_alt')} Save as filter</button>
             <span class="bd-newgroup">
                 <span class="td-dim">New</span>
@@ -423,6 +424,7 @@ function mountBacklogBoard(host, props, ctx) {
     // mass actions over the ticked items. See ./mass_actions.js.
     const mass = massActionBar(host.querySelector('.td-tablehost'), {
         noun: TRACKER ? 'tickets' : 'items',
+        toggle: host.querySelector('[data-a="select"]'),
         recordsOf: (indices, t) => indices.map((i) => byRef.get(t.config.rows[i]?.[REF_COL])).filter(Boolean)
             .map((m) => ITEMS.find((x) => Number(x.id) === Number(m.id)) || m).map(itemRecord),
         report: statusLine,

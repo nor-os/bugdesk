@@ -244,7 +244,7 @@ export async function massAction(records, id, { ask = defaultAsk, ...io } = {}) 
  * @param {() => Promise<void>|void} o.afterChange  reload and repaint after a run
  * @param {string} [o.noun='records']
  */
-export function massActionBar(before, { recordsOf, report, afterChange, noun = 'records' }) {
+export function massActionBar(before, { recordsOf, report, afterChange, noun = 'records', toggle = null }) {
     const bar = document.createElement('div');
     bar.className = 'bd-massbar';
     bar.hidden = true;
@@ -256,7 +256,24 @@ export function massActionBar(before, { recordsOf, report, afterChange, noun = '
 
     const current = () => (table ? recordsOf(table.getSelection(), table) : []);
 
+    // `toggle`: a labelled button in the page's own bar, beside "Save as
+    // filter", doing what the small icon in the table's corner does. The corner
+    // icon alone was too easy to miss.
+    const paintToggle = () => {
+        if (!toggle) return;
+        const on = !!table?.isSelectMode?.();
+        toggle.hidden = !table?.setSelectMode;
+        toggle.setAttribute('aria-pressed', String(on));
+        toggle.classList.toggle('ea-btn--primary', on);
+        toggle.title = on ? 'Stop selecting' : `Tick several ${noun} and act on them at once`;
+        toggle.innerHTML = `${icon(on ? 'close' : 'checklist')} ${on ? 'Done selecting' : 'Select'}`;
+    };
+    toggle?.addEventListener('click', () => {
+        if (table?.setSelectMode) table.setSelectMode(!table.isSelectMode());
+    });
+
     const paint = () => {
+        paintToggle();
         // A FlexDesk without select mode (before 0.12.0) draws no toggle: no bar.
         if (!table || !table.isSelectMode?.()) { bar.hidden = true; return; }
         bar.hidden = false;
