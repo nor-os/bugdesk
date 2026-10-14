@@ -13,7 +13,7 @@ subsystem: workflow
 labels: [workflow, settings]
 links: [relates-to STORY-0018, relates-to STORY-0007]
 created: 2026-10-14
-updated: 2026-10-14T08:19Z
+updated: 2026-10-14T08:21Z
 ---
 
 ## Description
@@ -110,3 +110,7 @@ Done: Settings › Flows now manages the flows on the page itself, with no windo
 - Edit workflow's pencil still opens the flow in a window, since that page is itself a window. Both use the same editor (mountFlowEditor).
 
 Checked in Edge on a scratch store: list, select, rename, add-a-step menu on top, new flow, remove, save (project.json written), leave and come back with changes kept, and search. No managed window opens. Suites: DOM 176 passed plus 1 failing, "right-click a board cell and filter the board by it", which fails the same way on a clean checkout of main before this commit; UI 218, tracker 34, check-graph OK, eslint 0 errors.
+
+### 2026-10-14T08:21Z · norman_agent
+
+Correction to the handback: the board right-click test is not failing. It broke only while FlexDesk 0.12.0 was vendored but not yet committed (the new checkbox column), and the STORY-0029 commit 6eb86c9 fixed it. On main at ba5370b, test-dom is 177 passed, 0 failed.
