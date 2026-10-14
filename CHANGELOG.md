@@ -107,8 +107,13 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   project's named flows are listed on the left — what each is for, its steps,
   and how many moves and actions use it — with a search and *New flow*, and the
   selected one's name and steps are edited on the right. One *Save* writes them
-  all; changes left unsaved are still there when you come back to the page. A
-  flow in use is not removed, and the page says what uses it. In Edit workflow a move or an action picks
+  all; changes left unsaved are still there when you come back to the page.
+  Right-click a flow to open, rename, duplicate or delete it; one in use is not
+  deleted, and the page says what uses it. Which records a flow is for is a
+  setting of the flow — *any record* (new flows' default: the fields bugs and
+  backlog items both have), or bugs or backlog items only, for their own fields
+  — and each list chip takes its colour. The same steps stored on several rows
+  (one action on three bug types) become one flow they share. In Edit workflow a move or an action picks
   its flow from a searchable list, makes a new one with *New flow…* or by typing
   a name that is not a flow yet, and opens the chosen one with its edit button.
   A flow's window is titled *Flow — <name>*, with the name editable in it. Flows

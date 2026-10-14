@@ -32,10 +32,10 @@ import {
 import { esc } from './data.js';
 import { appName } from '../core/app_identity.js';
 import { CONFIG } from './instance.js';
-import { customFields, STORE_TYPES } from './schema.js';
+import { STORE_TYPES } from './schema.js';
 import { attachSelect } from './select_field.js';
 import {
-    BLOCKS, CATEGORIES, DEFAULT_MASS_ACTIONS, SETTABLE, builtinMoves, checkFlow, configuredFlows, emptyFlow,
+    BLOCKS, CATEGORIES, DEFAULT_MASS_ACTIONS, builtinMoves, checkFlow, configuredFlows, emptyFlow, fieldChoices,
     liftInlineFlows, newFlowId, saveWorkflow, statusesOf, stepTypes, workflowConfig,
 } from './workflow.js';
 
@@ -575,9 +575,7 @@ export function mountFlowEditor(host, { store, types, graph = null, actions = fa
     // Insert a value: what earlier prompts answered, and the record's fields.
     const fieldGroup = {
         id: 'record', label: 'This record', sub: 'its value when the move is made',
-        items: [...SETTABLE[store], ['status', 'Status'], ['type', 'Type'], ['reporter', 'Reporter'], ['id', 'Id'],
-                ...types.flatMap((t) => customFields(store, t).map((f) => [f.name, f.label || f.name]))]
-            .filter(([n], i, a) => a.findIndex(([m]) => m === n) === i)
+        items: [...fieldChoices(store, types, { readable: true }), ['id', 'Id']]
             .map(([n, l]) => ({ label: l, type: 'field', ref: `\${record.${n}}` })),
     };
     let editor = null;

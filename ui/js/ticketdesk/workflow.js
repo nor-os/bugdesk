@@ -34,7 +34,7 @@
  */
 
 import { CONFIG, apiUrl } from './instance.js';
-import { customFields, customStatuses, isFinished, withCustomStatuses } from './schema.js';
+import { STORE_TYPES, customFields, customStatuses, isFinished, withCustomStatuses } from './schema.js';
 
 /* ── the configuration ──────────────────────────────────────────────── */
 
@@ -57,7 +57,17 @@ export function configuredMoves(store, type) {
 
 /** The project's named flows, of one store or of all (STORY-0028). */
 export const configuredFlows = (store = null, flows = W.flows) =>
-    (Array.isArray(flows) ? flows : []).filter((f) => f && (!store || f.store === store));
+    (Array.isArray(flows) ? flows : []).filter((f) => f && (!store || f.store === store || f.store === ANY_STORE));
+
+/**
+ * A flow FOR ANY RECORD — a bug or a backlog item. Which records a flow is for
+ * is a setting of the flow, not a kind of flow: "any" offers only what both
+ * stores have (assignee, labels, title, a question, a comment …), and is
+ * offered to every move and action; one for a store may use that store's own
+ * fields too. Either way it is checked again against each row that uses it.
+ */
+export const ANY_STORE = 'any';
+const ALL_TYPES = { bugs: STORE_TYPES.bugs.map(([t]) => t), backlog: STORE_TYPES.backlog.map(([t]) => t) };
 
 /**
  * A move's or an action's `flow` as a graph: the named flow its id names, or —
@@ -123,6 +133,11 @@ export function liftInlineFlows(wf) {
     for (const slot of flowSlots(wf)) {
         if (!slot.ref || typeof slot.ref !== 'object') continue;
         wf.flows = Array.isArray(wf.flows) ? wf.flows : [];
+        // The same steps on several rows — one action on three bug types, say —
+        // are ONE flow they share, not three copies to keep in step.
+        const same = JSON.stringify(slot.ref);
+        const twin = wf.flows.find((f) => f.store === slot.store && JSON.stringify(f.flow) === same);
+        if (twin) { slot.holder.flow = twin.id; n++; continue; }
         const label = String(slot.holder.label || '').trim() || 'Flow';
         const id = newFlowId(label, wf.flows);
         wf.flows.push({ id, label, store: slot.store, flow: slot.ref });
@@ -228,14 +243,28 @@ export const SETTABLE = {
 };
 const READABLE = [['status', 'Status'], ['type', 'Type'], ['reporter', 'Reporter']];
 
-/** The fields of a store's types, `[name, label]`, built-ins first. */
-function fieldChoices(store, types, { readable = false } = {}) {
+/** The fields of a store's types, `[name, label]`, built-ins first. A flow
+ *  for any record gets the fields both stores have. */
+export function fieldChoices(store, types, { readable = false } = {}) {
+    if (store === ANY_STORE) {
+        const backlog = new Set(fieldChoices('backlog', ALL_TYPES.backlog, { readable }).map(([n]) => n));
+        return fieldChoices('bugs', ALL_TYPES.bugs, { readable }).filter(([n]) => backlog.has(n));
+    }
     const out = [...SETTABLE[store]];
     if (readable) for (const r of READABLE) if (!out.some(([n]) => n === r[0])) out.push(r);
     for (const t of types) {
         for (const f of customFields(store, t)) if (!out.some(([n]) => n === f.name)) out.push([f.name, f.label || f.name]);
     }
     return out;
+}
+
+/** Every status the records may hold — for any record, the ones both stores have. */
+function statusesFor(store, types) {
+    if (store === ANY_STORE) {
+        const backlog = new Set(statusesFor('backlog', ALL_TYPES.backlog));
+        return statusesFor('bugs', ALL_TYPES.bugs).filter((x) => backlog.has(x));
+    }
+    return [...new Set(types.flatMap((t) => statusesOf(store, t)))];
 }
 
 const enumOf = (pairs, title, extra = {}) => ({
@@ -256,7 +285,7 @@ export const CATEGORIES = [
 export function stepTypes(store, types, { actions = false } = {}) {
     const fields = fieldChoices(store, types);
     const readable = fieldChoices(store, types, { readable: true });
-    const statuses = [...new Set(types.flatMap((t) => statusesOf(store, t)))];
+    const statuses = statusesFor(store, types);
     return [
         { type_id: 'start', label: 'Start', category: 'control', role: 'start', icon: 'play_arrow', ports: [OUT] },
         { type_id: 'end', label: 'End', category: 'control', role: 'end', icon: 'flag', ports: [IN],
@@ -334,7 +363,7 @@ export function checkFlow(graph, store, types, { actions = false } = {}) {
     const known = new Set(stepTypes(store, types, { actions }).map((t) => t.type_id));
     const settable = new Set(fieldChoices(store, types).map(([n]) => n));
     const readable = new Set(fieldChoices(store, types, { readable: true }).map(([n]) => n));
-    const statuses = new Set(types.flatMap((t) => statusesOf(store, t)));
+    const statuses = new Set(statusesFor(store, types));
     const ids = new Set(nodes.map((n) => n.id));
     for (const n of nodes) {
         const c = n.config || {};

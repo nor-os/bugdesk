@@ -73,7 +73,9 @@
 }
 
 .settings-page__content-inner {
-    max-width: 700px;
+    /* One width for every page — the Flows page's, which holds a list and
+       an editor side by side — so switching pages never moves the header. */
+    max-width: 1280px;
     margin: 0 auto;
 }
 

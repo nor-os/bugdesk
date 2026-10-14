@@ -109,10 +109,20 @@ static class RecordWorkflow
                     var store = Str(f?["store"]);
                     if (label.Length == 0) problems.Add(new(w, "a flow needs a name."));
                     if (!FlowId.IsMatch(id)) { problems.Add(new(w, $"'{label}': the flow id '{id}' must start with a letter or digit and use only a-z, 0-9 and -.")); continue; }
-                    if (!RecordSchema.TypesOf.ContainsKey(store)) { problems.Add(new(w, $"'{label}' is for '{store}', which is not bugs or backlog.")); continue; }
+                    if (store != AnyStore && !RecordSchema.TypesOf.ContainsKey(store)) { problems.Add(new(w, $"'{label}' is for '{store}', which is not bugs, backlog or any.")); continue; }
                     if (flows.ContainsKey(id)) { problems.Add(new(w, $"two flows have the id '{id}'.")); continue; }
                     flows[id] = (store, label.Length > 0 ? label : id, f?["flow"]);
-                    CheckFlow(f?["flow"], store, RecordSchema.TypesOf[store], w, label, schema, problems, allowStatus: true);
+                    if (store != AnyStore)
+                        CheckFlow(f?["flow"], store, RecordSchema.TypesOf[store], w, label, schema, problems, allowStatus: true);
+                    else
+                    {
+                        // For any record: what it does must make sense for both
+                        // stores. The same problem found in both is said once.
+                        var both = new List<Problem>();
+                        foreach (var (s, types) in RecordSchema.TypesOf)
+                            CheckFlow(f?["flow"], s, types, w, label, schema, both, allowStatus: true);
+                        problems.AddRange(both.Distinct());
+                    }
                 }
         }
 
@@ -146,7 +156,10 @@ static class RecordWorkflow
                         if (a?["when"] is JsonArray when)
                             foreach (var s in when.Select(Str))
                                 if (s != "*" && !known.Contains(s)) problems.Add(new(w, $"'{label}' is offered in '{s}', which is not a status of a {type}."));
-                        CheckRef(a?["flow"], store, new[] { type }, w, label, schema, problems, action: true, flows);
+                        // The same action on several types shares one flow: say which type
+                        // a problem is on, or three lines read the same.
+                        var typeWord = store == "bugs" && type == "task" ? "chore" : type;
+                        CheckRef(a?["flow"], store, new[] { type }, w, $"{typeWord} › {label}", schema, problems, action: true, flows);
                     }
                 }
             }
@@ -216,6 +229,9 @@ static class RecordWorkflow
         }
     }
 
+    /// <summary>A flow's <c>store</c> when it is for any record, bug or backlog item.</summary>
+    const string AnyStore = "any";
+
     static readonly System.Text.RegularExpressions.Regex FlowId = new("^[a-z0-9][a-z0-9-]{0,63}$");
 
     /// <summary>A row's <c>flow</c>: a named flow's id, or a graph stored inline.</summary>
@@ -232,7 +248,7 @@ static class RecordWorkflow
                 problems.Add(new(where, $"'{owner}' uses the flow '{id}', which does not exist."));
                 return;
             }
-            if (named.Store != store)
+            if (named.Store != store && named.Store != AnyStore)
             {
                 problems.Add(new(where, $"'{owner}' uses '{named.Label}', a flow for {named.Store}, not {store}."));
                 return;

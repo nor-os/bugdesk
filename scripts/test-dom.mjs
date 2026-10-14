@@ -3021,14 +3021,39 @@ console.log('\nWorkflow');
         };
         assert.equal(wf.liftInlineFlows(draft), 2);
         assert.deepEqual(draft.flows.map((f) => [f.id, f.label, f.store]),
-            [['close', 'Taken', 'bugs'], ['close-2', 'Close', 'bugs'], ['park', 'Park', 'backlog']], 'named after the row, ids unique');
-        assert.equal(draft.bugs.moves[0].flow, 'close-2');
+            [['close', 'Taken', 'bugs'], ['park', 'Park', 'backlog']],
+            'named after the row; the move whose steps ARE "Taken" now uses it, and the action\'s (other store) is its own');
+        assert.equal(draft.bugs.moves[0].flow, 'close');
         assert.equal(draft.actions.backlog.story[0].flow, 'park');
-        assert.deepEqual(wf.flowUses(draft, 'close').map((u) => u.owner), ['Bugs › Close']);
+        assert.deepEqual(wf.flowUses(draft, 'close').map((u) => u.owner), ['Bugs › Close', 'Bugs › Close']);
         assert.deepEqual(wf.flowUses(draft, 'park').map((u) => [u.owner, u.actions]), [['Story › Park (action)', true]]);
         assert.equal(wf.liftInlineFlows(draft), 0, 'nothing left to lift');
         assert.equal(wf.newFlowId('  Ask: why? ', [{ id: 'ask-why' }]), 'ask-why-2');
         assert.equal(wf.newFlowId('', []), 'flow');
+    });
+
+    await t('the same steps on several rows are lifted into ONE flow they share', () => {
+        const g = () => flow([{ id: 'c', type: 'clear-field', config: { field: 'assignee' } }], [['start', 'c']]);
+        const draft = { actions: { bugs: {
+            bug: [{ id: 'blocked', label: 'Blocked', flow: g() }],
+            regression: [{ id: 'blocked', label: 'Blocked', flow: g() }],
+            task: [{ id: 'blocked', label: 'Blocked', flow: g() }],
+        } } };
+        assert.equal(wf.liftInlineFlows(draft), 3);
+        assert.deepEqual(draft.flows.map((f) => f.id), ['blocked'], 'one flow, not blocked, blocked-2, blocked-3');
+        assert.equal(wf.flowUses(draft, 'blocked').length, 3);
+    });
+
+    await t('a flow for any record offers what both stores have, and every row may use it', () => {
+        const fields = wf.fieldChoices(wf.ANY_STORE, []).map(([n]) => n);
+        assert.ok(fields.includes('assignee') && fields.includes('labels'), 'what both have is offered');
+        assert.ok(!fields.includes('severity') && !fields.includes('phase'), 'what one store has is not');
+        const sets = (field) => flow([{ id: 's', type: 'set-field', config: { field, value: 'x' } }], [['start', 's']]);
+        assert.deepEqual(wf.checkFlow(sets('assignee'), wf.ANY_STORE, []), []);
+        assert.equal(wf.checkFlow(sets('severity'), wf.ANY_STORE, [])[0]?.code, 'unknown_field');
+        const flows = [{ id: 'a', store: 'any' }, { id: 'b', store: 'bugs' }, { id: 'k', store: 'backlog' }];
+        assert.deepEqual(wf.configuredFlows('bugs', flows).map((f) => f.id), ['a', 'b']);
+        assert.deepEqual(wf.configuredFlows('backlog', flows).map((f) => f.id), ['a', 'k']);
     });
 
     await t('the built-in table is what an unconfigured store already does', () => {

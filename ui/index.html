@@ -11,6 +11,14 @@
     <link href="vendor/material-symbols/material-symbols-outlined.css" rel="stylesheet" />
     <link href="vendor/marck-script/marck-script.css" rel="stylesheet" />
     <link href="vendor/sonsie-one/sonsie-one.css" rel="stylesheet" />
+    <!-- FlexDesk's tokens FIRST, bugdesk's own after: where both set a token
+         bugdesk's value wins, and every token bugdesk does not set — the flow
+         editors' tones, chips and signal colours, and whatever a later FlexDesk
+         adds — still has FlexDesk's value instead of none. (Only flexdesk.css
+         was loaded once, on the strength of a variable diff that came back
+         empty; the flow kit's 50-odd tokens arrived after it, and the flow
+         editors drew grey.) scripts/test-ui.mjs keeps the two in step. -->
+    <link href="vendor/flexdesk/tokens.css" rel="stylesheet" />
     <link href="css/tokens.css" rel="stylesheet" />
     <link href="css/base.css" rel="stylesheet" />
     <link href="css/components/controls.css" rel="stylesheet" />
@@ -24,11 +32,7 @@
          context menu, modal). Loaded BEFORE the tiling shell additions below
          so those bugdesk-specific overrides keep winning the cascade — same
          "loaded last so they win over legacy styles" rule those already
-         follow. Only flexdesk.css: bugdesk's own css/tokens.css already
-         defines every --twm-*/etc custom property flexdesk.css reads (a
-         repo-wide variable-name diff came back empty), so loading
-         vendor/flexdesk/tokens.css too would just fight bugdesk's own token
-         values for no benefit. -->
+         follow. Its tokens are loaded at the top, before bugdesk's own. -->
     <link href="css/components/tabs.css" rel="stylesheet" />
     <link href="css/sidebar.css" rel="stylesheet" />
     <link href="css/ecoagent_extra_modes.css" rel="stylesheet" />

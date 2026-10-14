@@ -1463,5 +1463,44 @@ t('deletion is distinguished from modification', () => {
 t('a deletion of another record does not read as ours', () =>
     assert.equal(live.eventDeleted(ev(file('bugs', 9, true)), 'bugs', 3), false));
 
+/* ── FlexDesk's tokens ─────────────────────────────────────────────
+ *
+ * flexdesk.css reads custom properties that bugdesk's own tokens.css never
+ * set — the flow editors' tones were the case that drew them grey — so the
+ * page loads FlexDesk's tokens.css first and its own after. A token flexdesk.css
+ * reads with no fallback must come from one of the two. */
+
+console.log("\nFlexDesk's tokens");
+
+const css = (...p) => readFileSync(join(ROOT, 'ui', ...p), 'utf8');
+const defined = (text) => new Set([...text.matchAll(/(--[a-z0-9-]+)\s*:/gi)].map((m) => m[1]));
+
+t('the page loads FlexDesk\'s tokens, and before its own', () => {
+    const html = css('index.html');
+    const fd = html.indexOf('href="vendor/flexdesk/tokens.css"');
+    const own = html.indexOf('href="css/tokens.css"');
+    assert.ok(fd >= 0, 'vendor/flexdesk/tokens.css is not loaded');
+    assert.ok(fd < own, 'FlexDesk\'s tokens must load first, so bugdesk\'s own values win');
+});
+
+t('every token flexdesk.css reads without a fallback is set somewhere', () => {
+    const have = defined(css('vendor', 'flexdesk', 'tokens.css'));
+    const walk = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+        e.isDirectory() ? walk(join(dir, e.name)) : e.name.endsWith('.css') ? [join(dir, e.name)] : []);
+    for (const f of walk(join(ROOT, 'ui', 'css'))) for (const v of defined(readFileSync(f, 'utf8'))) have.add(v);
+    const fdcss = css('vendor', 'flexdesk', 'flexdesk.css');
+    for (const v of defined(fdcss)) have.add(v);          // set by a rule of its own
+    const bare = new Set([...fdcss.matchAll(/var\(\s*(--[a-z0-9-]+)\s*\)/gi)].map((m) => m[1]));
+    const missing = [...bare].filter((v) => !have.has(v));
+    assert.deepEqual(missing, [], `read with no fallback and set nowhere: ${missing.join(', ')}`);
+});
+
+t('the flow editors\' tones are FlexDesk\'s unless bugdesk sets its own', () => {
+    const fd = defined(css('vendor', 'flexdesk', 'tokens.css'));
+    for (const tone of ['violet', 'teal', 'amber', 'grey']) {
+        assert.ok(fd.has(`--twm-flow-${tone}-bg`), `FlexDesk no longer sets --twm-flow-${tone}-bg`);
+    }
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
