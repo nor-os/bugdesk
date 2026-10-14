@@ -2,10 +2,10 @@
 id: 42
 type: story
 title: "The desktop window draws its own chrome: frameless, with BugDesk's top bar as the title bar"
-status: refined
+status: in-progress
 parent: 21
 phase:
-assignee:
+assignee: norman_agent
 reporter: norman
 due:
 points: 5
@@ -13,7 +13,7 @@ subsystem: desktop
 labels: [desktop]
 links: []
 created: 2026-10-14
-updated: 2026-10-14T18:01Z
+updated: 2026-10-14T18:02Z
 ---
 
 ## Description
@@ -73,6 +73,8 @@ and the drag area no longer depending on EcoSim's class names.
 ## History
 
 - 2026-10-14 · norman_agent · status: draft -> refined
+- 2026-10-14 · norman_agent · status: refined -> in-progress
+- 2026-10-14 · norman_agent · assignee: (unset) -> norman_agent
 
 ## Comments
 
