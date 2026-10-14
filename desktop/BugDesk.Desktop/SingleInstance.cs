@@ -27,7 +27,11 @@ sealed class SingleInstance : IDisposable
     public static SingleInstance? Acquire(string projectsFile)
     {
         var name = Name(projectsFile);
-        var mutex = new Mutex(initiallyOwned: true, @"Local\" + name, out var created);
+        // Local\ is the logon session on Windows, which is right. On Linux it is
+        // the POSIX session, and every terminal is one, so there it is Global\
+        // (the name carries the user).
+        var scope = OperatingSystem.IsWindows() ? @"Local\" : @"Global\";
+        var mutex = new Mutex(initiallyOwned: true, scope + name, out var created);
         if (!created)
         {
             // An abandoned mutex (the owner crashed) is ours for the taking.

@@ -83,6 +83,41 @@ suppresses the ICEs that want every per-user component keyed on an HKCU value
 (ICE38, ICE64, ICE91) and ICE60 (versioned non-font files). Neither package is
 signed, so SmartScreen warns on the first run.
 
+## Linux
+
+```
+desktop/linux/build.sh [version]
+```
+
+builds, into `desktop/out/`:
+
+| File | What it is |
+|---|---|
+| `bugdesk_<version>_amd64.deb` | the app in `/opt/bugdesk`, `bugdesk` on `PATH`, a launcher entry (`desktop/linux/bugdesk.desktop`) and its icon in `hicolor` |
+| `bugdesk-<version>-linux-x64.tar.gz` | the same app as a folder; run `./BugDesk` |
+
+Both are self-contained. What they need from the system is WebKitGTK 4.1 and
+GTK 3, which the `.deb` declares (`libwebkit2gtk-4.1-0`). Started without
+WebKitGTK, the app says which package to install and exits, rather than dying
+in Photino's native-library load. Run the script on a Linux file system or under
+WSL; it stages the package in a temporary folder because `dpkg-deb` refuses
+the permissions a Windows drive reports.
+
+The app is the same as on Windows, with these differences:
+
+- Its folder is `~/.config/BugDesk`.
+- Nothing touches the window handle (Photino's `WindowHandle` throws on
+  Linux); the shell fixes are Windows-only.
+- The single-instance mutex is `Global\` rather than `Local\`: on Linux,
+  `Local\` means the POSIX session, and every terminal is its own.
+- SIGTERM (a logout, `kill`) stops the server, and the window closes with it.
+- It runs through XWayland: under a Wayland session Photino hangs while
+  creating the window, so the app sets `GDK_BACKEND=x11` unless one is
+  already set. It sets it with libc's `setenv`, because .NET's
+  `SetEnvironmentVariable` does not reach native code on Unix.
+- Under WSLg the window opens at its minimum size (900 × 600). WSLg's window
+  manager refuses resizes, from Photino and from plain X11 alike.
+
 ## The icon
 
 `ui/assets/icons/bugdesk.ico` (16–256 px) and `bugdesk-256.png` (Linux) are

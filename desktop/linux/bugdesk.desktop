@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=BugDesk
+GenericName=Bug tracker and backlog
+Comment=Bugs and backlog, kept as markdown files in your repository
+Exec=bugdesk
+Icon=bugdesk
+Terminal=false
+Categories=Development;ProjectManagement;
+StartupWMClass=BugDesk

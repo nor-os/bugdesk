@@ -14,6 +14,7 @@
 // What the page can ask of the window goes over Photino's web messages as JSON
 // (NativeBridge.cs); see docs/desktop.md.
 
+using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.AspNetCore.Builder;
 using Photino.NET;
@@ -23,6 +24,22 @@ static class Desktop
     [STAThread]
     static int Main(string[] args)
     {
+        // Photino draws with WebKitGTK on Linux. Without it, the first window
+        // dies in a native-library load deep inside Photino; say what to install.
+        if (OperatingSystem.IsLinux() && !NativeLibrary.TryLoad("libwebkit2gtk-4.1.so.0", out _))
+        {
+            Console.Error.WriteLine("BugDesk needs WebKitGTK 4.1, which is not installed.\n"
+                + "  Debian, Ubuntu: sudo apt install libwebkit2gtk-4.1-0\n"
+                + "  Fedora:         sudo dnf install webkit2gtk4.1");
+            return 1;
+        }
+        // Under a Wayland session Photino hangs creating the window (seen in
+        // WSLg with WebKitGTK 2.52, with or without WebKit's DMA-BUF and
+        // compositing switches); through XWayland it works. Left alone when the
+        // user has chosen a backend. GTK reads the C environment, which .NET's
+        // SetEnvironmentVariable does not change on Unix, so this is libc's setenv.
+        if (OperatingSystem.IsLinux() && string.IsNullOrEmpty(Environment.GetEnvironmentVariable("GDK_BACKEND")))
+            setenv("GDK_BACKEND", "x11", 1);
         var data = AppData.Prepare();
         using var instance = SingleInstance.Acquire(data.ProjectsFile);
         if (instance is null)
@@ -69,16 +86,26 @@ static class Desktop
         if (Environment.GetEnvironmentVariable("BUGDESK_DESKTOP_MINIMIZED") == "1") window.SetMinimized(true);
 
         NativeBridge.Attach(window);
+        var windowOpen = true;
         window.RegisterWindowCreatedHandler((_, _) =>
         {
             if (OperatingSystem.IsWindows() && icon is not null) WindowsShell.SetWindowIcon(window.WindowHandle, icon);
             instance.Listen(() => window.Invoke(() => BringForward(window)));
             if (data.FirstRun) new Thread(() => ChooseFirstProject(window, url)) { IsBackground = true }.Start();
+            // The server can stop without the window: SIGTERM on Linux (a
+            // logout, `kill`) stops the ASP.NET host, not Photino. A window
+            // without its server is a dead page, so it closes too.
+            new Thread(() =>
+            {
+                serverThread.Join();
+                if (Volatile.Read(ref windowOpen)) window.Invoke(window.Close);
+            }) { IsBackground = true, Name = "BugDesk server watch" }.Start();
         });
 
         if (data.FirstRun) window.LoadRawString(FirstRunPage);
         else window.Load(url);
         window.WaitForClose();
+        Volatile.Write(ref windowOpen, false);
 
         // The clean stop: StopAsync ends the live-update streams and runs the
         // server's ApplicationStopped handlers, which flush the record caches;
@@ -89,6 +116,9 @@ static class Desktop
         serverThread.Join(TimeSpan.FromSeconds(2));
         return 0;
     }
+
+    [DllImport("libc", CharSet = CharSet.Ansi)]
+    static extern int setenv(string name, string value, int overwrite);
 
     /// <summary>
     /// The very first launch has no projects. Ask for the folder of one — the
