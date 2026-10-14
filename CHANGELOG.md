@@ -21,11 +21,16 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   in Settings › Workflow › Mass actions (`workflow.massActions`); unconfigured,
   every type offers the two.
 
-- **A desktop prototype** (STORY-0009, a spike). `desktop/BugDesk.Desktop`
-  opens BugDesk in a native Photino.NET window on Windows, with the server
-  running in the same process on a free loopback port. What it found (the host
-  bridge design, Linux and macOS, packaging and size) is in
-  `docs/desktop-spike.md`.
+- **The desktop app** (STORY-0025, after the STORY-0009 spike).
+  `desktop/BugDesk.Desktop` opens BugDesk in a native window on Windows, with
+  the server running in the same process on a free loopback port. One window
+  per user: a second launch brings the first forward. Closing it stops the
+  server cleanly, so an edit saved just before is on disk. Its `projects.toml`
+  and state live in `%AppData%\BugDesk`; the first launch asks for a project
+  folder with the native folder picker. It carries BugDesk's icon (new:
+  `ui/assets/icons/bugdesk.ico`) and its own AppUserModelID. The server's
+  startup is now `BugDeskServer.Run`, which the console server calls too. See
+  `docs/desktop.md`.
 
 - **Alerts** (STORY-0005). Settings › Alerts holds rules: a name, a store, a
   condition built in the filter editor (any field, custom ones included), a

@@ -3,9 +3,8 @@
 /// endpoint and its <c>Match</c>/<c>Snippet</c> helpers in Program.cs.
 ///
 /// <para>
-/// Their own file because Program.cs is top-level statements: a type declared
-/// among those has to follow every one of them, which would put these hundreds
-/// of lines away from the code that uses them.
+/// Their own file because Program.cs is one long method (BugDeskServer.Run),
+/// and a type cannot be declared inside a method.
 /// </para>
 /// </summary>
 

@@ -1,15 +1,17 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- STORY-0009 spike: BugDesk in a native window (Photino.NET), the server
-       in-process. Windows first, as SixShare.Desktop does; see
-       docs/desktop-spike.md for Linux and macOS. -->
+  <!-- BugDesk in a native window (Photino.NET), the server in-process; see
+       docs/desktop.md. Plain net10.0: the taskbar fixes are P/Invoke, so the
+       24 MB Windows SDK projection a -windows target pulls in is not needed. -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
-    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <RootNamespace>BugDesk.Desktop</RootNamespace>
+    <AssemblyName>BugDesk</AssemblyName>
+    <ApplicationIcon>..\..\ui\assets\icons\bugdesk.ico</ApplicationIcon>
     <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
 

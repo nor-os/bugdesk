@@ -2,6 +2,22 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
+// The server is a method rather than top-level statements, so that the desktop
+// app (desktop/BugDesk.Desktop) can run it inside its own process and stop it
+// cleanly when its window closes. Entry.cs is the console entry point. The body
+// below is deliberately NOT re-indented: it was top-level statements, its
+// helpers are still local functions, and re-indenting 2,700 lines would bury
+// every other change to this file.
+public static class BugDeskServer
+{
+/// <summary>
+/// Run BugDesk until it is stopped. <paramref name="built"/> is handed the app
+/// once it is built, before it starts listening: the desktop app keeps it, to
+/// call <c>StopAsync</c> when its window closes.
+/// </summary>
+public static void Run(string[] args, Action<WebApplication>? built = null)
+{
+
 // BugDesk bridge: serves the FlexDesk UI and exposes directories of markdown
 // records as JSON. The markdown files are the source of truth; this process only
 // reads and writes them.
@@ -2054,6 +2070,7 @@ app.MapGet("/api/events", async (HttpContext http, IHostApplicationLifetime life
 // fallback reported success instead — CSV export announced files it never wrote.
 // An unknown route is now a plain 404, which is what it is.
 
+built?.Invoke(app);
 app.Run();
 
 // ---- launch plumbing -------------------------------------------------------
@@ -2639,4 +2656,6 @@ static object FullItem(IReadOnlyList<BacklogItem> all, BacklogItem item)
                                due = c.Due, effectiveDue = EffectiveDue(all, c) })
             .ToList(),
     };
+}
+}
 }
