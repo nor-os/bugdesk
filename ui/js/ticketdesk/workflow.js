@@ -147,6 +147,71 @@ export function liftInlineFlows(wf) {
     return n;
 }
 
+/** A move's flow that asks for its message — what "needs a message" did. */
+export const askFlow = (prompt = '') => ({
+    nodes: [{ id: 'start', type: 'start', label: 'Start', config: {}, position: { x: 0, y: 0 } },
+            { id: 'message', type: 'require-message', label: 'Ask for the message', config: prompt ? { prompt } : {}, position: { x: 0, y: 0 } }],
+    connections: [{ source: 'start', sourcePort: 'out', target: 'message', targetPort: 'in' }],
+});
+
+/** The move table a `{store, type}` holds in a workflow, or null. */
+const movesOf = (wf, store, type) => (store === 'bugs' ? wf?.bugs?.moves : wf?.backlog?.[type]?.moves);
+
+/** How many of these tables' moves have no flow: every built-in one, and the
+ *  configured rows without a flow. */
+export function movesWithoutFlow(wf, tables) {
+    return tables.reduce((n, { store, type, builtin }) => {
+        const moves = movesOf(wf, store, type);
+        return n + (Array.isArray(moves) ? moves.filter((m) => !m.flow).length : builtin.length);
+    }, 0);
+}
+
+/**
+ * Give every move a flow, in place (an editor's draft): a table that moves the
+ * built-in way is written down first, from `builtin`; then each move without a
+ * flow gets one named after it that does what the move did — asks for its
+ * message, with the move's own question, or nothing yet. The asking moves INTO
+ * the flow, so it is asked once, there. The same steps under the same name are
+ * one flow every such move shares; they name no field, so they are for any
+ * record. Returns how many moves got a flow.
+ *
+ * @param {object} wf
+ * @param {Array<{store: string, type?: string, builtin: Array}>} tables
+ */
+export function seedMoveFlows(wf, tables) {
+    let n = 0;
+    wf.flows = Array.isArray(wf.flows) ? wf.flows : [];
+    for (const { store, type, builtin, label: where = '' } of tables) {
+        let moves = movesOf(wf, store, type);
+        if (!Array.isArray(moves)) {
+            moves = builtin.map((m) => ({ ...m }));
+            if (store === 'bugs') wf.bugs = { ...(wf.bugs || {}), moves };
+            else { wf.backlog = wf.backlog || {}; wf.backlog[type] = { ...(wf.backlog[type] || {}), moves }; }
+        }
+        for (const m of moves) {
+            const { prompt = '' } = m;
+            delete m.prompt;
+            if (m.flow) continue;
+            const graph = m.message ? askFlow(prompt) : emptyFlow();
+            const label = String(m.label || '').trim() || 'Move';
+            const same = JSON.stringify(graph);
+            const twin = wf.flows.find((f) => (f.label || '') === label && JSON.stringify(f.flow) === same
+                && (f.store === ANY_STORE || f.store === store));
+            // Two that share a name but not their steps (a bug's Reopen asks
+            // why, an item's does not) are told apart by where they are from.
+            const named = !twin && wf.flows.some((f) => (f.label || '') === label)
+                ? `${label} — ${String(where).split(' › ')[0] || store}` : label;
+            const twin2 = twin || wf.flows.find((f) => (f.label || '') === named && JSON.stringify(f.flow) === same);
+            const id = twin2 ? twin2.id : newFlowId(named, wf.flows);
+            if (!twin2) wf.flows.push({ id, label: named, store: ANY_STORE, flow: graph });
+            m.flow = id;
+            m.message = false;
+            n++;
+        }
+    }
+    return n;
+}
+
 /** The custom actions of a store and type (STORY-0007). */
 export const configuredActions = (store, type) => {
     const list = W.actions?.[store]?.[type];

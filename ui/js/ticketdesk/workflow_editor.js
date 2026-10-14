@@ -34,8 +34,9 @@ import { appName } from '../core/app_identity.js';
 import { CONFIG } from './instance.js';
 import { STORE_TYPES } from './schema.js';
 import { attachSelect } from './select_field.js';
+import { builtinTable } from './builtin_moves.js';
 import {
-    BLOCKS, CATEGORIES, DEFAULT_MASS_ACTIONS, builtinMoves, checkFlow, configuredFlows, emptyFlow, fieldChoices,
+    BLOCKS, CATEGORIES, DEFAULT_MASS_ACTIONS, checkFlow, configuredFlows, emptyFlow, fieldChoices, flowGraph,
     liftInlineFlows, newFlowId, saveWorkflow, statusesOf, stepTypes, workflowConfig,
 } from './workflow.js';
 
@@ -134,6 +135,14 @@ export const stepsWord = (flow) => { const n = stepCount(flow); return `${n} ste
 
 /** The stores flows can be made for here, `{store, types, label}` — the types a
  *  named flow is checked against are every type of its store offered here. */
+/** The move tables here, each with what it offers while it moves the built-in
+ *  way: `{key, store, type, types, label, builtin}` — for seedMoveFlows. */
+export function moveTablesHere() {
+    return tablesHere().filter(([key]) => !isActions(key) && !isMass(key)).map(([key, store, types, label]) => ({
+        key, store, type: store === 'bugs' ? null : types[0], types, label, builtin: builtinTable(store, types),
+    }));
+}
+
 export function flowStoresHere() {
     const out = [];
     for (const [key, store, types, label] of tablesHere()) {
@@ -308,7 +317,9 @@ export function openWorkflowEditor({ eventBus = null, start = '' } = {}) {
                 <input type="text" data-k="label" value="${esc(m.label || '')}" placeholder="Hand to testing" aria-label="Label">
                 <select data-k="to" data-sel="to:${i}">${statuses.map((s) =>
                     `<option value="${esc(s)}"${s === m.to ? ' selected' : ''}>${esc(s)}</option>`).join('')}</select>
-                <label class="bd-schema__req"><input type="checkbox" data-k="message" ${m.message ? 'checked' : ''}></label>
+                ${(flowGraph(m.flow, draft.flows)?.nodes || []).some((n) => n.type === 'require-message')
+                    ? `<label class="bd-schema__req" title="Its flow asks for the message (an Ask for the message step)"><input type="checkbox" checked disabled></label>`
+                    : `<label class="bd-schema__req"><input type="checkbox" data-k="message" ${m.message ? 'checked' : ''}></label>`}
                 ${flowCell('move', i, m)}
                 <button type="button" class="bd-schema__rm" data-rm="${i}" title="Remove this move">${icon('close')}</button>
             </div>`).join('')
@@ -418,7 +429,9 @@ export function openWorkflowEditor({ eventBus = null, start = '' } = {}) {
         }
         if (b.dataset.act === 'customise') {
             const [, store, types] = curSpec();
-            setTable(draft, cur, builtinMoves(store, types[0]));
+            // What the records offer now, custom statuses included; the message
+            // box keeps asking what it asked (its default question, per move).
+            setTable(draft, cur, builtinTable(store, types).map(({ prompt: _prompt, ...m }) => m));
             render(); return;
         }
         if (b.dataset.act === 'builtin') { setTable(draft, cur, null); render(); return; }

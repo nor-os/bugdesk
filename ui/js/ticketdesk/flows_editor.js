@@ -23,6 +23,12 @@
  *
  * Right-click a flow in the list to open, rename, duplicate or delete it.
  *
+ * EVERY TRANSITION CAN HAVE A FLOW: while some move has none — every move of a
+ * type that moves the built-in way, say — the page offers to give each one its
+ * own, starting from what it does now (seedMoveFlows): a move that asks for a
+ * message gets a flow that asks it, with the same question, so the flow is
+ * where that move is extended.
+ *
  * Saved, like the rest of the workflow, in `.bugdesk/project.json`.
  */
 
@@ -31,8 +37,11 @@ import { showContextMenu } from '@flexdesk/widgets';
 import { esc } from './data.js';
 import { appName } from '../core/app_identity.js';
 import { attachSelect } from './select_field.js';
-import { ANY_STORE, checkFlow, emptyFlow, flowSlots, flowUses, liftInlineFlows, newFlowId, saveWorkflow, workflowConfig } from './workflow.js';
-import { flowStoresHere, mountFlowEditor, stepsWord } from './workflow_editor.js';
+import {
+    ANY_STORE, checkFlow, emptyFlow, flowSlots, flowUses, liftInlineFlows, movesWithoutFlow, newFlowId, saveWorkflow,
+    seedMoveFlows, workflowConfig,
+} from './workflow.js';
+import { flowStoresHere, mountFlowEditor, moveTablesHere, stepsWord } from './workflow_editor.js';
 
 /** Each "for" its tone (FlexDesk's flow tones) — the list's chips. */
 const TONE = { [ANY_STORE]: 'violet', bugs: 'amber', backlog: 'teal' };
@@ -58,6 +67,7 @@ function baseline() {
  */
 export function mountFlowsManager(el, { eventBus = null } = {}) {
     const stores = flowStoresHere();
+    const tables = moveTablesHere();
     const ANY = { store: ANY_STORE, label: 'Any record', types: [] };
     // "Any record" only means something where there are two kinds of record.
     const choices = stores.length > 1 ? [ANY, ...stores] : stores;
@@ -89,6 +99,7 @@ export function mountFlowsManager(el, { eventBus = null } = {}) {
                 <button type="button" class="ea-btn" data-act="discard">Discard changes</button>
                 <button type="button" class="ea-btn ea-btn--primary" data-act="save">Save</button>
             </div>
+            <div data-slot="seed"></div>
             <div data-slot="problems"></div>
             <div class="bd-flowsmgr__split">
                 <div class="bd-flowsmgr__list" data-slot="list" aria-label="Flows"></div>
@@ -108,6 +119,19 @@ export function mountFlowsManager(el, { eventBus = null } = {}) {
         $('state').textContent = note || (changed ? 'Unsaved changes' : '');
         el.querySelector('[data-act="save"]').disabled = !changed;
         el.querySelector('[data-act="discard"]').disabled = !changed;
+    };
+
+    const renderSeed = () => {
+        const n = movesWithoutFlow(draft, tables);
+        const builtin = tables.filter((t) => !Array.isArray(t.store === 'bugs' ? draft.bugs?.moves : draft.backlog?.[t.type]?.moves));
+        $('seed').innerHTML = n ? `<div class="bd-flowsmgr__seed">${icon('alt_route')}
+            <span>${n} transition${n === 1 ? ' has' : 's have'} no flow yet${builtin.length
+                ? ` — ${builtin.map((t) => esc(t.label)).join(', ')} move${builtin.length === 1 ? 's' : ''} the built-in way, which only changes the status${
+                    builtin.some((t) => t.store === 'bugs') ? ' and, for bugs, asks for a message' : ''}`
+                : ''}. Give each one a flow that does what it does now, to extend it here.${builtin.length
+                ? ' Their moves are then written down in Edit workflow, as yours to change.' : ''}</span>
+            <button type="button" class="ea-btn" data-act="seed">${icon('auto_fix_high')} Give every transition a flow</button>
+        </div>` : '';
     };
 
     const renderProblems = () => {
@@ -210,7 +234,7 @@ export function mountFlowsManager(el, { eventBus = null } = {}) {
 
     const renderAll = () => {
         if (!current()) selected = shown()[0]?.id ?? null;
-        renderList(); renderProblems(); renderDetail(); renderState();
+        renderSeed(); renderList(); renderProblems(); renderDetail(); renderState();
     };
 
     const save = async () => {
@@ -339,6 +363,12 @@ export function mountFlowsManager(el, { eventBus = null } = {}) {
             return;
         }
         if (b.dataset.act === 'remove') { remove(selected); return; }
+        if (b.dataset.act === 'seed') {
+            const n = seedMoveFlows(draft, tables);
+            note = `${n} transition${n === 1 ? '' : 's'} now ha${n === 1 ? 's' : 've'} a flow — Save to keep them.`;
+            renderAll();
+            return;
+        }
         if (b.dataset.act === 'discard') {
             draft = JSON.parse(base);
             problems = [];

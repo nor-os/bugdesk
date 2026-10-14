@@ -3044,6 +3044,36 @@ console.log('\nWorkflow');
         assert.equal(wf.flowUses(draft, 'blocked').length, 3);
     });
 
+    await t('every transition gets a flow that does what it did — the message moves into it (STORY-0028)', async () => {
+        const { builtinTable } = await import(join(UI, 'ticketdesk', 'builtin_moves.js'));
+        const bugs = builtinTable('bugs', ['bug', 'regression', 'task']);
+        assert.ok(bugs.some((m) => m.from === 'open' && m.to === 'closed' && m.message && /Close message/.test(m.prompt)),
+            'the built-in table carries each move\'s own question');
+        const draft = {};
+        const tables = [{ store: 'bugs', type: null, label: 'Bugs', builtin: bugs },
+                        { store: 'backlog', type: 'story', label: 'Backlog › Story', builtin: builtinTable('backlog', ['story']) }];
+        assert.equal(wf.movesWithoutFlow(draft, tables), tables[0].builtin.length + tables[1].builtin.length);
+        const n = wf.seedMoveFlows(draft, tables);
+        assert.equal(n, tables[0].builtin.length + tables[1].builtin.length);
+        assert.equal(wf.movesWithoutFlow(draft, tables), 0, 'nothing left without a flow');
+        assert.ok(draft.bugs.moves.every((m) => m.flow && m.message === false && !('prompt' in m)), 'the asking moved into the flow');
+        const close = draft.flows.filter((f) => f.label === 'Close');
+        assert.equal(close.length, 1, 'every Close shares one flow');
+        assert.equal(wf.flowUses(draft, close[0].id).length, draft.bugs.moves.filter((m) => m.label === 'Close').length);
+        assert.equal(close[0].flow.nodes[1].type, 'require-message');
+        const reopen = draft.flows.filter((f) => /^Reopen/.test(f.label)).map((f) => f.label).sort();
+        assert.deepEqual(reopen, ['Reopen', 'Reopen — Backlog'], 'same name, different steps: told apart');
+        // It still asks, with the question the move asked before.
+        wf.setWorkflow(draft);
+        const move = wf.movesFor('bugs', 'bug', 'open').find((m) => m.to === 'closed');
+        let asked = null;
+        const patch = await wf.planMove({ store: 'bugs', record: { status: 'open' }, move,
+            ask: async () => null, askMessage: async (prompt) => { asked = prompt; return { comment: 'fixed' }; } });
+        assert.match(asked, /Close message/);
+        assert.deepEqual(patch, { status: 'closed', comment: 'fixed' });
+        wf.setWorkflow(null);
+    });
+
     await t('a flow for any record offers what both stores have, and every row may use it', () => {
         const fields = wf.fieldChoices(wf.ANY_STORE, []).map(([n]) => n);
         assert.ok(fields.includes('assignee') && fields.includes('labels'), 'what both have is offered');
