@@ -2,18 +2,18 @@
 id: 42
 type: story
 title: "The desktop window draws its own chrome: frameless, with BugDesk's top bar as the title bar"
-status: draft
+status: refined
 parent: 21
 phase:
 assignee:
 reporter: norman
 due:
-points:
+points: 5
 subsystem: desktop
 labels: [desktop]
 links: []
 created: 2026-10-14
-updated: 2026-10-14T17:52Z
+updated: 2026-10-14T18:01Z
 ---
 
 ## Description
@@ -51,7 +51,8 @@ What BugDesk has to do:
   Aero Snap and Win+arrow keys, double-click to maximise, the window shadow and
   rounded corners on Windows 11, the system menu (Alt+Space), and the taskbar's
   minimise/restore. Each needs a stated result: works, replaced, or accepted as lost.
-- Linux (WebKitGTK under X11/XWayland) needs the same pass, or stays native there.
+- Linux keeps its native frame in this story. WebKitGTK under XWayland is a
+  separate pass, and WSLg can't verify window sizes anyway.
 - Amend STORY-0026's criterion and `docs/desktop.md` once this is decided.
 
 The FlexDesk side is FlexDesk STORY-0026 (`../FlexDesk/backlog/STORY-0026.md`):
@@ -60,9 +61,18 @@ and the drag area no longer depending on EcoSim's class names.
 
 ## Acceptance criteria
 
-_(not refined yet)_
+- [ ] In the Windows desktop window there is no OS title bar. BugDesk's top bar is the top edge of the window, with minimise, maximise/restore and close buttons at its right, and dragging an empty part of it moves the window
+- [ ] Dragging the top bar to a screen edge snaps the window like a native one (half screen, maximised, Windows 11 snap layouts on hover over maximise), and Win+←/→/↑/↓ work
+- [ ] Double-clicking an empty part of the top bar maximises and restores, and the maximise button's icon follows the state however it changed (button, double-click, snap, Win+↑)
+- [ ] The window resizes from all four edges and corners, with the edge staying under the pointer during the drag, and not below 900×600
+- [ ] The window keeps its shadow and, on Windows 11, its rounded corners; maximised, it fills the work area without covering the taskbar or losing a strip of pixels at any edge
+- [ ] Alt+F4 and the close button both shut down cleanly, as closing does today. Clicking the taskbar button minimises and restores the window, and the size, position and maximised state still come back on the next start
+- [ ] In a browser tab, and in the Linux desktop window, the top bar is exactly what it is today, with no window buttons
+- [ ] `docs/desktop.md` describes the frameless window and why Linux keeps its frame, and STORY-0026's "native title bar only" criterion is amended to point here
 
 ## History
+
+- 2026-10-14 · norman_agent · status: draft -> refined
 
 ## Comments
 
@@ -72,3 +82,15 @@ Filed at norman's request after comparing with EcoSim's frameless window. The
 FlexDesk half is FlexDesk STORY-0026. Refinement should start from the trial:
 what Photino's chromeless mode does to snapping, resizing and the shadow in
 WebView2.
+
+### 2026-10-14T18:01Z · norman_agent
+
+Refined: 8 acceptance criteria, 5 points, under EPIC-0021. The criteria are
+written against what a native window does, so the trial decides how, not
+whether, each one holds: Photino's own chromeless mode, or the native frame
+kept with its title bar removed (the window keeps its resize border, snapping,
+shadow and rounded corners, and the top bar hands drags and resizes to Windows).
+Linux is left out on purpose: it keeps the native frame here. If the trial
+shows a criterion can't be met with Photino, that goes back to norman before
+anything is built against it. FlexDesk's half (the host reporting custom chrome,
+the buttons' markup and CSS, the drag area's names) stays FlexDesk STORY-0026.
