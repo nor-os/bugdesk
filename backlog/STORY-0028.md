@@ -13,7 +13,7 @@ subsystem: workflow
 labels: [workflow, settings]
 links: [relates-to STORY-0018, relates-to STORY-0007]
 created: 2026-10-14
-updated: 2026-10-14T08:21Z
+updated: 2026-10-14T08:43Z
 ---
 
 ## Description
@@ -114,3 +114,18 @@ Checked in Edge on a scratch store: list, select, rename, add-a-step menu on top
 ### 2026-10-14T08:21Z · norman_agent
 
 Correction to the handback: the board right-click test is not failing. It broke only while FlexDesk 0.12.0 was vendored but not yet committed (the new checkbox column), and the STORY-0029 commit 6eb86c9 fixed it. On main at ba5370b, test-dom is 177 passed, 0 failed.
+
+### 2026-10-14T08:43Z · norman_agent
+
+Second review round from norman, done in 162a220 on main:
+
+- Colours: BugDesk never loaded FlexDesk's tokens.css, and its own lacked the flow kit's ~50 tokens (step tones, chips, signal colours), so the flow editors drew grey. FlexDesk's tokens now load first and BugDesk's own after; test-ui checks the order and that every token flexdesk.css reads is set.
+- Right-click a flow: Open, Rename, Duplicate, Delete (greyed out while something uses it).
+- "Bug flow vs backlog flow" is now a setting of the flow: For = Any record (new flows' default; the fields both stores have, offered to every move and action), Bugs or Backlog (that store's own fields too). The server accepts store "any" and checks it against both stores. One New flow button. The list chips take the tone of the For setting.
+- Three "Blocked" flows: the project's Blocked action on Bug, Regression and Chore carried three identical copies of its flow, and lifting made one named flow per copy. Identical flows now lift into ONE shared flow ("Blocked", used by 3).
+- Every Settings page now has the Flows page's width (1280px max).
+- A refusal on a row now names its type ("regression › Blocked") and links to the flow.
+
+Checked in Edge on a scratch store set up like the real one (three Blocked actions). Suites: DOM 180, UI 221, tracker 34, check-graph OK.
+
+Open question to norman: "flows for all transitions". This project configures no moves, so its transitions are the built-in ones, which only change the status (and ask for a message); there is no flow to show for them.
