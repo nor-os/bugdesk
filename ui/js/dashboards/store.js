@@ -37,12 +37,13 @@ export async function deleteShared(id) {
 }
 
 /* ── personal dashboards ────────────────────────────────────────────
- * One person's own dashboards, in `dashboards.json` of their profile's state
- * directory (`.bugdesk/state-<slug>/`, beside the window layout), through the
- * same workspace_state endpoints the WM and the alert log use. That directory
- * is git-ignored (`.bugdesk/.gitignore` ignores everything but project.json),
- * so a personal dashboard never reaches a commit, and another profile on the
- * same repo reads its own file, never this one.
+ * One person's own dashboards, in `dashboards.json` of their profile's folder
+ * in BugDesk's own state directory, through the personal_state endpoints. Not
+ * in a project's `.bugdesk/`: a personal dashboard reads the tracker and any
+ * project, so it is listed in every project and in the tracker alike (the
+ * server folds the old per-project files in; see StoreRegistry.ReadPersonal).
+ * It never reaches a commit, and another profile reads its own file, never
+ * this one.
  *
  * File shape: `{ "version": 1, "dashboards": [ <entry as in project.json> ] }`.
  * Saved one dashboard at a time, re-reading the file first, so another tab's
@@ -51,7 +52,7 @@ export async function deleteShared(id) {
  */
 
 async function readPersonalText() {
-    const j = await call('/workspace_state_read', { method: 'POST', body: JSON.stringify({ path: PERSONAL_FILE }) });
+    const j = await call('/personal_state_read', { method: 'POST', body: JSON.stringify({ path: PERSONAL_FILE }) });
     return typeof j.result === 'string' ? j.result : null;
 }
 
@@ -66,7 +67,7 @@ async function editPersonal(change) {
     const { doc, broken } = parsePersonal(await readPersonalText());
     if (broken) throw new Error(`${broken}; it is not written over`);
     doc.dashboards = change(doc.dashboards);
-    const j = await call('/workspace_state_write', {
+    const j = await call('/personal_state_write', {
         method: 'POST', body: JSON.stringify({ path: PERSONAL_FILE, data: `${JSON.stringify(doc, null, 2)}\n` }),
     });
     if (j.result?.ok !== true) throw new Error('no profile is active, so personal dashboards cannot be saved');

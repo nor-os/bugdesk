@@ -1,3 +1,6 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
+
 /// <summary>
 /// One set of records BugDesk serves: a PROJECT (a bug store and/or a backlog,
 /// usually inside a repo) or the TRACKER (the one global store of tickets, which
@@ -111,6 +114,7 @@ sealed class StoreRegistry
     readonly ILogger _log;
     readonly string? _envUser, _envHuman, _envAgent;
     readonly string _lastUsedPath;
+    readonly string _stateDir;
 
     /// <summary>A project named on the command line (<c>--bugs-dir</c> and friends)
     /// that projects.toml does not list. Served for this run only, never written.</summary>
@@ -132,6 +136,7 @@ sealed class StoreRegistry
         _envUser = Env("BUGDESK_USER");
         _envHuman = Env("BUGDESK_HUMAN");
         _envAgent = Env("BUGDESK_AGENT");
+        _stateDir = stateDir;
         _lastUsedPath = Path.Combine(stateDir, "last-project");
     }
 
@@ -207,6 +212,99 @@ sealed class StoreRegistry
     {
         try { return System.IO.File.Exists(_lastUsedPath) ? System.IO.File.ReadAllText(_lastUsedPath).Trim() : null; }
         catch (IOException) { return null; }
+    }
+
+    /* ── personal state that is not a project's ─────────────────────────
+     * Some of what is yours belongs to no single project: your personal
+     * dashboards read the tracker and every project alike, so keeping them in
+     * one project's .bugdesk/state-<slug>/ showed them in that project only.
+     * They live in BugDesk's own state directory instead (beside last-project,
+     * one folder per profile), which every project and the tracker share.
+     */
+
+    /// <summary>Files that moved here from the stores' state folders, and are
+    /// folded in from there on read (see <see cref="FoldLegacyDashboards"/>).</summary>
+    const string DashboardsFile = "dashboards.json";
+
+    public string? ReadPersonal(string? slug, string path)
+    {
+        var file = PersonalPath(slug, path);
+        if (file is null) return null;
+        lock (_gate)
+        {
+            if (Path.GetFileName(file) == DashboardsFile) FoldLegacyDashboards(slug!, file);
+            return System.IO.File.Exists(file) ? System.IO.File.ReadAllText(file) : null;
+        }
+    }
+
+    public bool WritePersonal(string? slug, string path, string data)
+    {
+        var file = PersonalPath(slug, path);
+        if (file is null) return false;
+        lock (_gate)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+            System.IO.File.WriteAllText(file, data);
+        }
+        return true;
+    }
+
+    /// <summary>Only the file name is used, as in UserStore.ReadState, so
+    /// nothing a request sends can leave the profile's folder.</summary>
+    string? PersonalPath(string? slug, string path)
+    {
+        if (slug is null) return null;                          // nameless run — nothing to key on
+        var name = Path.GetFileName(path.Replace('\\', '/'));
+        if (string.IsNullOrWhiteSpace(name) || name is "." or "..") return null;
+        return Path.Combine(_stateDir, $"state-{slug}", name);
+    }
+
+    /// <summary>
+    /// Personal dashboards used to be kept per store. Every project's and the
+    /// tracker's old file is merged into the shared one — entries whose id is
+    /// already there are left out, so a dashboard copied into two stores comes
+    /// over once — and renamed aside, so it is folded in exactly once and stays
+    /// on disk. A file that does not parse, on either side, is left alone.
+    /// </summary>
+    void FoldLegacyDashboards(string slug, string file)
+    {
+        var configs = Definitions.Select(d => Plan(d).Config).ToList();
+        if (TrackerPath is { } t) configs.Add(PlanTracker(t).Config);
+        var legacy = configs.Select(c => Path.Combine(c, $"state-{slug}", DashboardsFile))
+            .Distinct(StringComparer.OrdinalIgnoreCase).Where(System.IO.File.Exists).ToList();
+        if (legacy.Count == 0) return;
+
+        JsonObject doc;
+        try
+        {
+            doc = System.IO.File.Exists(file)
+                ? JsonNode.Parse(System.IO.File.ReadAllText(file)) as JsonObject ?? throw new JsonException()
+                : new JsonObject { ["version"] = 1, ["dashboards"] = new JsonArray() };
+            if (doc["dashboards"] is not JsonArray) throw new JsonException();
+        }
+        catch (JsonException) { return; }
+        var list = (JsonArray)doc["dashboards"]!;
+
+        foreach (var old in legacy)
+        {
+            try
+            {
+                if (JsonNode.Parse(System.IO.File.ReadAllText(old))?["dashboards"] is not JsonArray entries) continue;
+                foreach (var e in entries)
+                {
+                    var id = (e as JsonObject)?["id"]?.GetValueKind() == JsonValueKind.String ? (string?)e!["id"] : null;
+                    if (id is not null && list.Any(x => (x as JsonObject)?["id"]?.GetValueKind() == JsonValueKind.String
+                                                        && (string?)x!["id"] == id)) continue;
+                    list.Add(e?.DeepClone());
+                }
+                Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+                System.IO.File.WriteAllText(file, $"{doc.ToJsonString(new JsonSerializerOptions { WriteIndented = true })}\n");
+                System.IO.File.Move(old, old + ".migrated", overwrite: true);
+                _log.LogInformation("BugDesk: personal dashboards in {old} moved to {file}", old, file);
+            }
+            catch (JsonException) { /* left where it is, for anyone who wants to look */ }
+            catch (IOException ex) { _log.LogWarning(ex, "BugDesk: could not move personal dashboards from {old}", old); }
+        }
     }
 
     /// <summary>Where a store's files are — cheap to work out on every request,

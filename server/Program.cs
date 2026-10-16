@@ -2156,6 +2156,25 @@ app.MapPost("/api/workspace_state_write", async (HttpRequest req) =>
     return Results.Json(new { ok = true, result = new { ok = wrote } }, json);
 });
 
+// The same pair for what is yours across every project and the tracker — your
+// personal dashboards. Same shapes, but one folder whichever store asks; see
+// StoreRegistry.ReadPersonal.
+app.MapPost("/api/personal_state_read", async (HttpRequest req) =>
+{
+    var body = await JsonSerializer.DeserializeAsync<Dictionary<string, JsonElement>>(req.Body, json) ?? new();
+    var path = body.TryGetValue("path", out var p) ? p.GetString() ?? "" : "";
+    return Results.Json(new { ok = true, result = stores.ReadPersonal(Req.Store.Users.ActiveSlug, path) }, json);
+});
+
+app.MapPost("/api/personal_state_write", async (HttpRequest req) =>
+{
+    var body = await JsonSerializer.DeserializeAsync<Dictionary<string, JsonElement>>(req.Body, json) ?? new();
+    var path = body.TryGetValue("path", out var p) ? p.GetString() ?? "" : "";
+    var data = body.TryGetValue("data", out var d) ? d.GetString() ?? "" : "";
+    var wrote = stores.WritePersonal(Req.Store.Users.ActiveSlug, path, data);
+    return Results.Json(new { ok = true, result = new { ok = wrote } }, json);
+});
+
 // ---- Live updates: the stream ---------------------------------------------
 // One long-lived response per open browser.
 //
