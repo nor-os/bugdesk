@@ -1258,16 +1258,101 @@ function mountItem(host, props, ctx) {
         box.hidden = childTypesFor(item.type).length === 0 && kids.length === 0;
         $('[data-slot="children"]').innerHTML = kids.length
             ? kids.map((c) => `
-                <div class="bd-childrow">
+                <div class="bd-childrow" data-child="${c.id}">
                     ${typeGlyph(c.type)}
                     <button type="button" class="bd-item__ref" data-goto="${c.id}">${esc(itemRef(c))}</button>
                     <span class="bd-childrow__title">${esc(c.title)}</span>
-                    <span class="td-dim">${esc(c.assignee || '')}</span>
-                    ${TRACKER ? duePill(c) : `<span class="td-dim">${esc(c.points || '')}</span>`}
+                    <span class="td-dim bd-childrow__who">${esc(c.assignee || '')}</span>
+                    ${TRACKER ? (duePill(c) || '<span></span>') : `<span class="td-dim bd-childrow__points">${esc(c.points || '')}</span>`}
                     ${statusPill(c.status)}
                 </div>`).join('')
-            : '<div class="td-dim">No children yet.</div>';
+            : '<div class="td-dim bd-children__empty">No children yet.</div>';
     };
+
+    /** Re-read only the children: a full apply() would throw away unsaved edits
+     *  to THIS record for a change made to one of its children. */
+    const refreshChildren = async () => {
+        try {
+            const fresh = await fetchItem(item.id);
+            item.childItems = fresh.childItems;
+            renderChildren();
+        } catch (err) { statusLine(`Reload failed: ${err?.message || err}`); }
+    };
+
+    /* The board's row menu, for one child: its moves and actions, the ways to
+       open it, and the record operations that make sense away from the board. */
+    const onChildMenu = (e) => {
+        const row = e.target.closest('[data-child]');
+        if (!row) return;
+        const cid = Number(row.dataset.child);
+        const model = ITEMS.find((x) => Number(x.id) === cid)
+            || (item.childItems || []).find((x) => Number(x.id) === cid);
+        if (!model) return;
+        e.preventDefault();
+        const ref = itemRef(model);
+        const props = { id: String(model.id), label: itemLabel(model) || ref };
+        const moves = itemMovesFor(model);
+        const acts = actionsFor('backlog', model.type, model.status);
+        showContextMenu(e.clientX, e.clientY, [
+            ...moves.map((m) => ({
+                label: m.label, icon: m.to === 'dropped' ? 'block' : 'swap_horiz',
+                action: `move:${m.to}:${m.label}`,
+                disabled: isGated(m.to) && refinementGaps(model).length > 0,
+            })),
+            ...acts.map((a) => ({ label: a.label, icon: 'bolt', action: `act:${a.id}` })),
+            ...(moves.length || acts.length ? [{ separator: true }] : []),
+            { label: 'Open', icon: 'open_in_new', action: 'open' },
+            { label: 'Open in new window', icon: 'web_asset', action: 'open-window' },
+            { label: 'Open in split right', icon: 'splitscreen_vertical_add', action: 'open-split-h' },
+            { separator: true },
+            { label: 'Add child…', icon: 'add', action: 'add-child',
+              disabled: childTypesFor(model.type).length === 0 },
+            { separator: true },
+            { label: 'Delete…', icon: 'delete', action: 'delete', danger: true },
+            { separator: true },
+            { label: 'Copy reference', icon: 'content_copy', action: 'copy-ref' },
+        ], async (action) => {
+            const a = String(action);
+            if (a.startsWith('act:')) {
+                const full = await fetchItem(model.id).catch(() => null);
+                if (full && await runItemAction(full, a.slice(4))) { await broadcast(); await refreshChildren(); }
+                return;
+            }
+            if (a.startsWith('move:')) {
+                const [, to, ...rest] = a.split(':');
+                const move = moves.find((m) => m.to === to && m.label === rest.join(':'));
+                if (!move) return;
+                try {
+                    // A fresh copy: the flow reads the record, not the row.
+                    const full = await fetchItem(model.id);
+                    const patch = await planItemMove(full, move);
+                    if (!patch) { statusLine('Status unchanged.'); return; }
+                    await patchItem(model.id, patch);
+                    await broadcast();
+                    await refreshChildren();
+                    statusLine(`${ref} → ${humanizeItemStatus(patch.status || model.status)}.`);
+                } catch (err) { statusLine(`Could not move ${ref}: ${err?.message || err}`); }
+                return;
+            }
+            switch (a) {
+                case 'open': ctx.wm?.openInTabFromContext?.(ctx, KIND.item, props); break;
+                case 'open-window': ctx.wm?.navigate?.(KIND.item, props, { ctx, dest: 'window' }); break;
+                case 'open-split-h': ctx.wm?.navigate?.(KIND.item, props, { ctx, dest: 'split-h' }); break;
+                case 'add-child':
+                    openNewItem(ctx.wm, { kind: childTypesFor(model.type)[0] || 'task', parent: model.id, ctx });
+                    break;
+                case 'delete':
+                    if (await confirmDelete(model, { onStatus: statusLine })) { await broadcast(); await refreshChildren(); }
+                    break;
+                case 'copy-ref':
+                    navigator.clipboard.writeText(ref)
+                        .then(() => statusLine(`Copied ${ref}.`))
+                        .catch((err) => statusLine(`Copy failed: ${err?.message || err}`));
+                    break;
+            }
+        });
+    };
+    host.addEventListener('contextmenu', onChildMenu);
 
     /* ── links ─────────────────────────────────────────────────────────────
        Outgoing links are this item's own and removable here; incoming ones are
@@ -1899,6 +1984,7 @@ function mountItem(host, props, ctx) {
         title: itemLabel(ITEMS.find((x) => Number(x.id) === id)) || `Item ${id}`,
         destroy: () => {
             live.dispose();
+            host.removeEventListener('contextmenu', onChildMenu);
             host.removeEventListener('change', onCriteriaChange);
             host.removeEventListener('keydown', onCriteriaKey);
             destroyWidgets();

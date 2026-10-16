@@ -628,13 +628,19 @@ const gridColumns = (css, selector) => {
     return decl[1].replace(/\([^)]*\)/g, 'x').trim().split(/\s+/).length;
 };
 
-await t('the children row declares a column for every cell it renders', () => {
-    const declared = gridColumns(backlogCss, '.bd-childrow');
-    assert.ok(declared, 'no grid-template-columns for .bd-childrow');
+await t('the children list declares a column for every cell a row renders', () => {
+    // The columns live on the LIST and every row is a subgrid of them, so a
+    // column lines up across rows (BUG-0020); a grid per row sized its `auto`
+    // columns per row.
+    const declared = gridColumns(backlogCss, '.bd-children');
+    assert.ok(declared, 'no grid-template-columns for .bd-children');
     // glyph, reference, title, assignee, points-or-due, status
     assert.equal(declared, 6,
-        `.bd-childrow renders 6 cells but declares ${declared} columns — `
+        `.bd-childrow renders 6 cells but .bd-children declares ${declared} columns — `
         + 'the extras wrap onto an implicit row');
+    const row = backlogCss.split('.bd-childrow {')[1]?.split('}')[0] || '';
+    assert.match(row, /grid-template-columns:\s*subgrid/, '.bd-childrow is not a subgrid of the list');
+    assert.match(row, /grid-column:\s*1\s*\/\s*-1/, '.bd-childrow does not span every column');
 });
 
 /* ── the Tracker dashboard ───────────────────────────────────────────

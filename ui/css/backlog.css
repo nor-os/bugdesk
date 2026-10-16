@@ -341,20 +341,34 @@
 }
 .bd-ancestors__sep { color: var(--text-dim, #666); }
 
-.bd-children { display: flex; flex-direction: column; }
+/* ONE grid for the whole list, and each row a subgrid of it, so a column is
+   as wide as its widest cell in ANY row. A grid per row sized its `auto`
+   columns per row, and the status pills started wherever that row's points
+   happened to end (BUG-0020).
+   SIX cells: glyph, reference, title, assignee, points-or-due, status.
+   A short template does not truncate — the extra cell wraps onto an implicit
+   row and lands in the 15px glyph column, which is how a Done status pill came
+   to render as a green circle under the list. */
+.bd-children {
+    display: grid;
+    grid-template-columns: 15px auto minmax(0, 1fr) minmax(0, max-content) auto auto;
+    column-gap: 8px;
+}
 .bd-childrow {
     display: grid;
-    /* SIX cells: glyph, reference, title, assignee, points-or-due, status.
-       A short template does not truncate — the extra cell wraps onto an
-       implicit row and lands in the 15px glyph column, which is how a Done
-       status pill came to render as a green circle under the list. */
-    grid-template-columns: 15px 78px 1fr minmax(0, 90px) auto auto;
+    grid-column: 1 / -1;
+    grid-template-columns: subgrid;
     align-items: center;
-    gap: 8px;
     padding: 4px 2px;
     border-bottom: 1px solid var(--ea-border-soft, #2a2a2a);
 }
 .bd-childrow:last-child { border-bottom: none; }
+.bd-children__empty { grid-column: 1 / -1; }
+.bd-childrow > .bd-item__ref { justify-self: start; }
+.bd-childrow__who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 120px; }
+/* Numbers right-aligned on one baseline; pills from one left edge. */
+.bd-childrow__points { justify-self: end; font-variant-numeric: tabular-nums; }
+.bd-childrow > .bd-status, .bd-childrow > .bd-due { justify-self: start; }
 .bd-childrow__title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Acceptance criteria — a real checklist, ticked in place. The markdown editor
@@ -800,8 +814,10 @@ tr[draggable="true"]:active,
 .bd-duefield {
     display: flex;
     align-items: center;
-    gap: 6px;
-    flex-wrap: nowrap;
+    gap: 4px 6px;
+    /* Wrap rather than squeeze: a pill on a second line still reads, a pill
+       clipped to "after PROJ-00" does not (BUG-0021). */
+    flex-wrap: wrap;
     min-width: 0;
 }
 .bd-duefield input[type="date"] { flex: 0 1 auto; min-width: 0; }
@@ -819,15 +835,15 @@ tr[draggable="true"]:active,
    solid and amber because it is a problem. */
 .bd-duebadge,
 .bd-duefield .bd-duewarn--pill {
-    flex: 0 1 auto;
-    min-width: 0;
+    /* Never shrinks. The text of the amber pill sits in an inline-flex box,
+       where `text-overflow` has nothing to put an ellipsis on, so shrinking
+       it just cut the last digits of the reference off. */
+    flex: 0 0 auto;
     padding: 0 6px;
     border-radius: var(--radius-pill, 999px);
     font-size: 9.5px;
     letter-spacing: 0.03em;
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
     cursor: help;
 }
 .bd-duebadge {
