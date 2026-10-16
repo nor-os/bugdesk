@@ -538,8 +538,10 @@
 .bd-proj__foot code { font-family: "JetBrains Mono", "Cascadia Mono", Consolas, monospace; font-size: 10.5px; color: var(--text-muted); background: none; padding: 0; }
 .bd-schema__foot { font-size: 10.5px; }
 
-/* The field. `.bd-sel` (select_field.js) draws its own button to match. */
-:is(.bd-proj, .bd-alerts-edit) :is(input[type="text"], input[type="search"], input[type="number"], input:not([type]), select) {
+/* The field. `.bd-sel` (select_field.js) draws its own button to match. The
+ * flow outline's find box keeps FlexDesk's own size: its margins plus this
+ * 100% width overflowed the outline and put a scrollbar under it. */
+:is(.bd-proj, .bd-alerts-edit) :is(input[type="text"], input[type="search"], input[type="number"], input:not([type]), select):not(.twm-flow-outline__find) {
     box-sizing: border-box;
     width: 100%;
     min-width: 0;
