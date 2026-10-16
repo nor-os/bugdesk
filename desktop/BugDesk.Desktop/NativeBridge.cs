@@ -42,7 +42,7 @@ static class NativeBridge
         switch (cap, op)
         {
             case ("host", "describe"):
-                return new { host = "photino", version = typeof(PhotinoWindow).Assembly.GetName().Version?.ToString(), capabilities = new[] { "window", "dialogs" }, frame = Frame.Name };
+                return new { host = "photino", version = typeof(PhotinoWindow).Assembly.GetName().Version?.ToString(), capabilities = new[] { "window", "dialogs", "shell" }, frame = Frame.Name };
             case ("window", "minimize"): w.SetMinimized(true); return null;
             // A drag on the page's top bar, or a press on a resize handle, handed
             // to Windows (CustomFrame). The reply comes on mouse-up.
@@ -67,8 +67,30 @@ static class NativeBridge
                 return null;
             }
             case ("dialogs", "saveFile"): return SaveFile(w, Arg(0));
+            case ("shell", "openExternal"): return OpenExternal(Arg(0));
             default: throw new InvalidOperationException($"unknown request {cap}.{op}");
         }
+    }
+
+    /// <summary>
+    /// A link out of the app, handed to the OS's default browser or mail client
+    /// (BUG-0018). Only http, https and mailto: the URL comes from record text
+    /// somebody else wrote, and a file: path or a custom protocol handed to the
+    /// shell would run whatever the OS associates with it. Refused, the page
+    /// falls back to window.open.
+    /// </summary>
+    static bool OpenExternal(JsonElement arg)
+    {
+        var raw = arg.ValueKind == JsonValueKind.String ? arg.GetString() : null;
+        if (!Uri.TryCreate(raw, UriKind.Absolute, out var uri)
+            || uri.Scheme is not ("http" or "https" or "mailto"))
+            throw new ArgumentException("openExternal takes an http, https or mailto address");
+        var url = uri.AbsoluteUri;
+        var psi = OperatingSystem.IsWindows() ? new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true }
+            : new System.Diagnostics.ProcessStartInfo(OperatingSystem.IsMacOS() ? "open" : "xdg-open") { UseShellExecute = false };
+        if (!OperatingSystem.IsWindows()) psi.ArgumentList.Add(url);
+        using var p = System.Diagnostics.Process.Start(psi);
+        return true;
     }
 
     /// <summary>

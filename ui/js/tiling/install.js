@@ -30,8 +30,11 @@ import { installRecordCount, paintRecordCount } from '../ticketdesk/record_count
 import {
     WindowManager, createContentRegistry, installKeymap, mountZoomControl,
 } from '@flexdesk/wm';
-import { createPhotinoHost, createPywebviewHost, isPhotinoWindow } from '@flexdesk/host';
-import { HelpModal, WindowChromeController, createTableStateStore, installAutoScrollbars, openForm, showContextMenu } from '@flexdesk/widgets';
+import { createPhotinoHost, createPywebviewHost, isPhotinoWindow, routeExternalLinks } from '@flexdesk/host';
+import {
+    HelpModal, WindowChromeController, createTableStateStore, installAutoScrollbars, openForm, showContextMenu,
+    suppressNativeContextMenu,
+} from '@flexdesk/widgets';
 
 export async function installTilingShell({ eventBus, logger } = {}) {
     const log = logger ?? { info(){}, warn(){}, error(){}, debug(){} };
@@ -162,6 +165,12 @@ export async function installTilingShell({ eventBus, logger } = {}) {
     const host = isPhotinoWindow()
         ? createPhotinoHost({ state: serverHost.state, logger: log })
         : serverHost;
+    // Links out of the app open in the system browser in the desktop app
+    // (BUG-0018); in a tab the host has no `shell` and this does nothing.
+    routeExternalLinks({ host });
+    // Right-click shows BugDesk's own menus and nothing else, except in text
+    // you can paste into or have selected (BUG-0017).
+    suppressNativeContextMenu();
 
     // WHY A SORT DID NOT SURVIVE OPENING A BUG. FlexDesk keeps only a tile's
     // ACTIVE tab mounted: open a bug in a new tab and the queue's table is

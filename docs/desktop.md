@@ -152,6 +152,11 @@ answers:
   cannot suggest a file name, so the name is in its title, and the extension is
   added when the one typed has none. Cancelling answers `{ok:false,
   cancelled:true}`, and the page says nothing.
+- `shell.openExternal`: a link out of the app (a `target="_blank"` link, a
+  link to another site, mailto, `window.open`) opens in the system's default
+  browser or mail client. Only http, https and mailto are opened; anything else
+  is refused and the page falls back to `window.open`. FlexDesk's
+  `routeExternalLinks` (0.16.0) routes the clicks; `install.js` turns it on.
 - `state` is not offered. `ui/js/tiling/install.js` keeps the server's adapter
   for it, so layouts and table state stay per user on the server, as in a tab.
 

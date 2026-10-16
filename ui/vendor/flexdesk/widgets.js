@@ -560,6 +560,7 @@ function createAlertLog({ source = null, limit = 300 } = {}) {
 
 // src/ui/components/alerts_pane.js
 var CHIPS = [["all", "All"], ["alert", "Alert"], ["warning", "Warning"], ["info", "Info"]];
+var MORE_WITHIN_PX = 48;
 function mountAlertsPane(host, {
   log,
   onOpen = null,
@@ -802,6 +803,16 @@ function mountAlertsPane(host, {
   input.addEventListener("input", () => {
     q = input.value;
     paint();
+  });
+  let loadingMore = false;
+  list.addEventListener("scroll", () => {
+    if (loadingMore || !log.hasMore()) return;
+    if (list.scrollTop + list.clientHeight < list.scrollHeight - MORE_WITHIN_PX) return;
+    loadingMore = true;
+    Promise.resolve(log.loadMore()).catch(() => {
+    }).finally(() => {
+      loadingMore = false;
+    });
   });
   const unsubscribe = log.subscribe(() => paint());
   const timer = setInterval(paint, 6e4);
@@ -6443,6 +6454,55 @@ function installAutoScrollbars(root = document.body, { exclude = null } = {}) {
   };
 }
 
+// src/ui/utils/native_context_menu.js
+var TEXT_INPUTS = /* @__PURE__ */ new Set([
+  "",
+  "text",
+  "search",
+  "url",
+  "tel",
+  "email",
+  "password",
+  "number",
+  "date",
+  "datetime-local",
+  "month",
+  "week",
+  "time"
+]);
+function isEditable(el) {
+  if (!el || el.nodeType !== 1) return false;
+  const tag = el.tagName;
+  if (tag === "TEXTAREA" || tag === "SELECT") return true;
+  if (tag === "INPUT") return TEXT_INPUTS.has(String(el.getAttribute("type") || "").toLowerCase());
+  return !!el.closest?.('[contenteditable=""],[contenteditable="true"],[contenteditable="plaintext-only"]');
+}
+function onSelection(target, doc) {
+  const sel = doc?.getSelection?.();
+  if (!sel || sel.isCollapsed || !String(sel).trim()) return false;
+  for (let i = 0; i < sel.rangeCount; i += 1) {
+    if (sel.getRangeAt(i).intersectsNode?.(target)) return true;
+  }
+  return false;
+}
+function suppressNativeContextMenu({ root, allow } = {}) {
+  const r = root ?? (typeof document !== "undefined" ? document : null);
+  if (!r) return { dispose() {
+  } };
+  const onMenu = (e) => {
+    if (e.defaultPrevented) return;
+    const t = e.target;
+    if (isEditable(t)) return;
+    if (onSelection(t, t?.ownerDocument)) return;
+    if (allow?.(e)) return;
+    e.preventDefault();
+  };
+  r.addEventListener("contextmenu", onMenu);
+  return { dispose() {
+    r.removeEventListener("contextmenu", onMenu);
+  } };
+}
+
 // src/ui/utils/overlay_scrollbar.js
 function normalizeOrientation(value) {
   return String(value || "horizontal").toLowerCase() === "vertical" ? "vertical" : "horizontal";
@@ -7183,6 +7243,7 @@ export {
   HelpModal,
   ISO_DATE,
   ISO_DATETIME,
+  MORE_WITHIN_PX,
   ManagedWindow,
   NotificationCenter,
   NotificationHistory,
@@ -7262,6 +7323,7 @@ export {
   showDeleteConfirmDialog,
   showRunProgressDialog,
   showSelectDialog,
+  suppressNativeContextMenu,
   thumbGeometry,
   toastError,
   toastInfo,
