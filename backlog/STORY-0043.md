@@ -13,7 +13,7 @@ subsystem: settings
 labels: []
 links: []
 created: 2026-10-14
-updated: 2026-10-17T08:34Z
+updated: 2026-10-17T09:18Z
 ---
 
 ## Description
@@ -56,7 +56,7 @@ top-bar element at all since STORY-0046, so only the Tracker is switched here):
 
 - [x] Settings › You › Behaviour has a **Tracker** switch, on by default, that says it is yours alone; its value is saved to your personal state (one file per profile in BugDesk's state folder, shared by every project), never to `project.json`
 - [x] Changing the switch first asks to confirm, saying BugDesk reloads and nothing is deleted; Cancel leaves it as it was, OK saves it and reloads the page
-- [x] Switched off: the Tracker chip is gone from the top bar and F1, F2 go to Bugs and Backlog with no F-key for the Tracker; the command palette returns no tracker tickets; the left rails and the bottom panel show nothing of the tracker; the help's Getting around and Keyboard topics no longer list it and the Tracker topic is not offered
+- [x] Switched off: the Tracker chip is gone from the top bar and F1, F2 go to Bugs and Backlog with no F-key for the Tracker; the command palette returns no tracker tickets; the left rails and the bottom panel show nothing of the tracker; the help's Getting started and Keyboard topics no longer list it and the Tracker topic is not offered
 - [x] Switched off, a dashboard tile that charts tracker records shows a note that the Tracker is switched off and where to switch it on; a saved tab of a tracker page says the same instead of failing
 - [x] Nothing is deleted: switching back on brings back the chip at its old F-key, the Tracker's dashboards in its rail, its tickets in the palette and its help, with the tracker's records untouched
 - [x] With `[tracker] enabled = false` in `projects.toml` the switch is off and disabled, naming that file; with no tracker set up it is disabled and says so; standalone TicketDesk (`--tracker`) does not offer it
@@ -127,3 +127,41 @@ Tests: test-tracker-off 13 (new), test-dom 198, test-ui 222,
 test-tracker 35, test-dashboards 52, test-dashboards-dom 46,
 test-dashboards-tracker 7, test-dashboards-example 8; eslint 0 errors;
 check-graph OK.
+
+### 2026-10-17T09:18Z · norman_agent
+
+Fixed what review found:
+
+- A tracker tile's settings, opened while the Tracker is off, used to offer
+  only Bugs and Backlog, so Save turned a shared tracker tile into a bugs one
+  for everybody. The dialog now shows "Tracker (not here now)" with the
+  switched-off note, and Save keeps the tile's source and filter untouched;
+  only how it looks can change.
+- Behaviour's Reset now switches the Tracker back on, asking first and
+  reloading like the switch does. It does nothing when the switch is already
+  on, is off for the machine, or there is no tracker.
+- Help: with `enabled = false`, Getting started names projects.toml instead
+  of pointing at a switch that cannot be pressed. Keyboard lists the pages
+  that are actually there, so a bugs-only or backlog-only project reads
+  "(Backlog) F1".
+- POST /api/personal/preferences answers 400, not 500, for a body that is
+  not JSON, and turns down keys it does not know.
+- Criterion 3 said "Getting around"; the topic is called Getting started,
+  so I changed the wording. The meaning is the same.
+
+Checked on the scratch server (8781) in headless Edge over CDP (9321), with
+the Tracker switched off. I opened a project dashboard's tracker KPI
+settings and saw the one-option Records select and the note. I renamed the
+tile by typing and pressed Save. project.json kept source tracker and
+filter overdue under the new title, and after switching back on the tile
+showed Overdue 2. Reset on Behaviour opened "Switch the Tracker on", and
+OK cleared preferences.json and reloaded with the Tracker chip back. With
+`enabled = false`, Getting started named projects.toml, and the
+backlog-only project's Keyboard read "(Backlog) F1". curl: `{bad`,
+`{"foo":1}`, `{"tracker":"no"}` and a string body all gave 400.
+
+Tests: test-tracker-off 17 (four new), test-ui 222, test-tracker 35,
+test-dashboards 52, test-dom 198, test-dashboards-dom 46 (the
+"no tracker" case now expects the tile's own source kept),
+test-dashboards-tracker 7, test-dashboards-example 8; eslint
+0 errors; check-graph OK; server build 0 warnings.
