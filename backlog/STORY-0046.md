@@ -13,7 +13,7 @@ subsystem: ui
 labels: []
 links: []
 created: 2026-10-16
-updated: 2026-10-17T06:20Z
+updated: 2026-10-17T09:30Z
 ---
 
 ## Description
@@ -45,13 +45,13 @@ Open questions for refinement, answered by norman on 2026-10-17:
 
 ## Acceptance criteria
 
-- [ ] The top bar has no Dashboards chip in a project (Bugs, Backlog, Tracker) or in standalone tracker mode (Tracker only), and F1, F2, F3 go to those chips in order: there is no F-key for Dashboards
-- [ ] The Bugs, Backlog and Tracker rails each show a Dashboards group with a Project and a Personal list; each lists only the dashboards whose section is that section or `all`
-- [ ] "New dashboard" / "New personal dashboard" in a rail asks for a name, saves the dashboard with `section` set to that rail's section, and opens it in the main area; the chip of that section stays lit
-- [ ] Clicking a dashboard in a rail opens it in the main area of that section (the chip does not change, the rail stays the same)
-- [ ] A dashboard can be renamed, moved to another section (or "All sections"), and deleted from the rail (hover buttons and right-click menu); a rename or delete of the dashboard that is open updates the open page without a reload, and a delete asks first
-- [ ] A dashboard saved before this story (no `section`) is listed in every section's rail; a `section` value BugDesk does not know is listed as `all` and kept in the file unchanged
-- [ ] The example dashboards are seeded into their sections (Bugs, Backlog, Tracker); the help (Getting around, Dashboards, Keyboard), README and CHANGELOG describe the rail instead of the chip
+- [x] The top bar has no Dashboards chip in a project (Bugs, Backlog, Tracker) or in standalone tracker mode (Tracker only), and F1, F2, F3 go to those chips in order: there is no F-key for Dashboards
+- [x] The Bugs, Backlog and Tracker rails each show a Dashboards group with a Project and a Personal list; each lists only the dashboards whose section is that section or `all`
+- [x] "New dashboard" / "New personal dashboard" in a rail asks for a name, saves the dashboard with `section` set to that rail's section, and opens it in the main area; the chip of that section stays lit
+- [x] Clicking a dashboard in a rail opens it in the main area of that section (the chip does not change, the rail stays the same)
+- [x] A dashboard can be renamed, moved to another section (or "All sections"), and deleted from the rail (hover buttons and right-click menu); a rename or delete of the dashboard that is open updates the open page without a reload, and a delete asks first
+- [x] A dashboard saved before this story (no `section`) is listed in every section's rail; a `section` value BugDesk does not know is listed as `all` and kept in the file unchanged
+- [x] The example dashboards are seeded into their sections (Bugs, Backlog, Tracker); the help (Getting around, Dashboards, Keyboard), README and CHANGELOG describe the rail instead of the chip
 
 ## History
 
@@ -71,3 +71,35 @@ Refined with norman's answers of 2026-10-17 (see the description): per-section
 dashboards with a `section` field (default: where it was created; none means
 `all`), no top-level Dashboards element at all, Tracker chip stays. 7 criteria,
 5 points, under EPIC-0045. Taking it on in the ultra/track-A worktree.
+
+### 2026-10-17T09:30Z · norman_agent
+
+Built on branch ultra/track-A (6f6f30a), not merged yet; stays in-progress
+until integration.
+
+- No Dashboards chip: `dashboards` is a page of the landing section now,
+  with `backlog-dashboard` and `tracker-dashboard` beside it, so a
+  dashboard opens under the chip of the rail it came from. F1/F2/F3 are
+  Bugs/Backlog/Tracker in a project; standalone tracker mode has only
+  Tracker.
+- Each rail starts with "Project dashboards" and "Personal dashboards"
+  for that section plus `all`. "Shared" now reads "Project", as this story
+  names them. New dashboards get `section` = the rail's section. The pencil
+  (or right-click › Rename or move…) renames and picks "Listed in"; the bin
+  (or right-click › Delete dashboard) deletes after a confirm. The open page
+  follows a rename or delete made in the rail without a reload.
+- No `section`, or a value BugDesk does not know: listed everywhere, written
+  back unchanged.
+- Example dashboards: Bugs → bugs, Backlog → backlog, My tracker → tracker.
+
+Checked on a scratch server (port 8781) in headless Edge over CDP, with real
+clicks: the chips and F-keys, each rail's list, opening from the Bugs and
+Backlog rails, creating in Backlog (project.json got `section: backlog`) and a
+personal one in Tracker, rename + move to All sections with the page open
+(tile kept), right-click delete of the open one (confirm, page moved on to
+Backlog), tracker mode, the help's Keyboard and Dashboards topics, and no
+Dashboards hit in Ctrl+K. Not done on the real instance: an unknown `section`
+value (covered by test-dashboards and test-dashboards-dom only). Tests:
+test-ui 222, test-tracker 35, test-dashboards 50, test-dashboards-dom 43,
+test-dashboards-example 8, test-dashboards-tracker 7, test-dom 198; eslint 0
+errors; check-graph OK.
