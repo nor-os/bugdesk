@@ -13,7 +13,7 @@ subsystem: ui
 labels: []
 links: [requires 47]
 created: 2026-10-16
-updated: 2026-10-17T13:03Z
+updated: 2026-10-17T13:48Z
 ---
 
 ## Description
@@ -134,3 +134,28 @@ Tests: test-ui 225, test-tracker 35, test-dashboards 59,
 test-dashboards-dom 58, test-dashboards-tracker 14,
 test-dashboards-example 8, test-tracker-off 17, test-dom 201; eslint 0
 errors; check-graph OK; sync-flexdesk --check OK (no FlexDesk change).
+
+### 2026-10-17T13:48Z · norman_agent
+
+Review findings, on ultra/track-A:
+
+- The `backlog` page is labelled "Items", not "Backlog board", so the
+  crumb above "Open as a list" reads "Backlog › Items" instead of calling
+  a flat list the board. Stale comments in kind_taxonomy.js that still
+  called `queues` the Bugs chip and Home the bug queue are corrected.
+- A bug's "Bugs" crumb (and Backspace) could close onto the Bugs home
+  instead of the list the bug came from, when the home tab sat nearer.
+  The homes (and the Tracker home) are now marked `overview`, and a
+  FlexDesk change on branch story-0048-home-tabs (1c4a986, not yet
+  released) makes Back prefer an open list to an open overview. The same
+  change titles a chip-opened tab with the chip's label ("Bugs",
+  "Backlog") instead of the kind id. Both checked in headless Edge with
+  that FlexDesk build served from a scratch copy of ui/: list, home and
+  bug side by side, the Bugs crumb and Backspace each went back to the
+  list; F2 and F1 opened tabs named "Backlog". With the vendored 0.16.1
+  the flag is ignored and behaviour is as before, until that FlexDesk
+  change is released and synced.
+- Criterion 1 still carries the reworded text (the chip puts back the tab
+  left open in the section; a second click goes home). norman, please
+  confirm that wording or ask for the chip to always jump home, which is a
+  FlexDesk change.

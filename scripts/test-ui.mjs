@@ -589,6 +589,9 @@ t('each section\'s chip opens its home, and Bugs is the landing one (STORY-0048)
     assert.deepEqual({ ...HOME_KIND }, { bugs: 'bugs-home', backlog: 'backlog-home' });
     assert.equal(LANDING_SECTION, 'bugs');
     assert.equal(taxonomyDefault.meta('queues').label, 'Bug list');
+    assert.equal(taxonomyDefault.meta('backlog').label, 'Items', 'the crumb above a flat list does not call it the board');
+    assert.ok(taxonomyDefault.meta('bugs-home').overview && taxonomyDefault.meta('backlog-home').overview,
+        'a record\'s Back and section crumb prefer an open list to the home');
     assert.ok(!taxonomyDefault.meta('queues').isTopNav && !taxonomyDefault.meta('backlog').isTopNav,
         'the queue or the board is still a chip of its own');
 });

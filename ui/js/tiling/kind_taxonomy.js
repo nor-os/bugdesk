@@ -87,12 +87,12 @@ export const taxonomy = createTaxonomy({
     root: 'home',
     kinds: {
         // BugDesk taxonomy — one top-nav per store, plus the Tracker dashboard
-        // in tracker mode. `home` is the WM default leaf and maps to the Queues
-        // landing (in tracker mode, to the dashboard — see
-        // dashboards/homes.js, the Tracker home). `ticket` is a sub-page of Queues,
-        // `item` a sub-page of Backlog.
+        // in tracker mode. `home` is the WM default leaf and maps to the Bugs
+        // home (the Backlog home in a project with no bug store, the Tracker
+        // home in tracker mode — see dashboards/homes.js). `queues` and `ticket`
+        // are pages of Bugs, `backlog` and `item` pages of Backlog.
         // `home` is the WM's default leaf, and it RENDERS the landing page of a
-        // section — the bug queue normally, the Tracker dashboard in tracker
+        // section — the Bugs home normally, the Tracker home in tracker
         // mode. So it has to SAY which section that is. It declared none, which
         // made every openInPrimary(...) from the landing tile a cross-page swap:
         // the WM archived the tile's tabs, restored the target page's, and
@@ -109,9 +109,11 @@ export const taxonomy = createTaxonomy({
         // two cryptic three-letter codes where the whole job of the strip is to
         // say which of the two stores you are looking at.
         //
-        // The kind id stays `queues` while the label reads "Bugs": the id is
-        // baked into saved tile layouts and every `props.filter` route, and
-        // renaming it would strand both for a cosmetic gain.
+        // `queues` was the Bugs chip until STORY-0048 and keeps its id now that
+        // it is the bug list under the home: the id is baked into every
+        // `props.filter` route, and renaming it would strand them for a
+        // cosmetic gain. (Saved layouts naming it as a PAGE are renamed when
+        // read, see `migrateLayout` below.)
         //
         // ABSENT ENTIRELY IN TRACKER MODE, along with `ticket`. A tracker has no
         // bug store — it does not live in a code repo at all (see
@@ -130,9 +132,13 @@ export const taxonomy = createTaxonomy({
         // home, and the queue is one rail click away. `queues` keeps its id and
         // its props for the reason above; `ticket` points at the chip kind
         // because the WM groups a tile's tabs by a single `topNav` hop.
+        //
+        // `overview` tells the WM the home SUMS the section up rather than
+        // listing it: Back or the Bugs crumb from a bug closes onto an open bug
+        // list before an open home, whichever sits nearer (FlexDesk C32).
         ...(TRACKER ? {} : {
             'bugs-home': HAS_BUGS
-                ? { label: 'Bugs', icon: 'bug_report', isTopNav: true, order: 20 }
+                ? { label: 'Bugs', icon: 'bug_report', isTopNav: true, order: 20, overview: true }
                 : { label: 'Bugs', icon: 'bug_report', topNav: 'home' },
             queues: { label: 'Bug list', icon: 'list', topNav: 'bugs-home' },
             ticket: { label: 'Bug', icon: 'bug_report', topNav: 'bugs-home' },
@@ -148,7 +154,7 @@ export const taxonomy = createTaxonomy({
         ...(TRACKER ? {
             tracker: {
                 label: 'Tracker', icon: 'space_dashboard',
-                isTopNav: true, order: 10,
+                isTopNav: true, order: 10, overview: true,
             },
         } : {}),
 
@@ -158,8 +164,10 @@ export const taxonomy = createTaxonomy({
         // and the palette pick between synonyms.
         //
         // The kind id stays `backlog` in both modes, for the same reason
-        // `queues` stays `queues` while reading "Bugs": it is baked into saved
-        // tile layouts and every `props.filter` route.
+        // `queues` keeps its id: it is baked into every `props.filter` route.
+        // It shows the board or, opened with a filter, a flat list of items, so
+        // it is labelled "Items", not "Board": the crumb above "Open as a list"
+        // must not call that list the board.
         //
         // In tracker mode it is NOT a top-nav entry — it sits UNDER Tracker.
         // That is what keeps the chip lit and the left rail in place when you
@@ -172,7 +180,7 @@ export const taxonomy = createTaxonomy({
         ...(MERGED_TRACKER ? {
             tracker: {
                 label: 'Tracker', icon: 'space_dashboard',
-                isTopNav: true, order: 40,
+                isTopNav: true, order: 40, overview: true,
             },
             'tracker-tickets': { label: 'Tickets', icon: 'workspaces', topNav: 'tracker' },
             'tracker-item': {
@@ -211,12 +219,12 @@ export const taxonomy = createTaxonomy({
         // section: the board is the Tracker's Tickets.
         ...(TRACKER ? {} : {
             'backlog-home': HAS_BACKLOG
-                ? { label: 'Backlog', icon: 'workspaces', isTopNav: true, order: 30 }
+                ? { label: 'Backlog', icon: 'workspaces', isTopNav: true, order: 30, overview: true }
                 : { label: 'Backlog', icon: 'workspaces', topNav: 'home' },
         }),
         backlog: TRACKER
             ? { label: 'Tickets', icon: 'workspaces', topNav: 'tracker' }
-            : { label: 'Backlog board', icon: 'account_tree', topNav: 'backlog-home' },
+            : { label: 'Items', icon: 'account_tree', topNav: 'backlog-home' },
 
         // `item` points at whatever SECTION its list is in, not at the list.
         //
@@ -341,8 +349,8 @@ const lastContentLeaf = new WeakMap();
  * the answer "the left rail".
  *
  * `home` is seeded by the WM as its own kind, but a shell is free to render a
- * landing there — BugDesk's Home IS the bug queue — so it resolves to the FIRST
- * top-nav entry rather than matching nothing.
+ * landing there — BugDesk's Home is the landing section's home dashboard — so
+ * it resolves to the FIRST top-nav entry rather than matching nothing.
  *
  * Lives here, taking the WM as a parameter, because two callers need to agree on
  * it exactly: install.js lights the chip, and the left rail decides which body
