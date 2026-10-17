@@ -699,7 +699,17 @@ the same store, so its saved filters belong one click away. Clicking an epic sco
 the board to that whole subtree, which is the same ad-hoc `epic is …`
 expression the tree's own "Show only this work package" produces.
 
-The rail navigates; it does not create.
+Every section's rail starts with its **dashboards** (STORY-0046): the project
+dashboards (committed, in `.bugdesk/project.json`) and then your personal ones
+(your profile, every project and the tracker alike). There is no Dashboards
+chip and no F-key for one: a dashboard belongs to a section, through its
+`section` key (`bugs`, `backlog`, `tracker`, or `all`), and opens in the main
+area under that section's chip. A dashboard is listed in the section it was
+created in; one without a `section`, saved before the key existed, is listed in
+all of them. Create, rename, move to another section and delete them from the
+rail; the tiles are edited on the dashboard itself.
+
+Apart from dashboards, the rail navigates; it does not create.
 
 ## Filing something
 

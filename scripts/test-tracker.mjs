@@ -67,7 +67,9 @@ const picker = await import(UI + 'item_picker.js');
 const records = await import(UI + 'records.js');
 const refs = await import(UI + 'refs.js');
 const links = await import(UI + 'links.js');
-const { taxonomy, activeTopNavKind } = await import(TILING + 'kind_taxonomy.js');
+const {
+    taxonomy, activeTopNavKind, DASHBOARD_KIND, DASHBOARD_SECTIONS, dashboardSectionOf,
+} = await import(TILING + 'kind_taxonomy.js');
 const { REF_TOKENS } = await import('./record-fixtures.mjs');
 
 /** The lit chip for a page of `kind`, through the real derivation the top bar
@@ -139,13 +141,18 @@ t('no <name>_agent is assignable', () => {
 
 console.log('\ntracker mode: chrome');
 
-t('Tracker and Dashboards are the top-level sections', () =>
+t('Tracker is the only top-level section', () =>
     // Tickets stay UNDER Tracker: a Tickets chip read as a competing place to
     // be, and moved the user out of the section they were working in the moment
-    // they opened a ticket. Dashboards (STORY-0034) is different in kind — a
-    // section of every project in every mode, charts rather than a second way
-    // into the same records — so it is the one chip beside Tracker.
-    assert.deepEqual(taxonomy.topNavEntries().map((e) => e.kind), ['tracker', 'dashboards']));
+    // they opened a ticket. Dashboards (STORY-0046) are listed in the Tracker's
+    // rail and open under its chip, so there is no chip for them either.
+    assert.deepEqual(taxonomy.topNavEntries().map((e) => e.kind), ['tracker']));
+t('a dashboard opens under Tracker, and lists as a tracker dashboard', () => {
+    assert.deepEqual(DASHBOARD_SECTIONS, ['tracker']);
+    assert.equal(DASHBOARD_KIND.tracker, 'dashboards');
+    assert.equal(taxonomy.topNavFor('dashboards'), 'tracker');
+    assert.equal(dashboardSectionOf('dashboards'), 'tracker');
+});
 t('the bug store is absent, not empty', () => {
     // A tracker does not live in a code repo, so there is no bug store for a
     // Bugs chip to lead to.

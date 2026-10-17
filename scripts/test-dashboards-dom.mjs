@@ -88,13 +88,13 @@ put('fetch', async (url, init = {}) => {
         const i = server.list.findIndex((e) => e && e.id === body.dashboard.id);
         if (i >= 0) server.list[i] = body.dashboard; else server.list.push(body.dashboard);
         j = { ok: true, dashboard: body.dashboard };
-    } else if (path === '/workspace_state_read') {
+    } else if (path === '/personal_state_read') {
         // One state directory per profile; a nameless run has none (UserConfig.StatePath).
         j = { ok: true, result: server.user ? server.state[`${server.user}/${body.path}`] ?? null : null };
-    } else if (path === '/workspace_state_write' && server.failStateWrites > 0) {
+    } else if (path === '/personal_state_write' && server.failStateWrites > 0) {
         server.failStateWrites--;
         j = { ok: false, error: 'disk full' };
-    } else if (path === '/workspace_state_write') {
+    } else if (path === '/personal_state_write') {
         if (server.user) server.state[`${server.user}/${body.path}`] = body.data;
         j = { ok: true, result: { ok: !!server.user } };
     } else if (path.startsWith('/project/dashboards/') && method === 'DELETE') {
@@ -107,7 +107,7 @@ put('fetch', async (url, init = {}) => {
     }
     return { ok: !!j.ok, status: j.ok ? 200 : 400, json: async () => j };
 });
-const isState = (c) => c.path.startsWith('/workspace_state_');
+const isState = (c) => c.path.startsWith('/personal_state_');
 const writes = () => server.calls.filter((c) => c.method !== 'GET' && !isState(c));
 const posts = () => server.calls.filter((c) => c.method === 'POST' && !isState(c));
 const projectWrites = () => server.calls.filter((c) => c.method !== 'GET' && c.path.startsWith('/project/'));
@@ -139,8 +139,8 @@ async function answerConfirm() {
 
 const { createDashboardsContent, SAVE_DELAY_MS } = await import(join(UI, 'dashboards', 'page.js'));
 const { mountDashboardsRail } = await import(join(UI, 'dashboards', 'rail.js'));
-const { taxonomy } = await import(join(UI, 'tiling', 'kind_taxonomy.js'));
-const factory = createDashboardsContent({ eventBus: null }).dashboards;
+const { taxonomy, DASHBOARD_KIND } = await import(join(UI, 'tiling', 'kind_taxonomy.js'));
+const content = createDashboardsContent({ eventBus: null });
 const props = [];
 const ctx = { leafId: 'L1', taxonomy, wm: { updateActiveTabProps: (leaf, patch) => props.push({ leaf, patch }) } };
 
@@ -149,7 +149,9 @@ const ctx = { leafId: 'L1', taxonomy, wm: { updateActiveTabProps: (leaf, patch) 
  * `openInPrimary`, which the window manager answers by mounting the page again
  * with the new props; the fake does the same, so `m.page` is always the live one.
  */
-function mount(p = {}) {
+function mount(p = {}, { section = 'bugs' } = {}) {
+    const kind = DASHBOARD_KIND[section];
+    const page = content[kind];
     const host = document.createElement('div');
     const nav = document.createElement('div');
     const body = document.createElement('div');
@@ -158,16 +160,16 @@ function mount(p = {}) {
     const m = { host, nav, page: null, rail: null };
     const mctx = { ...ctx, wm: {
         ...ctx.wm,
-        openInPrimary: (kind, next) => {
-            assert.equal(kind, 'dashboards');
+        openInPrimary: (opened, next) => {
+            assert.equal(opened, kind, 'opened under another section');
             props.push({ leaf: 'L1', patch: next });
             m.page.destroy();
             body.innerHTML = '';
-            m.page = factory(body, next, mctx);
+            m.page = page(body, next, mctx);
         },
     } };
-    m.page = factory(body, p, mctx);
-    m.rail = mountDashboardsRail(nav, mctx);
+    m.page = page(body, p, mctx);
+    m.rail = mountDashboardsRail(nav, mctx, { section });
     m.destroy = () => { m.page.destroy(); m.rail.destroy(); host.remove(); };
     return m;
 }
@@ -321,10 +323,10 @@ await t('the list has a Personal section under Shared, empty at first', async ()
     m = mount({ dashboard: 'bugs' });
     await m.page.ready;
     const headings = [...m.nav.querySelectorAll('.td-nav__section')].map((h) => h.textContent);
-    assert.deepEqual(headings, ['Shared', 'Personal']);
+    assert.deepEqual(headings, ['Project dashboards', 'Personal dashboards']);
     assert.equal(section(m.host, 'personal').length, 0);
-    assert.match(m.nav.textContent, /Only you see these; they are never committed/);
-    assert.equal(m.host.querySelector('.bd-dash__scope').textContent, 'groupShared');
+    assert.match(m.nav.innerHTML, /Only you see these; they are never committed/);
+    assert.equal(m.host.querySelector('.bd-dash__scope').textContent, 'groupProject');
 });
 
 await t('a personal dashboard is created in the profile state, never in project.json', async () => {
@@ -406,7 +408,7 @@ await t('sharing under a taken name asks for another, and never overwrites the s
     await answerForm({});                                   // the name as offered: "Bugs"
     assert.equal(projectWrites().length, before, 'shared under a taken name');
     const dialog = [...document.querySelectorAll('form.twm-modal__form')].at(-1);
-    assert.match(dialog.textContent, /A shared dashboard is already called "Bugs"/);
+    assert.match(dialog.textContent, /A project dashboard is already called "Bugs"/);
     assert.ok(dialog.querySelector('.twm-is-invalid'), 'no inline error');
     await answerForm({ name: 'Bugs by component' });
     await tick(10);
@@ -459,6 +461,142 @@ await t('without a profile, a personal save says so instead of pretending', asyn
     assert.match(n.host.querySelector('.bd-dash__status').textContent, /Not copied: no profile/);
     n.destroy();
     server.user = 'alice';
+});
+
+/* ── STORY-0046: dashboards per section, in the rail ─────────────── */
+
+console.log('\nDashboards in each section\'s rail (STORY-0046)');
+
+const names = (host, scope) => section(host, scope).map(rowName);
+
+await t('every dashboard kind is this one page, and the Bugs one keeps its old id', () => {
+    assert.deepEqual(Object.keys(content).sort(), ['backlog-dashboard', 'dashboards']);
+    assert.equal(DASHBOARD_KIND.bugs, 'dashboards');
+});
+
+await t('a section lists its own dashboards and the ones listed everywhere, nothing else', async () => {
+    delete server.state['alice/dashboards.json'];
+    server.list.push({ id: 'bl', name: 'Backlog only', version: 1, section: 'backlog', tiles: [] },
+        { id: 'tr', name: 'Tracker only', version: 1, section: 'tracker', tiles: [] },
+        { id: 'ev', name: 'Everywhere', version: 1, section: 'all', tiles: [] });
+    const b = mount({}, { section: 'bugs' });
+    await b.page.ready;
+    const bugs = names(b.host, 'shared');
+    assert.ok(bugs.includes('Bugs') && bugs.includes('Everywhere'), `bugs rail: ${bugs}`);
+    assert.ok(!bugs.includes('Backlog only') && !bugs.includes('Tracker only'), `bugs rail: ${bugs}`);
+    b.destroy();
+    const k = mount({}, { section: 'backlog' });
+    await k.page.ready;
+    const backlog = names(k.host, 'shared');
+    // `bugs` has no section (saved before there were any): listed everywhere.
+    assert.ok(backlog.includes('Backlog only') && backlog.includes('Everywhere') && backlog.includes('Bugs'), `backlog rail: ${backlog}`);
+    assert.ok(!backlog.includes('Tracker only'));
+    assert.equal(k.nav.querySelector('.bd-dash-nav').dataset.section, 'backlog');
+    k.destroy();
+});
+
+await t('with no dashboard asked for, a section opens its own first one', async () => {
+    // Only unreadable ones listed everywhere: a readable one of Backlog's comes first.
+    server.list = server.list.filter((e) => !(e && e.tiles && Array.isArray(e.tiles) && !['backlog', 'tracker'].includes(e.section)));
+    const k = mount({}, { section: 'backlog' });
+    await k.page.ready;
+    assert.equal(k.host.querySelector('.bd-dash__title').textContent, 'Backlog only');
+    k.destroy();
+    server.list = SEED().concat(server.list.filter((e) => e && ['bl', 'tr'].includes(e.id)));
+});
+
+let k;
+await t('New dashboard in the Backlog rail is listed in Backlog, opens there, and only there', async () => {
+    k = mount({}, { section: 'backlog' });
+    await k.page.ready;
+    k.nav.querySelector('[data-new="shared"]').click();
+    await answerForm({ name: 'Sprint' });
+    await tick(10);
+    await k.page.ready;
+    await tick(10);
+    const saved = server.list.find((e) => e && e.name === 'Sprint');
+    assert.equal(saved?.section, 'backlog');
+    assert.equal(k.host.querySelector('.bd-dash__title').textContent, 'Sprint');
+    assert.deepEqual(props.at(-1).patch, { dashboard: saved.id, label: 'Sprint' });
+    const b = mount({}, { section: 'bugs' });
+    await b.page.ready;
+    assert.ok(!names(b.host, 'shared').includes('Sprint'), 'a backlog dashboard in the Bugs rail');
+    b.destroy();
+});
+
+await t('a personal dashboard made in a rail is listed in that section too', async () => {
+    k.nav.querySelector('[data-new="personal"]').click();
+    await answerForm({ name: 'My sprint' });
+    await tick(10);
+    await k.page.ready;
+    assert.equal(personalFile().dashboards.find((d) => d.name === 'My sprint')?.section, 'backlog');
+    assert.ok(names(k.host, 'personal').includes('My sprint'));
+});
+
+await t('renaming the open dashboard from the rail renames it on the page, and its tiles are kept', async () => {
+    await pick(k, section(k.host, 'shared').find((r) => rowName(r) === 'Sprint'));
+    k.host.querySelector('[data-action="add-kpi"]').click();
+    await settle();
+    const row = section(k.host, 'shared').find((r) => rowName(r) === 'Sprint');
+    row.querySelector('.td-nav__action[data-act="rename"]').click();
+    await answerForm({ name: 'Sprint 12' });
+    await tick(10);
+    assert.equal(k.host.querySelector('.bd-dash__title').textContent, 'Sprint 12');
+    assert.ok(names(k.host, 'shared').includes('Sprint 12'));
+    const saved = server.list.find((e) => e && e.name === 'Sprint 12');
+    assert.equal(saved.tiles.length, 1, 'the tile was lost');
+    // A later change on the page writes the new name, not the old one back.
+    k.host.querySelector('[data-action="add-chart"]').click();
+    await settle();
+    const again = server.list.find((e) => e && e.id === saved.id);
+    assert.equal(again.name, 'Sprint 12');
+    assert.equal(again.tiles.length, 2);
+});
+
+await t('moving a dashboard to another section takes it out of this rail', async () => {
+    const row = section(k.host, 'shared').find((r) => rowName(r) === 'Sprint 12');
+    row.querySelector('.td-nav__action[data-act="rename"]').click();
+    await tick(); await tick();
+    const select = [...document.querySelectorAll('form.twm-modal__form')].at(-1).querySelector('[name="section"]');
+    assert.deepEqual([...select.options].map((o) => o.value), ['bugs', 'backlog', 'all']);
+    assert.equal(select.value, 'backlog');
+    await answerForm({ section: 'bugs' });
+    await tick(10);
+    assert.equal(server.list.find((e) => e && e.name === 'Sprint 12').section, 'bugs');
+    assert.ok(!names(k.host, 'shared').includes('Sprint 12'));
+    const b = mount({}, { section: 'bugs' });
+    await b.page.ready;
+    assert.ok(names(b.host, 'shared').includes('Sprint 12'));
+    b.destroy();
+});
+
+await t('the right-click menu opens, renames and deletes', async () => {
+    const row = section(k.host, 'shared').find((r) => rowName(r) === 'Backlog only');
+    row.dispatchEvent(new dom.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 5, clientY: 5 }));
+    await tick();
+    const menu = document.querySelector('.twm-context-menu');
+    assert.ok(menu, 'no menu');
+    assert.match(menu.textContent, /Open[\s\S]*Rename or move…[\s\S]*Delete dashboard/);
+    menu.remove();
+});
+
+await t('deleting the open dashboard from the rail asks first, then the page moves on', async () => {
+    await pick(k, section(k.host, 'shared').find((r) => rowName(r) === 'Backlog only'));
+    assert.equal(k.host.querySelector('.bd-dash__title').textContent, 'Backlog only');
+    const row = section(k.host, 'shared').find((r) => rowName(r) === 'Backlog only');
+    const before = server.list.length;
+    row.querySelector('.td-nav__action[data-act="delete"]').click();
+    await answerConfirm();
+    await tick(20);
+    assert.equal(server.list.length, before - 1);
+    assert.ok(!server.list.some((e) => e && e.id === 'bl'));
+    assert.ok(!names(k.host, 'shared').includes('Backlog only'));
+    assert.notEqual(k.host.querySelector('.bd-dash__title')?.textContent, 'Backlog only');
+    await settle();
+    assert.ok(!server.list.some((e) => e && e.id === 'bl'), 'the page saved it back');
+    k.destroy();
+    server.list = SEED();
+    delete server.state['alice/dashboards.json'];
 });
 
 /* ── STORY-0036: what the tiles show ─────────────────────────────── */

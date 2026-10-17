@@ -101,7 +101,7 @@ put('fetch', async (url, init = {}) => {
     const route = path.split('?')[0];
     let j = { ok: false, error: 'no route' };
     if (route === '/project/dashboards' && method === 'GET') j = { ok: true, dashboards: JSON.parse(JSON.stringify(DASHBOARDS)), broken: null };
-    else if (route === '/workspace_state_read') j = { ok: true, result: null };
+    else if (route === '/personal_state_read') j = { ok: true, result: null };
     else if (route === '/dashboards/status_history') j = { ok: true, history: historyOf(path.includes('store=bugs') ? BUGS : BACKLOG) };
     else if (method === 'GET' && records[route]) j = { ok: true, ...JSON.parse(JSON.stringify(records[route])) };
     return { ok: !!j.ok, status: j.ok ? 200 : 400, json: async () => j };
@@ -168,12 +168,18 @@ await t('they are seeded into the shared project config, not a personal file', a
     const nav = document.createElement('div');
     document.body.appendChild(nav);
     const { mountDashboardsRail } = await import(join(UI, 'dashboards', 'rail.js'));
-    const rail = mountDashboardsRail(nav, ctx);
-    await tick(20);
-    const rows = [...nav.querySelectorAll('.bd-dash-nav__item[data-scope="shared"]')];
-    assert.deepEqual(rows.map((r) => r.querySelector('span:not(.material-symbols-outlined)').textContent), ['Bugs', 'Backlog']);
-    assert.match(nav.textContent, /Shared/);
-    rail.destroy();
+    // Each in its own section's rail (STORY-0046).
+    const listed = async (section) => {
+        const rail = mountDashboardsRail(nav, ctx, { section });
+        await tick(20);
+        const rows = [...nav.querySelectorAll('.bd-dash-nav__item[data-scope="shared"]')];
+        const out = rows.map((r) => r.querySelector('span:not(.material-symbols-outlined)').textContent);
+        assert.match(nav.textContent, /Project dashboards/);
+        rail.destroy();
+        return out;
+    };
+    assert.deepEqual(await listed('bugs'), ['Bugs']);
+    assert.deepEqual(await listed('backlog'), ['Backlog']);
     page.destroy();
 });
 
@@ -186,6 +192,7 @@ await t('the example tracker ships a personal dashboard over its tickets', async
     const [e] = entries;
     assert.ok(e.ok, e.reason);
     assert.deepEqual(e.keptTiles, []);
+    assert.equal(model.sectionOf(e), 'tracker', 'not listed in the Tracker rail');
     assert.ok(e.tiles.every((x) => x.config.binding.source === 'tracker'), 'a tile reads something other than the tracker');
     assert.ok(e.tiles.some((x) => x.config.binding.plot === 'burndown' && x.config.binding.scope?.kind === 'project'));
     const program = readFileSync(join(ROOT, 'server', 'Program.cs'), 'utf8');
@@ -221,7 +228,7 @@ await t('example STORY-0005 is still the draft worked example', async () => {
 
 await t('opening the example dashboards writes nothing', async () => {
     await tick(1500);
-    assert.deepEqual(calls.filter((c) => c.method !== 'GET' && !c.path.startsWith('/workspace_state_')), []);
+    assert.deepEqual(calls.filter((c) => c.method !== 'GET' && !c.path.startsWith('/personal_state_')), []);
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

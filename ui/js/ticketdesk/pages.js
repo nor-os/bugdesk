@@ -1905,6 +1905,11 @@ function navFilterRow(f, custom) {
  *
  * So there is one navigation axis, at the top, and the rail is a consequence of
  * it.
+ *
+ * Above the section's own body sits its Dashboards group (STORY-0046,
+ * dashboards/rail.js): there is no Dashboards chip, so each section lists the
+ * dashboards that belong to it. Its own slot, outside `body`, so the bug rail's
+ * delegated handlers never see a dashboard row.
  */
 function mountTicketNav(host, props, ctx) {
     const open = (kind, p) => ctx.wm?.openInPrimary?.(kind, p);
@@ -1914,8 +1919,9 @@ function mountTicketNav(host, props, ctx) {
     // a mount that runs before that happens (the same fallback FlexDesk's breadcrumb uses).
     const getWm = () => ctx?.wm || window.__twm?.wm || null;
 
-    let shown = null;            // 'bugs' | 'backlog' | 'tracker' (see panelSection) | 'dashboards'
+    let shown = null;            // 'bugs' | 'backlog' | 'tracker' (see panelSection)
     let backlogRail = null;      // the Backlog body's controller, mounted lazily
+    let dashRail = null;         // the Dashboards group's controller, for `dashSection`
     // Bumped by every show() and by destroy. The backlog rail mounts after an
     // await, and `wm:changed` fires in bursts: without this, a switch that
     // finished late mounted the backlog rail over the bug rail (with `shown`
@@ -1927,8 +1933,27 @@ function mountTicketNav(host, props, ctx) {
     let mounted = 0;             // the generation whose rail is actually on screen
 
     host.classList.add('bd-rail');
-    host.innerHTML = '<div class="bd-rail__body" data-slot="railbody"></div>';
+    host.innerHTML = `<div class="bd-rail__body">
+        <div class="bd-rail__dashboards" data-slot="dashboards"></div>
+        <div data-slot="railbody"></div>
+    </div>`;
     const body = host.querySelector('[data-slot="railbody"]');
+    const dashBody = host.querySelector('[data-slot="dashboards"]');
+
+    /** The section's dashboards. Standalone TicketDesk's one section is the
+     *  tracker, though its rail is this copy's backlog rail. */
+    let dashGeneration = 0;
+    let dashWanted = null;       // the section asked for last, mounted or on the way
+    const showDashboards = async (section) => {
+        const dashSection = CONFIG.mode === 'tracker' ? 'tracker' : section;
+        if (dashWanted === dashSection) return;
+        dashWanted = dashSection;
+        const mine = ++dashGeneration;
+        const { mountDashboardsRail } = await import('../dashboards/rail.js');
+        if (mine !== dashGeneration) return;
+        try { dashRail?.destroy(); } catch { /* not mounted */ }
+        dashRail = mountDashboardsRail(dashBody, ctx, { section: dashSection });
+    };
 
     const show = async (next) => {
         // Already showing it — or already on the way to it.
@@ -1938,15 +1963,8 @@ function mountTicketNav(host, props, ctx) {
         try { backlogRail?.destroy(); } catch { /* not mounted */ }
         backlogRail = null;
         body.innerHTML = '';
+        showDashboards(next);
         if (next === 'bugs') { renderFilters(); mounted = mine; return; }
-        if (next === 'dashboards') {
-            // The project's dashboards (EPIC-0033): a row opens one, like a filter.
-            const { mountDashboardsRail } = await import('../dashboards/rail.js');
-            if (mine !== generation) return;
-            backlogRail = mountDashboardsRail(body, ctx);
-            mounted = mine;
-            return;
-        }
         // Imported lazily so the bug rail — the thing on screen at boot — never
         // waits on the backlog module to parse.
         const { mountBacklogRail } = next === 'tracker'
@@ -1964,8 +1982,9 @@ function mountTicketNav(host, props, ctx) {
         if (!topNav) { if (!shown) show('bugs'); return; }
         // The Tracker dashboard is a view over the backlog store, so it gets the
         // backlog rail: its saved filters and its project tree are exactly what
-        // you want one click away from "who has what".
-        show(topNav === 'dashboards' ? 'dashboards' : panelSection(topNav));
+        // you want one click away from "who has what". A dashboard page is a
+        // page of its section (STORY-0046), so it gets that section's rail.
+        show(panelSection(topNav));
     };
     const renderFilters = () => {
         const custom = listFilters();
@@ -2086,6 +2105,8 @@ function mountTicketNav(host, props, ctx) {
         title: 'Filters',
         destroy: () => {
             generation++;                    // a backlog mount still loading must not land
+            dashGeneration++;
+            try { dashRail?.destroy(); } catch { /* not mounted */ }
             unsub();
             focusSub?.dispose?.();
             body.removeEventListener('click', onBugRailClick);
@@ -2393,10 +2414,6 @@ const MERGED_TRACKER = CONFIG.mode !== 'tracker' && !!CONFIG.tracker?.available;
 /** Which body a side panel shows for the section in front. */
 function panelSection(topNav) {
     if (topNav === 'tracker' && MERGED_TRACKER) return 'tracker';
-    // Dashboards (EPIC-0033): the Navigator lists the dashboards (mountTicketNav);
-    // the team panel shows a store this project HAS — never the bugs' in tracker
-    // mode or over a project without a bug store.
-    if (topNav === 'dashboards') return CONFIG.mode === 'tracker' || CONFIG.store?.hasBugs === false ? 'backlog' : 'bugs';
     return topNav === 'backlog' || topNav === 'tracker' ? 'backlog' : 'bugs';
 }
 

@@ -152,6 +152,34 @@ t('names are compared ignoring case and surrounding spaces', () => {
     assert.equal(model.nameTaken('Backlog', entries), false);
 });
 
+console.log('\ndashboards: sections (STORY-0046)');
+
+t('a dashboard with no section, or one BugDesk does not know, is listed everywhere', () => {
+    // Saved before the key existed: dropping it from every rail would lose it.
+    for (const raw of [{ id: 'a', name: 'A' }, { id: 'b', name: 'B', section: 'reports' }, { id: 'c', name: 'C', section: 7 }]) {
+        const e = model.readEntry(raw);
+        assert.ok(e.ok, `${raw.id} is not readable`);
+        assert.equal(model.sectionOf(e), 'all');
+        for (const s of ['bugs', 'backlog', 'tracker']) assert.ok(model.listedIn(e, s), `${raw.id} is not listed in ${s}`);
+    }
+});
+t('a dashboard of one section is listed there and nowhere else', () => {
+    const e = model.readEntry({ id: 'b', name: 'B', section: 'backlog' });
+    assert.equal(model.sectionOf(e), 'backlog');
+    assert.deepEqual(['bugs', 'backlog', 'tracker'].filter((s) => model.listedIn(e, s)), ['backlog']);
+    assert.ok(model.listedIn(model.readEntry({ id: 'x', name: 'X', section: 'all' }), 'tracker'));
+});
+t('a new dashboard is listed in the section it was created in', () => {
+    assert.equal(model.newEntry('Mine', 'p-1', 'tracker').raw.section, 'tracker');
+    assert.equal(model.sectionOf(model.newEntry('Mine', 'p-2', 'bugs')), 'bugs');
+    assert.ok(!('section' in model.newEntry('Mine', 'p-3').raw), 'no section given, none written');
+    assert.ok(!('section' in model.newEntry('Mine', 'p-4', 'nonsense').raw));
+});
+t('a section BugDesk does not know is written back unchanged', () => {
+    const e = model.readEntry({ id: 'b', name: 'B', section: 'reports', tiles: [] });
+    assert.equal(model.toEntry(e, []).section, 'reports');
+});
+
 console.log('\ndashboards: personal (STORY-0035)');
 
 t('the personal file: none yet reads as empty; one that does not parse is broken, never empty', () => {
@@ -178,7 +206,7 @@ t('personal dashboards live in the git-ignored profile state, never beside proje
     assert.equal(model.PERSONAL_FILE, 'dashboards.json');
     const store = readFileSync(join(ROOT, 'ui', 'js', 'dashboards', 'store.js'), 'utf8');
     const personal = store.slice(store.indexOf('personal dashboards'));
-    assert.match(personal, /workspace_state_write/);
+    assert.match(personal, /personal_state_write/);
     assert.doesNotMatch(personal, /\/project\//, 'a personal save goes to the project config');
     const ignore = readFileSync(join(ROOT, 'server', 'UserConfig.cs'), 'utf8');
     assert.match(ignore, /\$"state-\{ActiveSlug\}"/, 'the state is no longer per profile');

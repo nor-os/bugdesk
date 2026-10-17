@@ -325,6 +325,18 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Dashboards are listed in each section's left rail; the Dashboards chip is
+  gone** (STORY-0046). Bugs, Backlog and Tracker each list their project and
+  personal dashboards at the top of the rail, and a dashboard opens in the main
+  area under that section's chip. There is no top-level Dashboards element any
+  more, so the chips after it move up a key (Tracker is F3 in a project), and the
+  help follows. A dashboard has a `section` (`bugs`, `backlog`, `tracker` or
+  `all`), set to the section it was created in; one saved before, with none, is
+  listed in every section. Create, rename, move and delete from the rail (hover
+  buttons or right-click); a change to the open dashboard shows on it at once.
+  "Shared" dashboards are called Project dashboards. The example dashboards are
+  seeded into their sections.
+
 - **Settings opens in a dialog** (STORY-0044), like Help but larger (up to
   1280×860, maximisable), instead of as a tab in the main tile. Every button that
   sends you to a Settings page opens the dialog on that page, or switches the open

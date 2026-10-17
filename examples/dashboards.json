@@ -2,6 +2,7 @@
   {
     "id": "example-bugs",
     "name": "Bugs",
+    "section": "bugs",
     "version": 1,
     "tiles": [
       { "id": "open-by-status", "type": "flexdesk.chart", "x": 0, "y": 0, "w": 4, "h": 4,
@@ -24,6 +25,7 @@
   {
     "id": "example-backlog",
     "name": "Backlog",
+    "section": "backlog",
     "version": 1,
     "tiles": [
       { "id": "points-by-status", "type": "flexdesk.chart", "x": 0, "y": 0, "w": 5, "h": 4,

@@ -56,7 +56,9 @@ const t = (name, fn) => {
 
 const { createFilterModel } = await import(UI + 'filter_engine.js');
 const data = await import(UI + 'backlog_data.js');
-const { activeTopNavKind, taxonomy: taxonomyDefault } = await import(TILING + 'kind_taxonomy.js');
+const {
+    activeTopNavKind, taxonomy: taxonomyDefault, DASHBOARD_KIND, DASHBOARD_SECTIONS, dashboardSectionOf,
+} = await import(TILING + 'kind_taxonomy.js');
 const newItem = await import(UI + 'new_item.js');
 const live = await import(UI + 'live.js');
 
@@ -547,19 +549,29 @@ t('every page declares the section it lives in', () => {
     // beside — makes openInPrimary a cross-page swap, which archives the tabs
     // and DROPS the props it was handed. That is invisible until something
     // routes by props, and then it looks like a click doing nothing.
-    for (const kind of ['home', 'queues', 'ticket', 'backlog', 'item', 'new-item', 'dashboards']) {
+    for (const kind of ['home', 'queues', 'ticket', 'backlog', 'item', 'new-item', 'dashboards', 'backlog-dashboard']) {
         assert.ok(taxonomyDefault.topNavFor(kind), `${kind} declares no section`);
     }
     assert.equal(taxonomyDefault.topNavFor('home'), 'queues', 'home is not with the page it renders');
     assert.equal(taxonomyDefault.topNavFor('item'), taxonomyDefault.topNavFor('backlog'));
     assert.equal(taxonomyDefault.topNavFor('ticket'), taxonomyDefault.topNavFor('queues'));
 });
-t('the default mode has no Tracker chip, and has Dashboards after the stores', () =>
+t('the default mode has no Tracker chip, and no Dashboards chip either', () =>
     // The tracker-mode counterpart of this lives in test-tracker.mjs, which
     // runs in its own process — the mode is read once, at module load.
-    // Dashboards (STORY-0034) is a section of every project in every mode; it
-    // sits after the two stores it charts.
-    assert.deepEqual(taxonomyDefault.topNavEntries().map((e) => e.kind), ['queues', 'backlog', 'dashboards']));
+    // Dashboards (STORY-0046) are listed in each section's rail, so F1 and F2
+    // are the two stores and nothing else.
+    assert.deepEqual(taxonomyDefault.topNavEntries().map((e) => e.kind), ['queues', 'backlog']));
+t('a dashboard opens under the chip of the section it was opened from', () => {
+    // STORY-0046. The WM groups a tile's tabs by `topNavFor(kind)`, so a
+    // dashboard opened from the Backlog rail must be a Backlog page, or the
+    // open is a swap to the Bugs page that drops its props.
+    assert.deepEqual(DASHBOARD_SECTIONS, ['bugs', 'backlog']);
+    assert.equal(taxonomyDefault.topNavFor(DASHBOARD_KIND.bugs), 'queues');
+    assert.equal(taxonomyDefault.topNavFor(DASHBOARD_KIND.backlog), 'backlog');
+    assert.ok(!taxonomyDefault.meta('dashboards').isTopNav);
+    for (const s of DASHBOARD_SECTIONS) assert.equal(dashboardSectionOf(DASHBOARD_KIND[s]), s);
+});
 
 /* ── the comment-header regex ────────────────────────────────────────
  *

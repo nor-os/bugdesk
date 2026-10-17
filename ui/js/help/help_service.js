@@ -227,10 +227,10 @@ The chips in the top bar are the pages of the project, in this order:
 |---|---|---|
 | **Bugs** | the bug queue, a sortable, filterable table | **F1** |
 | **Backlog** | the epic → story → task tree | **F2** |
-| **Dashboards** | charts and counts over your records | **F3** |
-| **Tracker** | the tracker shared by every project, if one is set up | **F4** |
+| **Tracker** | the tracker shared by every project, if one is set up | **F3** |
 
-A missing page moves the later ones up a key. **New Item** opens one
+A missing page moves the later ones up a key. Dashboards have no chip:
+each page lists its own at the top of its left rail (see **Dashboards**). **New Item** opens one
 form for any record: its Type decides the store (Bug, Regression or
 Chore go to the bugs; Epic, Story or Task to the backlog). The Bugs
 page's own **New** button opens the full bug form. **Ctrl/⌘ + K** opens
@@ -243,7 +243,8 @@ the top left.
 ## Rails and panels
 
 The **left rail** follows the page in front: the filters on Bugs, the
-views and work packages on Backlog, the dashboards on Dashboards. The
+views and work packages on Backlog, and on every page that page's
+dashboards at the top. The
 **right panel** is the team: who is on what. The **bottom panel** has
 two tabs, **Alerts** (what your alert rules flagged) and **Changes**
 (what is not committed or pushed yet). The buttons at the top right
@@ -413,10 +414,19 @@ while it is in front.
         title: 'Dashboards',
         category: 'basics',
         keywords: ['dashboard', 'chart', 'kpi', 'tile', 'bar', 'pie', 'donut',
-                   'histogram', 'burndown', 'sum', 'average', 'count', 'personal', 'shared'],
+                   'histogram', 'burndown', 'sum', 'average', 'count', 'personal', 'shared',
+                   'project', 'section', 'rail', 'rename'],
         markdown: `# Dashboards
 
-A dashboard is a grid of chart and KPI tiles over your records. Add,
+A dashboard is a grid of chart and KPI tiles over your records. Each
+page (Bugs, Backlog, Tracker) lists its dashboards at the top of its
+left rail; click one to open it in the main area, under the same chip.
+**New dashboard** there creates one listed on that page. The pencil on
+a row, or a right-click, renames it and chooses where it is **listed
+in**: one page, or **All sections**; the bin deletes it. A dashboard
+made before dashboards moved into the rails is listed on every page.
+
+Add,
 remove, move and resize tiles, and configure each one:
 
 - **Source**: bugs, backlog items or tracker tickets, one or more types,
@@ -432,10 +442,11 @@ remove, move and resize tiles, and configure each one:
 Click a bar or a slice to open the records behind it. Tiles redraw when
 records change, here or on disk.
 
-**Shared** dashboards are saved in the project's committed
+**Project** dashboards are saved in the project's committed
 \`.bugdesk/project.json\`, so a change shows in the Changes panel and
 reaches everyone who pulls. **Personal** dashboards are listed under
-them and stay with your profile, out of git.
+them and stay with your profile, out of git, in every project and the
+tracker alike.
 `,
     },
 
@@ -651,7 +662,7 @@ desktops. On a Mac, ⌘ works wherever Ctrl is listed with ⌘.
 
 | Action | Key |
 |---|---|
-| Go to the Nth page in the top bar (Bugs, Backlog, Dashboards, Tracker) | **F1 … F4** |
+| Go to the Nth page in the top bar (Bugs, Backlog, Tracker) | **F1 … F3** |
 | Command palette: search every record, run a command | **Ctrl/⌘ + K** |
 | Switch project | **Ctrl/⌘ + P** |
 | Go back | **Backspace**, or the mouse's back button |

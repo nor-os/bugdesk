@@ -2,11 +2,13 @@
  * library.js — the project's dashboards, as the Navigator and the page share
  * them (EPIC-0033).
  *
- * Two views hang off one list: the Navigator (rail.js, the left panel while
- * Dashboards is in front) lists them and opens one; the page (page.js) shows
- * the open one and edits it. Both read `lists` here and repaint on
- * `onLibraryChanged`, so a rename on the page is in the Navigator at once and
- * a dashboard created from the Navigator is what the page opens.
+ * Two views hang off one list: the Navigator (rail.js, the Dashboards group at
+ * the top of every section's rail, STORY-0046) lists a section's dashboards,
+ * opens, renames and deletes them; the page (page.js) shows the open one and
+ * edits it. Both read `lists` here and repaint on `onLibraryChanged`, so a
+ * rename on the page is in the Navigator at once, a rename in the Navigator is
+ * on the page, and a dashboard created from the Navigator is what the page
+ * opens.
  *
  * Which dashboard is open is still a prop of the page's tab
  * (`props.dashboard`); `selectedKey` only mirrors it so the Navigator can mark
@@ -15,7 +17,7 @@
 
 import { openForm } from '@flexdesk/widgets';
 import { loadShared, loadPersonal } from './store.js';
-import { nameTaken } from './model.js';
+import { SECTIONS, SECTION_LABEL, listedIn, nameTaken } from './model.js';
 
 /** Both lists. `broken` is why that whole list cannot be read (nothing is
  *  saved to it then), or null. Mutated in place, never replaced. */
@@ -25,12 +27,12 @@ export const lists = {
 };
 
 export const SCOPES = {
-    shared: { heading: 'Shared', icon: 'group', file: 'project.json',
+    shared: { heading: 'Project', icon: 'group', file: 'project.json',
         tip: 'Shared: in project.json, committed, seen by everyone on the repo',
-        empty: 'No shared dashboards yet.' },
+        empty: 'No project dashboards here yet.', emptyTip: 'Shared with everyone on the repo once committed.' },
     personal: { heading: 'Personal', icon: 'person', file: 'your personal dashboards.json',
         tip: 'Personal: only you see it; kept with your profile and never committed',
-        empty: 'No personal dashboards. Only you see these; they are never committed.' },
+        empty: 'No personal dashboards here yet.', emptyTip: 'Only you see these; they are never committed.' },
 };
 
 const subs = new Set();
@@ -95,30 +97,50 @@ export function entryFor(key) {
     return null;
 }
 
-/** The first readable dashboard, else the first entry, else none. */
-export function firstKey() {
+/** The first readable dashboard listed in `section` (none: in any), else the
+ *  first such entry, else none. */
+export function firstKey(section = null) {
+    const here = (e) => !section || listedIn(e, section);
     for (const scope of ['shared', 'personal']) {
-        const ok = lists[scope].entries.find((e) => e.ok);
+        const ok = lists[scope].entries.find((e) => e.ok && here(e));
         if (ok) return keyOf(scope, ok);
     }
     for (const scope of ['shared', 'personal']) {
-        if (lists[scope].entries.length) return keyOf(scope, lists[scope].entries[0], 0);
+        const i = lists[scope].entries.findIndex(here);
+        if (i >= 0) return keyOf(scope, lists[scope].entries[i], i);
     }
     return null;
 }
 
 export const readable = (scope) => lists[scope].entries.filter((e) => e.ok);
 
+const nameField = (scope, exceptId, hint) => ({
+    name: 'name', label: 'Name', type: 'text', required: true, hint,
+    validator: (v) => (!String(v || '').trim() ? 'A dashboard needs a name.'
+        : nameTaken(v, readable(scope), exceptId)
+            ? `A ${scope === 'shared' ? 'project' : scope} dashboard is already called "${String(v).trim()}". Choose a different name.` : null),
+});
+
 /** Ask for a name no other `scope` dashboard has. */
 export async function askName(title, scope, { name = '', exceptId = null, hint, submitLabel = 'Save' } = {}) {
+    const r = await openForm({ title, submitLabel, defaults: { name }, fields: [nameField(scope, exceptId, hint)] });
+    return r ? String(r.name).trim() : null;
+}
+
+/**
+ * Ask for a name and the section a dashboard is listed in (STORY-0046):
+ * `{name, section}`, or null when cancelled. `sections` is the ones this page
+ * has, `all` always last.
+ */
+export async function askDetails(title, scope, { name = '', section = 'all', sections = SECTIONS, exceptId = null, submitLabel = 'Save' } = {}) {
+    const offered = [...new Set([...sections.filter((s) => s !== 'all'), ...(section !== 'all' ? [section] : []), 'all'])];
     const r = await openForm({
-        title, submitLabel, defaults: { name },
-        fields: [{
-            name: 'name', label: 'Name', type: 'text', required: true, hint,
-            validator: (v) => (!String(v || '').trim() ? 'A dashboard needs a name.'
-                : nameTaken(v, readable(scope), exceptId)
-                    ? `A ${scope} dashboard is already called "${String(v).trim()}". Choose a different name.` : null),
+        title, submitLabel, defaults: { name, section: offered.includes(section) ? section : 'all' },
+        fields: [nameField(scope, exceptId), {
+            name: 'section', label: 'Listed in', type: 'select', required: true,
+            options: offered.map((s) => ({ value: s, label: SECTION_LABEL[s] })),
+            hint: 'The rail it is listed in. All sections lists it under Bugs, Backlog and Tracker alike.',
         }],
     });
-    return r ? String(r.name).trim() : null;
+    return r ? { name: String(r.name).trim(), section: SECTIONS.includes(r.section) ? r.section : 'all' } : null;
 }

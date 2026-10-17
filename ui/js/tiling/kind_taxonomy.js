@@ -164,10 +164,22 @@ export const taxonomy = createTaxonomy({
             'tracker-new': { label: 'New ticket', icon: 'add_circle', topNav: 'tracker' },
         } : {}),
 
-        // EPIC-0033. Charts over this project's records, in every mode. Before
-        // the merged Tracker chip (40), which belongs to no project and so stays
-        // last. Which dashboard is open is `props.dashboard`, not a sub-kind.
-        dashboards: { label: 'Dashboards', icon: 'monitoring', isTopNav: true, order: TRACKER ? 20 : 35 },
+        // EPIC-0033, STORY-0046. A dashboard is a page OF A SECTION, not a
+        // section of its own: no chip, no F-key. Each section's rail lists its
+        // dashboards (dashboards/rail.js), and the page they open sits under
+        // that section's chip, one kind per section, because the WM groups a
+        // tile's tabs by `topNavFor(kind)` and a single dashboards kind would
+        // make every open from the Backlog rail a swap to the Bugs page.
+        // `dashboards` keeps its id, since saved layouts name it, and is the
+        // landing section's (Bugs; Tracker in tracker mode). Which dashboard is
+        // open is `props.dashboard`, not a sub-kind.
+        dashboards: { label: 'Dashboards', icon: 'monitoring', topNav: LANDING },
+        ...(TRACKER ? {} : {
+            'backlog-dashboard': { label: 'Dashboards', icon: 'monitoring', topNav: HAS_BACKLOG ? 'backlog' : 'home' },
+        }),
+        ...(MERGED_TRACKER ? {
+            'tracker-dashboard': { label: 'Dashboards', icon: 'monitoring', topNav: 'tracker' },
+        } : {}),
 
         backlog: TRACKER
             ? { label: 'Tickets', icon: 'workspaces', topNav: 'tracker' }
@@ -215,6 +227,30 @@ export const taxonomy = createTaxonomy({
         },
     },
 });
+
+/* ── dashboards, per section (STORY-0046) ───────────────────────────
+ *
+ * The section a dashboard is listed in (its `section` field, dashboards/model.js)
+ * and the kind of the page that shows it there. Standalone TicketDesk has one
+ * section, the tracker, and its dashboards open under `dashboards`.
+ */
+export const DASHBOARD_KIND = Object.freeze({
+    bugs: 'dashboards',
+    backlog: TRACKER ? 'dashboards' : 'backlog-dashboard',
+    tracker: TRACKER ? 'dashboards' : 'tracker-dashboard',
+});
+
+/** The sections this page has, in rail order: where a dashboard can be listed. */
+export const DASHBOARD_SECTIONS = Object.freeze(TRACKER ? ['tracker']
+    : [HAS_BUGS && 'bugs', HAS_BACKLOG && 'backlog', MERGED_TRACKER && 'tracker'].filter(Boolean));
+
+/** The section a dashboards kind belongs to: `bugs`, `backlog` or `tracker`. */
+export function dashboardSectionOf(kind) {
+    if (TRACKER) return 'tracker';
+    if (kind === 'backlog-dashboard') return 'backlog';
+    if (kind === 'tracker-dashboard') return 'tracker';
+    return HAS_BUGS ? 'bugs' : 'backlog';
+}
 
 /** Per tile tree, the last content leaf that had focus. Weak, so a closed
  *  desktop's tree is not kept alive by having once been asked about. */

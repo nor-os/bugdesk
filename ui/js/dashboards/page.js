@@ -24,6 +24,13 @@
  * one's id, or `personal:<id>`), so the window manager's saved layout reopens
  * it after a reload.
  *
+ * ONE KIND PER SECTION (STORY-0046). There is no Dashboards chip; a dashboard
+ * opens from its section's rail, under that section's chip, as `dashboards`
+ * (Bugs), `backlog-dashboard` or `tracker-dashboard` (see DASHBOARD_KIND in
+ * tiling/kind_taxonomy.js). They are all this page; the kind only says which
+ * section's dashboards it falls back to when the open one is gone. A rename or
+ * a delete made in the rail reaches the open page through the library.
+ *
  * PERSONAL DASHBOARDS (STORY-0035) are listed under the shared ones in the
  * Navigator, marked with their own heading and icon, and here with a badge, and stored per profile in a
  * git-ignored file (store.js). A shared one can be copied to a personal one;
@@ -41,11 +48,12 @@
 import { makeLoadingOverlay, mountTileBreadcrumb } from '@flexdesk/wm';
 import { openConfirm } from '@flexdesk/widgets';
 import { loadShared, saveShared, deleteShared, savePersonal, deletePersonal } from './store.js';
-import { freeName, newId, readEntry, toEntry } from './model.js';
+import { freeName, newId, readEntry, sectionOf, toEntry } from './model.js';
 import {
-    SCOPES, askName, entryFor, firstKey, keyOf, lists, loadLibrary, notifyLibrary, readable,
-    setSelectedKey, trackWrite,
+    SCOPES, askDetails, askName, entryFor, firstKey, keyOf, lists, loadLibrary, notifyLibrary,
+    onLibraryChanged, readable, setSelectedKey, trackWrite,
 } from './library.js';
+import { DASHBOARD_KIND, DASHBOARD_SECTIONS, dashboardSectionOf, taxonomy } from '../tiling/kind_taxonomy.js';
 import { drillExpr, resolveTile } from './resolve.js';
 import { openTileSettings } from './tile_editor.js';
 
@@ -85,11 +93,15 @@ function button(label, icon, onClick, { title = '', primary = false } = {}) {
     return b;
 }
 
+/** The page, under every dashboards kind this page's taxonomy has. */
 export function createDashboardsContent({ eventBus } = {}) {
-    return { dashboards: (host, props, ctx) => mountDashboards(host, props || {}, ctx || {}, eventBus) };
+    const kinds = [...new Set(Object.values(DASHBOARD_KIND))].filter((k) => taxonomy.meta(k));
+    return Object.fromEntries(kinds.map((kind) =>
+        [kind, (host, props, ctx) => mountDashboards(host, props || {}, ctx || {}, eventBus, kind)]));
 }
 
-function mountDashboards(host, props, ctx, eventBus) {
+function mountDashboards(host, props, ctx, eventBus, kind = 'dashboards') {
+    const section = dashboardSectionOf(kind);
     host.classList.add('twm-page-shell');
     host.innerHTML = '';
     const crumbSlot = el('div', 'twm-page-shell__breadcrumb');
@@ -97,7 +109,7 @@ function mountDashboards(host, props, ctx, eventBus) {
     host.append(crumbSlot, contentSlot);
     let crumb = null;
     try {
-        crumb = mountTileBreadcrumb('dashboards', props, { ...ctx, eventBus });
+        crumb = mountTileBreadcrumb(kind, props, { ...ctx, eventBus });
         crumbSlot.appendChild(crumb.el);
     } catch { /* no breadcrumb is not a broken page */ }
 
@@ -153,6 +165,8 @@ function mountDashboards(host, props, ctx, eventBus) {
     function write(raw, scope) {
         const json = JSON.stringify(raw);
         if (json === lastJson) return Promise.resolve();
+        // Deleted meanwhile (from the rail): saving would put it back.
+        if (!lists[scope].entries.some((e) => e.ok && e.id === raw.id)) return Promise.resolve();
         const prev = lastJson;
         lastJson = json;
         const saved = readEntry(raw);
@@ -196,9 +210,9 @@ function mountDashboards(host, props, ctx, eventBus) {
         statusEl = null;
         const found = entryFor(selectedId);
         if (!found) {
-            main.append(el('div', 'bd-dash__empty', lists.shared.entries.length || lists.personal.entries.length
-                ? 'Choose a dashboard in the Navigator.'
-                : 'This project has no dashboards yet. Create one with New dashboard in the Navigator; it is saved in the project config and shared with everyone on the repo. A personal dashboard is only yours.'));
+            main.append(el('div', 'bd-dash__empty', firstKey(section)
+                ? 'Choose a dashboard under Dashboards in the left rail.'
+                : 'No dashboards here yet. Create one with New dashboard at the top of the left rail; it is saved in the project config and shared with everyone on the repo. A personal dashboard is only yours.'));
             return;
         }
         const { scope, entry } = found;
@@ -369,12 +383,40 @@ function mountDashboards(host, props, ctx, eventBus) {
 
     async function rename() {
         if (!current) return;
-        const name = await askName('Rename dashboard', currentScope, { name: current.name, exceptId: current.id });
-        if (!name || disposed || !current || name === current.name) return;
-        current = { ...current, name };
+        const r = await askDetails('Rename dashboard', currentScope, {
+            name: current.name, section: sectionOf(current), sections: DASHBOARD_SECTIONS, exceptId: current.id,
+        });
+        if (!r || disposed || !current || (r.name === current.name && r.section === sectionOf(current))) return;
+        current = { ...current, name: r.name, raw: { ...current.raw, section: r.section } };
         await flush();
-        main.querySelector('.bd-dash__title').textContent = name;
+        main.querySelector('.bd-dash__title').textContent = r.name;
     }
+
+    /**
+     * The library changed under the open dashboard: the rail renamed, moved or
+     * deleted it, or a re-read brought a new copy. A copy this page wrote is
+     * `current` itself and changes nothing here.
+     */
+    function followLibrary() {
+        if (!current || disposed) return;
+        const found = entryFor(keyOf(currentScope, current));
+        if (found?.entry === current) return;
+        if (!found || !found.entry.ok) {
+            clearTimeout(saveTimer);
+            saveTimer = null;
+            disposeGrid();
+            // Gone: the section's first. Unreadable now: say so, where it is.
+            select(found ? selectedId : firstKey(section), { remember: !found });
+            return;
+        }
+        // Keep the grid, and whatever on it is not saved yet: the next save
+        // writes it over the stored entry, under its new name and keys.
+        current = found.entry;
+        lastJson = JSON.stringify(found.entry.raw);
+        const title = main.querySelector('.bd-dash__title');
+        if (title) title.textContent = current.name;
+    }
+    const unfollow = onLibraryChanged(followLibrary);
 
     /** A copy of the open shared dashboard, as a new personal one. */
     async function copyToPersonal() {
@@ -436,7 +478,7 @@ function mountDashboards(host, props, ctx, eventBus) {
         if (current?.id === entry.id && currentScope === scope) { current = null; }
         lists[scope].entries = lists[scope].entries.filter((e) => e !== entry && !(e.ok && e.id === entry.id));
         notifyLibrary();
-        await select(firstKey(), { remember: true });
+        await select(firstKey(section), { remember: true });
     }
 
     /* ── start ──────────────────────────────────────────────────── */
@@ -448,7 +490,7 @@ function mountDashboards(host, props, ctx, eventBus) {
         .then(() => {
             hideLoading();
             if (disposed) return;
-            if (!entryFor(selectedId)) selectedId = firstKey();
+            if (!entryFor(selectedId)) selectedId = firstKey(section);
             setSelectedKey(selectedId);
             return renderMain();
         });
@@ -461,6 +503,7 @@ function mountDashboards(host, props, ctx, eventBus) {
         destroy: () => {
             if (saveTimer) flush();
             disposed = true;
+            unfollow();
             clearTimeout(refreshTimer);
             for (const sub of subs) { try { sub?.dispose?.(); } catch { /* already gone */ } }
             disposeGrid();

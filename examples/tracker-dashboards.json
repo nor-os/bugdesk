@@ -2,6 +2,7 @@
   {
     "id": "example-tracker",
     "name": "My tracker",
+    "section": "tracker",
     "version": 1,
     "tiles": [
       { "id": "due-by-assignee", "type": "flexdesk.chart", "x": 0, "y": 0, "w": 6, "h": 6,

@@ -126,9 +126,36 @@ export function toEntry(entry, layout, defaultsFor = () => ({})) {
     return clone({ ...entry.raw, id: entry.id, name: entry.name, tiles: ordered });
 }
 
-/** A new, readable entry. */
-export function newEntry(name, id = newId('d')) {
-    const raw = { id, name: name.trim(), version: DASHBOARD_VERSION, tiles: [] };
+/* ── sections (STORY-0046) ─────────────────────────────────────────
+ *
+ * A dashboard is listed in ONE section's rail (Bugs, Backlog or Tracker), or in
+ * every one: its `section` key. A dashboard saved before the key existed has
+ * none and is listed everywhere, so nobody's dashboard went missing when the
+ * Dashboards chip did. A value this BugDesk does not know reads as `all` too,
+ * and is written back as it is: the key is the entry's own, like any other.
+ */
+export const SECTIONS = Object.freeze(['bugs', 'backlog', 'tracker', 'all']);
+export const SECTION_LABEL = Object.freeze({
+    bugs: 'Bugs', backlog: 'Backlog', tracker: 'Tracker', all: 'All sections',
+});
+
+/** The section a raw or read entry is listed in. */
+export function sectionOf(entry) {
+    const raw = isObject(entry?.raw) ? entry.raw : entry;
+    const s = isObject(raw) ? raw.section : undefined;
+    return SECTIONS.includes(s) ? s : 'all';
+}
+
+/** Whether an entry is listed in `section`'s rail. */
+export const listedIn = (entry, section) => {
+    const s = sectionOf(entry);
+    return s === 'all' || s === section;
+};
+
+/** A new, readable entry, listed in `section` (none: every section). */
+export function newEntry(name, id = newId('d'), section = null) {
+    const raw = { id, name: name.trim(), version: DASHBOARD_VERSION,
+        ...(SECTIONS.includes(section) ? { section } : {}), tiles: [] };
     return readEntry(raw);
 }
 
