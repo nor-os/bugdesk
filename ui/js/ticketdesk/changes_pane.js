@@ -32,11 +32,18 @@
  * A push runs in the background on the bridge. Its result — git's own words
  * when it was rejected, had no remote or no credentials — is shown here; the
  * commit stays local and nothing is lost.
+ *
+ * NO REPOSITORY, NO REMOTE (STORY-0049). A store outside any repository says so
+ * and offers Initialize git; a repository with no remote at all says "No remote
+ * configured" and offers Add remote… — the same two buttons as the warnings
+ * (git_warnings.js). A branch without an upstream keeps its passive "No remote
+ * branch" line.
  */
 
 import { esc } from './data.js';
 import * as instance from './instance.js';
 import { changeSummary, fieldChanges, textChanges } from './record_diff.js';
+import { initRepo, promptRemote } from './git_warnings.js';
 
 const { CONFIG, apiUrl, ev } = instance;
 
@@ -101,6 +108,13 @@ export function mountChangesPane(host, { eventBus = null, sources = null, onCoun
 
     /* ── drawing ─────────────────────────────────────────────────── */
 
+    // Initialize git, for a store the bridge could ask about and found outside
+    // any repository (not one it could not ask at all).
+    const initButton = (si) => (srcs[si].state?.ok
+        ? `<button type="button" class="ea-btn bd-changes__init" data-init="${si}" ${busy ? 'disabled' : ''}
+            title="git init in ${esc(srcs[si].state.home || 'the store\'s folder')}">${icon('add_circle')} Initialize git</button>` : '');
+    const noRemote = (st) => Array.isArray(st.remotes) && st.remotes.length === 0;
+
     const fileRow = ({ s, f, key }) => {
         const t = s.texts.get(f.path);
         const summary = t ? changeSummary(t.before, t.after, f.status) : f.status;
@@ -126,7 +140,8 @@ export function mountChangesPane(host, { eventBus = null, sources = null, onCoun
                 // One store: the whole pane says it (below). Several: the group does.
                 if (srcs.length > 1) {
                     groups.push(`<div class="bd-changes__group">${esc(s.inst.storeLabelOf('backlog').toUpperCase())}</div>
-                        <div class="bd-changes__note">${esc(st.reason || 'Not in a git repository, so there is nothing to commit.')}</div>`);
+                        <div class="bd-changes__note">${esc(st.reason || 'Not in a git repository, so there is nothing to commit.')}
+                            ${initButton(si)}</div>`);
                 }
                 return;
             }
@@ -192,11 +207,13 @@ export function mountChangesPane(host, { eventBus = null, sources = null, onCoun
         const st = main.state;
         const s = st.settings || {};
         const ahead = st.ahead > 0 ? `${st.ahead} commit${st.ahead === 1 ? '' : 's'} not pushed`
-            : st.ahead === 0 ? 'Up to date with its remote' : 'No remote branch, so nothing to push';
+            : st.ahead === 0 ? 'Up to date with its remote'
+                : noRemote(st) ? 'No remote configured, so nothing to push' : 'No remote branch, so nothing to push';
         return `
             <div class="bd-changes__bar">
                 <span class="bd-changes__branch">${icon('fork_right')}${esc(st.branch || '?')}</span>
                 <span class="td-dim">${esc(ahead)}</span>
+                ${noRemote(st) ? `<button type="button" class="ea-btn bd-changes__remote" data-act="remote" ${busy ? 'disabled' : ''}>${icon('add_link')} Add remote…</button>` : ''}
                 <span class="td-spacer"></span>
                 <div class="bd-changes__auto" role="group" aria-label="Automatic commits">
                     <span class="bd-changes__autolabel">AUTO</span>
@@ -219,7 +236,7 @@ export function mountChangesPane(host, { eventBus = null, sources = null, onCoun
         const st = main.state;
         const pushOff = !st.enabled || st.ahead === -1 || (st.ahead === 0 && !st.pushing);
         const pushWhy = !st.enabled ? 'This store is not in a git repository'
-            : st.ahead === -1 ? 'No remote branch to push to' : st.ahead === 0 ? 'Nothing to push' : '';
+            : noRemote(st) ? 'This repository has no remote' : st.ahead === -1 ? 'No remote branch to push to' : st.ahead === 0 ? 'Nothing to push' : '';
         const label = picked.length === files.length ? `Commit ${files.length || ''}` : `Commit ${picked.length} of ${files.length}`;
         return `
             <div class="bd-changes__commit">
@@ -241,7 +258,9 @@ export function mountChangesPane(host, { eventBus = null, sources = null, onCoun
         if (srcs.some((s) => !s.state)) { host.innerHTML = '<div class="td-dim bd-changes__empty">Loading…</div>'; return; }
         if (srcs.every((s) => !s.state.enabled)) {
             host.innerHTML = `<div class="bd-changes bd-changes--off">${icon('info')} ${esc(main.state.reason || 'Git is not available here.')}
-                <div class="td-dim">Commit on save and push after commit are switched off for this store.</div></div>`;
+                <div class="td-dim">Commit on save and push after commit are switched off for this store.</div>
+                ${error ? `<div class="bd-changes__msg bd-changes__msg--err" role="alert">${icon('error')} <pre>${esc(error)}</pre></div>` : ''}
+                ${initButton(0)}</div>`;
             return;
         }
         // Keep the caret where it was: a refresh while somebody types the
@@ -361,14 +380,22 @@ export function mountChangesPane(host, { eventBus = null, sources = null, onCoun
             return;
         }
         const disc = e.target.closest('[data-discard]')?.dataset.discard;
+        const init = e.target.closest('[data-init]')?.dataset.init;
         const act = e.target.closest('[data-act]')?.dataset.act;
-        if (!disc && !act) return;
+        if (!disc && !act && init === undefined) return;
         if (act === 'refresh') { refresh(); return; }
         busy = true; error = '';
         render();
         try {
             if (disc) await discard(disc);
-            else if (act === 'commit') await commit();
+            else if (init !== undefined) {
+                const s = srcs[Number(init)];
+                s.state = await initRepo(s.api);
+                eventBus?.emit?.(s.inst.ev('git:changed'), {});
+            } else if (act === 'remote') {
+                const next = await promptRemote(main.api);
+                if (next) { main.state = next; eventBus?.emit?.(main.inst.ev('git:changed'), {}); }
+            } else if (act === 'commit') await commit();
             else if (act === 'push') main.state = await callAt(main.api, '/git/push', {});
         } catch (err) { error = err.message; }
         busy = false;
@@ -420,7 +447,9 @@ export function mountChangesPane(host, { eventBus = null, sources = null, onCoun
 /**
  * Settings › Git: the same two switches as the pane's, on the Settings page
  * (STORY-0032). Each applies as it is flipped, as in the pane. Auto-save is not
- * here any more: it is each person's own, under Settings › Behaviour.
+ * here any more: it is each person's own, under Settings › Behaviour. A store
+ * outside any repository is offered Initialize git, and one whose repository has
+ * no remote, Add remote… (STORY-0049).
  * @param {HTMLElement} el
  * @param {object} [o]
  * @param {object} [o.eventBus]
@@ -430,14 +459,20 @@ export async function mountGitSettings(el, { eventBus = null } = {}) {
     let state;
     let error = '';
     try { state = await call('/git'); } catch (err) { state = { enabled: false, reason: err.message }; }
+    const problem = () => (error ? `<div class="bd-schema__problems" role="alert"><span class="material-symbols-outlined">error</span><span>Not saved: ${esc(error)}</span></div>` : '');
     const render = () => {
         if (!state.enabled) {
-            el.innerHTML = `<p class="td-dim">${esc(state.reason || 'Git is not available here.')}</p>`;
+            el.innerHTML = `<p class="td-dim">${esc(state.reason || 'Git is not available here.')}</p>
+                ${state.ok ? `<p><button type="button" class="ea-btn" data-git="init"><span class="material-symbols-outlined">add_circle</span> Initialize git</button>
+                    <span class="td-dim">Runs git init in ${esc(state.home || 'the store\'s folder')}.</span></p>` : ''}${problem()}`;
             return;
         }
         const s = state.settings || {};
+        const noRemote = Array.isArray(state.remotes) && state.remotes.length === 0;
         el.innerHTML = `
             <div class="bd-git-settings">
+                ${noRemote ? `<p class="bd-git-settings__remote"><span class="td-dim">This repository has no remote, so commits stay on this computer.</span>
+                    <button type="button" class="ea-btn" data-git="remote"><span class="material-symbols-outlined">add_link</span> Add remote…</button></p>` : ''}
                 <label class="bd-git-settings__row">
                     <input type="checkbox" data-set="commitAfterSave" ${s.commitAfterSave ? 'checked' : ''}>
                     <span><b>Commit after save</b><span class="td-dim">Every save commits the record it wrote — that file only — as BUG-0042: record edits from the UI. Auto-saves commit once you leave the record, or after five quiet minutes.</span></span>
@@ -446,7 +481,7 @@ export async function mountGitSettings(el, { eventBus = null } = {}) {
                     <input type="checkbox" data-set="pushAfterCommit" ${s.pushAfterCommit ? 'checked' : ''} ${s.commitAfterSave ? '' : 'disabled'}>
                     <span><b>Push after commit</b><span class="td-dim">Each of those commits is pushed straight after. A failed push is shown in the Changes tab.</span></span>
                 </label>
-                ${error ? `<div class="bd-schema__problems" role="alert"><span class="material-symbols-outlined">error</span><span>Not saved: ${esc(error)}</span></div>` : ''}
+                ${problem()}
                 <div class="td-dim bd-schema__foot">Saved to .bugdesk/project.json — commit it to share it. The bottom panel's Changes tab lists what is uncommitted, and commits and pushes by hand.</div>
             </div>`;
     };
@@ -465,7 +500,17 @@ export async function mountGitSettings(el, { eventBus = null } = {}) {
         } catch (err) { error = err.message; }
         render();
     };
+    const onClick = async (e) => {
+        const which = e.target.closest('[data-git]')?.dataset.git;
+        if (!which) return;
+        try {
+            const next = which === 'init' ? await initRepo() : await promptRemote();
+            if (next) { state = next; error = ''; eventBus?.emit?.(ev('git:changed'), {}); }
+        } catch (err) { error = err.message; }
+        render();
+    };
     el.addEventListener('change', onChange);
+    el.addEventListener('click', onClick);
     render();
-    return () => el.removeEventListener('change', onChange);
+    return () => { el.removeEventListener('change', onChange); el.removeEventListener('click', onClick); };
 }

@@ -45,6 +45,18 @@ sealed class Store : IDisposable
     public GitService Git => _git ??= new GitService(BugsDir, BacklogDir) { ConfigDir = ConfigDir };
     GitService? _git;
 
+    /// <summary>Look for the repository again when there was none: somebody may
+    /// have run <c>git init</c> since — here (Initialize git) or by hand.</summary>
+    public void RefreshGit()
+    {
+        if (_git is { Enabled: false }) _git = null;
+    }
+
+    /// <summary>Where Initialize git puts a repository (STORY-0049): the folder
+    /// the store's folders sit in — a tracker's base, a project's root — as
+    /// StoreRegistry.Plan works it out.</summary>
+    public string GitHome => Path.GetDirectoryName(Path.GetFullPath(HasBugs ? BugsDir : HasBacklog ? BacklogDir : ConfigDir))!;
+
     /// <summary>
     /// Every record write goes through here, so the watcher can tell our own echo
     /// from a change somebody else made — and so "commit after save" (Settings ›

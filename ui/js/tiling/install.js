@@ -414,6 +414,15 @@ export async function installTilingShell({ eventBus, logger } = {}) {
         log.warn?.('notifications could not be installed', { err });
     }
 
+    // A store outside any git repository, or in one with no remote, is not
+    // backed up: a sticky toast says so, per store, until dismissed for good
+    // (git_warnings.js, STORY-0049). Not awaited: the bridge asks git.
+    import('../ticketdesk/git_warnings.js')
+        .then((gw) => gw.installGitWarnings({ eventBus }))
+        .catch((err) => log.warn?.('git warnings could not be installed', { err }));
+    trackerCopy?.gitWarnings.installGitWarnings({ eventBus })
+        .catch((err) => log.warn?.('the tracker\'s git warnings could not be installed', { err }));
+
     // A schema in project.json with problems is in effect without the broken
     // entries — said once here, at the bottom, and in full in Settings ›
     // Record types, rather than leaving a field to be quietly missing.
@@ -612,10 +621,10 @@ async function _loadTrackerCopy({ eventBus }) {
         tracker: cfg.tracker || { available: true },
     };
     const T = '../ticketdesk@t/';
-    const [data, pages, backlogPages, newItem, trackerPages, live, links, alerts] = await Promise.all([
+    const [data, pages, backlogPages, newItem, trackerPages, live, links, alerts, gitWarnings] = await Promise.all([
         import(`${T}backlog_data.js`), import(`${T}pages.js`), import(`${T}backlog_pages.js`),
         import(`${T}new_item.js`), import(`${T}tracker_pages.js`), import(`${T}live.js`),
-        import(`${T}ref_autolink.js`), import(`${T}alerts.js`),
+        import(`${T}ref_autolink.js`), import(`${T}alerts.js`), import(`${T}git_warnings.js`),
     ]);
     await data.loadBacklog();
     pages.useEventBus(eventBus);
@@ -631,6 +640,7 @@ async function _loadTrackerCopy({ eventBus }) {
         live,
         links,
         alerts,
+        gitWarnings,
     };
 }
 

@@ -1858,6 +1858,11 @@ object GitPayload(Store s) => new
     enabled = s.Git.Enabled,
     reason = s.Git.Enabled ? null : "This store is not in a git repository, so there is nothing to commit or push.",
     root = s.Git.Root,
+    // Where Initialize git would put the repository, for the warning to name.
+    home = s.GitHome,
+    // No remotes at all is not "the branch has no upstream" (ahead -1): the
+    // first is warned about, the second only said in the pane (STORY-0049).
+    remotes = s.Git.Remotes(),
     branch = s.Git.Branch(),
     ahead = s.Git.Ahead(),
     settings = GitSettings.Parse(s.Project.Document()["git"]).ToJson(),
@@ -1894,7 +1899,38 @@ static string FrontMatterTitle(string text)
     return "";
 }
 
-app.MapGet("/api/git", () => Results.Json(GitPayload(Req.Store), json));
+app.MapGet("/api/git", () =>
+{
+    Req.Store.RefreshGit();
+    return Results.Json(GitPayload(Req.Store), json);
+});
+
+// Initialize git / Add remote… (STORY-0049): only ever because somebody pressed
+// it — in a warning, the Changes pane or Settings › Git. BugDesk never puts a
+// store under git, or gives it a remote, by itself.
+app.MapPost("/api/git/init", () =>
+{
+    var store = Req.Store;
+    store.RefreshGit();
+    if (store.Git.Enabled) return Results.Json(new { ok = false, error = $"This store is already in a git repository ({store.Git.Root})." }, json, statusCode: 409);
+    var error = GitService.Init(store.GitHome);
+    if (error is not null) return Results.Json(new { ok = false, error }, json, statusCode: 409);
+    store.RefreshGit();
+    store.Watcher.Broadcast("git", "{}");
+    return Results.Json(GitPayload(store), json);
+});
+
+app.MapPost("/api/git/remote", async (HttpRequest req) =>
+{
+    var body = await JsonSerializer.DeserializeAsync<Dictionary<string, JsonElement>>(req.Body, json) ?? new();
+    var store = Req.Store;
+    if (!store.Git.Enabled) return Results.Json(new { ok = false, error = "this store is not in a git repository" }, json, statusCode: 409);
+    var url = body.TryGetValue("url", out var uv) && uv.ValueKind == JsonValueKind.String ? uv.GetString() ?? "" : "";
+    var error = store.Git.AddRemote(url);
+    if (error is not null) return Results.Json(new { ok = false, error }, json, statusCode: 400);
+    store.Watcher.Broadcast("git", "{}");
+    return Results.Json(GitPayload(store), json);
+});
 
 // The diff, and both whole versions: the pane reads the front matter of each to
 // say "Severity: high → critical" rather than show two YAML lines.

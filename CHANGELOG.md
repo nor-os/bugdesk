@@ -7,6 +7,18 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **A warning when a store is not backed up** (STORY-0049). When BugDesk opens,
+  a store that is not in a git repository — the tracker, by default — shows a
+  sticky warning with **Initialize git**, and a store whose repository has no
+  remote at all shows a separate one with **Add remote…** (a URL, added as
+  `origin`). A branch without an upstream is still only mentioned in the
+  Changes pane, which now says "No remote configured" when there is no remote at
+  all. BugDesk never initializes a repository or adds a remote by itself.
+  **Don't warn again** hides a warning for that store and that person until the
+  condition changes. The Changes pane and Settings › Git offer the same two
+  buttons. New endpoints: `POST /api/git/init`, `POST /api/git/remote`;
+  `GET /api/git` also returns `remotes` and `home`.
+
 - **The desktop window draws its own frame on Windows** (STORY-0042). The
   Windows title bar is gone: BugDesk's top bar is the top edge of the window,
   with minimise, maximise/restore and close at its right, and the window can be

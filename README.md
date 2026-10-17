@@ -464,10 +464,26 @@ updated record plus `target:{store, id, ref, title}`, so the page repaints every
 pane with no follow-up GET. `WIDGET-1` is a 400 (not a reference at all);
 `STORY-9` parses and comes back 404 if there is no item 9.
 
-**BugDesk never runs git.** There is no `/api/git`, nothing in the server shells
-out, and no history anywhere is derived from `git log` — the `## History`
-section is the record's own. A record you edit in the UI is therefore sitting
+**Git is for record files only, and only when asked.** `/api/git` lists the
+store's uncommitted records (the Changes pane), its branch, how far it is ahead,
+and its remotes; `/api/git/commit` and `/api/git/push` commit and push record
+files by path, never anything else. No history anywhere is derived from
+`git log` — the `## History` section is the record's own. Unless the project
+turns on commit after save (Settings › Git), a record you edit in the UI sits
 uncommitted in the working tree, for you or for an agent to commit.
+
+**A store that is not backed up says so** (STORY-0049). When BugDesk opens, a
+store outside any git repository — the tracker, by default — gets a sticky
+warning with **Initialize git** (`POST /api/git/init`, `git init` in the folder
+the store sits in), and a store in a repository with **no remote at all** gets
+another with **Add remote…** (`POST /api/git/remote {"url"}`, added as
+`origin`; a URL with spaces or a leading `-` is refused). A branch that merely
+has no upstream is not warned about; the Changes pane still says "No remote
+branch". BugDesk never runs `git init` or adds a remote by itself. **Don't warn
+again** hides that warning for that store and that person, saved in their state
+for the store (`git-warnings.json` beside the layout, not project.json), until
+the condition changes: once the store is fine, or in the other condition, the
+dismissal is forgotten and a recurrence warns again.
 
 Every other `/api/<method>` returns `{ok:true,result:{ok:true}}` so the shell
 boots and renders its empty states.
@@ -839,6 +855,11 @@ to other people: it is not about the code in any checkout, most of the people in
 it have never seen that checkout, and committing it would put private notes
 about colleagues into a shared history. `bugs/` and `backlog/` inside a project
 are the wrong home for it in every respect — including the names.
+
+So a tracker has **no history and no backup** until you give it a repository of
+its own. BugDesk does not do that by itself; it warns when it opens, and the
+warning's **Initialize git** runs `git init` in the tracker's folder (and
+**Add remote…** then gives it somewhere to push). See the API section.
 
 With a `[tracker] path` in [`projects.toml`](#projects), `--tracker` opens that
 one — the same tracker every project page shows as its Tracker section — and

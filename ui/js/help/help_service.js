@@ -422,7 +422,7 @@ them and stay with your profile, out of git.
                    'custom field', 'comment', 'composer', 'markdown', 'history',
                    'link', 'reference', 'autolink', 'delete', 'trash', 'snooze',
                    'mass action', 'select', 'drag', 'drop', 'changes', 'commit', 'push',
-                   'live', 'conflict'],
+                   'live', 'conflict', 'git', 'git init', 'remote', 'backup', 'warning'],
         markdown: `# Editing records
 
 ## The form
@@ -486,6 +486,25 @@ The **Changes** panel lists records not committed yet, with their diffs
 (as fields or as text), and lets you commit, push or discard. In
 **Settings › Git** a project can commit after every save and push after
 every commit.
+
+## Not in git, or no remote
+
+Records are only shared, and only backed up, once they are committed and
+pushed. So when BugDesk opens it warns about a store that cannot be:
+
+| Warning | Offers |
+|---|---|
+| *… is not in a git repository* — the tracker, unless you gave it one | **Initialize git**: \`git init\` in the folder the store sits in |
+| *… has no git remote* — commits never leave this computer | **Add remote…**: a URL, added as \`origin\` |
+
+A branch that has a remote but no upstream is not warned about; the
+Changes panel says "No remote branch". BugDesk never initializes a
+repository or adds a remote unless you press the button — the Changes
+panel and Settings › Git offer the same two.
+
+× closes a warning until BugDesk opens again. **Don't warn again** hides
+it for that store, for you, until the condition changes: once the store
+is fine, or has the other problem, the warning can come back.
 `,
     },
 

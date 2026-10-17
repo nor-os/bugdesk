@@ -3770,5 +3770,169 @@ console.log('\nBottom panel: Changes and Alerts');
     });
 }
 
+console.log('\nGit warnings: no repository, no remote (STORY-0049)');
+{
+    const gw = await import(join(UI, 'ticketdesk', 'git_warnings.js'));
+    const settle = async () => { for (let i = 0; i < 20; i++) await new Promise((r) => setTimeout(r, 5)); };
+
+    await t('the condition: no repository, no remote at all, and an upstream-less branch is neither', () => {
+        assert.equal(gw.gitCondition({ ok: true, enabled: false }), 'no-repo');
+        assert.equal(gw.gitCondition({ ok: true, enabled: true, remotes: [], ahead: -1 }), 'no-remote');
+        assert.equal(gw.gitCondition({ ok: true, enabled: true, remotes: ['origin'], ahead: -1 }), null, 'no upstream is not a warning');
+        assert.equal(gw.gitCondition({ ok: true, enabled: true, remotes: ['origin'], ahead: 0 }), null);
+        assert.equal(gw.gitCondition(null), null, 'a bridge that could not be asked says nothing');
+        assert.equal(gw.gitCondition({ ok: true, enabled: true }), null, 'a bridge too old to list remotes says nothing');
+    });
+
+    await t('a dismissal holds for its own condition only, and is forgotten once the condition changes', () => {
+        assert.deepEqual(gw.decideWarning('no-repo', null), { warn: true, dismissed: null });
+        assert.deepEqual(gw.decideWarning('no-repo', 'no-repo'), { warn: false, dismissed: 'no-repo' });
+        assert.deepEqual(gw.decideWarning('no-remote', 'no-repo'), { warn: true, dismissed: null }, 'the other condition warns and clears');
+        assert.deepEqual(gw.decideWarning(null, 'no-remote'), { warn: false, dismissed: null }, 'fine again: the dismissal goes');
+    });
+
+    await t('a remote URL with spaces, a leading dash or nothing at all is refused', () => {
+        assert.ok(gw.remoteUrlProblem(''));
+        assert.ok(gw.remoteUrlProblem('  '));
+        assert.ok(gw.remoteUrlProblem('--upload-pack=x'));
+        assert.ok(gw.remoteUrlProblem('https://example.com/a b.git'));
+        assert.equal(gw.remoteUrlProblem(' git@github.com:me/records.git '), null);
+    });
+
+    // A fake bridge: the store's /git state, and the per-user state file.
+    const bridge = (initial) => {
+        const b = { state: initial, saved: null, posted: [] };
+        b.fetch = async (url, init) => {
+            const u = String(url);
+            const reply = (j, status = 200) => ({ ok: status < 400, status, json: async () => j });
+            if (u.endsWith('/workspace_state_read')) return reply({ ok: true, result: b.saved });
+            if (u.endsWith('/workspace_state_write')) { b.saved = JSON.parse(init.body).data; return reply({ ok: true }); }
+            if (u.endsWith('/git/init')) { b.posted.push('init'); b.state = { ...b.state, enabled: true, root: b.state.home, remotes: [] }; return reply(b.state); }
+            if (u.endsWith('/git/remote')) { b.posted.push(JSON.parse(init.body)); b.state = { ...b.state, remotes: ['origin'] }; return reply(b.state); }
+            if (u.endsWith('/git')) return reply(b.state);
+            return reply({ ok: true });
+        };
+        return b;
+    };
+    const bus = () => {
+        const handlers = new Map();
+        const toasts = [];
+        return {
+            toasts,
+            on: (n, f) => { handlers.set(n, [...(handlers.get(n) || []), f]); return () => {}; },
+            emit: (n, p) => {
+                if (n === 'toast:show') toasts.push(p);
+                if (n === 'notification:show') toasts.push({ ...p, type: p.severity });
+                for (const f of handlers.get(n) || []) f(p);
+            },
+        };
+    };
+
+    await t('a store outside git warns once with Initialize git; pressing it inits, and the no-remote warning follows', async () => {
+        const realFetch = globalThis.fetch;
+        const b = bridge({ ok: true, enabled: false, home: '/home/me/.bugdesk/acme', files: [] });
+        globalThis.fetch = b.fetch;
+        gw._resetGitWarnings();
+        const eb = bus();
+        // FlexDesk's own toasts on the same bus, as install.js mounts them.
+        const { NotificationCenter } = await import('@flexdesk/widgets');
+        const center = new NotificationCenter({ eventBus: eb, maxVisible: 3, overflow: 'collapse' });
+        center.mount(document.body);
+        const onScreen = () => [...document.querySelectorAll('.twm-notification__title')].map((e) => e.textContent);
+        try {
+            await gw.installGitWarnings({ eventBus: eb });
+            assert.equal(eb.toasts.length, 1);
+            assert.ok(onScreen().some((x) => /is not in a git repository/.test(x)), 'the warning is not on screen');
+            const w = eb.toasts[0];
+            assert.equal(w.type, 'warn');
+            assert.equal(w.persistent, true, 'the warning is sticky');
+            assert.match(w.title, /is not in a git repository/);
+            assert.match(w.message, /\/home\/me\/\.bugdesk\/acme/);
+            assert.deepEqual(w.actions.map((a) => a.label), ['Initialize git', "Don't warn again"]);
+            // A git event in the same condition does not warn twice.
+            eb.emit('git:changed', {});
+            await new Promise((r) => setTimeout(r, 350)); await settle();
+            assert.equal(eb.toasts.length, 1, 'warned again for the same condition in one session');
+            // Initialize git: the bridge is asked, the person told, then the no-remote warning.
+            w.actions[0].handler();
+            await new Promise((r) => setTimeout(r, 350)); await settle();
+            assert.deepEqual(b.posted, ['init']);
+            assert.ok(eb.toasts.some((x) => x.type === 'success' && /Initialized a git repository/.test(x.message)));
+            const nr = eb.toasts.find((x) => /has no git remote/.test(x.title || ''));
+            assert.ok(nr, 'no no-remote warning after git init');
+            assert.deepEqual(nr.actions.map((a) => a.label), ['Add remote…', "Don't warn again"]);
+            assert.ok(onScreen().some((x) => /has no git remote/.test(x)), 'the no-remote warning is not on screen');
+            // The store moves on again (a remote added by hand): its warning closes.
+            b.state = { ...b.state, remotes: ['origin'] };
+            await gw.checkGitWarnings();
+            assert.ok(!onScreen().some((x) => /git remote|git repository/.test(x)), 'a warning outlived its condition on screen');
+        } finally {
+            globalThis.fetch = realFetch;
+            center.unmount?.();
+        }
+    });
+
+    await t('Don\'t warn again is saved per store and holds across a reload, until the condition changes', async () => {
+        const realFetch = globalThis.fetch;
+        const b = bridge({ ok: true, enabled: true, root: '/r', home: '/r', remotes: [], files: [] });
+        globalThis.fetch = b.fetch;
+        try {
+            gw._resetGitWarnings();
+            let eb = bus();
+            await gw.installGitWarnings({ eventBus: eb });
+            assert.equal(eb.toasts.length, 1);
+            eb.toasts[0].actions[1].handler();
+            await settle();
+            assert.deepEqual(JSON.parse(b.saved), { dismissed: 'no-remote' });
+            // "Reload": a fresh session reads the dismissal and stays quiet.
+            gw._resetGitWarnings();
+            eb = bus();
+            await gw.installGitWarnings({ eventBus: eb });
+            assert.equal(eb.toasts.length, 0, 'a dismissed warning came back after a reload');
+            // The store gets a remote, then loses it: the dismissal is gone, it warns.
+            b.state = { ...b.state, remotes: ['origin'] };
+            await gw.checkGitWarnings();
+            assert.deepEqual(JSON.parse(b.saved), { dismissed: null }, 'the dismissal outlived its condition');
+            b.state = { ...b.state, remotes: [] };
+            await gw.checkGitWarnings();
+            assert.equal(eb.toasts.length, 1, 'the warning did not come back after the condition changed');
+        } finally {
+            globalThis.fetch = realFetch;
+            gw._resetGitWarnings();
+        }
+    });
+
+    await t('the Changes pane offers Initialize git outside a repository, and Add remote… with no remote', async () => {
+        const realFetch = globalThis.fetch;
+        const b = bridge({ ok: true, enabled: false, reason: 'This store is not in a git repository, so there is nothing to commit or push.', home: '/p', files: [], others: [] });
+        globalThis.fetch = b.fetch;
+        const { mountChangesPane } = await import(join(UI, 'ticketdesk', 'changes_pane.js'));
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        const pane = mountChangesPane(host, {});
+        try {
+            await settle();
+            assert.match(host.textContent, /not in a git repository/);
+            const init = host.querySelector('[data-init="0"]');
+            assert.ok(init, 'no Initialize git in the pane');
+            init.click();
+            await settle();
+            assert.deepEqual(b.posted, ['init']);
+            assert.match(host.querySelector('.bd-changes__bar').textContent, /No remote configured, so nothing to push/);
+            assert.ok(host.querySelector('[data-act="remote"]'), 'no Add remote… with no remote');
+            assert.equal(host.querySelector('[data-act="push"]').title, 'This repository has no remote');
+            // A remote but no upstream: the passive line, no button.
+            b.state = { ...b.state, remotes: ['origin'], ahead: -1 };
+            await pane.refresh();
+            assert.match(host.querySelector('.bd-changes__bar').textContent, /No remote branch, so nothing to push/);
+            assert.equal(host.querySelector('[data-act="remote"]'), null);
+        } finally {
+            pane.destroy();
+            host.remove();
+            globalThis.fetch = realFetch;
+        }
+    });
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

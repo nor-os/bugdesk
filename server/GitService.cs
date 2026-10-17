@@ -196,11 +196,59 @@ sealed class GitService
         return ok && int.TryParse(output.Trim(), out var n) ? n : -1;
     }
 
+    /// <summary>The repository's remotes, by name; empty when it has none at all
+    /// — which is not the same as the branch having no upstream (<see cref="Ahead"/>
+    /// is -1 for both). Settings › Git and the warnings tell the two apart (STORY-0049).</summary>
+    public List<string> Remotes()
+    {
+        if (Root is null) return new();
+        var (ok, output, _) = Run(Root, Timeout, "remote");
+        return ok ? output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList() : new();
+    }
+
+    /// <summary>
+    /// Add <paramref name="url"/> as the repository's <c>origin</c>. Offered only
+    /// to a repository with no remote at all, so it never replaces one. Returns
+    /// null on success, else why not. A URL with spaces or one that git would
+    /// read as an option is refused before git is asked.
+    /// </summary>
+    public string? AddRemote(string url)
+    {
+        if (Root is null) return "the store is not in a git repository";
+        url = url.Trim();
+        if (url.Length == 0) return "A remote needs a URL.";
+        if (url.StartsWith('-') || url.Any(c => char.IsWhiteSpace(c) || char.IsControl(c)))
+            return $"'{url}' is not a remote URL: it may not contain spaces or start with '-'.";
+        lock (_gate)
+        {
+            if (Remotes().Count > 0) return "This repository already has a remote.";
+            var (ok, _, err) = Run(Root, Timeout, "remote", "add", "origin", url);
+            return ok ? null : err.Trim();
+        }
+    }
+
+    /// <summary>
+    /// <c>git init</c> in <paramref name="dir"/> — only ever because somebody
+    /// asked (STORY-0049): BugDesk does not put a store under git by itself.
+    /// Returns null on success, else git's message. The caller builds a new
+    /// <see cref="GitService"/> afterwards, since <see cref="Root"/> is found once.
+    /// </summary>
+    public static string? Init(string dir)
+    {
+        if (!Directory.Exists(dir)) return $"'{dir}' does not exist.";
+        var (ok, output, err) = Run(dir, Timeout, "init", "-q");
+        return ok ? null : (err.Trim().Length > 0 ? err.Trim() : output.Trim());
+    }
+
     public string Branch()
     {
         if (Root is null) return "";
-        var (_, output, _) = Run(Root, Timeout, "rev-parse", "--abbrev-ref", "HEAD");
-        return output.Trim();
+        var (ok, output, _) = Run(Root, Timeout, "rev-parse", "--abbrev-ref", "HEAD");
+        if (ok && output.Trim() != "HEAD") return output.Trim();
+        // A repository with no commits yet (just initialized) has no HEAD to
+        // parse, but its branch still has a name; a detached HEAD has none.
+        var (sok, sym, _) = Run(Root, Timeout, "symbolic-ref", "--short", "-q", "HEAD");
+        return sok ? sym.Trim() : output.Trim();
     }
 
     /// <summary>Push the current branch, in the background. <paramref name="done"/>
