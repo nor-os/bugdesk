@@ -2,10 +2,10 @@
 id: 50
 type: story
 title: "Duplicate, won't fix and the other built-in actions are configurable flows"
-status: in-progress
+status: review
 parent: 17
 phase:
-assignee: norman_agent
+assignee: norman
 reporter: norman
 due:
 points: 5
@@ -13,7 +13,7 @@ subsystem: workflow
 labels: []
 links: []
 created: 2026-10-16
-updated: 2026-10-17T07:20Z
+updated: 2026-10-17T14:50Z
 ---
 
 ## Description
@@ -78,6 +78,8 @@ Out of scope (norman, 2026-10-17): unblock as an action, block for backlog types
 - 2026-10-17 · norman_agent · status: draft -> refined
 - 2026-10-17 · norman_agent · status: refined -> in-progress
 - 2026-10-17 · norman_agent · assignee:  -> norman_agent
+- 2026-10-17 · norman_agent · status: in-progress -> review
+- 2026-10-17 · norman_agent · assignee: norman_agent -> norman
 
 ## Comments
 
@@ -99,3 +101,24 @@ Built on branch ultra/track-C. It stays in progress until the branch is integrat
 - Help (bug lifecycle), README (duplicate, Add a link, Resolutions, API row), CHANGELOG, and the bugs/backlog skills' field notes and Duplicate steps are updated.
 
 Suites: server build OK; check-graph OK; eslint 0 errors; test-ui 221/221; test-tracker 34/34; test-dom 206/206 (8 new tests for this story; the old duplicate test now expects one save to `/api/bugs/42`). Three dashboard suites already fail at the base commit a7bb723 (test-dashboards 1, test-dashboards-example 1, test-dashboards-dom 12). They fail the same way with this change and do not touch this code.
+
+### 2026-10-17T14:50Z · norman_agent
+
+Handing back for review. On main and pushed: c375b2c (refined and taken on), 5e0dea1 (flows can add links, Duplicate is an editable action, records have a resolution), 315505f (review fixes: older workflows keep Mark as duplicate; Resolution can be hidden and keeps hand-typed values).
+
+Built: an "Add a link" flow step (verb, target, optional comment on the linked record), and "Ask for input" can answer with "A record" through the record picker; the server refuses a bad target and writes nothing. "Mark as duplicate and close" (bugs) and "Mark as duplicate and drop" (backlog) are every type's default action, built from those steps and editable in Settings › Workflow. A type list saved before this story gets the default added; removing it is saved as `workflow.removedDefaults.<store>.<type>`. With nothing configured it works as before, and the duplicate-of routes still work and set the resolution. A `resolution` field: closing, dropping or moving to a finished status asks for it, reopening clears it; it is on both record pages and in both filter editors, flows can set, clear and test it, it can be hidden per type, and a hand-typed value is kept.
+
+Verified on scratch projects (one with no workflow, one with a pre-story type list) in headless Edge over CDP with real input: the link step, the duplicate action from the page and the row menu, removing it, resolution on close, drop and reopen. Checked again on main at 4b75945 before this handback: server builds (0 errors), check-graph OK, eslint 0 errors, test-ui 225/225, test-tracker 35/35, test-dom 218/218, test-dashboards 59/59, test-dashboards-dom 58/58, test-dashboards-example 8/8, test-dashboards-tracker 14/14, test-tracker-off 17/17, sync-flexdesk --check matches flexdesk@0.16.1.
+
+Open, for you to judge:
+- With no workflow configured, the right-click row menu does not offer Mark as duplicate (the page does); once a type has its own list, it does. Not a regression.
+- A removed default Duplicate cannot be brought back from the UI after saving (help says a removed one stays removed); there is no "restore default".
+- The first Settings save of a pre-story type list writes the action into project.json for that type.
+- The default flow sets resolution: duplicate even on a type that hides Resolution.
+- A recent comment of yours (under 5 minutes), such as the note an Add-a-link save leaves, stands in for the close message, and the resolution is then asked on its own.
+- A mass action `action:duplicate` on a type whose list gets the default only at load time is refused by the server.
+- The default action is recognised by its id `duplicate`; an unrelated action with that id counts as it.
+- The Duplicate picker's title is now the flow's question. The Resolution field in the backlog filter editor is covered by a DOM test, not checked in a browser.
+- In schema.js the customFields doc comment now sits above the RESOLUTIONS block, not above customFields.
+- Older, not from this story: saving the bug page writes `title:` without quotes.
+- The record was refined, claimed and commented on ultra/track-C and reached main at integration.

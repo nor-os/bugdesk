@@ -2,10 +2,10 @@
 id: 48
 type: story
 title: "Bugs and Backlog open on a home dashboard"
-status: in-progress
+status: review
 parent: 45
 phase:
-assignee: norman_agent
+assignee: norman
 reporter: norman
 due:
 points: 5
@@ -13,7 +13,7 @@ subsystem: ui
 labels: []
 links: [requires 47]
 created: 2026-10-16
-updated: 2026-10-17T13:48Z
+updated: 2026-10-17T14:50Z
 ---
 
 ## Description
@@ -60,6 +60,8 @@ Open question, with norman's answer (2026-10-17):
 - 2026-10-17 · norman_agent · status: draft -> refined
 - 2026-10-17 · norman_agent · status: refined -> in-progress
 - 2026-10-17 · norman_agent · assignee: (unset) -> norman_agent
+- 2026-10-17 · norman_agent · status: in-progress -> review
+- 2026-10-17 · norman_agent · assignee: norman_agent -> norman
 
 ## Comments
 
@@ -159,3 +161,24 @@ Review findings, on ultra/track-A:
   left open in the section; a second click goes home). norman, please
   confirm that wording or ask for the chip to always jump home, which is a
   FlexDesk change.
+
+### 2026-10-17T14:50Z · norman_agent
+
+Handing back for review. On main and pushed: 62a6ba4 (refined and taken on), 2374cf9 (Bugs and Backlog open on a home dashboard), 1388139 (criteria met), 4b75945 (review fixes: the crumb above a backlog list says Items; the homes are marked `overview`).
+
+Built: Bugs and Backlog each open on a home dashboard, which is the landing page. Defaults are built in (ui/js/dashboards/homes.js); editing saves `home-bugs` / `home-backlog` in project.json, and Reset to default puts the built-in back. The queue and the board are a rail click away, and a Home row at the top of each rail brings the home back. Old queue and board tabs still restore.
+
+Verified on a scratch BugDesk in headless Edge over CDP with real input: chips and F-keys, Home rows, tiles and click-throughs, breadcrumbs and Backspace from a list row and from a chart bar, customise and Reset, a migrated layout. Checked again on main at 4b75945 before this handback: server builds (0 errors), check-graph OK, eslint 0 errors, test-ui 225/225, test-tracker 35/35, test-dom 218/218, test-dashboards 59/59, test-dashboards-dom 58/58, test-dashboards-example 8/8, test-dashboards-tracker 14/14, test-tracker-off 17/17, sync-flexdesk --check matches flexdesk@0.16.1.
+
+Please decide:
+- Criterion 1 is reworded from what was refined and is ticked against the new text: coming back from another section the chip puts back the tab left open there (as every FlexDesk chip does), and a second click goes home. Confirm that, or ask for the chip to always jump home, which is a FlexDesk change.
+
+Open:
+- Two fixes need a FlexDesk release that has not happened: FlexDesk 1c4a986 on branch story-0048-home-tabs (no FlexDesk record yet) makes Back and the section crumb prefer an open list over a nearer home, and names a chip-opened tab after the chip ("Bugs", not "bugs-home"). Until it is released (0.16.2) and synced, the `overview` flags do nothing and tabs read "bugs-home" / "backlog-home". That branch is based on FlexDesk main with other sessions' unreleased fixes, which would ship with it.
+- The Backlog home's "Ready to start" tile counts refined non-epics; the rail's "Ready to start" view counts refined or draft. Same label, different numbers.
+- A new split always opens on the Bugs home, also from the Backlog section.
+- The new "On me or <agent>" bug view (`on-us`) shows in the Bugs rail; worth a look.
+- "Progress per epic": long epic names are cut on the x-axis and the legend sits below the visible area. Reset leaves an empty "dashboards": [] in project.json (harmless).
+- The Bugs rail's filter counts do not update after a bug is closed until a reload; the home's tiles do (possibly older than this story).
+- Not checked on a real instance: "me" on an override saved by someone else, and the desktop window.
+- Refine and claim were one commit, on ultra/track-A; the record reached main at integration.

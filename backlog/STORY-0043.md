@@ -2,10 +2,10 @@
 id: 43
 type: story
 title: "The Tracker can be switched off in Settings"
-status: in-progress
+status: review
 parent: 19
 phase:
-assignee: norman_agent
+assignee: norman
 reporter: norman
 due:
 points: 3
@@ -13,7 +13,7 @@ subsystem: settings
 labels: []
 links: []
 created: 2026-10-14
-updated: 2026-10-17T09:18Z
+updated: 2026-10-17T14:50Z
 ---
 
 ## Description
@@ -67,6 +67,8 @@ top-bar element at all since STORY-0046, so only the Tracker is switched here):
 - 2026-10-17 · norman_agent · status: draft -> refined
 - 2026-10-17 · norman_agent · status: refined -> in-progress
 - 2026-10-17 · norman_agent · assignee: (unset) -> norman_agent
+- 2026-10-17 · norman_agent · status: in-progress -> review
+- 2026-10-17 · norman_agent · assignee: norman_agent -> norman
 
 ## Comments
 
@@ -165,3 +167,21 @@ test-dashboards 52, test-dom 198, test-dashboards-dom 46 (the
 "no tracker" case now expects the tile's own source kept),
 test-dashboards-tracker 7, test-dashboards-example 8; eslint
 0 errors; check-graph OK; server build 0 warnings.
+
+### 2026-10-17T14:50Z · norman_agent
+
+Handing back for review. On main and pushed: 8384948 (refined and taken on), 6eca78c (the switch), a363f41 (criteria met), 66894de (review fixes: tracker tiles keep their data, Reset switches it back on), 50ed485 (record).
+
+Built: Settings › You › Behaviour › Tracker, personal and the same in every project (`tracker` in preferences.json in the state folder, never project.json). The switch asks first, saves and reloads. Off: no chip or F-key, no palette results, dashboards, rail, alerts or help for the Tracker; tracker tiles and saved tracker tabs show a note instead. A tracker tile's settings offer only "Tracker (not here now)", so saving one keeps its source and filter. Behaviour's Reset switches it back on (asks, reloads). On again: everything comes back, nothing deleted. `[tracker] enabled = false` in projects.toml still switches it off for the machine. POST /api/personal/preferences answers 400 for a body that is not JSON or an unknown key.
+
+Verified on a scratch BugDesk (own projects.toml and state) in headless Edge over CDP with real input: switch, confirm, reload, chips and F-keys, tile note, Reset, the projects.toml case. Checked again on main at 4b75945 before this handback: server builds (0 errors), check-graph OK, eslint 0 errors, test-ui 225/225, test-tracker 35/35, test-dom 218/218, test-dashboards 59/59, test-dashboards-dom 58/58, test-dashboards-example 8/8, test-dashboards-tracker 14/14, test-tracker-off 17/17, sync-flexdesk --check matches flexdesk@0.16.1.
+
+Open, for you to judge:
+- The change goes through an announced reload, not live; other open windows pick it up on their own next reload.
+- A tracker-item tab kept in a leaf's Home tab group can be lost across an off/on cycle (the Tracker page's own group survived). Records, dashboards and preferences are not affected.
+- After a reload with the Tracker off on a tracker tab, the "Tracker (off)" note shows while the Bugs chip is lit (cosmetic).
+- Reset resets the other Behaviour rows before the Tracker confirm; Cancel only cancels the Tracker part.
+- Tracker alerts leaving the bottom panel were not seen on screen (the scratch tracker had no alert rules).
+- With the Tracker on, Keyboard still lists "Bugs, Backlog, Tracker F1 … F3" in a project without all three (older behaviour).
+- The Description still argues for switching Dashboards off; it is your text, and the rescope is explained below it.
+- The record was refined, claimed and commented on ultra/track-A and reached main when the track was integrated, not before the work as the backlog skill asks.

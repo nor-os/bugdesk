@@ -2,10 +2,10 @@
 id: 47
 type: story
 title: "The Tracker home is a standard, customisable dashboard"
-status: in-progress
+status: review
 parent: 45
 phase:
-assignee: norman_agent
+assignee: norman
 reporter: norman
 due:
 points: 8
@@ -13,7 +13,7 @@ subsystem: ui
 labels: []
 links: []
 created: 2026-10-16
-updated: 2026-10-17T12:12Z
+updated: 2026-10-17T14:50Z
 ---
 
 ## Description
@@ -71,6 +71,8 @@ with others).
 - 2026-10-17 · norman_agent · status: draft -> refined
 - 2026-10-17 · norman_agent · status: refined -> in-progress
 - 2026-10-17 · norman_agent · assignee: (unset) -> norman_agent
+- 2026-10-17 · norman_agent · status: in-progress -> review
+- 2026-10-17 · norman_agent · assignee: norman_agent -> norman
 
 ## Comments
 
@@ -155,3 +157,19 @@ EcoSim-migration release), and it carries BUG-0016's SortableList fix.
 The home's tab reads "tracker" because FlexDesk titles a tab opened from
 the top bar with its kind id (Backlog's reads "backlog" too); the fix
 belongs in FlexDesk.
+
+### 2026-10-17T14:50Z · norman_agent
+
+Handing back for review. On main and pushed: 699268a (refined and taken on), 21c67d2 (the Tracker home is a standard dashboard, with list and people tiles), 6894c3c (criteria met), 677aa5f (review fix: a bugs list tile is not ordered by a target date).
+
+Built: the Tracker chip and F-key open the Tracker home, a standard dashboard. The default is built in (Overdue, Due in the next 7 days, Who has what, Needs a name or a date); the first edit saves `home-tracker` in the tracker's project.json, the header says Customised and offers Reset to default (asks, redraws without a reload; never in a rail). Every dashboard gets List and People tiles and an Everyone / Assigned by me / Out with others scope that every tile follows and the tab keeps. These are FlexDesk's (FlexDesk STORY-0072, e255cf4, released as 0.16.1 and synced); BugDesk adds the data adapters and the row actions. The old Tracker page's header New button and its "N open · M overdue" line are gone on purpose: the top bar's New Item creates tickets, and each tile carries its own count. The row menu entry is now "Open beside the dashboard", since it is on every dashboard.
+
+Verified on a scratch BugDesk and on standalone TicketDesk (--tracker) in headless Edge over CDP with real input: home, tiles, row click and menu, scope across a reload, customise and Reset. Checked again on main at 4b75945 before this handback: server builds (0 errors), check-graph OK, eslint 0 errors, test-ui 225/225, test-tracker 35/35, test-dom 218/218, test-dashboards 59/59, test-dashboards-dom 58/58, test-dashboards-example 8/8, test-dashboards-tracker 14/14, test-tracker-off 17/17, sync-flexdesk --check matches flexdesk@0.16.1.
+
+Open, for you to decide:
+- FlexDesk went out as 0.16.1, not the 0.17.0 you named, because FlexDesk STORY-0069 reserves 0.17.0 for the migration release. It is new API in a patch release and also carries BUG-0016's SortableList fix. Say if you want 0.17.0 anyway; BugDesk then only changes the pin.
+- The home's tab reads "tracker" in lower case (FlexDesk titles a chip-opened tab with the kind id). The fix is FlexDesk 1c4a986 on branch story-0048-home-tabs, not released yet (see STORY-0048).
+- In a narrow list tile the title is dropped while the reference, assignee, due and status stay; it should be cut short instead (FlexDesk list tile CSS).
+- Help and CHANGELOG say "beside" both for a row click (a tab in the same tile) and for "Open beside the dashboard" (a split).
+- The row menu's own Open entry was not exercised on the real instance (same call as a click).
+- The record was refined, claimed and commented on ultra/track-A and reached main at integration.

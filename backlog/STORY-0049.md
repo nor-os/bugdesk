@@ -2,10 +2,10 @@
 id: 49
 type: story
 title: "Warn when a store has no git repository or no remote"
-status: in-progress
+status: review
 parent: 19
 phase:
-assignee: norman_agent
+assignee: norman
 reporter: norman
 due:
 points: 5
@@ -13,7 +13,7 @@ subsystem: settings
 labels: []
 links: []
 created: 2026-10-16
-updated: 2026-10-17T07:15Z
+updated: 2026-10-17T14:50Z
 ---
 
 ## Description
@@ -65,6 +65,8 @@ Open questions for refinement:
 - 2026-10-17 · norman_agent · status: draft -> refined
 - 2026-10-17 · norman_agent · status: refined -> in-progress
 - 2026-10-17 · norman_agent · assignee: (unset) -> norman_agent
+- 2026-10-17 · norman_agent · status: in-progress -> review
+- 2026-10-17 · norman_agent · assignee: norman_agent -> norman
 
 ## Comments
 
@@ -110,3 +112,21 @@ Fixes after review:
 - Enter in the Add remote URL field already submits and runs the check. The review sent a keyDown with no text, which does not submit a form. Sent with Enter's text, `-bad` showed the inline error and a valid path added `origin`.
 
 Checked on a scratch server with Edge over CDP: the tracker's Add remote… in the project page's pane, Enter in the URL field, and the tracker's `.git` removed while the server ran (both pages then warned "The tracker is not in a git repository"). One more test is in `scripts/test-dom.mjs`.
+
+### 2026-10-17T14:50Z · norman_agent
+
+Handing back for review. On main and pushed: b657fc8 (refined and taken on), e8eb4e5 (warn when a store has no git repository or no remote), 5b37d14 (review fixes: a removed repository warns as one; the tracker's Add remote… in the project pane).
+
+Built: on open, a store (the project's, or the tracker's on a project page) not in a git repository gets a sticky warning naming it and its folder, with Initialize git and Don't warn again. A repository with no remote at all gets its own warning with Add remote… (asks for a URL, adds it as origin) and Don't warn again; a remote without an upstream gets no warning. BugDesk never runs git init or adds a remote unless a button is pressed. Don't warn again is per store and per person, saved in the person's own state (git-warnings.json, not project.json), and cleared when the condition changes. The Changes pane and Settings › Git offer the same buttons; the pane says "No remote configured" when there is none. `git remote` failing or timing out means unknown, and no warning. POST /api/git/remote answers 400 for a body that is not JSON.
+
+Verified on scratch projects and a scratch tracker in headless Edge over CDP with real input: both warnings, Initialize git, Add remote… (spaces and a leading '-' refused), Don't warn again across reloads, the dismissal clearing after git init and after a remote is added and removed. Checked again on main at 4b75945 before this handback: server builds (0 errors), check-graph OK, eslint 0 errors, test-ui 225/225, test-tracker 35/35, test-dom 218/218, test-dashboards 59/59, test-dashboards-dom 58/58, test-dashboards-example 8/8, test-dashboards-tracker 14/14, test-tracker-off 17/17, sync-flexdesk --check matches flexdesk@0.16.1.
+
+Open, for you to judge:
+- The sticky warnings sit over the right end of the Changes pane bar (Commit, Push, the AUTO switches). In review, two clicks meant for Commit landed on Don't warn again and switched those warnings off for good. Worth moving or making harder to hit.
+- An empty remote URL is refused by the field's `required` with no visible message; the criterion asks for a message.
+- After Add remote… the branch has no upstream, so Push stays disabled and the first push is `git push -u` outside BugDesk; the success toast still says "Push from the Changes tab". The help does not mention the tracker's own Add remote… in the project pane.
+- A dismissal is cleared only when BugDesk checks (on open, on a git event); a store fixed and broken again while BugDesk is closed stays dismissed.
+- On a project page the not-in-git note sits under a "BACKLOG" heading although it is the whole project, and the tracker's non-record changes show without saying they are the tracker's.
+- Closing a stale warning presses its × in the DOM (FlexDesk has no notification:dismiss event); one held behind "+N more" is not closed. Pressing a warning's button closes the warning, so cancelling the URL prompt hides it until the next open.
+- Bugs and backlog folders in different repositories get one warning; GIT_DIR set elsewhere is not covered.
+- Refine and claim were one commit, on ultra/track-B; the record reached main at integration.
