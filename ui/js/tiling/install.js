@@ -106,12 +106,6 @@ export async function installTilingShell({ eventBus, logger } = {}) {
         // A project with no bug store lands on its backlog, not on a queue
         // over a folder it does not have.
         if (!storeHas('bugs') && !trackerMode) backlogContent.home = backlogContent.backlog;
-        // Tracker mode only, and imported only then: the dashboard is dead
-        // weight in a deployment whose taxonomy has no chip pointing at it.
-        if (trackerMode) {
-            const { createTrackerContent } = await import('../ticketdesk/tracker_pages.js');
-            trackerContent = createTrackerContent({ eventBus });
-        }
     } catch (err) {
         console.error('[bugdesk] page registration failed', err);
     }
@@ -137,12 +131,22 @@ export async function installTilingShell({ eventBus, logger } = {}) {
     // nothing heavy; FlexDesk's tiles and charts load on its first mount.
     let dashboardsContent = {};
     try {
-        dashboardsContent = (await import('../dashboards/page.js')).createDashboardsContent({ eventBus });
+        const dashboards = await import('../dashboards/page.js');
+        dashboardsContent = dashboards.createDashboardsContent({ eventBus });
+        // THE TRACKER HOME is a standard dashboard (STORY-0047): the built-in
+        // default of dashboards/homes.js, or the override that replaced it. In
+        // standalone TicketDesk it is `home` too, the page the app opens on: the
+        // WM's default leaf would otherwise be a bug queue over a store this
+        // deployment is not about, with the Tracker chip lit above it.
+        if (trackerMode || trackerCopy) {
+            const home = dashboards.createHomeContent({ eventBus, section: 'tracker', kind: 'tracker' });
+            trackerContent = { ...trackerContent, tracker: home, ...(trackerMode ? { home } : {}) };
+        }
     } catch (err) {
         console.error('[bugdesk] the dashboards page could not be registered', err);
     }
-    // Order is the override order. Tracker last: it deliberately re-points
-    // `home` at the dashboard (see createTrackerContent).
+    // Order is the override order. Tracker last: in tracker mode it
+    // deliberately re-points `home` at the Tracker home.
     const content = createContentRegistry({
         ...settingsContent, ...ticketDeskContent, ...backlogContent, ...dashboardsContent, ...trackerContent,
     });
@@ -624,21 +628,19 @@ async function _loadTrackerCopy({ eventBus }) {
         tracker: cfg.tracker || { available: true },
     };
     const T = '../ticketdesk@t/';
-    const [data, pages, backlogPages, newItem, trackerPages, live, links, alerts, gitWarnings] = await Promise.all([
+    const [data, pages, backlogPages, newItem, live, links, alerts, gitWarnings] = await Promise.all([
         import(`${T}backlog_data.js`), import(`${T}pages.js`), import(`${T}backlog_pages.js`),
-        import(`${T}new_item.js`), import(`${T}tracker_pages.js`), import(`${T}live.js`),
+        import(`${T}new_item.js`), import(`${T}live.js`),
         import(`${T}ref_autolink.js`), import(`${T}alerts.js`), import(`${T}git_warnings.js`),
     ]);
     await data.loadBacklog();
     pages.useEventBus(eventBus);
-    // The dashboard would re-point `home` at itself, as it does in standalone
-    // TicketDesk. Here Home is the project's.
-    const { home: _dashboardAsHome, ...dashboard } = trackerPages.createTrackerContent({ eventBus });
+    // The `tracker` page itself, the Tracker home, is the page's own
+    // dashboards page over the tracker's records (see the caller).
     return {
         content: {
             ...backlogPages.createBacklogContent({ eventBus }),
             ...newItem.createNewItemContent({ eventBus }),
-            ...dashboard,
         },
         live,
         links,

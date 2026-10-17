@@ -16,7 +16,10 @@
  */
 
 import { openForm } from '@flexdesk/widgets';
-import { KPI_PLOTS, NUMERIC_PLOTS, PLOTS, check } from './resolve.js';
+import { KPI_PLOTS, LIST_SORTS, NUMERIC_PLOTS, PLOTS, check } from './resolve.js';
+
+/** A list or people tile (STORY-0047): records, types and a filter, no plot. */
+const isRows = (kind) => kind === 'list' || kind === 'people';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const typeName = (src, value) => `bd_t_${src.id}_${String(value).replace(/[^A-Za-z0-9_-]/g, '_')}`;
@@ -54,13 +57,17 @@ const fieldOption = (f) => ({ value: f.key, label: f.custom ? `${f.label} (custo
  * The data fields of the form, and their starting values.
  * @param {object[]} sources  available sources (sources.js `getSource`)
  */
-export function dataFields(sources, binding, kind) {
+export function dataFields(sources, binding, kind, preferred = null) {
     const fields = [{ section: 'Data', name: 'bd_data' }];
     const defaults = {};
-    const chosen = sources.some((s) => s.id === binding?.source) ? binding.source : sources[0]?.id;
+    // A new tile reads the dashboard's own section first (the Tracker home's: tracker records).
+    const chosen = sources.some((s) => s.id === binding?.source) ? binding.source
+        : sources.some((s) => s.id === preferred) ? preferred : sources[0]?.id;
     fields.push({ name: 'bd_source', label: 'Records', type: 'select',
         options: sources.map((s) => ({ value: s.id, label: s.label })) });
     defaults.bd_source = chosen;
+
+    if (isRows(kind)) return rowsFields(sources, binding, kind, fields, defaults);
 
     const plots = kind === 'kpi' ? KPI_PLOTS : PLOTS;
     fields.push({ name: 'bd_plot', label: kind === 'kpi' ? 'Show' : 'Plot', type: 'select',
@@ -138,9 +145,44 @@ export function dataFields(sources, binding, kind) {
     return { fields, defaults };
 }
 
+/** The types and filter of each store, and a list's order: a list or people tile's data part. */
+function rowsFields(sources, binding, kind, fields, defaults) {
+    for (const src of sources) {
+        const mine = binding?.source === src.id ? binding : null;
+        fields.push({ section: 'Record types (none ticked: all of them)', name: `bd_types_${src.id}` });
+        for (const t of src.types()) {
+            fields.push({ name: typeName(src, t.value), label: t.label, type: 'checkbox' });
+            defaults[typeName(src, t.value)] = !!mine?.types?.includes(t.value);
+        }
+        fields.push({ name: `bd_filter_${src.id}`, label: kind === 'people' ? 'Of the records' : 'Filter', type: 'select',
+            options: filterOptions(src, mine),
+            hint: 'A saved filter is copied into the tile, so everyone who sees the tile sees the same records.' });
+        defaults[`bd_filter_${src.id}`] = filterValue(mine);
+    }
+    if (kind === 'list') {
+        fields.push({ name: 'bd_sort', label: 'Order', type: 'select',
+            options: Object.entries(LIST_SORTS).map(([value, label]) => ({ value, label })) });
+        defaults.bd_sort = LIST_SORTS[binding?.sort] ? binding.sort : 'due';
+        fields.push({ name: 'bd_open', label: 'Open records only', type: 'checkbox',
+            hint: 'Leave a finished record out even when the filter would list it.' });
+        defaults.bd_open = binding?.open !== false;
+    }
+    fields.push({ section: 'Display', name: 'bd_display' });
+    return { fields, defaults };
+}
+
 /** Show the chosen store's pickers and the ones the chosen plot reads. */
 export function syncVisibility(api, sources, kind) {
     const source = api.get('bd_source');
+    if (isRows(kind)) {
+        for (const src of sources) {
+            const on = src.id === source;
+            api.setVisible(`bd_types_${src.id}`, on);
+            for (const t of src.types()) api.setVisible(typeName(src, t.value), on);
+            api.setVisible(`bd_filter_${src.id}`, on);
+        }
+        return;
+    }
     const plot = api.get('bd_plot');
     for (const src of sources) {
         const on = src.id === source;
@@ -190,6 +232,13 @@ export function bindingFrom(result, sources, kind, previous) {
         const saved = src.savedFilters().find((s) => s.id === f.slice(6));
         if (saved) binding.filter = { expr: JSON.parse(JSON.stringify(saved.expr)), label: saved.label };
     } else if (f === 'keep' && previous?.filter?.expr) binding.filter = previous.filter;
+    if (isRows(kind)) {
+        if (kind === 'list') {
+            binding.sort = LIST_SORTS[result.bd_sort] ? result.bd_sort : 'due';
+            if (result.bd_open === false) binding.open = false;
+        }
+        return binding;
+    }
     binding.plot = plot;
     if (kind !== 'kpi' && ['count', 'sum', 'avg'].includes(plot)) binding.field = result[`bd_field_${src.id}`];
     if (kind !== 'kpi' && plot === 'count' && result[`bd_split_${src.id}`]) binding.split = result[`bd_split_${src.id}`];
@@ -212,10 +261,11 @@ export function bindingFrom(result, sources, kind, previous) {
  * Open the settings of one tile. Resolves to the new config, or null when the
  * dialog was cancelled.
  * @param {object} o
- * @param {'chart'|'kpi'} o.kind
+ * @param {'chart'|'kpi'|'list'|'people'} o.kind
  * @param {object[]} o.sources  available sources, built now
+ * @param {string} [o.preferred]  the source a tile with no settings starts on
  */
-export async function openTileSettings({ kind, config, schema, sources }) {
+export async function openTileSettings({ kind, config, schema, sources, preferred = null }) {
     const binding = config?.binding || null;
     // A tile over a store this page does not have (the Tracker switched off, by
     // you or for the machine; a store the project dropped) keeps its data
@@ -224,7 +274,7 @@ export async function openTileSettings({ kind, config, schema, sources }) {
     // the next Save (STORY-0043). Only how it looks can be changed.
     const absent = !!binding?.source && !sources.some((s) => s.id === binding.source);
     const data = absent ? keptData(binding)
-        : sources.length ? dataFields(sources, binding, kind) : { fields: [], defaults: {} };
+        : sources.length ? dataFields(sources, binding, kind, preferred) : { fields: [], defaults: {} };
     const display = displayFields(schema);
     const shown = new Map((schema?.fields || []).map((f) => [f.name, f.visibleWhen]));
     const fresh = !binding;

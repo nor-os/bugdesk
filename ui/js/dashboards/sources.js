@@ -60,12 +60,22 @@ export const dueBucketField = () => ({
     drill: (key) => ({ kind: 'clause', field: 'dueState', op: 'one_of', value: DUE_BUCKETS[key]?.states || ['none'] }),
 });
 
+const clause = (field, op, value) => ({ kind: 'clause', field, op, value });
+
+/**
+ * What the list and people tiles (STORY-0047) need of a store beyond its
+ * filters: who "me" is, the clauses the board's scope and a click-through are
+ * made of, how a record opens, and how it reads as a row. Built per copy of
+ * the modules, so a tracker row on a project page opens the tracker's ticket
+ * and is deleted through the tracker's own API.
+ */
 /** The records of one type, as picker entries. */
 const refsOf = (items, type) => items.filter((r) => r.type === type)
     .map((r) => ({ id: Number(r.id), label: `${r.ref} ${r.title || ''}`.trim() }));
 
 /** A backlog-shaped store (the backlog, or the tracker) over one copy's modules. */
-function backlogSpec({ store, bdata, filters, statusCategory, customFilterFields, apiUrl: api, label, listKind, changedEvent }) {
+function backlogSpec({ store, bdata, filters, statusCategory, customFilterFields, apiUrl: api, label, listKind, changedEvent,
+    human, itemKind, removeItem }) {
     return {
         store,
         filters,
@@ -92,6 +102,55 @@ function backlogSpec({ store, bdata, filters, statusCategory, customFilterFields
         listProps: (expr, lbl) => ({ expr, label: lbl, flat: true }),
         changedEvent,
         noun: 'item',
+        // The list and people tiles (STORY-0047).
+        human,
+        scopeClause: (scope) => (scope === 'byme' ? clause('reporter', 'is', human)
+            : scope === 'others' ? clause('assignee', 'none_of', ['none', human]) : null),
+        openClause: () => clause('ownFinished', 'is', 'no'),
+        assigneeClause: (who) => clause('assignee', 'is', who || 'none'),
+        assigneeOf: (r) => r.assignee || '',
+        dueStateOf: (r) => r.dueState || 'none',
+        projectRefOf: (r) => r.projectRef || '',
+        projectExpr: (ref) => filters.projectExpr(ref),
+        refOf: (r) => bdata.itemRef(r),
+        itemKind,
+        itemPropsOf: (r) => ({ id: String(r.id), label: bdata.itemLabel(r) || r.ref }),
+        removeItem,
+        /** One record as a list tile's row: what the old Tracker rows said. */
+        listRow: (r) => {
+            const state = r.dueState || 'none';
+            const over = bdata.dueOverrun(r);
+            const due = bdata.dueOf(r);
+            return {
+                key: String(r.id),
+                icon: bdata.TYPE_ICON[r.type] || 'task',
+                iconTitle: bdata.typeLabelOf(r.type),
+                lead: r.ref,
+                title: r.title || '',
+                className: 'bd-dash-row',
+                cells: [
+                    r.assignee ? { text: r.assignee } : { text: 'nobody', tone: 'muted' },
+                    state === 'none' ? { text: 'no date', tone: 'muted' } : {
+                        text: bdata.duePhrase(r), title: `${due}${r.inheritsDue ? ' (inherited)' : ''}`,
+                        tone: state === 'overdue' ? 'danger' : state === 'today' || state === 'soon' ? 'warning' : undefined,
+                    },
+                    ...(over ? [{ icon: 'warning', tone: 'warning', title: `Due after ${bdata.itemRef(over)} (${bdata.dueOf(over)})` }] : []),
+                    { text: bdata.humanizeItemStatus(r.status), className: `bd-status bd-status--${r.status}` },
+                ],
+            };
+        },
+    };
+}
+
+/**
+ * Delete one backlog-shaped record through its own copy's `confirmDelete` (it
+ * asks first, and offers to keep the children). → whether it was deleted.
+ * Imported on first use: deleting is rare, and the dialog pulls in more.
+ */
+function removerFor(load) {
+    return async (r, { onStatus } = {}) => {
+        const { confirmDelete } = await load();
+        return !!(await confirmDelete(r, { onStatus }));
     };
 }
 
@@ -118,11 +177,37 @@ const SPECS = {
         listProps: (expr, label) => ({ expr, label }),
         changedEvent: 'bugs:changed',
         noun: 'bug',
+        human: data.HUMAN_AUTHOR,
+        scopeClause: (scope) => (scope === 'byme' ? clause('reporter', 'is', data.HUMAN_AUTHOR)
+            : scope === 'others' ? { kind: 'group', op: 'AND', children: [
+                clause('assignee', 'is_not_empty'), clause('assignee', 'is_not', data.HUMAN_AUTHOR)] } : null),
+        // Not finished: the statuses this project calls finished are the ones left out.
+        openClause: () => clause('status', 'none_of', [...new Set(data.TICKETS.map((t) => t.rawStatus || '')
+            .filter((st) => schema.statusCategory('bugs', 'bug', st) === 'finished'))]),
+        assigneeClause: (who) => (who ? clause('assignee', 'is', who) : clause('assignee', 'is_empty')),
+        assigneeOf: (r) => r.assignee || '',
+        dueStateOf: () => 'none',
+        refOf: (r) => r.id,
+        itemKind: 'ticket',
+        itemPropsOf: (r) => ({ id: r.id, label: `${r.id} — ${r.summary}` }),
+        listRow: (r) => ({
+            key: String(r.bugId),
+            icon: 'bug_report',
+            iconTitle: data.typeLabelOf(r.type),
+            lead: r.id,
+            title: r.summary || '',
+            className: 'bd-dash-row',
+            cells: [
+                r.assignee ? { text: r.assignee } : { text: 'nobody', tone: 'muted' },
+                { text: r.status, className: 'bd-dash-row__status' },
+            ],
+        }),
     },
     backlog: backlogSpec({
         store: 'backlog', bdata: backlogData, filters: backlogFilters,
         statusCategory: schema.statusCategory, customFilterFields: schema.customFilterFields, apiUrl,
         label: sourceLabel('backlog'), listKind: KIND.list, changedEvent: 'backlog:changed',
+        human: data.HUMAN_AUTHOR, itemKind: KIND.item, removeItem: removerFor(() => import('../ticketdesk/delete_item.js')),
     }),
     // In tracker mode the tracker IS this page's store; on a project page it is
     // filled in by loadTracker().
@@ -130,6 +215,7 @@ const SPECS = {
         store: 'backlog', bdata: backlogData, filters: backlogFilters,
         statusCategory: schema.statusCategory, customFilterFields: schema.customFilterFields, apiUrl,
         label: 'Tracker', listKind: KIND.list, changedEvent: 'backlog:changed',
+        human: data.HUMAN_AUTHOR, itemKind: KIND.item, removeItem: removerFor(() => import('../ticketdesk/delete_item.js')),
     }) : null,
 };
 
@@ -143,12 +229,13 @@ let trackerLoad = null;
  */
 export function loadTracker() {
     if (!MERGED_TRACKER || typeof window === 'undefined' || !window.__BUGDESK_TRACKER_CONFIG__) return Promise.resolve(false);
-    trackerLoad ??= Promise.all(['backlog_data.js', 'backlog_filters.js', 'schema.js', 'instance.js'].map((f) => trackerModule(f)))
-        .then(([bdata, filters, tschema, inst]) => {
+    trackerLoad ??= Promise.all(['backlog_data.js', 'backlog_filters.js', 'schema.js', 'instance.js', 'data.js'].map((f) => trackerModule(f)))
+        .then(([bdata, filters, tschema, inst, tdata]) => {
             SPECS.tracker = backlogSpec({
                 store: 'backlog', bdata, filters,
                 statusCategory: tschema.statusCategory, customFilterFields: tschema.customFilterFields, apiUrl: inst.apiUrl,
                 label: 'Tracker', listKind: inst.KIND.list, changedEvent: inst.ev('backlog:changed'),
+                human: tdata.HUMAN_AUTHOR, itemKind: inst.KIND.item, removeItem: removerFor(() => trackerModule('delete_item.js')),
             });
             return true;
         })

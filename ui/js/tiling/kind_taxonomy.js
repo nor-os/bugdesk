@@ -89,7 +89,7 @@ export const taxonomy = createTaxonomy({
         // BugDesk taxonomy — one top-nav per store, plus the Tracker dashboard
         // in tracker mode. `home` is the WM default leaf and maps to the Queues
         // landing (in tracker mode, to the dashboard — see
-        // ticketdesk/tracker_pages.js). `ticket` is a sub-page of Queues,
+        // dashboards/homes.js, the Tracker home). `ticket` is a sub-page of Queues,
         // `item` a sub-page of Backlog.
         // `home` is the WM's default leaf, and it RENDERS the landing page of a
         // section — the bug queue normally, the Tracker dashboard in tracker

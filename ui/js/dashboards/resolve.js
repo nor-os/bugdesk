@@ -18,7 +18,18 @@
  *     scope?: {kind: 'epic' | 'project', id} | {kind: 'phase', phase} | {kind: 'all'},
  *                                       burndown over the backlog or the tracker
  *                                       (STORY-0037; a PROJ record STORY-0038)
+ *     sort?: 'due' | 'updated' | 'created' | 'ref',   a list tile's order (STORY-0047)
+ *     open?: boolean,                   a list tile: open records only (the default)
  *   }
+ *
+ * A LIST tile (`flexdesk.list`) lists the selected records, a PEOPLE tile
+ * (`flexdesk.people`) groups the open ones by assignee (STORY-0047). Both read
+ * the same source, types and filter as a chart.
+ *
+ * THE BOARD'S SCOPE (STORY-0047) is not part of a binding: it is how the whole
+ * dashboard is being looked at (Everyone / Assigned by me / Out with others),
+ * chosen in its header and handed to every resolve, and to every click-through,
+ * so the list a click opens holds the records the tile counted.
  *
  * Everything that can be wrong with a binding — no settings yet, a store this
  * project lacks, a field removed from the schema, a filter that no longer
@@ -44,6 +55,33 @@ export const PLOTS = {
     burndown: 'Burndown',
 };
 export const KPI_PLOTS = { count: 'Number of records', sum: 'Sum', avg: 'Average' };
+
+/** The board's scopes, in the header's order. The source says what each one
+ *  means for its records (sources.js `scopeClause`). */
+export const SCOPES = Object.freeze([
+    { value: 'all', label: 'Everyone' },
+    { value: 'byme', label: 'Assigned by me' },
+    { value: 'others', label: 'Out with others' },
+]);
+export const scopeOf = (v) => (SCOPES.some((s) => s.value === v) ? v : 'all');
+
+/** A scope's hint for its button: whose records it keeps. */
+export const scopeHint = (scope, human) => ({
+    all: 'every record',
+    byme: `records whose reporter is ${human || 'you'}`,
+    others: `records assigned to somebody who is not ${human || 'you'}`,
+})[scopeOf(scope)];
+
+/** The clause a scope adds for `src`, or null (everyone, or a source that cannot say). */
+const scopeClause = (src, scope) => (scope && scope !== 'all' && src?.scopeClause ? src.scopeClause(scope) : null);
+
+/** A list tile's orders. */
+export const LIST_SORTS = Object.freeze({
+    due: 'Target date (the most late first, then the soonest)',
+    updated: 'Last updated (newest first)',
+    created: 'Created (newest first)',
+    ref: 'Reference',
+});
 
 /** Plots that read a numeric field. */
 export const NUMERIC_PLOTS = new Set(['sum', 'avg', 'histogram']);
@@ -110,9 +148,9 @@ export function check(src, binding, kind = 'chart') {
     return { plot, field, valueField, split, filter };
 }
 
-/** The rows a binding selects: its types, then its filter. */
-export function rowsFor(src, binding, filter) {
-    const match = src.model.matcherFor(andExpr(filter.expr, typesClause(binding)));
+/** The rows a binding selects: its types, its filter, and the board's scope. */
+export function rowsFor(src, binding, filter, scope = 'all') {
+    const match = src.model.matcherFor(andExpr(filter.expr, typesClause(binding), scopeClause(src, scope)));
     return src.rows().filter(match);
 }
 
@@ -126,11 +164,13 @@ const isDay = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s)
  * A tile's data: `{data}` for the tile's `setData`, or `{empty}`.
  * @param {'chart'|'kpi'} kind
  */
-export async function resolveTile(src, binding, { kind = 'chart', today = todayISO() } = {}) {
+export async function resolveTile(src, binding, { kind = 'chart', today = todayISO(), scope = 'all' } = {}) {
     const c = check(src, binding, kind);
     if (c.empty) return c;
     const { plot, field, valueField, split, filter } = c;
-    const rows = rowsFor(src, binding, filter);
+    const rows = rowsFor(src, binding, filter, scope);
+    if (kind === 'list') return listTile(src, binding, rows);
+    if (kind === 'people') return peopleTile(src, rows, today);
     const readValue = valueField ? (r) => src.read(valueField, r) : null;
     const valueNote = (skipped) => skippedNote(skipped, `${valueField?.label || ''} value`.trim());
 
@@ -186,6 +226,99 @@ export async function resolveTile(src, binding, { kind = 'chart', today = todayI
         } };
     }
     return { empty: `This tile asks for '${plot}', which this BugDesk cannot draw.` };
+}
+
+/* ── the list and people tiles (STORY-0047) ─────────────────────── */
+
+const byRef = (src) => (a, b) => (Number(src.idOf(a)) || 0) - (Number(src.idOf(b)) || 0);
+
+/** `rows` in a list tile's order. Records with no date (or no stamp) go last. */
+export function sortRows(src, rows, sort = 'due') {
+    const ref = byRef(src);
+    const stamp = (get) => (r) => String(get?.(r) || '');
+    const desc = (get) => (a, b) => (stamp(get)(b) || '').localeCompare(stamp(get)(a) || '') || ref(a, b);
+    const out = [...rows];
+    if (sort === 'updated') return out.sort(desc(src.updatedOf));
+    if (sort === 'created') return out.sort(desc(src.createdOf));
+    if (sort === 'due' && src.dueOf) {
+        return out.sort((a, b) => {
+            const da = src.dueOf(a) || '', db = src.dueOf(b) || '';
+            if (!da !== !db) return da ? -1 : 1;
+            return da.localeCompare(db) || ref(a, b);
+        });
+    }
+    return out.sort(ref);
+}
+
+/** A list tile's data: its records as rows, open ones only unless it says otherwise. */
+function listTile(src, binding, rows) {
+    const shown = binding.open === false ? rows : rows.filter((r) => !src.isFinishedNow(r));
+    if (!src.listRow) return { empty: `${src.label} records cannot be listed in a tile.` };
+    return { data: {
+        rows: sortRows(src, shown, binding.sort).map((r) => src.listRow(r)),
+        action: { label: 'Open as a list', icon: 'list' },
+    } };
+}
+
+const daysBetween = (a, b) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400000);
+
+/**
+ * Who has open work, worst first: by the number overdue, then by how late the
+ * worst one is, then by how much is open. Not alphabetically — the list is
+ * read top-down and stopped at, so the order has to BE the priority. Work on
+ * nobody is a row of its own, "Nobody": a real and urgent bucket.
+ */
+export function peopleOf(src, rows, today = todayISO()) {
+    const by = new Map();
+    for (const r of rows) {
+        if (src.isFinishedNow(r)) continue;
+        const who = src.assigneeOf ? src.assigneeOf(r) : '';
+        if (!by.has(who)) by.set(who, { who, open: 0, overdue: 0, undated: 0, worst: 0, next: '' });
+        const p = by.get(who);
+        p.open++;
+        const state = src.dueStateOf ? src.dueStateOf(r) : 'none';
+        const due = src.dueOf ? src.dueOf(r) : '';
+        if (state === 'overdue') {
+            p.overdue++;
+            if (isDay(due)) p.worst = Math.max(p.worst, -daysBetween(today, due));
+        } else if (state === 'none') p.undated++;
+        else if (due && (!p.next || due < p.next)) p.next = due;
+    }
+    return [...by.values()].sort((a, b) => b.overdue - a.overdue || b.worst - a.worst || b.open - a.open
+        || String(a.who).localeCompare(String(b.who)));
+}
+
+function peopleTile(src, rows, today) {
+    const dated = !!src.dueOf;
+    return { data: { people: peopleOf(src, rows, today).map((p) => ({
+        key: p.who,
+        name: p.who || 'Nobody',
+        muted: !p.who,
+        icon: p.who ? (p.who.endsWith('_agent') ? 'smart_toy' : 'person') : 'person_off',
+        count: p.open,
+        title: `Show everything open on ${p.who || 'nobody'}`,
+        pills: dated ? [
+            p.overdue ? { text: `${p.overdue} overdue`, tone: 'danger' } : null,
+            p.undated ? { text: `${p.undated} undated`, tone: 'muted' } : null,
+            p.next ? { text: `next ${p.next}` } : null,
+        ].filter(Boolean) : [],
+    })) } };
+}
+
+/** The records a list tile lists, for its "Open as a list": `{expr, label}` or null. */
+export function listDrill(src, binding, title = '', scope = 'all') {
+    const c = check(src, binding, 'list');
+    if (c.empty) return null;
+    const expr = andExpr(c.filter.expr, typesClause(binding), binding.open === false ? null : src.openClause?.(), scopeClause(src, scope));
+    return { expr, label: title || c.filter.label || `${src.label}` };
+}
+
+/** One person's open records, as a people tile's row opens them: `{expr, label}` or null. */
+export function personDrill(src, binding, who, scope = 'all') {
+    const c = check(src, binding, 'people');
+    if (c.empty || !src.assigneeClause) return null;
+    const expr = andExpr(c.filter.expr, typesClause(binding), src.openClause?.(), scopeClause(src, scope), src.assigneeClause(who));
+    return { expr, label: who ? `On ${who}` : 'Nobody on it' };
 }
 
 /** The rows of a backlog burndown's scope, and its own due date. → `{rows, due}` or `{empty}`. */
@@ -261,7 +394,7 @@ async function burndownTile(src, binding, filtered, today) {
  * The records behind one bar or slice, for the list view: the tile's filter and
  * types AND the clicked group. → `{expr, label}` or null.
  */
-export function drillExpr(src, binding, key, title = '') {
+export function drillExpr(src, binding, key, title = '', scope = 'all') {
     const c = check(src, binding, 'chart');
     if (c.empty || !c.field) return null;
     // A split chart's point is `[group, split]`.
@@ -271,7 +404,7 @@ export function drillExpr(src, binding, key, title = '') {
         if (field.virtual) {
             // Status category is not a field the list views know: name the statuses
             // the matching records are in instead.
-            const statuses = [...new Set(rowsFor(src, binding, c.filter)
+            const statuses = [...new Set(rowsFor(src, binding, c.filter, scope)
                 .filter((r) => field.get(r) === value).map((r) => src.statusOf(r)))];
             return { kind: 'clause', field: 'status', op: 'one_of', value: statuses };
         }
@@ -280,7 +413,7 @@ export function drillExpr(src, binding, key, title = '') {
     const clause = clauseFor(c.field, k);
     const splitClause = c.split && sk !== undefined ? clauseFor(c.split, sk) : null;
     if (!clause || (sk !== undefined && c.split && !splitClause)) return null;
-    const expr = andExpr(c.filter.expr, typesClause(binding), clause, splitClause);
+    const expr = andExpr(c.filter.expr, typesClause(binding), scopeClause(src, scope), clause, splitClause);
     const label = `${title || c.field.label}: ${keyLabel(c.field, k)}${splitClause ? ` · ${keyLabel(c.split, sk)}` : ''}`;
     return { expr, label };
 }

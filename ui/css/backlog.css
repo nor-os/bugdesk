@@ -780,9 +780,9 @@
    during an ordinary drag-select or a tab reorder. */
 
 tr[draggable="true"],
-.tk-row[draggable="true"] { cursor: grab; }
+.fd-list-tile__row[draggable="true"] { cursor: grab; }
 tr[draggable="true"]:active,
-.tk-row[draggable="true"]:active { cursor: grabbing; }
+.fd-list-tile__row[draggable="true"]:active { cursor: grabbing; }
 
 .bd-dragging-record .twm-leaf {
     /* Every tile that COULD take the drop, stated quietly, so the one under

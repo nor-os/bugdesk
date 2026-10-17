@@ -22,7 +22,12 @@
 
 export const DASHBOARD_VERSION = 1;
 export const ID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
-export const TILE_TYPES = Object.freeze(['flexdesk.chart', 'flexdesk.kpi']);
+export const TILE_TYPES = Object.freeze(['flexdesk.chart', 'flexdesk.kpi', 'flexdesk.list', 'flexdesk.people']);
+
+/** What a tile type shows, as resolve.js and the tile settings name it. */
+export const TILE_KIND = Object.freeze({
+    'flexdesk.chart': 'chart', 'flexdesk.kpi': 'kpi', 'flexdesk.list': 'list', 'flexdesk.people': 'people',
+});
 
 const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const isInt = (v) => Number.isInteger(v);
@@ -211,4 +216,20 @@ export function freeName(name, entries) {
         const candidate = `${base} (copy${n === 1 ? '' : ` ${n}`})`;
         if (!nameTaken(candidate, entries)) return candidate;
     }
+}
+
+/* ── section homes (STORY-0047) ────────────────────────────────────
+ *
+ * A section's home is a BUILT-IN dashboard (homes.js), not an entry anybody
+ * has to keep in a file. Editing it saves an OVERRIDE: an ordinary entry with
+ * the home's id and `"home": "<section>"`, which then replaces the built-in.
+ * Reset to default deletes it. An override is never listed in a rail as a
+ * dashboard of its own: it is the home, and it is opened from the chip.
+ */
+export const homeIdOf = (section) => `home-${section}`;
+
+/** The section whose home a raw or read entry overrides, or null. */
+export function homeOf(entry) {
+    const raw = isObject(entry?.raw) ? entry.raw : entry;
+    return isObject(raw) && typeof raw.home === 'string' && raw.home && raw.id === homeIdOf(raw.home) ? raw.home : null;
 }

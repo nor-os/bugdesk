@@ -660,7 +660,7 @@ await t('the children list declares a column for every cell a row renders', () =
  * an undated item is not "on time".
  */
 
-console.log('\nTracker dashboard');
+console.log('\nTracker home: the list and people tiles');
 
 const backlogData = await import(join(UI, 'ticketdesk', 'backlog_data.js'));
 
@@ -754,15 +754,35 @@ await t('the item already chosen is never hidden, whatever its status', async ()
     await done;
 });
 
-const { createTrackerContent } = await import(join(UI, 'ticketdesk', 'tracker_pages.js'));
 const { createBacklogContent } = await import(join(UI, 'ticketdesk', 'backlog_pages.js'));
+
+/* THE TRACKER HOME IS A DASHBOARD NOW (STORY-0047): FlexDesk's list and people
+ * tiles, resolved by dashboards/resolve.js over a source (sources.js) and
+ * wired by dashboards/row_actions.js. The built-in home reads the tracker's
+ * own views (`overdue`, `duesoon`), which a project's backlog has not got, so
+ * this board spells the same four tiles out as expressions over the backlog —
+ * the same records, the same derived `dueState`, the same rows. The built-in
+ * itself is mounted in test-dashboards-tracker.mjs. */
+const tilesLib = await import('@flexdesk/tiles');
+tilesLib.registerListTiles();
+const dashSources = await import(join(UI, 'dashboards', 'sources.js'));
+const dashResolve = await import(join(UI, 'dashboards', 'resolve.js'));
+const { wireRowTile } = await import(join(UI, 'dashboards', 'row_actions.js'));
+const dueIs = (...states) => ({ kind: 'group', op: 'AND', children: [{ kind: 'clause', field: 'dueState', op: 'one_of', value: states }] });
+const BOARD = {
+    overdue: { type: 'list', binding: { source: 'backlog', sort: 'due', filter: { expr: dueIs('overdue') } } },
+    soon: { type: 'list', binding: { source: 'backlog', sort: 'due', filter: { expr: dueIs('today', 'soon') } } },
+    people: { type: 'people', binding: { source: 'backlog' } },
+    gaps: { type: 'list', binding: { source: 'backlog', sort: 'due', filter: { expr: { kind: 'group', op: 'OR', children: [
+        { kind: 'clause', field: 'assignee', op: 'is', value: 'none' }, { kind: 'clause', field: 'dueState', op: 'is', value: 'none' }] } } } },
+};
 
 /* A WM stand-in that models the one thing these assertions are about: tiles
  * exist, a split creates one, and navigating an existing tile does not. */
 const opened = [];
 const panes = new Set();
 let paneSeq = 0;
-const mountDashboard = () => {
+const mountDashboard = async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const ctx = {
@@ -781,27 +801,52 @@ const mountDashboard = () => {
             openInTabFromContext: (_c, kind, props) => opened.push({ how: 'tab', kind, props }),
         },
     };
-    const handle = createTrackerContent({ eventBus: null }).tracker(host, {}, ctx);
-    return { host, handle };
+    let scope = 'all';
+    const src = dashSources.getSource('backlog');
+    const tiles = {};
+    const wires = [];
+    for (const [sec, spec] of Object.entries(BOARD)) {
+        const slot = document.createElement('section');
+        slot.dataset.sec = sec;
+        host.append(slot);
+        const Tile = spec.type === 'list' ? tilesLib.ListTile : tilesLib.PeopleTile;
+        const tile = new Tile({ id: sec, grid: null, config: { title: sec, binding: spec.binding } });
+        tile.mount(slot);
+        wires.push(wireRowTile(tile, spec.type, { ctx, eventBus: null, get: () => ({ src, binding: spec.binding, scope }) }));
+        tiles[sec] = { tile, spec };
+    }
+    const render = async () => {
+        for (const { tile, spec } of Object.values(tiles)) {
+            const r = await dashResolve.resolveTile(src, spec.binding, { kind: spec.type, scope });
+            if (r.data) tile.setData(r.data); else tile.showEmpty(r.empty || r.error);
+        }
+    };
+    await render();
+    return {
+        host,
+        setScope: async (s) => { scope = s; await render(); },
+        handle: { destroy: () => { wires.forEach((w) => w.destroy()); Object.values(tiles).forEach(({ tile }) => tile.dispose()); } },
+    };
 };
 
 const sectionRefs = (host, sec) =>
-    [...host.querySelectorAll(`[data-sec="${sec}"] [data-open]`)]
-        .map((el) => el.querySelector('.tk-row__ref')?.textContent.trim());
+    [...host.querySelectorAll(`[data-sec="${sec}"] [data-row-key]`)]
+        .map((el) => el.querySelector('.fd-list-tile__lead')?.textContent.trim());
 
-const board = mountDashboard();
+const board = await mountDashboard();
 
-await t('every section renders, empty or not', () => {
+await t('every tile renders, empty or not', () => {
     for (const sec of ['overdue', 'soon', 'people', 'gaps']) {
-        assert.ok(board.host.querySelector(`[data-sec="${sec}"]`), `no ${sec} section`);
+        assert.ok(board.host.querySelector(`[data-sec="${sec}"] .fd-list-tile`), `no ${sec} tile`);
     }
 });
 
 await t('an overdue item is listed, with how late it is and who has it', () => {
     assert.deepEqual(sectionRefs(board.host, 'overdue'), ['STORY-0002']);
-    const row = board.host.querySelector('[data-sec="overdue"] [data-open]');
+    const row = board.host.querySelector('[data-sec="overdue"] [data-row-key]');
     assert.match(row.textContent, /9 days late/);
     assert.match(row.textContent, /bob/);
+    assert.ok(row.querySelector('.fd-list-tile__cell--danger'), 'the lateness is not marked');
 });
 
 await t('a CLOSED item is never overdue, however old its date', () =>
@@ -814,24 +859,26 @@ await t('an item due inside the week is in "due soon", not in overdue', () => {
     assert.ok(!sectionRefs(board.host, 'overdue').includes('STORY-0004'));
 });
 
-await t('the gaps section holds what the tracker cannot answer', () => {
-    // TASK-0005 has neither an assignee nor a date — one row, not two sections.
+await t('the gaps tile holds what the tracker cannot answer', () => {
+    // TASK-0005 has neither an assignee nor a date — one row, not two tiles.
     assert.deepEqual(sectionRefs(board.host, 'gaps'), ['TASK-0005']);
-    const row = board.host.querySelector('[data-sec="gaps"] [data-open]');
+    const row = board.host.querySelector('[data-sec="gaps"] [data-row-key]');
     assert.match(row.textContent, /nobody/);
     assert.match(row.textContent, /no date/);
 });
 
 await t('unassigned work gets a person row of its own', () => {
-    const names = [...board.host.querySelectorAll('[data-who]')].map((el) => el.dataset.who);
+    const names = [...board.host.querySelectorAll('[data-sec="people"] [data-row-key]')].map((el) => el.dataset.rowKey);
     assert.ok(names.includes(''), `no "nobody" row among ${JSON.stringify(names)}`);
     assert.ok(names.includes('bob'));
+    assert.match(board.host.querySelector('[data-sec="people"] [data-row-key=""]').textContent, /Nobody/);
 });
 
 await t('people are ordered worst-first, not alphabetically', () => {
     // bob holds the only overdue item; alice and "nobody" do not.
-    const names = [...board.host.querySelectorAll('[data-who]')].map((el) => el.dataset.who);
+    const names = [...board.host.querySelectorAll('[data-sec="people"] [data-row-key]')].map((el) => el.dataset.rowKey);
     assert.equal(names[0], 'bob', `expected bob first, got ${JSON.stringify(names)}`);
+    assert.match(board.host.querySelector('[data-sec="people"] [data-row-key="bob"]').textContent, /1 overdue/);
 });
 
 await t('clicking a row opens a TAB in the dashboard\'s own tile', () => {
@@ -839,7 +886,7 @@ await t('clicking a row opens a TAB in the dashboard\'s own tile', () => {
     // it: a split gives two half-width tiles, and a ticket read at half width
     // is a ticket whose description wraps every four words.
     opened.length = 0;
-    board.host.querySelector('[data-sec="overdue"] [data-open]').click();
+    board.host.querySelector('[data-sec="overdue"] [data-row-key]').click();
     assert.equal(opened.length, 1);
     assert.equal(opened[0].kind, 'item');
     assert.equal(opened[0].props.id, '2');
@@ -849,8 +896,8 @@ await t('clicking a row opens a TAB in the dashboard\'s own tile', () => {
 
 await t('every click lands in the same tile — no pane per row', () => {
     opened.length = 0;
-    board.host.querySelector('[data-sec="soon"] [data-open]').click();
-    board.host.querySelector('[data-sec="gaps"] [data-open]').click();
+    board.host.querySelector('[data-sec="soon"] [data-row-key]').click();
+    board.host.querySelector('[data-sec="gaps"] [data-row-key]').click();
     assert.equal(opened.length, 2);
     assert.ok(opened.every((o) => o.dest === 'origin' && o.newTab),
         `a click escaped the tile: ${JSON.stringify(opened)}`);
@@ -858,7 +905,7 @@ await t('every click lands in the same tile — no pane per row', () => {
 
 await t('clicking a person opens their list the same way', () => {
     opened.length = 0;
-    board.host.querySelector('[data-who="bob"]').click();
+    board.host.querySelector('[data-sec="people"] [data-row-key="bob"]').click();
     assert.equal(opened[0].kind, 'backlog');
     assert.match(JSON.stringify(opened[0].props.expr), /"bob"/);
     assert.equal(opened[0].dest, 'origin');
@@ -869,15 +916,57 @@ await t('clicking a person opens their list the same way', () => {
     assert.equal(opened[0].props.flat, true, 'the person list opens as a tree');
 });
 
-await t('the scope switch narrows to what I handed out', async () => {
+await t('"Open as a list" opens the tile\'s records, open ones only', () => {
+    opened.length = 0;
+    board.host.querySelector('[data-sec="overdue"] [data-list-action]').click();
+    assert.equal(opened[0].kind, 'backlog');
+    assert.equal(opened[0].dest, 'origin');
+    const expr = JSON.stringify(opened[0].props.expr);
+    assert.match(expr, /"dueState"/);
+    assert.match(expr, /"ownFinished"/, 'closed records would be listed');
+});
+
+await t('right-click shows the old Tracker row menu, and its entries act', async () => {
+    const row = board.host.querySelector('[data-sec="overdue"] [data-row-key]');
+    row.dispatchEvent(new dom.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 5, clientY: 5 }));
+    const items = () => [...document.querySelectorAll('.twm-context-menu [role="menuitem"]')];
+    const labels = items().map((b) => b.textContent.trim().replace(/^\S+\s+/, ''));
+    assert.deepEqual(labels, ['Open', 'Open beside the dashboard', 'Open in a window', 'Everything on bob',
+        'Everything in this project', 'Copy reference', 'Delete…']);
+    opened.length = 0;
+    items()[1].click();
+    assert.deepEqual([opened[0].kind, opened[0].dest], ['item', 'split-h']);
+    row.dispatchEvent(new dom.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 5, clientY: 5 }));
+    items()[3].click();
+    assert.equal(opened[1].kind, 'backlog');
+    assert.match(JSON.stringify(opened[1].props.expr), /"assignee","op":"is","value":"bob"/);
+    row.dispatchEvent(new dom.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 5, clientY: 5 }));
+    items()[4].click();
+    assert.match(JSON.stringify(opened[2].props.expr), /PROJ-0001/);
+    assert.match(opened[2].props.label, /PROJ-0001/);
+});
+
+await t('Alt+N on a row opens it in a window, as in a table', () => {
+    opened.length = 0;
+    const row = board.host.querySelector('[data-sec="soon"] [data-row-key]');
+    row.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'n', altKey: true, bubbles: true, cancelable: true }));
+    assert.deepEqual(opened.map((o) => [o.kind, o.props.id, o.dest]), [['item', '4', 'window']]);
+});
+
+await t('the scope narrows every tile to what I handed out', async () => {
     // "Assigned by me" reads REPORTER: STORY-0004 is carol's to chase, so it
     // leaves the board even though bob is doing it.
-    board.host.querySelector('[data-scope="byme"]').click();
-    await tick();
+    await board.setScope('byme');
     assert.deepEqual(sectionRefs(board.host, 'soon'), []);
     assert.deepEqual(sectionRefs(board.host, 'overdue'), ['STORY-0002']);
-    board.host.querySelector('[data-scope="all"]').click();
-    await tick();
+    opened.length = 0;
+    board.host.querySelector('[data-sec="overdue"] [data-list-action]').click();
+    assert.match(JSON.stringify(opened[0].props.expr), /"reporter","op":"is","value":"alice"/, 'the list a click opens is not scoped');
+    // Out with others: on somebody who is not me — nobody's work is not out with anyone.
+    await board.setScope('others');
+    assert.deepEqual(sectionRefs(board.host, 'gaps'), []);
+    assert.deepEqual(sectionRefs(board.host, 'soon'), ['STORY-0004']);
+    await board.setScope('all');
     assert.deepEqual(sectionRefs(board.host, 'soon'), ['STORY-0004']);
 });
 
@@ -1163,9 +1252,9 @@ await t('a DOMStringList of types is accepted, not thrown on', () => {
     tile.remove();
 });
 
-await t('dragging a dashboard row carries what would open it', () => {
-    const board2 = mountDashboard();
-    const row = board2.host.querySelector('[data-sec="overdue"] [data-open]');
+await t('dragging a dashboard row carries what would open it', async () => {
+    const board2 = await mountDashboard();
+    const row = board2.host.querySelector('[data-sec="overdue"] [data-row-key]');
     assert.equal(row.draggable, true, 'the row is not draggable');
     const dt = makeTransfer();
     fire(row, 'dragstart', dt);

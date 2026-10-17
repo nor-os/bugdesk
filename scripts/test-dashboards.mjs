@@ -455,6 +455,87 @@ ta('no settings yet, or a store this project lacks, is an empty state too', asyn
 });
 
 
+console.log('\ndashboards: lists, people and the board\'s scope (STORY-0047)');
+
+/** fakeSource with what the list and people tiles read (sources.js's backlogSpec). */
+function rowsSource(rows) {
+    const src = fakeSource(rows);
+    const clause = (field, op, value) => ({ kind: 'clause', field, op, value });
+    src.fields.push({ key: 'reporter', label: 'Reporter', type: 'enum', options: ['ann', 'bob', 'none'], get: (i) => i.reporter || 'none' });
+    src.model = createFilterModel({ fields: src.fields, noun: 'item' });
+    return Object.assign(src, {
+        scopeClause: (sc) => (sc === 'byme' ? clause('reporter', 'is', 'ann') : sc === 'others' ? clause('assignee', 'none_of', ['none', 'ann']) : null),
+        openClause: () => clause('finished', 'is', 'no'),
+        assigneeClause: (who) => clause('assignee', 'is', who || 'none'),
+        assigneeOf: (r) => r.assignee || '',
+        dueStateOf: (r) => r.dueState || 'none',
+        listRow: (r) => ({ key: String(r.id), lead: `#${r.id}`, title: r.title || '' }),
+    });
+}
+const LIST_ROWS = [
+    { id: 1, type: 'story', status: 'draft', assignee: 'ann', reporter: 'ann', due: '2026-10-20', dueState: 'soon', updated: '2026-10-01', created: '2026-09-01' },
+    { id: 2, type: 'story', status: 'draft', assignee: 'bob', reporter: 'ann', due: '2026-10-01', dueState: 'overdue', updated: '2026-10-09', created: '2026-09-03' },
+    { id: 3, type: 'task', status: 'done', assignee: 'bob', reporter: 'ann', due: '2026-09-01', dueState: 'done', updated: '2026-10-02', created: '2026-09-02' },
+    { id: 4, type: 'task', status: 'draft', assignee: '', reporter: 'bob', due: '', dueState: 'none', updated: '2026-10-05', created: '2026-09-05' },
+    { id: 5, type: 'task', status: 'draft', assignee: 'bob', reporter: 'bob', due: '2026-09-28', dueState: 'overdue', updated: '2026-09-28', created: '2026-09-04' },
+];
+const keys = (r) => r.data.rows.map((x) => x.key);
+const listOf = (b, o = {}) => resolve.resolveTile(rowsSource(LIST_ROWS), { source: 'backlog', ...b }, { kind: 'list', today: '2026-10-08', ...o });
+
+ta('a list tile lists open records, the most late first by target date, undated last', async () => {
+    assert.deepEqual(keys(await listOf({})), ['5', '2', '1', '4']);
+    assert.deepEqual(keys(await listOf({ open: false })), ['3', '5', '2', '1', '4'], 'open: false lists finished ones too');
+    const r = await listOf({});
+    assert.deepEqual(r.data.action, { label: 'Open as a list', icon: 'list' });
+});
+
+ta('a list tile\'s other orders', async () => {
+    assert.deepEqual(keys(await listOf({ sort: 'updated' })), ['2', '4', '1', '5']);
+    assert.deepEqual(keys(await listOf({ sort: 'created' })), ['4', '5', '2', '1']);
+    assert.deepEqual(keys(await listOf({ sort: 'ref' })), ['1', '2', '4', '5']);
+});
+
+ta('every tile follows the board\'s scope: a list, a KPI and a chart', async () => {
+    assert.deepEqual(keys(await listOf({}, { scope: 'byme' })), ['2', '1'], 'Assigned by me reads the reporter');
+    assert.deepEqual(keys(await listOf({}, { scope: 'others' })), ['5', '2'], 'Out with others: on somebody else, not on nobody');
+    const kpi = await resolve.resolveTile(rowsSource(LIST_ROWS), { source: 'backlog', plot: 'count' }, { kind: 'kpi', scope: 'byme' });
+    assert.equal(kpi.data.value, 3);
+    const chart = await resolve.resolveTile(rowsSource(LIST_ROWS), { source: 'backlog', plot: 'count', field: 'assignee' }, { scope: 'others' });
+    assert.deepEqual(chart.data.series[0].x, ['bob']);
+    assert.equal(resolve.scopeOf('nonsense'), 'all');
+    assert.deepEqual(resolve.SCOPES.map((x) => x.label), ['Everyone', 'Assigned by me', 'Out with others']);
+});
+
+ta('a people tile: open records by assignee, worst first, nobody a row of its own', async () => {
+    const r = await resolve.resolveTile(rowsSource(LIST_ROWS), { source: 'backlog' }, { kind: 'people', today: '2026-10-08' });
+    assert.deepEqual(r.data.people.map((p) => [p.key, p.name, p.count, p.pills.map((x) => x.text)]), [
+        ['bob', 'bob', 2, ['2 overdue']],
+        ['', 'Nobody', 1, ['1 undated']],
+        ['ann', 'ann', 1, ['next 2026-10-20']],
+    ]);
+    assert.equal(r.data.people[1].muted, true);
+    assert.equal(r.data.people[0].pills[0].tone, 'danger');
+});
+
+ta('a click-through carries the tile\'s filter, open records only, and the scope', async () => {
+    const src = rowsSource(LIST_ROWS);
+    const match = (d) => LIST_ROWS.filter(src.model.matcherFor(d.expr)).map((x) => x.id);
+    const b = { source: 'backlog', types: ['story'] };
+    assert.deepEqual(match(resolve.listDrill(src, b, 'Stories', 'all')), [1, 2]);
+    assert.equal(resolve.listDrill(src, b, 'Stories').label, 'Stories');
+    assert.deepEqual(match(resolve.personDrill(src, { source: 'backlog' }, 'bob', 'all')), [2, 5], 'a finished one is on the list');
+    assert.deepEqual(match(resolve.personDrill(src, { source: 'backlog' }, '', 'all')), [4]);
+    assert.equal(resolve.personDrill(src, { source: 'backlog' }, '', 'all').label, 'Nobody on it');
+    assert.deepEqual(match(resolve.personDrill(src, { source: 'backlog' }, 'bob', 'byme')), [2]);
+    const chart = { source: 'backlog', plot: 'count', field: 'assignee' };
+    assert.deepEqual(match(resolve.drillExpr(src, chart, 'bob', '', 'byme')), [2, 3], 'a chart\'s click carries the scope too');
+});
+
+ta('a list or people tile over a store this page lacks says so', async () => {
+    const r = await resolve.resolveTile(null, { source: 'bugs' }, { kind: 'list' });
+    assert.match(r.empty, /no bugs store/);
+});
+
 console.log('\ndashboards: burndown (STORY-0037)');
 
 /** The example backlog's records and their status History, read straight from the .md files. */

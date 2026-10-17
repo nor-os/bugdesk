@@ -390,7 +390,7 @@ closed (or dropped) and linked to it.
         title: 'Tracker and TicketDesk',
         category: 'basics',
         keywords: ['tracker', 'ticketdesk', 'ticket', 'due', 'target date', 'overdue',
-                   'late', 'plate', 'assigned', 'reporter', '--tracker'],
+                   'late', 'plate', 'assigned', 'reporter', '--tracker', 'home', 'reset to default'],
         markdown: `# Tracker and TicketDesk
 
 Started with \`--tracker\`, the server is **TicketDesk**: the same app
@@ -399,10 +399,26 @@ an assignee and a target date (\`due\`, inherited from what it sits
 under), and is grouped under projects, epics and stories like the
 backlog.
 
-The **Tracker** page leads with what needs chasing: work that is late,
-work nobody is on, work with no target date, and each person's plate.
-Its builtin views start with **Overdue** and **Due this week**, then In
-progress, Nobody on it, No target date, Assigned by me and On me.
+The **Tracker** home leads with what needs chasing: work that is late,
+work due in the next 7 days, each person's plate, and work nobody is on
+or that has no target date. Its builtin views start with **Overdue** and
+**Due this week**, then In progress, Nobody on it, No target date,
+Assigned by me and On me.
+
+## The Tracker home is a dashboard
+
+The Tracker chip opens a dashboard like any other (see Dashboards): four
+tiles, **Overdue**, **Due in the next 7 days**, **Who has what** and
+**Needs a name or a date**, with **Everyone / Assigned by me / Out with
+others** at the top. Click a row to open the ticket as a tab beside the
+home; right-click it to open it beside the home or in a window, list
+everything on that person or in that project, copy its reference or
+delete it. Click a person to list what is on them.
+
+Move, resize, add, remove or configure a tile, and the changed home is
+saved in the tracker's \`.bugdesk/project.json\`, where it replaces the
+built-in default for everyone who uses this tracker; the header then
+says **Customised**. **Reset to default** removes it again.
 
 When a BugDesk has a tracker configured (\`[tracker]\` in
 \`projects.toml\`), it appears as a **Tracker** chip in every project.
@@ -431,10 +447,11 @@ it off for the whole machine, underneath anyone's own choice.
         category: 'basics',
         keywords: ['dashboard', 'chart', 'kpi', 'tile', 'bar', 'pie', 'donut',
                    'histogram', 'burndown', 'sum', 'average', 'count', 'personal', 'shared',
-                   'project', 'section', 'rail', 'rename'],
+                   'project', 'section', 'rail', 'rename', 'list', 'people', 'scope', 'everyone',
+                   'assigned by me', 'out with others'],
         markdown: `# Dashboards
 
-A dashboard is a grid of chart and KPI tiles over your records. Each
+A dashboard is a grid of chart, KPI, list and people tiles over your records. Each
 page (Bugs, Backlog, Tracker) lists its dashboards at the top of its
 left rail; click one to open it in the main area, under the same chip.
 **New dashboard** there creates one listed on that page. The pencil on
@@ -455,9 +472,22 @@ remove, move and resize tiles, and configure each one:
 - **Created and finished per week** over a date range, or a
   **burndown**.
 - **KPI**: a single count, sum or average.
+- **List** (**Add list**): the records themselves, open ones only unless
+  you say otherwise, in target-date order (the most late first) or by
+  update, creation or reference. Click a row to open it as a tab beside
+  the dashboard, right-click for more; **Open as a list** opens them all.
+- **People** (**Add people**): the open records grouped by assignee,
+  the most overdue first, with *Nobody* as a row of its own. Click a
+  person to list what is on them.
 
 Click a bar or a slice to open the records behind it. Tiles redraw when
 records change, here or on disk.
+
+**Everyone / Assigned by me / Out with others** at the top of a
+dashboard narrows every tile on it: to the records you are the reporter
+of, or to those assigned to somebody else. What a tile's click opens is
+narrowed the same way. The choice is kept with the tab, not saved in the
+dashboard.
 
 **Project** dashboards are saved in the project's committed
 \`.bugdesk/project.json\`, so a change shows in the Changes panel and

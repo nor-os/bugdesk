@@ -89,13 +89,32 @@ const TRACKER_ITEMS = [
 const PROJECT_ITEMS = [rec(1, 'epic', 0, 'zed', ''), rec(2, 'story', 1, 'zed', '')];
 
 const calls = [];
-put('fetch', async (url) => {
+// project.json's dashboards, per store: the project's (`api/`) and the tracker's (`/t/api/`).
+const dashFiles = { project: [], tracker: [] };
+const writes = [];
+put('fetch', async (url, init = {}) => {
     const u = String(url);
     calls.push(u);
     const tracker = u.startsWith('/t/api/');
     const path = u.replace(/^.*?api\//, '/').split('?')[0];
+    const method = init.method || 'GET';
+    const file = dashFiles[tracker ? 'tracker' : 'project'];
     let j = { ok: false, error: 'no route' };
-    if (path === '/backlog') j = { ok: true, items: JSON.parse(JSON.stringify(tracker ? TRACKER_ITEMS : PROJECT_ITEMS)) };
+    if (path === '/project/dashboards' && method === 'GET') j = { ok: true, dashboards: JSON.parse(JSON.stringify(file)), broken: null };
+    else if (path === '/project/dashboards' && method === 'POST') {
+        const d = JSON.parse(init.body).dashboard;
+        writes.push({ method, u, d });
+        const i = file.findIndex((e) => e.id === d.id);
+        if (i >= 0) file[i] = d; else file.push(d);
+        j = { ok: true, dashboard: d };
+    } else if (path.startsWith('/project/dashboards/') && method === 'DELETE') {
+        writes.push({ method, u });
+        const id = decodeURIComponent(path.split('/').pop());
+        const i = file.findIndex((e) => e.id === id);
+        if (i >= 0) file.splice(i, 1);
+        j = { ok: true };
+    } else if (path === '/personal_state_read') j = { ok: true, result: null };
+    else if (path === '/backlog') j = { ok: true, items: JSON.parse(JSON.stringify(tracker ? TRACKER_ITEMS : PROJECT_ITEMS)) };
     else if (path === '/backlog/meta') j = { ok: true, phases: [] };
     else if (path === '/dashboards/status_history' && tracker) j = { ok: true, history: { 5: [{ date: '2026-09-05', from: 'draft', to: 'done' }] } };
     return { ok: !!j.ok, status: j.ok ? 200 : 404, json: async () => j };
@@ -188,6 +207,137 @@ await t('the tile settings offer the tracker, and its projects for a burndown sc
     assert.ok(f('bd_split_tracker').options.some((o) => o.value === 'dueBucket'), 'due (week) cannot split');
     const b = editor.bindingFrom({ bd_source: 'tracker', bd_plot: 'burndown', bd_unit: 'items', bd_scope: 'project', bd_project_tracker: '1' }, all, 'chart');
     assert.deepEqual(b, { source: 'tracker', plot: 'burndown', unit: 'items', scope: { kind: 'project', id: 1 } });
+});
+
+/* ── the Tracker home (STORY-0047) ─────────────────────────────────
+ *
+ * The page's own dashboards page, opened as the `tracker` kind with a home:
+ * the built-in default over the tracker's records, until something on it is
+ * changed, which saves an override in the TRACKER's project.json (`/t/api`),
+ * never the project's. Reset to default deletes it. */
+
+console.log('\nThe Tracker home, a standard dashboard (STORY-0047)');
+
+const plotly = { newPlot: async (el) => el, react: async (el) => el, purge: () => {}, Plots: { resize: async () => {} } };
+put('Plotly', plotly);
+dom.window.Plotly = plotly;
+dom.window.Element.prototype.scrollIntoView = function scrollIntoView() {};
+const tick = (ms = 0) => new Promise((r) => setTimeout(r, ms));
+const page = await import(pathToFileURL(join(UI, 'dashboards', 'page.js')).href);
+const homes = await import(pathToFileURL(join(UI, 'dashboards', 'homes.js')).href);
+const navigated = [];
+const tabProps = [];
+const mountHome = async (props = {}) => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const ctx = { leafId: 'L1', wm: {
+        navigate: (kind, p, o) => navigated.push({ kind, props: p, dest: o?.dest, newTab: !!o?.newTab }),
+        updateActiveTabProps: (_id, patch) => tabProps.push(patch),
+        openInPrimary: (kind, p) => navigated.push({ kind, props: p, how: 'primary' }),
+    } };
+    const handle = page.createHomeContent({ eventBus: null, section: 'tracker', kind: 'tracker' })(host, props, ctx);
+    await handle.ready;
+    await tick(20);
+    return { host, handle };
+};
+const leads = (host, id) => [...host.querySelectorAll(`.tile[data-tile-id="${id}"] [data-row-key] .fd-list-tile__lead`)].map((e) => e.textContent);
+const people = (host) => [...host.querySelectorAll('.tile[data-tile-id="people"] [data-row-key]')].map((e) => e.dataset.rowKey);
+const badge = (host) => host.querySelector('.bd-dash__scope')?.textContent.trim();
+const resetBtn = (host) => host.querySelector('[data-action="reset"]');
+
+let home;
+await t('with nothing saved, the Tracker home is the built-in default: four tiles over the tracker', async () => {
+    home = await mountHome();
+    const titles = [...home.host.querySelectorAll('.tile .tile-title')].map((e) => e.textContent);
+    assert.deepEqual(titles, ['Overdue', 'Due in the next 7 days', 'Who has what', 'Needs a name or a date']);
+    assert.equal(home.host.querySelector('.bd-dash__title').textContent, 'Tracker');
+    assert.deepEqual(leads(home.host, 'overdue'), ['TASK-0002'], 'a closed record is not overdue');
+    assert.deepEqual(leads(home.host, 'soon'), ['TASK-0003']);
+    assert.deepEqual(leads(home.host, 'gaps'), ['TASK-0004']);
+    assert.deepEqual(people(home.host), ['ann', 'bob', 'alice'], 'not worst first');
+    assert.match(badge(home.host), /Built in/);
+    assert.equal(resetBtn(home.host).hidden, true, 'Reset is offered with nothing to reset');
+    assert.equal(writes.length, 0, 'opening the home wrote something');
+    for (const a of ['rename', 'delete', 'share']) assert.ok(!home.host.querySelector(`[data-action="${a}"]`), `${a} is offered on the home`);
+    for (const a of ['add-list', 'add-people', 'add-chart', 'add-kpi', 'copy-personal']) assert.ok(home.host.querySelector(`[data-action="${a}"]`), `no ${a}`);
+});
+
+await t('a row opens the tracker\'s ticket, as a tab in the home\'s own tile', async () => {
+    navigated.length = 0;
+    home.host.querySelector('.tile[data-tile-id="overdue"] [data-row-key]').click();
+    assert.deepEqual(navigated.map((n) => [n.kind, n.props.id, n.dest, n.newTab]), [['tracker-item', '2', 'origin', true]]);
+    home.host.querySelector('.tile[data-tile-id="people"] [data-row-key="bob"]').click();
+    assert.equal(navigated[1].kind, 'tracker-tickets');
+    assert.equal(navigated[1].props.label, 'On bob');
+});
+
+await t('the scope picker narrows every tile, and is kept with the tab', async () => {
+    const buttons = [...home.host.querySelectorAll('.fd-scope-picker button')];
+    assert.deepEqual(buttons.map((b) => b.textContent), ['Everyone', 'Assigned by me', 'Out with others']);
+    assert.match(buttons[1].title, /reporter is alice/);
+    buttons[2].click();
+    await tick(20);
+    assert.deepEqual(tabProps.at(-1), { scope: 'others' });
+    assert.deepEqual(people(home.host), ['ann', 'bob'], 'alice\'s own work is not out with others');
+    assert.deepEqual(leads(home.host, 'overdue'), ['TASK-0002']);
+    home.handle.destroy();
+    home.host.remove();
+    home = await mountHome({ scope: 'others' });
+    assert.equal(home.host.querySelector('.fd-scope-picker [aria-pressed="true"]').textContent, 'Out with others', 'the scope was not restored');
+    assert.deepEqual(people(home.host), ['ann', 'bob']);
+});
+
+await t('changing the built-in saves an override in the tracker\'s project.json, never the project\'s', async () => {
+    home.handle.grid.removeTile('gaps');
+    await tick(page.SAVE_DELAY_MS + 50);
+    assert.equal(writes.length, 1, `${writes.length} writes`);
+    assert.ok(writes[0].u.startsWith('/t/api/project/dashboards'), writes[0].u);
+    assert.equal(writes[0].d.id, 'home-tracker');
+    assert.equal(writes[0].d.home, 'tracker');
+    assert.deepEqual(writes[0].d.tiles.map((x) => x.id), ['overdue', 'soon', 'people']);
+    assert.equal(dashFiles.project.length, 0, 'the project\'s project.json was written');
+    assert.match(badge(home.host), /Customised/);
+    assert.equal(resetBtn(home.host).hidden, false, 'no Reset to default');
+});
+
+await t('the override is the home from then on, and never a dashboard of the rail', async () => {
+    home.handle.destroy();
+    home.host.remove();
+    home = await mountHome();
+    assert.equal(home.host.querySelectorAll('.tile').length, 3);
+    assert.match(badge(home.host), /Customised/);
+    const lib = await import(pathToFileURL(join(UI, 'dashboards', 'library.js')).href);
+    dashFiles.project.push({ ...dashFiles.tracker[0] });       // as standalone TicketDesk keeps it: in the listed file
+    await lib.loadLibrary();
+    assert.ok(!lib.lists.shared.entries.some((e) => e.id === 'home-tracker'), 'the override is listed as a dashboard');
+    dashFiles.project.length = 0;
+    await lib.loadLibrary();
+});
+
+await t('Reset to default asks, deletes the override and shows the built-in again', async () => {
+    resetBtn(home.host).click();
+    await tick(10);
+    const confirm = [...document.querySelectorAll('[data-action="confirm"]')].at(-1);
+    assert.ok(confirm, 'Reset did not ask');
+    confirm.click();
+    await tick(40);
+    assert.deepEqual(writes.at(-1), { method: 'DELETE', u: '/t/api/project/dashboards/home-tracker' });
+    assert.equal(dashFiles.tracker.length, 0);
+    assert.equal(home.host.querySelectorAll('.tile').length, 4, 'the built-in is not back');
+    assert.match(badge(home.host), /Built in/);
+    assert.equal(resetBtn(home.host).hidden, true);
+    home.handle.destroy();
+    home.host.remove();
+});
+
+await t('the built-in home reads the tracker\'s own views', () => {
+    const b = homes.builtinHome('tracker');
+    const trk = sources.getSource('tracker');
+    for (const tile of b.tiles) {
+        const c = resolve.check(trk, tile.config.binding, tile.type === 'flexdesk.people' ? 'people' : 'list');
+        assert.ok(!c.empty, `${tile.id}: ${c.empty}`);
+    }
+    assert.equal(homes.builtinHome('bugs'), null);
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

@@ -11,8 +11,8 @@
 import { apiUrl } from '../ticketdesk/instance.js';
 import { readEntries, parsePersonal, PERSONAL_FILE } from './model.js';
 
-async function call(path, init) {
-    const res = await fetch(apiUrl(path), {
+async function call(path, init, api = apiUrl) {
+    const res = await fetch(api(path), {
         ...init,
         headers: { 'content-type': 'application/json', accept: 'application/json' },
     });
@@ -21,19 +21,23 @@ async function call(path, init) {
     return j;
 }
 
-/** `{entries, broken}` — `broken` is why the whole key cannot be read, or null. */
-export async function loadShared() {
-    const j = await call('/project/dashboards', { method: 'GET' });
+/**
+ * `{entries, broken}` — `broken` is why the whole key cannot be read, or null.
+ * `api` is another store's API: the tracker's, for the Tracker home's override
+ * on a project page (homes.js, STORY-0047).
+ */
+export async function loadShared(api = apiUrl) {
+    const j = await call('/project/dashboards', { method: 'GET' }, api);
     return { entries: readEntries(j.dashboards), broken: j.broken || null };
 }
 
 /** Save one raw entry (adds it, or replaces the one with its id). */
-export async function saveShared(raw) {
-    await call('/project/dashboards', { method: 'POST', body: JSON.stringify({ dashboard: raw }) });
+export async function saveShared(raw, api = apiUrl) {
+    await call('/project/dashboards', { method: 'POST', body: JSON.stringify({ dashboard: raw }) }, api);
 }
 
-export async function deleteShared(id) {
-    await call(`/project/dashboards/${encodeURIComponent(id)}`, { method: 'DELETE' });
+export async function deleteShared(id, api = apiUrl) {
+    await call(`/project/dashboards/${encodeURIComponent(id)}`, { method: 'DELETE' }, api);
 }
 
 /* ── personal dashboards ────────────────────────────────────────────

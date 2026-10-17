@@ -964,5 +964,74 @@ await t('due (week) per assignee is offered as a split and saved with the tile',
     L.page.destroy();
 });
 
+console.log('\nList and people tiles, and the board\'s scope (STORY-0047)');
+
+await t('a list and a people tile are added, configured and saved like any tile', async () => {
+    L = mountLive();
+    await L.page.ready; await tick(10);
+    const before = L.page.grid.layout.length;
+    L.host.querySelector('[data-action="add-list"]').click();
+    L.host.querySelector('[data-action="add-people"]').click();
+    await tick(10);
+    const added = L.page.grid.layout.slice(before);
+    assert.deepEqual(added.map((x) => x.type), ['flexdesk.list', 'flexdesk.people']);
+    const [list, people] = added.map((x) => tileOf(L.page, x.id));
+    assert.match(tileText(L.page, list.id), /no data settings yet/);
+    list._onConfigClick();
+    let form = await fillForm({ bd_source: 'backlog' });
+    assert.ok(!form.querySelector('[name="bd_plot"]'), 'a list tile asks what to plot');
+    assert.deepEqual(options(form, 'bd_sort'), ['due', 'updated', 'created', 'ref']);
+    assert.ok(form.querySelector('[name="empty_text"]') && form.querySelector('[name="max_rows"]'), 'FlexDesk\'s own settings are not offered');
+    form = await fillForm({ bd_source: 'backlog', bd_t_backlog_story: true, bd_sort: 'ref', title: 'Stories', empty_text: 'No stories.' });
+    await submit(form);
+    assert.deepEqual([...list.contentElement.querySelectorAll('[data-row-key]')].map((r) => r.dataset.rowKey), ['1', '2']);
+    assert.match(list.contentElement.textContent, /STORY-0001.*Item 1.*ann/s);
+    people._onConfigClick();
+    form = await fillForm({ bd_source: 'backlog' });
+    await submit(form);
+    assert.deepEqual([...people.contentElement.querySelectorAll('[data-row-key]')].map((r) => r.dataset.rowKey), ['bob', 'ann']);
+    await settle();
+    const saved = server.list.find((e) => e && e.id === 'data').tiles;
+    const sl = saved.find((x) => x.id === list.id);
+    assert.deepEqual(sl.config.binding, { source: 'backlog', types: ['story'], sort: 'ref' });
+    assert.equal(sl.config.empty_text, 'No stories.');
+    assert.deepEqual(saved.find((x) => x.id === people.id).config.binding, { source: 'backlog' });
+});
+
+await t('the scope picker sits in every dashboard\'s header; every tile follows it and the tab keeps it', async () => {
+    const buttons = [...L.host.querySelectorAll('.bd-dash__head .fd-scope-picker button')];
+    assert.deepEqual(buttons.map((b) => b.textContent), ['Everyone', 'Assigned by me', 'Out with others']);
+    const kpiBefore = kpiValue(L.page, 'k-pts');
+    buttons[2].click();
+    await tick(30);
+    assert.deepEqual(props.at(-1).patch, { scope: 'others' });
+    // Out with others: on somebody who is not alice. Every item here is on ann or bob.
+    assert.equal(kpiValue(L.page, 'k-pts'), kpiBefore);
+    buttons[1].click();
+    await tick(30);
+    // Assigned by me: every item's reporter is alice.
+    assert.equal(kpiValue(L.page, 'k-pts'), kpiBefore);
+    server.records['/backlog'] = { items: ITEMS().map((i) => (i.id === 1 ? { ...i, reporter: 'carol' } : i)) };
+    await backlogData.loadBacklog();
+    bus.emit('backlog:changed', {});
+    await tick(150);
+    const list = [...L.page.grid.tiles.values()].find((x) => x.constructor.TYPE === 'flexdesk.list');
+    assert.deepEqual([...list.contentElement.querySelectorAll('[data-row-key]')].map((r) => r.dataset.rowKey), ['2'], 'the list does not follow the scope');
+    assert.ok(!server.list.find((e) => e && e.id === 'data').scope, 'the scope was written into the dashboard');
+    L.page.destroy();
+    server.records['/backlog'] = { items: ITEMS() };
+    await backlogData.loadBacklog();
+});
+
+await t('a home override in project.json is never listed in a rail', async () => {
+    server.list.push({ id: 'home-bugs', home: 'bugs', name: 'Bugs home', version: 1, tiles: [] });
+    const r = mount();
+    await r.page.ready; await tick(10);
+    const names = [...r.nav.querySelectorAll('.bd-dash-nav__item')].map(rowName);
+    assert.ok(!names.includes('Bugs home'), `listed: ${names.join(', ')}`);
+    r.destroy();
+    server.list = server.list.filter((e) => !(e && e.id === 'home-bugs'));
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

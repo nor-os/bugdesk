@@ -18,7 +18,7 @@
 
 import { openForm } from '@flexdesk/widgets';
 import { loadShared, loadPersonal } from './store.js';
-import { SECTIONS, SECTION_LABEL, listedIn, nameTaken } from './model.js';
+import { SECTIONS, SECTION_LABEL, homeOf, listedIn, nameTaken } from './model.js';
 import { DASHBOARD_SECTIONS } from '../tiling/kind_taxonomy.js';
 
 /** Both lists. `broken` is why that whole list cannot be read (nothing is
@@ -78,7 +78,9 @@ export function loadLibrary() {
     loading ??= Promise.all([...writes])
         .then(() => Promise.all([loadShared().catch(unreadable), loadPersonal().catch(unreadable)]))
         .then(([shared, personal]) => {
-            Object.assign(lists.shared, shared);
+            // A section home's override (homes.js) is the home, opened from its
+            // chip, never a dashboard of the rail; it stays in the file as it is.
+            Object.assign(lists.shared, { ...shared, entries: shared.entries.filter((e) => !homeOf(e)) });
             Object.assign(lists.personal, personal);
             notifyLibrary();
         })

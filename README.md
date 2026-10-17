@@ -1017,9 +1017,20 @@ like a tracker with nothing in it.
 
 ### The dashboard
 
-Four sections, in the order a manager reads them:
+The Tracker home is a standard dashboard (STORY-0047): the same grid, tiles and
+tile settings as every other one, built from FlexDesk's list and people tiles.
+Its default is built into BugDesk (`ui/js/dashboards/homes.js`). Move, add,
+remove or configure a tile and the changed home is saved as an override in the
+**tracker's** `.bugdesk/project.json` (id `home-tracker`, `"home": "tracker"`),
+where it replaces the default for everyone who uses this tracker; **Reset to
+default** in its header deletes the override. The override is never listed in a
+rail. **Everyone / Assigned by me / Out with others** at the top narrows every
+tile, and every list a click opens, to the whole store, to what you are the
+reporter of, or to what is assigned to somebody else.
 
-| section | what it answers |
+Four tiles by default, in the order a manager reads them:
+
+| tile | what it answers |
 |---|---|
 | **Overdue** | worst first, **with a name on every row** — "3 overdue" is a number you nod at, "Priya, 9 days late, the finance sign-off" is one you act on |
 | **Due in the next 7 days** | what is about to become the first section |
@@ -1030,8 +1041,10 @@ The last one is the point. A tool that reports only on the work it knows about
 is most confident exactly where it is least complete, and an undated item is
 invisible to every other question on the page.
 
-Every row opens the item; every heading opens the same set as a filtered list;
-right-click gives "everything on this person" and "everything in this project".
+Every row opens the item as a tab beside the home; **Open as a list** opens the
+same set as a filtered list; right-click gives open beside, open in a window,
+"everything on this person", "everything in this project", copy reference and
+delete. A person opens the list of what is on them.
 
 ### Deleting
 

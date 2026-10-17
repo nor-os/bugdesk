@@ -36,6 +36,25 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   hideable per type in Settings › Record types; a move to `done` does not ask. The bug and backlog patch routes take
   `resolution` and `addLinks`.
 
+- **The Tracker home is a standard dashboard** (STORY-0047). The Tracker chip
+  opens a dashboard like any other, built into BugDesk
+  (`ui/js/dashboards/homes.js`): Overdue, Due in the next 7 days, Who has what
+  and Needs a name or a date. Editing it (a tile moved, added, removed or
+  configured) saves an override in the tracker's `.bugdesk/project.json`
+  (`home-tracker`), which then replaces the default for everyone; **Reset to
+  default** in its header removes it, after asking. The override is not listed
+  in any rail. The hand-built Tracker page (`ticketdesk/tracker_pages.js`) is
+  gone. Two new tile types, on every dashboard: **List** (records through a
+  view or a filter, sorted, with a count, *Open as a list*, a click that opens
+  the record as a tab beside the dashboard, and the old Tracker row menu on
+  right-click) and **People** (open records by assignee, the most overdue
+  first). Every dashboard gets **Everyone / Assigned by me / Out with others**
+  in its header: every tile follows it, a click-through carries it, and the tab
+  keeps it. The tiles and the scope picker are FlexDesk's (`flexdesk.list`,
+  `flexdesk.people`, `createScopePicker`, `TileGrid.setScope`, FlexDesk 0.16.1);
+  the bug filter fields gain **Reporter**, so "Assigned by me" works for bugs.
+
+
 - **The Tracker can be switched off in Settings** (STORY-0043). Settings › You ›
   Behaviour › Tracker is each person's own switch, saved with their personal
   dashboards in BugDesk's state folder (`preferences.json`,

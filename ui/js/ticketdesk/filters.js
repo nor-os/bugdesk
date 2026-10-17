@@ -89,6 +89,14 @@ export const FILTER_FIELDS = [
         options: ASSIGNEES,
         get: (t) => t.assignee || '',
     },
+    {
+        // Who filed it. An unrecorded reporter reads as you (see mapBug), so a
+        // dashboard's "Assigned by me" scope (STORY-0047) keeps the bugs you
+        // filed before the field existed.
+        key: 'reporter', label: 'Reporter', type: 'enum',
+        options: ASSIGNEES,
+        get: (t) => t.reporter || HUMAN_AUTHOR,
+    },
     { key: 'labels', label: 'Labels', type: 'set', get: (t) => Array.isArray(t.labels) ? t.labels : [] },
     { key: 'created', label: 'Created', type: 'date', get: (t) => t.created || '' },
     { key: 'updated', label: 'Updated', type: 'date', get: (t) => t.sla || '' },

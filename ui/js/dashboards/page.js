@@ -43,19 +43,33 @@
  * store changes (`bugs:changed` / `backlog:changed`, which follow an edit here
  * and a change on disk alike). A click on a bar or a slice opens the records
  * behind it in the Bugs or Backlog list.
+ *
+ * LISTS, PEOPLE AND THE SCOPE (STORY-0047). FlexDesk's list and people tiles
+ * sit beside the charts; what their rows do is row_actions.js. The header's
+ * scope picker (Everyone / Assigned by me / Out with others) is the board's
+ * scope (`TileGrid.setScope`): every tile is resolved again under it, a
+ * click-through carries it, and it is kept with the tab (`props.scope`).
+ *
+ * A SECTION'S HOME (STORY-0047) is this page too, opened with `home`: the
+ * Tracker chip's page. It shows the built-in home, or the override that
+ * replaces it once anything on it is changed (homes.js), and offers Reset to
+ * default instead of Rename, Share and Delete.
  */
 
 import { makeLoadingOverlay, mountTileBreadcrumb } from '@flexdesk/wm';
 import { openConfirm } from '@flexdesk/widgets';
 import { loadShared, saveShared, deleteShared, savePersonal, deletePersonal } from './store.js';
-import { freeName, newId, readEntry, sectionOf, toEntry, withSection } from './model.js';
+import { TILE_KIND, freeName, homeOf, newId, readEntry, sectionOf, toEntry, withSection } from './model.js';
 import {
     SCOPES, askDetails, askName, entryFor, firstKey, keyOf, lists, loadLibrary, notifyLibrary,
     onLibraryChanged, readable, selectedKey, setSelectedKey, trackWrite,
 } from './library.js';
 import { DASHBOARD_KIND, DASHBOARD_SECTIONS, dashboardSectionOf, taxonomy } from '../tiling/kind_taxonomy.js';
-import { drillExpr, resolveTile } from './resolve.js';
+import { SCOPES as BOARD_SCOPES, drillExpr, resolveTile, scopeHint, scopeOf } from './resolve.js';
 import { openTileSettings } from './tile_editor.js';
+import { builtinHome, homeFile, loadHome, resetHome, saveHome } from './homes.js';
+import { wireRowTile } from './row_actions.js';
+import { HUMAN_AUTHOR } from '../ticketdesk/data.js';
 
 export const SAVE_DELAY_MS = 600;
 export const PLOTLY_URL = new URL('../../vendor/plotly/plotly-2.35.2.min.js', import.meta.url).href;
@@ -68,6 +82,7 @@ export function loadDashboardLibs() {
             import('@flexdesk/tiles'), import('@flexdesk/charts'), import('./sources.js')]);
         charts.setPlotlySource(PLOTLY_URL);
         tiles.registerChartTiles();
+        tiles.registerListTiles();      // list and people (STORY-0047)
         await sources.loadTracker();     // tracker records (STORY-0038); nothing when it is off
         return { tiles, charts, sources };
     })().catch((err) => { _libs = null; throw err; });
@@ -100,8 +115,13 @@ export function createDashboardsContent({ eventBus } = {}) {
         [kind, (host, props, ctx) => mountDashboards(host, props || {}, ctx || {}, eventBus, kind)]));
 }
 
-function mountDashboards(host, props, ctx, eventBus, kind = 'dashboards') {
-    const section = dashboardSectionOf(kind);
+/** `section`'s home (homes.js) as the page of `kind`: the Tracker chip's `tracker`. */
+export function createHomeContent({ eventBus, section, kind }) {
+    return (host, props, ctx) => mountDashboards(host, props || {}, ctx || {}, eventBus, kind, section);
+}
+
+function mountDashboards(host, props, ctx, eventBus, kind = 'dashboards', home = null) {
+    const section = home || dashboardSectionOf(kind);
     host.classList.add('twm-page-shell');
     host.innerHTML = '';
     const crumbSlot = el('div', 'twm-page-shell__breadcrumb');
@@ -121,7 +141,13 @@ function mountDashboards(host, props, ctx, eventBus, kind = 'dashboards') {
     const store = {
         shared: { save: saveShared, remove: deleteShared },
         personal: { save: savePersonal, remove: deletePersonal },
+        home: { save: (raw) => saveHome(home, raw), remove: () => resetHome(home) },
     };
+    /** The home's state (homes.js `loadHome`): `{entry, overridden, broken}`. */
+    let homeState = null;
+    let scope = scopeOf(props.scope);
+    let picker = null;
+    const rowWires = new Map();  // tile id → its row_actions handle
     let selectedId = props.dashboard || null;
     let current = null;          // the readable entry the grid is showing
     let currentScope = null;     // 'shared' | 'personal', where `current` is stored
@@ -162,20 +188,27 @@ function mountDashboards(host, props, ctx, eventBus, kind = 'dashboards') {
         return write(raw, currentScope);
     }
 
-    function write(raw, scope) {
+    function write(raw, where) {
         const json = JSON.stringify(raw);
         if (json === lastJson) return Promise.resolve();
         // Deleted meanwhile (from the rail): saving would put it back.
-        if (!lists[scope].entries.some((e) => e.ok && e.id === raw.id)) return Promise.resolve();
+        if (where !== 'home' && !lists[where].entries.some((e) => e.ok && e.id === raw.id)) return Promise.resolve();
         const prev = lastJson;
         lastJson = json;
         const saved = readEntry(raw);
-        if (current && current.id === saved.id && currentScope === scope) current = saved;
-        lists[scope].entries = lists[scope].entries.map((e) => (e.ok && e.id === saved.id ? saved : e));
-        notifyLibrary();
+        if (current && current.id === saved.id && currentScope === where) current = saved;
+        if (where === 'home') homeState = { ...homeState, entry: saved };
+        else {
+            lists[where].entries = lists[where].entries.map((e) => (e.ok && e.id === saved.id ? saved : e));
+            notifyLibrary();
+        }
         setStatus('Saving…');
-        return trackWrite(store[scope].save(raw)).then(
-            () => { if (!disposed) setStatus('Saved'); },
+        return trackWrite(store[where].save(raw)).then(
+            () => {
+                // The first change to a built-in home saved it as the home's override.
+                if (where === 'home' && !homeState.overridden) { homeState = { ...homeState, overridden: true }; paintHomeBadge(); }
+                if (!disposed) setStatus('Saved');
+            },
             (err) => {
                 if (lastJson === json) lastJson = prev;
                 if (!disposed) setStatus(`Not saved: ${err.message}`, true);
@@ -197,6 +230,10 @@ function mountDashboards(host, props, ctx, eventBus, kind = 'dashboards') {
     }
 
     function disposeGrid() {
+        for (const w of rowWires.values()) { try { w.destroy(); } catch { /* already gone */ } }
+        rowWires.clear();
+        try { picker?.dispose(); } catch { /* already gone */ }
+        picker = null;
         try { grid?.dispose(); } catch { /* already gone */ }
         grid = null;
         current = null;
@@ -207,11 +244,31 @@ function mountDashboards(host, props, ctx, eventBus, kind = 'dashboards') {
     /** The pane header reads the open dashboard's name, not the kind's label. */
     const nameTile = (name) => { try { ctx.setTitle?.(name || null); } catch { /* best effort */ } };
 
+    const entryName = () => homeState?.entry?.name || 'section';
+    /** The home's badge and Reset button, as the override now stands. */
+    function homeWhere() {
+        const file = homeFile(home);
+        return homeState?.overridden
+            ? { heading: 'Customised', icon: 'edit_note', file,
+                tip: `Changed here, and saved in ${file}, where it replaces the built-in default for everyone. Reset to default puts the default back.` }
+            : { heading: 'Built in', icon: 'home',
+                tip: `The default ${entryName()} home. Change anything on it and it is saved in ${file} as this home, for everyone.` };
+    }
+    function paintHomeBadge() {
+        const badge = main.querySelector('.bd-dash__scope');
+        if (!badge || !home) return;
+        const where = homeWhere();
+        badge.replaceChildren(el('span', 'material-symbols-outlined', where.icon), el('span', null, where.heading));
+        badge.title = where.tip;
+        const reset = main.querySelector('[data-action="reset"]');
+        if (reset) reset.hidden = !homeState?.overridden;
+    }
+
     async function renderMain() {
         const mine = ++seq;
         main.innerHTML = '';
         statusEl = null;
-        const found = entryFor(selectedId);
+        const found = home ? (homeState ? { scope: 'home', entry: homeState.entry } : null) : entryFor(selectedId);
         if (!found) {
             nameTile(null);
             main.append(el('div', 'bd-dash__empty', firstKey(section)
@@ -219,44 +276,61 @@ function mountDashboards(host, props, ctx, eventBus, kind = 'dashboards') {
                 : 'No dashboards here yet. Create one with New dashboard at the top of the left rail; it is saved in the project config and shared with everyone on the repo. A personal dashboard is only yours.'));
             return;
         }
-        const { scope, entry } = found;
-        const where = SCOPES[scope];
+        const { scope: place, entry } = found;
+        const where = place === 'home' ? homeWhere() : SCOPES[place];
         nameTile(entry.name || entry.id);
         if (!entry.ok) {
             const panel = el('div', 'bd-dash__broken');
             panel.append(el('h3', null, 'This dashboard could not be read'));
             panel.append(el('p', null, `Reason: ${entry.reason}.`));
-            panel.append(el('p', 'bd-dash__dim', `It is kept in ${where.file} exactly as it is. Fix it there, or delete it.`));
-            if (entry.id) panel.append(button('Delete', 'delete', () => remove(entry, scope)));
+            if (place === 'home') {
+                panel.append(el('p', 'bd-dash__dim', `It is kept in ${where.file} exactly as it is. Fix it there, or reset this home to the built-in default.`));
+                panel.append(button('Reset to default', 'restart_alt', () => resetToDefault()));
+            } else {
+                panel.append(el('p', 'bd-dash__dim', `It is kept in ${where.file} exactly as it is. Fix it there, or delete it.`));
+                if (entry.id) panel.append(button('Delete', 'delete', () => remove(entry, place)));
+            }
             main.append(panel);
             return;
         }
 
         const head = el('div', 'bd-dash__head');
         head.append(el('h2', 'bd-dash__title', entry.name));
-        const badge = el('span', `bd-dash__scope bd-dash__scope--${scope}`);
+        const badge = el('span', `bd-dash__scope bd-dash__scope--${place}`);
         badge.append(el('span', 'material-symbols-outlined', where.icon), el('span', null, where.heading));
         badge.title = where.tip;
         head.append(badge);
+        if (place === 'home' && homeState.broken) head.title = `Changes are not saved: ${homeState.broken}.`;
         statusEl = el('span', 'bd-dash__status');
+        const scopeSlot = el('span', 'bd-dash__scopes');
         const actions = el('div', 'bd-dash__actions');
-        const disabled = !!lists[scope].broken;
-        const buttons = [
+        const disabled = place === 'home' ? !!homeState.broken : !!lists[place].broken;
+        const adds = [
             ['Add chart', 'insert_chart', () => addTile('flexdesk.chart'), 'add-chart', disabled],
             ['Add KPI', 'speed', () => addTile('flexdesk.kpi'), 'add-kpi', disabled],
+            ['Add list', 'list', () => addTile('flexdesk.list'), 'add-list', disabled],
+            ['Add people', 'groups', () => addTile('flexdesk.people'), 'add-people', disabled],
+        ];
+        const buttons = place === 'home' ? [
+            ...adds,
+            ['Reset to default', 'restart_alt', () => resetToDefault(), 'reset', disabled],
+            ['Copy to personal', 'content_copy', () => copyToPersonal(), 'copy-personal', !!lists.personal.broken],
+        ] : [
+            ...adds,
             ['Rename', 'edit', () => rename(), 'rename', disabled],
-            scope === 'shared'
+            place === 'shared'
                 ? ['Copy to personal', 'content_copy', () => copyToPersonal(), 'copy-personal', !!lists.personal.broken]
                 : ['Share', 'group_add', () => share(), 'share', disabled || !!lists.shared.broken],
-            ['Delete', 'delete', () => remove(entry, scope), 'delete', disabled],
+            ['Delete', 'delete', () => remove(entry, place), 'delete', disabled],
         ];
         for (const [label, icon, fn, action, off] of buttons) {
             const b = button(label, icon, fn);
             b.dataset.action = action;
             b.disabled = off;
+            if (action === 'reset') b.hidden = !homeState.overridden;
             actions.append(b);
         }
-        head.append(statusEl, actions);
+        head.append(statusEl, scopeSlot, actions);
         const body = el('div', 'bd-dash__grid');
         main.append(head);
         if (entry.keptTiles.length) {
@@ -279,13 +353,16 @@ function mountDashboards(host, props, ctx, eventBus, kind = 'dashboards') {
         libs.sources.invalidateHistory();
 
         current = entry;
-        currentScope = scope;
+        currentScope = place;
         lastJson = JSON.stringify(entry.raw);
+        mountScopePicker(scopeSlot);
         grid = new libs.tiles.TileGrid({
             container: body,
             host: ctx.host,      // the desktop app's native Save dialog for a tile's PNG (STORY-0026)
             showToolbar: false,
             readonly: disabled,
+            scope,
+            onScopeChange: () => refreshTiles(),
             // The config modal is ours; a tile's toast ("Chart saved to …") goes to the app's.
             eventBus: { emit: (name, payload) => {
                 if (name === 'grid:config-modal-show') editTile(payload);
@@ -304,7 +381,23 @@ function mountDashboards(host, props, ctx, eventBus, kind = 'dashboards') {
     /* ── what the tiles show ────────────────────────────────────── */
 
     const tileSeq = new Map();   // tile id → number of its latest resolve
-    const kindOf = (id) => (grid?.layout.find((l) => l.id === id)?.type === 'flexdesk.kpi' ? 'kpi' : 'chart');
+    const kindOf = (id) => TILE_KIND[grid?.layout.find((l) => l.id === id)?.type] || 'chart';
+
+    /** The scope picker, into the header's slot: FlexDesk's, over resolve.js's scopes. */
+    function mountScopePicker(slot) {
+        try { picker?.dispose(); } catch { /* already gone */ }
+        picker = libs.tiles.createScopePicker({
+            label: 'Whose records',
+            options: BOARD_SCOPES.map((o) => ({ ...o, hint: `Every tile shows ${scopeHint(o.value, HUMAN_AUTHOR)}` })),
+            value: scope,
+            onChange: (value) => {
+                scope = scopeOf(value);
+                try { ctx.wm?.updateActiveTabProps?.(ctx.leafId, { scope }); } catch { /* best effort */ }
+                grid?.setScope(scope);
+            },
+        });
+        slot.append(picker.element);
+    }
 
     /** Resolve the tiles' bindings again (all, or `ids`) and hand each its data. */
     async function refreshTiles(ids = null) {
@@ -316,7 +409,7 @@ function mountDashboards(host, props, ctx, eventBus, kind = 'dashboards') {
             const binding = tile.config?.binding;
             let r;
             try {
-                r = await resolveTile(binding?.source ? libs.sources.getSource(binding.source) : null, binding, { kind: kindOf(id) });
+                r = await resolveTile(binding?.source ? libs.sources.getSource(binding.source) : null, binding, { kind: kindOf(id), scope });
             } catch (err) { r = { error: err?.message || String(err) }; }
             if (g !== grid || tile._disposed || tileSeq.get(id) !== mine) return;
             if (r.data) { tile.setData(r.data); return; }
@@ -336,12 +429,22 @@ function mountDashboards(host, props, ctx, eventBus, kind = 'dashboards') {
     // `tracker/backlog:changed` is the tracker's copy on a project page (STORY-0038).
     const subs = ['bugs:changed', 'backlog:changed', 'tracker/backlog:changed'].map((name) => eventBus?.on?.(name, storeChanged));
 
-    /** A click on a bar or a slice opens the records behind it in the list view. */
+    /** A click on a bar or a slice opens the records behind it in the list
+     *  view; a list or people tile's rows are row_actions.js's. */
     function wireTile(tile) {
+        const kind = TILE_KIND[tile.constructor.TYPE];
+        if (kind === 'list' || kind === 'people') {
+            rowWires.get(tile.id)?.destroy();
+            rowWires.set(tile.id, wireRowTile(tile, kind, { ctx, eventBus, get: () => {
+                const binding = tile.config?.binding;
+                return { src: binding?.source ? libs?.sources.getSource(binding.source) : null, binding, scope };
+            } }));
+            return;
+        }
         tile.onPointClick = ({ customdata }) => {
             const binding = tile.config?.binding;
             const src = binding?.source ? libs?.sources.getSource(binding.source) : null;
-            const drill = src && drillExpr(src, binding, customdata, tile.config?.title);
+            const drill = src && drillExpr(src, binding, customdata, tile.config?.title, scope);
             if (!drill) return;
             ctx.wm?.openInPrimary?.(src.listKind, src.listProps(drill.expr, drill.label));
         };
@@ -364,12 +467,16 @@ function mountDashboards(host, props, ctx, eventBus, kind = 'dashboards') {
             title: 'Remove tile', message: '<p>Remove this tile from the dashboard?</p>',
             confirmLabel: 'Remove', danger: true, icon: 'delete',
         });
-        if (ok && grid) grid.removeTile(tileId);
+        if (ok && grid) {
+            rowWires.get(tileId)?.destroy();
+            rowWires.delete(tileId);
+            grid.removeTile(tileId);
+        }
     }
 
     async function editTile({ tileId, config, schema, onSave }) {
         const sources = libs ? libs.sources.availableSources().map((s) => libs.sources.getSource(s.id)).filter(Boolean) : [];
-        const next = await openTileSettings({ kind: kindOf(tileId), config, schema, sources });
+        const next = await openTileSettings({ kind: kindOf(tileId), config, schema, sources, preferred: section });
         if (!next || disposed) return;
         onSave(next);
         refreshTiles([tileId]);
@@ -404,7 +511,7 @@ function mountDashboards(host, props, ctx, eventBus, kind = 'dashboards') {
      * `current` itself and changes nothing here.
      */
     function followLibrary() {
-        if (!current || disposed) return;
+        if (!current || disposed || home) return;
         const found = entryFor(keyOf(currentScope, current));
         if (found?.entry === current) return;
         if (!found || !found.entry.ok) {
@@ -425,14 +532,49 @@ function mountDashboards(host, props, ctx, eventBus, kind = 'dashboards') {
     }
     const unfollow = onLibraryChanged(followLibrary);
 
-    /** A copy of the open shared dashboard, as a new personal one. */
+    /** A copy of the open shared dashboard (or of the home), as a new personal one. */
     async function copyToPersonal() {
-        if (!current || currentScope !== 'shared') return;
+        if (!current || (currentScope !== 'shared' && currentScope !== 'home')) return;
         await flush();
-        const raw = { ...JSON.parse(JSON.stringify(current.raw)), id: newId('p'),
-            name: freeName(current.name, readable('personal')) };
+        const { home: _home, ...rest } = JSON.parse(JSON.stringify(current.raw));
+        const raw = { ...rest, id: newId('p'), name: freeName(current.name, readable('personal')) };
+        if (currentScope === 'home') {
+            // The home stays the home: the copy opens beside it, in the
+            // section's own dashboards page, and is listed in its rail.
+            try {
+                await trackWrite(store.personal.save(raw));
+                const entry = readEntry(raw);
+                lists.personal.entries.push(entry);
+                notifyLibrary();
+                ctx.wm?.navigate?.(DASHBOARD_KIND[section] || 'dashboards', { dashboard: keyOf('personal', entry), label: raw.name },
+                    { ctx, dest: 'origin', newTab: true });
+                setStatus(`Copied to your personal dashboards as "${raw.name}"`);
+            } catch (err) { setStatus(`Not copied: ${err.message}`, true); }
+            return;
+        }
         try { await add('personal', raw); }
         catch (err) { setStatus(`Not copied: ${err.message}`, true); }
+    }
+
+    /** Put the built-in home back: delete the override (homes.js). */
+    async function resetToDefault() {
+        if (!home) return;
+        const file = homeFile(home);
+        const ok = await openConfirm({
+            title: 'Reset to default',
+            message: `<p>Put the <b>${esc(entryName())}</b> home back to the built-in default?</p><p>Its changes are removed from ${esc(file)}, for everyone who uses it.</p>`,
+            confirmLabel: 'Reset', danger: true, icon: 'restart_alt',
+        });
+        if (!ok || disposed) return;
+        clearTimeout(saveTimer);
+        saveTimer = null;
+        try { await trackWrite(store.home.remove()); }
+        catch (err) { setStatus(`Not reset: ${err.message}`, true); return; }
+        disposeGrid();
+        homeState = await loadHome(home);
+        if (disposed) return;
+        await renderMain();
+        setStatus('Back to the default');
     }
 
     /**
@@ -445,7 +587,8 @@ function mountDashboards(host, props, ctx, eventBus, kind = 'dashboards') {
         await flush();
         const mine = current;
         try {
-            Object.assign(lists.shared, await loadShared());
+            const fresh = await loadShared();
+            Object.assign(lists.shared, { ...fresh, entries: fresh.entries.filter((e) => !homeOf(e)) });
             notifyLibrary();
         } catch (err) { setStatus(`Not shared: ${err.message}`, true); return; }
         if (lists.shared.broken) { setStatus(`Not shared: shared dashboards cannot be read (${lists.shared.broken})`, true); return; }
@@ -493,17 +636,20 @@ function mountDashboards(host, props, ctx, eventBus, kind = 'dashboards') {
     // Read the lists again on every open: another checkout's dashboards arrive
     // with a pull. The Navigator repaints from the same read.
     const hideLoading = makeLoadingOverlay(contentSlot);
-    const ready = loadLibrary()
+    const ready = (home
+        ? Promise.all([loadLibrary(), loadHome(home).then((h) => { homeState = h; })])
+        : loadLibrary())
         .then(() => {
             hideLoading();
             if (disposed) return;
+            if (home) return renderMain();
             if (!entryFor(selectedId)) selectedId = firstKey(section);
             setSelectedKey(selectedId, kind);
             return renderMain();
         });
 
     return {
-        title: props.label || 'Dashboards',
+        title: props.label || (home ? builtinHome(home)?.name : null) || 'Dashboards',
         ready,
         /** For tests: the live grid, or null. */
         get grid() { return grid; },
@@ -511,7 +657,7 @@ function mountDashboards(host, props, ctx, eventBus, kind = 'dashboards') {
             if (saveTimer) flush();
             disposed = true;
             unfollow();
-            if (selectedKey(kind) === selectedId) setSelectedKey(null, kind);
+            if (!home && selectedKey(kind) === selectedId) setSelectedKey(null, kind);
             clearTimeout(refreshTimer);
             for (const sub of subs) { try { sub?.dispose?.(); } catch { /* already gone */ } }
             disposeGrid();
