@@ -15,6 +15,7 @@
  */
 
 import { setHelpProvider } from '@flexdesk/widgets';
+import { trackerOffReason } from '../core/app_identity.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Simple Markdown Parser
@@ -407,6 +408,19 @@ When a BugDesk has a tracker configured (\`[tracker]\` in
 \`projects.toml\`), it appears as a **Tracker** chip in every project.
 The tracker belongs to no project, so the project field reads *n/a*
 while it is in front.
+
+## Switching it off
+
+If you do not follow work up through the tracker, switch it off under
+**Settings › You › Behaviour › Tracker**. That is yours alone, and the
+same in every project. BugDesk reloads, and the Tracker chip, its F-key
+(the later chips move up), its dashboards, its tickets in the command
+palette and this topic are gone. Nothing is deleted: switch it back on
+and everything is where it was. A dashboard tile that charts tracker
+records says the Tracker is switched off instead of drawing.
+
+\`enabled = false\` under \`[tracker]\` in \`projects.toml\` switches
+it off for the whole machine, underneath anyone's own choice.
 `,
     },
 
@@ -740,6 +754,49 @@ back to it.
 
 // ═══════════════════════════════════════════════════════════════════════════
 // HelpService Class
+/* ── the Tracker switched off (STORY-0043) ───────────────────────────────
+ *
+ * Switched off, the Tracker drops out of the help as it drops out of the top
+ * bar: its own topic is not offered, and the topics that list it as a page say
+ * the pages that are there. Each pair is [what the topic says, what it says
+ * instead]; scripts/test-tracker-off.mjs checks every `from` is still in its
+ * topic, so a reworded topic cannot quietly keep the Tracker in.
+ *
+ * Read at call time, not at load: this module is evaluated before index.html
+ * has the config (see core/app_identity.js), and the config cannot change
+ * without a reload.
+ */
+export const TRACKER_OFF_EDITS = {
+    'getting-started': [
+        ['| **Tracker** | the tracker shared by every project, if one is set up | **F3** |\n', ''],
+        ['A missing page moves the later ones up a key.',
+         'A missing page moves the later ones up a key. The Tracker is switched off (Settings › You › Behaviour › Tracker).'],
+        ['across both stores (and the\ntracker) plus every command.', 'across both stores plus every command.'],
+    ],
+    'dashboards': [
+        ['page (Bugs, Backlog, Tracker) lists', 'page (Bugs, Backlog) lists'],
+        ['bugs, backlog items or tracker tickets,', 'bugs or backlog items,'],
+        ['in every project and the\ntracker alike.', 'in every project alike.'],
+    ],
+    'keyboard-shortcuts': [
+        ['(Bugs, Backlog, Tracker) | **F1 … F3** |', '(Bugs, Backlog) | **F1 … F2** |'],
+    ],
+};
+
+let _shown = null;
+/** The topics this page offers: all of them, or without the Tracker when it is off. */
+function shownTopics() {
+    if (!trackerOffReason()) return HELP_TOPICS;
+    if (_shown) return _shown;
+    const { tracker: _off, ...rest } = HELP_TOPICS;
+    for (const [id, edits] of Object.entries(TRACKER_OFF_EDITS)) {
+        if (!rest[id]) continue;
+        const markdown = edits.reduce((md, [from, to]) => md.replace(from, to), rest[id].markdown);
+        rest[id] = { ...rest[id], markdown, keywords: rest[id].keywords.filter((k) => !/tracker/i.test(k)) };
+    }
+    return (_shown = rest);
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
@@ -757,7 +814,7 @@ class HelpService {
      * @returns {Object} Topic registry
      */
     getTopics() {
-        return HELP_TOPICS;
+        return shownTopics();
     }
 
     /**
@@ -766,7 +823,7 @@ class HelpService {
      * @returns {Object[]} Array of topics in category
      */
     getTopicsByCategory(category) {
-        return Object.entries(HELP_TOPICS)
+        return Object.entries(shownTopics())
             .filter(([_, topic]) => topic.category === category)
             .map(([id, topic]) => ({ id, ...topic }));
     }
@@ -777,7 +834,7 @@ class HelpService {
      */
     getCategories() {
         const categories = new Set();
-        Object.values(HELP_TOPICS).forEach(topic => categories.add(topic.category));
+        Object.values(shownTopics()).forEach(topic => categories.add(topic.category));
         return Array.from(categories);
     }
 
@@ -790,7 +847,7 @@ class HelpService {
         if (!query) return [];
         const lowerQuery = query.toLowerCase();
 
-        return Object.entries(HELP_TOPICS)
+        return Object.entries(shownTopics())
             .filter(([id, topic]) => {
                 const inTitle = topic.title.toLowerCase().includes(lowerQuery);
                 const inKeywords = topic.keywords.some(kw => kw.toLowerCase().includes(lowerQuery));
@@ -806,7 +863,7 @@ class HelpService {
      * @returns {Promise<{title: string, html: string, markdown: string}>}
      */
     async loadTopic(topicId) {
-        const topic = HELP_TOPICS[topicId];
+        const topic = shownTopics()[topicId];
         if (!topic) {
             throw new Error(`Unknown help topic: ${topicId}`);
         }

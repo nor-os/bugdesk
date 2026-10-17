@@ -1749,10 +1749,28 @@ object ConfigPayload(Store s, string? slug = null) => new
     // The store this page is on, and which of its two halves exist.
     store = new { kind = s.Kind, name = s.Name, hasBugs = s.HasBugs, hasBacklog = s.HasBacklog, @base = s.UrlBase },
     projects = ProjectList(),
-    tracker = new { available = stores.TrackerAvailable, @base = "/t/", path = stores.TrackerPath },
+    tracker = TrackerPayload(slug ?? s.Users.ActiveSlug),
     projectsFile = projectsFile.Path,
     projectsError = projectsFile.Error,
 };
+
+// The tracker as this person sees it (STORY-0043). `available` is what the
+// page goes by: there is a tracker, projects.toml has not switched it off for
+// the machine (`machineOff`), and the person has not switched it off for
+// themselves (`switchedOff`, Settings › You). Standalone TicketDesk is the
+// tracker, so neither switch applies there.
+object TrackerPayload(string? slug)
+{
+    var shown = mode == "tracker" || stores.TrackerShown(slug);
+    return new
+    {
+        available = stores.TrackerAvailable && shown,
+        @base = "/t/",
+        path = stores.TrackerPath,
+        switchedOff = !shown,
+        machineOff = stores.TrackerPath is not null && !stores.TrackerAvailable,
+    };
+}
 
 // The client fetches this once, before it renders anything, so every "who is
 // posting this comment" / "on me" / "on the agent" default reflects the
@@ -2310,6 +2328,26 @@ app.MapPost("/api/personal_state_write", async (HttpRequest req) =>
     var data = body.TryGetValue("data", out var d) ? d.GetString() ?? "" : "";
     var wrote = stores.WritePersonal(Req.Store.Users.ActiveSlug, path, data);
     return Results.Json(new { ok = true, result = new { ok = wrote } }, json);
+});
+
+// Your switches over which sections you see, the same in every project
+// (STORY-0043; StoreRegistry.Preferences). Only `tracker` is read. A POST lays
+// its object over what is saved; a null clears a key back to its default. The
+// page reloads after a change, since the top bar is built from it at load.
+app.MapGet("/api/personal/preferences", () =>
+    Results.Json(new { ok = true, preferences = stores.Preferences(Req.Store.Users.ActiveSlug),
+                       tracker = TrackerPayload(Req.Store.Users.ActiveSlug) }, json));
+
+app.MapPost("/api/personal/preferences", async (HttpRequest req) =>
+{
+    if (JsonNode.Parse(await new StreamReader(req.Body).ReadToEndAsync()) is not JsonObject patch)
+        return Results.Json(new { ok = false, error = "expected a JSON object of preferences" }, json, statusCode: 400);
+    if (patch["tracker"] is { } t && t.GetValueKind() is not (JsonValueKind.True or JsonValueKind.False))
+        return Results.Json(new { ok = false, error = "tracker must be true, false or null" }, json, statusCode: 400);
+    var slug = Req.Store.Users.ActiveSlug;
+    if (!stores.MergePreferences(slug, patch))
+        return Results.Json(new { ok = false, error = "no user profile yet — set a name first" }, json, statusCode: 409);
+    return Results.Json(new { ok = true, preferences = stores.Preferences(slug), tracker = TrackerPayload(slug) }, json);
 });
 
 // ---- Live updates: the stream ---------------------------------------------

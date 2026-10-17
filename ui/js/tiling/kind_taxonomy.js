@@ -56,6 +56,16 @@ const LANDING = TRACKER ? 'tracker' : HAS_BUGS ? 'queues' : 'backlog';
 export const MERGED_TRACKER = !TRACKER && typeof window !== 'undefined'
     && !!window.__BUGDESK_CONFIG__?.tracker?.available;
 
+/* A tracker that is there but SWITCHED OFF, for this person (Settings › You,
+ * STORY-0043) or for the machine (`[tracker] enabled = false`). Its kinds stay
+ * defined, as a missing store's do, so a tracker tab saved in a layout (the
+ * Tracker page's own tabs, or one in another page's tile) stays in it: shown,
+ * it says the Tracker is switched off (tiling/install.js), and it is all there
+ * again when the Tracker is switched back on. They only lose the chip. */
+const TRACKER_SWITCHED_OFF = !TRACKER && !MERGED_TRACKER && typeof window !== 'undefined'
+    && !!window.__BUGDESK_CONFIG__?.tracker?.path
+    && !!(window.__BUGDESK_CONFIG__.tracker.switchedOff || window.__BUGDESK_CONFIG__.tracker.machineOff);
+
 /* ── record hierarchy, supplied by the store ────────────────────────
  *
  * FlexDesk's breadcrumb builds a record's path from `taxonomy.ancestors` and
@@ -163,6 +173,12 @@ export const taxonomy = createTaxonomy({
             },
             'tracker-new': { label: 'New ticket', icon: 'add_circle', topNav: 'tracker' },
         } : {}),
+        ...(TRACKER_SWITCHED_OFF ? {
+            tracker: { label: 'Tracker', icon: 'space_dashboard', topNav: 'home' },
+            'tracker-tickets': { label: 'Tickets', icon: 'workspaces', topNav: 'home' },
+            'tracker-item': { label: 'Ticket', icon: 'article', topNav: 'home' },
+            'tracker-new': { label: 'New ticket', icon: 'add_circle', topNav: 'home' },
+        } : {}),
 
         // EPIC-0033, STORY-0046. A dashboard is a page OF A SECTION, not a
         // section of its own: no chip, no F-key. Each section's rail lists its
@@ -177,8 +193,8 @@ export const taxonomy = createTaxonomy({
         ...(TRACKER ? {} : {
             'backlog-dashboard': { label: 'Dashboards', icon: 'monitoring', topNav: HAS_BACKLOG ? 'backlog' : 'home' },
         }),
-        ...(MERGED_TRACKER ? {
-            'tracker-dashboard': { label: 'Dashboards', icon: 'monitoring', topNav: 'tracker' },
+        ...(MERGED_TRACKER || TRACKER_SWITCHED_OFF ? {
+            'tracker-dashboard': { label: 'Dashboards', icon: 'monitoring', topNav: MERGED_TRACKER ? 'tracker' : 'home' },
         } : {}),
 
         backlog: TRACKER

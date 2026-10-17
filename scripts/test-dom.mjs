@@ -144,7 +144,7 @@ await t('it opens on Profile, and General and Windows are gone', async () => {
     done();
 });
 
-await t('Behaviour holds Ctrl-click, animate minimize and auto-save', async () => {
+await t('Behaviour holds the Tracker switch, Ctrl-click, animate minimize and auto-save', async () => {
     const { host, page, done } = await mountSettings();
     page._switchCategory('behaviour');
     await tick(); await tick();
@@ -153,8 +153,11 @@ await t('Behaviour holds Ctrl-click, animate minimize and auto-save', async () =
     }
     assert.ok(host.querySelector('[data-panel="bugdesk.autosave"] [data-path="bugdesk.autosave"]'),
         'the auto-save row is not drawn');
+    // STORY-0043: the Tracker switch, yours, first under Pages.
+    assert.ok(host.querySelector('[data-panel="bugdesk.tracker"] [data-path="bugdesk.tracker"]'),
+        'the Tracker row is not drawn');
     const titles = [...host.querySelectorAll('.settings-page__group-title')].map((h) => h.textContent.trim());
-    assert.deepEqual(titles, ['Records', 'Saving', 'Windows']);
+    assert.deepEqual(titles, ['Pages', 'Records', 'Saving', 'Windows']);
     done();
 });
 

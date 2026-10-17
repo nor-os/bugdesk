@@ -212,6 +212,15 @@ tracker's results. `enabled = false` under `[tracker]` hides the section (and
 its API) from project pages while keeping the path; `--tracker` still opens it
 on its own.
 
+Somebody who does not follow work up through the tracker can switch it off for
+themselves: **Settings › You › Behaviour › Tracker**. That choice is personal,
+kept with your personal dashboards in BugDesk's state folder and the same in
+every project, and BugDesk reloads to apply it. The chip and its F-key go (the
+later chips move up), and so do the tracker's dashboards, its search results and
+its help topic; a dashboard tile over tracker records says it is switched off.
+Nothing is deleted, and switching it back on restores everything.
+`enabled = false` in `projects.toml` stays the machine-wide off underneath.
+
 ## Who you are
 
 **Your name is set once, in `projects.toml`'s `[user]`, and used everywhere** —

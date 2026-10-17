@@ -23,6 +23,7 @@
 import { createCommandPalette } from './command_palette.js';
 import { installHistoryBack } from './history_nav.js';
 import { taxonomy, activeTopNavKind, MERGED_TRACKER } from './kind_taxonomy.js';
+import { trackerOffReason } from '../core/app_identity.js';
 import { createSettingsContent } from '../ticketdesk/settings_content.js';
 
 import { installRecordCount, paintRecordCount } from '../ticketdesk/record_count.js';
@@ -579,17 +580,19 @@ const _escHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({
 
 /** Stand-ins for the tracker's page kinds on a page where the tracker is off. */
 function _trackerOffContent() {
+    // Switched off by the person (STORY-0043) or by projects.toml: say which,
+    // and how to switch it back on.
+    const why = trackerOffReason() || 'The tracker is switched off.';
     const off = (host) => {
         host.innerHTML = `
             <div class="td-page"><div class="td-banner">
                 <span class="material-symbols-outlined">space_dashboard</span>
-                The tracker is switched off. Set <code>enabled = true</code> under
-                <code>[tracker]</code> in projects.toml and reload to show it again,
-                or close this tab.
+                ${why} Nothing in it was deleted. Close this tab, or switch the
+                Tracker back on to see it again.
             </div></div>`;
         return { title: 'Tracker (off)' };
     };
-    return Object.fromEntries(['tracker', 'tracker-tickets', 'tracker-item', 'tracker-new'].map((k) => [k, off]));
+    return Object.fromEntries(['tracker', 'tracker-tickets', 'tracker-item', 'tracker-new', 'tracker-dashboard'].map((k) => [k, off]));
 }
 
 /**

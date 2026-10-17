@@ -36,6 +36,21 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   hideable per type in Settings › Record types; a move to `done` does not ask. The bug and backlog patch routes take
   `resolution` and `addLinks`.
 
+- **The Tracker can be switched off in Settings** (STORY-0043). Settings › You ›
+  Behaviour › Tracker is each person's own switch, saved with their personal
+  dashboards in BugDesk's state folder (`preferences.json`,
+  `GET/POST /api/personal/preferences`), so it holds in every project and never
+  touches `project.json`. Switched off, the Tracker chip leaves the top bar and
+  gives up its F-key, and its dashboards, its tickets in the command palette, its
+  alerts and its help topic go with it; a dashboard tile that charts tracker
+  records says the Tracker is switched off, and so does a saved tracker tab.
+  Nothing is deleted, and switching it back on brings it all back. The switch
+  asks first and reloads the page, because the top bar is built once at load.
+  `enabled = false` under `[tracker]` in `projects.toml` stays a hard off for
+  the machine underneath it: the switch is then off and disabled, and says why.
+  `/api/config` reports `tracker.switchedOff` and `tracker.machineOff` beside
+  `available`.
+
 - **The desktop window draws its own frame on Windows** (STORY-0042). The
   Windows title bar is gone: BugDesk's top bar is the top edge of the window,
   with minimise, maximise/restore and close at its right, and the window can be

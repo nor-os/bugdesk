@@ -272,6 +272,47 @@ sealed class StoreRegistry
         return Path.Combine(_stateDir, $"state-{slug}", name);
     }
 
+    /* ── personal switches (STORY-0043) ─────────────────────────────────
+     * Which sections YOU see, kept beside your personal dashboards and for the
+     * same reason: the Tracker is the same in every project, so switching it
+     * off in one project and finding it on in the next would be two answers to
+     * one question. Only `tracker` so far: false hides the Tracker section of
+     * every project page, on top of projects.toml's machine-wide switch.
+     */
+    const string PreferencesFile = "preferences.json";
+
+    public JsonObject Preferences(string? slug)
+    {
+        var text = ReadPersonal(slug, PreferencesFile);
+        if (string.IsNullOrWhiteSpace(text)) return new JsonObject();
+        try { return JsonNode.Parse(text) as JsonObject ?? new JsonObject(); }
+        catch (JsonException) { return new JsonObject(); }
+    }
+
+    /// <summary>Lays <paramref name="patch"/> over the saved preferences; a
+    /// <c>null</c> value removes the key, back to the default. False when
+    /// there is no profile to save them to.</summary>
+    public bool MergePreferences(string? slug, JsonObject patch)
+    {
+        if (PersonalPath(slug, PreferencesFile) is null) return false;
+        lock (_gate)
+        {
+            var doc = Preferences(slug);
+            foreach (var (key, value) in patch)
+            {
+                if (value is null) doc.Remove(key);
+                else doc[key] = value.DeepClone();
+            }
+            return WritePersonal(slug, PreferencesFile, doc.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+        }
+    }
+
+    /// <summary>Whether this person shows the Tracker section: yes unless they
+    /// switched it off. Says nothing about whether there is a tracker at all
+    /// (<see cref="TrackerAvailable"/>).</summary>
+    public bool TrackerShown(string? slug) =>
+        Preferences(slug)["tracker"] is not JsonValue v || !v.TryGetValue<bool>(out var on) || on;
+
     /// <summary>
     /// Personal dashboards used to be kept per store. Every project's and the
     /// tracker's old file is merged into the shared one — entries whose id is

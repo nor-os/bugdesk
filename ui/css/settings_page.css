@@ -675,3 +675,10 @@
 .twm-managed-window--modal .twm-modal__body.twm-modal__body--rich:has(> .bd-settings-dialog) {
     margin: 0;
 }
+
+/* A switch the page cannot change here (STORY-0043: the Tracker, when
+ * projects.toml has switched it off for the machine). */
+.settings-toggle:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}

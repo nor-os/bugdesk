@@ -40,6 +40,21 @@ export function storeHas(half) {
     return half === 'bugs' ? store.hasBugs !== false : store.hasBacklog !== false;
 }
 
+/**
+ * Why this project page has no Tracker, in a sentence, or null when it has one
+ * or there is none to have (STORY-0043). Two switches can hide it: the
+ * person's own (Settings › You › Behaviour, `switchedOff`) and the machine's
+ * (`[tracker] enabled = false` in projects.toml, `machineOff`). Said the same
+ * way wherever a tracker page or tile would have been.
+ */
+export function trackerOffReason() {
+    const t = typeof window !== 'undefined' ? window.__BUGDESK_CONFIG__?.tracker : null;
+    if (!t || t.available) return null;
+    if (t.machineOff) return 'The Tracker is switched off for this machine: enabled = false under [tracker] in projects.toml.';
+    if (t.switchedOff) return 'The Tracker is switched off for you. Switch it back on under Settings › You › Behaviour › Tracker.';
+    return null;
+}
+
 /** The small badge used for the top bar and the favicon, relative to ui/. */
 export function appIcon(app = currentApp()) {
     return app === 'ticketdesk' ? 'assets/icons/ticketdesk-glyph.svg' : 'assets/icons/bugdesk-glyph.svg';

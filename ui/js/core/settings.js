@@ -116,6 +116,7 @@ export const VISIBLE_SETTINGS = new Set([
     'bugdesk.agentName',
     'bugdesk.modifierOpen',
     'bugdesk.autosave',
+    'bugdesk.tracker',
     // This project: shared with everyone who pulls the repo.
     'bugdesk.recordTypes',
     'bugdesk.workflow',
@@ -185,7 +186,7 @@ export const BUGDESK_SETTINGS_SLICE = {
         { id: 'profile', label: 'Profile', icon: 'badge', section: 'You', order: 11, noReset: true,
           description: 'Who you are here: the names your work, and your assistant\'s comments, are signed with. Saved to your profile beside the store.' },
         { id: 'behaviour', label: 'Behaviour', icon: 'tune', section: 'You', order: 12,
-          groupOrder: ['Records', 'Saving', 'Windows'],
+          groupOrder: ['Pages', 'Records', 'Saving', 'Windows'],
           description: 'How BugDesk behaves for you. Other people choose their own.' },
         { id: 'recordTypes', label: 'Record types', icon: 'schema', section: 'This project', order: 21, shared: true,
           description: 'Each record type\'s fields and statuses, and how new records of it are named and numbered.' },
@@ -220,6 +221,7 @@ export const BUGDESK_SETTINGS_SLICE = {
             // schema below). Each carries a default so the settings store has a
             // shape for the path and the row renders like every other one.
             autosave: null,
+            tracker: null,
             collaborators: null,
             recordTypes: null,
             workflow: null,
@@ -251,6 +253,18 @@ export const BUGDESK_SETTINGS_SLICE = {
         },
 
         // ── You › Behaviour ─────────────────────────────────────────────
+        // STORY-0043. Whether you see the Tracker section at all: yours, in your
+        // personal preferences, the same in every project. It reloads the page,
+        // because the top bar is built from it at load (ticketdesk/tracker_setting.js).
+        'bugdesk.tracker': {
+            type: 'panel', category: 'behaviour', group: 'Pages',
+            label: 'Tracker',
+            description: 'Show the Tracker, the follow-up tracker shared by every project, as a page in the top bar. Yours alone, saved to your profile and the same in every project. Switching it reloads BugDesk; nothing is deleted.',
+            buttonLabel: 'Go to Behaviour',
+            icon: 'space_dashboard',
+            defaultValue: null,
+            mount: panel(async () => (await import('../ticketdesk/tracker_setting.js')).mountTrackerSetting),
+        },
         // Both answers are reasonable and the difference is about how someone
         // works, not about which is correct — so it is a setting rather than a
         // decision made for everybody.

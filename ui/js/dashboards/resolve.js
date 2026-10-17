@@ -33,6 +33,7 @@ import {
     aggregate, addDays, andExpr, burndown, drillClause, finishedDay, groupCount, groupCountSplit, keyLabel, kpi,
     numericValues, perWeek, skippedNote, toNumber,
 } from './series.js';
+import { trackerOffReason } from '../core/app_identity.js';
 
 export const PLOTS = {
     count: 'Count per value',
@@ -77,7 +78,12 @@ export function check(src, binding, kind = 'chart') {
         return { empty: 'This tile has no data settings yet. Open its settings to choose what it shows.' };
     }
     if (!src && binding.source === 'tracker') {
-        return { empty: 'The tracker is not available here (it is switched off, or could not be loaded), so this tile has nothing to show.' };
+        // Switched off is said as such (STORY-0043): the tile is kept, and shows
+        // again once the Tracker is back.
+        const off = trackerOffReason();
+        return { empty: off
+            ? `${off} This tile shows tracker records, so it has nothing to show until then.`
+            : 'The tracker is not available here (it is switched off, or could not be loaded), so this tile has nothing to show.' };
     }
     if (!src) return { empty: `This project has no ${binding.source} store, so this tile has nothing to show.` };
     const plot = binding.plot || 'count';
