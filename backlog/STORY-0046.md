@@ -13,7 +13,7 @@ subsystem: ui
 labels: []
 links: []
 created: 2026-10-16
-updated: 2026-10-17T09:30Z
+updated: 2026-10-17T07:44Z
 ---
 
 ## Description
@@ -72,7 +72,7 @@ dashboards with a `section` field (default: where it was created; none means
 `all`), no top-level Dashboards element at all, Tracker chip stays. 7 criteria,
 5 points, under EPIC-0045. Taking it on in the ultra/track-A worktree.
 
-### 2026-10-17T09:30Z · norman_agent
+### 2026-10-17T07:15Z · norman_agent
 
 Built on branch ultra/track-A (6f6f30a), not merged yet; stays in-progress
 until integration.
@@ -103,3 +103,29 @@ value (covered by test-dashboards and test-dashboards-dom only). Tests:
 test-ui 222, test-tracker 35, test-dashboards 50, test-dashboards-dom 43,
 test-dashboards-example 8, test-dashboards-tracker 7, test-dom 198; eslint 0
 errors; check-graph OK.
+
+### 2026-10-17T07:44Z · norman_agent
+
+Review fixes on ultra/track-A:
+
+- A rename that leaves "Listed in" alone keeps a `section` BugDesk does not
+  know (e.g. `reports`) as written; only a move to a real section replaces it.
+- A rail marks a dashboard only while its own section's main area shows that
+  dashboard: not while the queue or board is open, and not in another
+  section's rail. A page that closes takes its mark with it.
+- The pane header reads the open dashboard's name (and follows a rename),
+  not "Dashboards".
+- A dashboard listed under a store this project has not got (a `bugs` one in
+  a backlog-only project, say from a copied project.json) is listed in every
+  section, with a tooltip saying why, so it can still be opened, moved or
+  deleted. Tracker dashboards are the exception: with no tracker (not merged,
+  or switched off later by STORY-0043) they wait, kept, unlisted.
+- My previous comment's stamp read 09:30Z, local time written as UTC; it is
+  corrected to 07:15Z, the time of that commit.
+
+Checked on a scratch server (8781) in headless Edge over CDP with real
+clicks: renamed 'Weird' (section `reports`) to 'Weird 2' via the pencil,
+project.json kept `reports`; the header showed 'Weird 2'; with the Active
+queue open the Bugs rail marked nothing, and F2/F3 marked only the section's
+own open dashboard; a backlog-only project listed its copied `bugs` dashboard
+with the tooltip.

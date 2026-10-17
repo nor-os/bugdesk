@@ -11,13 +11,15 @@
  * opens.
  *
  * Which dashboard is open is still a prop of the page's tab
- * (`props.dashboard`); `selectedKey` only mirrors it so the Navigator can mark
- * the row.
+ * (`props.dashboard`); `selectedKey` only mirrors it, one per page kind (each
+ * section has its own), so a section's Navigator can mark the row its page
+ * shows. A page that closes takes its mark with it.
  */
 
 import { openForm } from '@flexdesk/widgets';
 import { loadShared, loadPersonal } from './store.js';
 import { SECTIONS, SECTION_LABEL, listedIn, nameTaken } from './model.js';
+import { DASHBOARD_SECTIONS } from '../tiling/kind_taxonomy.js';
 
 /** Both lists. `broken` is why that whole list cannot be read (nothing is
  *  saved to it then), or null. Mutated in place, never replaced. */
@@ -36,7 +38,7 @@ export const SCOPES = {
 };
 
 const subs = new Set();
-let selected = null;
+const selected = new Map();       // page kind → the key its page shows
 let loading = null;
 
 /** Call `cb` after every change to the lists or the open dashboard. Returns unsubscribe. */
@@ -51,10 +53,10 @@ export function notifyLibrary() {
     }
 }
 
-export const selectedKey = () => selected;
-export function setSelectedKey(key) {
-    if (key === selected) return;
-    selected = key;
+export const selectedKey = (kind) => selected.get(kind) ?? null;
+export function setSelectedKey(key, kind) {
+    if ((selected.get(kind) ?? null) === key) return;
+    if (key == null) selected.delete(kind); else selected.set(kind, key);
     notifyLibrary();
 }
 
@@ -100,7 +102,7 @@ export function entryFor(key) {
 /** The first readable dashboard listed in `section` (none: in any), else the
  *  first such entry, else none. */
 export function firstKey(section = null) {
-    const here = (e) => !section || listedIn(e, section);
+    const here = (e) => !section || listedIn(e, section, DASHBOARD_SECTIONS);
     for (const scope of ['shared', 'personal']) {
         const ok = lists[scope].entries.find((e) => e.ok && here(e));
         if (ok) return keyOf(scope, ok);

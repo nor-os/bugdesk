@@ -146,10 +146,28 @@ export function sectionOf(entry) {
     return SECTIONS.includes(s) ? s : 'all';
 }
 
-/** Whether an entry is listed in `section`'s rail. */
-export const listedIn = (entry, section) => {
+/**
+ * `raw` listed in `section`, as a copy. A `section` BugDesk does not know reads
+ * as 'all' and is kept as it is while 'all' is what the user chose: a rename
+ * alone never rewrites it.
+ */
+export function withSection(raw, section) {
+    const copy = JSON.parse(JSON.stringify(raw));
+    if (sectionOf(copy) !== section) copy.section = section;
+    return copy;
+}
+
+/**
+ * Whether an entry is listed in `section`'s rail. `present`, the sections this
+ * project has: an entry of a section it does not have (a 'bugs' dashboard in a
+ * backlog-only project, from a copied project.json) is listed in all of them
+ * rather than in none, so it can still be opened, moved or deleted. Not a
+ * tracker one: no tracker means it is switched off or not merged here, and its
+ * dashboards wait, kept, until it is back.
+ */
+export const listedIn = (entry, section, present = null) => {
     const s = sectionOf(entry);
-    return s === 'all' || s === section;
+    return s === 'all' || s === section || (!!present && s !== 'tracker' && !present.includes(s));
 };
 
 /** A new, readable entry, listed in `section` (none: every section). */

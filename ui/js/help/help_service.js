@@ -424,7 +424,8 @@ left rail; click one to open it in the main area, under the same chip.
 **New dashboard** there creates one listed on that page. The pencil on
 a row, or a right-click, renames it and chooses where it is **listed
 in**: one page, or **All sections**; the bin deletes it. A dashboard
-made before dashboards moved into the rails is listed on every page.
+made before dashboards moved into the rails is listed on every page, and
+so is one listed under a page this project does not have.
 
 Add,
 remove, move and resize tiles, and configure each one:

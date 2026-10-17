@@ -14,7 +14,7 @@
 
 import { openConfirm, showContextMenu } from '@flexdesk/widgets';
 import { saveShared, savePersonal, deleteShared, deletePersonal } from './store.js';
-import { SECTION_LABEL, listedIn, newEntry, newId, readEntry, sectionOf } from './model.js';
+import { SECTION_LABEL, listedIn, newEntry, newId, readEntry, sectionOf, withSection } from './model.js';
 import {
     SCOPES, askDetails, askName, entryFor, keyOf, lists, loadLibrary, notifyLibrary, onLibraryChanged, selectedKey,
     trackWrite,
@@ -36,8 +36,24 @@ const STORE = {
  * Mount the Dashboards group of `section`'s rail ('bugs' | 'backlog' |
  * 'tracker'; the landing section's when not given) into `host`.
  */
-export function mountDashboardsRail(host, ctx, { section = DASHBOARD_SECTIONS[0] || 'bugs' } = {}) {
+export function mountDashboardsRail(host, ctx, { section = DASHBOARD_SECTIONS[0] || 'bugs', eventBus = null } = {}) {
     const kind = DASHBOARD_KIND[section] || 'dashboards';
+    /**
+     * The key of the dashboard this section's page shows in the main area, or
+     * null. The rail is on every page of the section, so a row is marked only
+     * while the main area is this section's dashboard page: not while it shows
+     * the queue, and never in another section's rail. Without a window manager
+     * to ask (tests), the page's own mark is the answer.
+     */
+    const openKey = () => {
+        const tree = (ctx.wm || window.__twm?.wm)?.desktops?.active?.()?.tree;
+        if (tree) {
+            const id = tree.primaryLeafId?.();
+            if ((id ? tree.get(id)?.content?.kind : null) !== kind) return null;
+        }
+        return selectedKey(kind);
+    };
+    let marked = null;
     // `label` names the tab (the WM titles a tab by it), so the tile reads the
     // dashboard's name rather than the kind id when its page is restored.
     const open = (key) => {
@@ -47,7 +63,7 @@ export function mountDashboardsRail(host, ctx, { section = DASHBOARD_SECTIONS[0]
     let error = '';
 
     /** `[entry, its index in the whole list]` for the entries this section lists. */
-    const here = (scope) => lists[scope].entries.map((e, i) => [e, i]).filter(([e]) => listedIn(e, section));
+    const here = (scope) => lists[scope].entries.map((e, i) => [e, i]).filter(([e]) => listedIn(e, section, DASHBOARD_SECTIONS));
 
     const group = (scope) => {
         const s = SCOPES[scope];
@@ -55,10 +71,14 @@ export function mountDashboardsRail(host, ctx, { section = DASHBOARD_SECTIONS[0]
         const rows = here(scope).map(([e, i]) => {
             const key = keyOf(scope, e, i);
             const name = e.name || e.id || `Entry ${i + 1}`;
-            const everywhere = sectionOf(e) === 'all' && DASHBOARD_SECTIONS.length > 1;
-            const tip = e.ok ? `${s.tip}${everywhere ? '. Listed in all sections' : ''}` : `Cannot be read: ${e.reason}`;
+            const where = sectionOf(e);
+            const everywhere = where === 'all' && DASHBOARD_SECTIONS.length > 1;
+            const stray = !['all', 'tracker'].includes(where) && !DASHBOARD_SECTIONS.includes(where);
+            const tip = e.ok
+                ? `${s.tip}${everywhere ? '. Listed in all sections' : ''}${stray ? `. Listed in ${SECTION_LABEL[where]}, which this project does not have, so it is shown in every section` : ''}`
+                : `Cannot be read: ${e.reason}`;
             return `
-            <div class="td-nav__item bd-dash-nav__item bd-dash-nav__item--${scope}${key === selectedKey() ? ' is-selected' : ''}${e.ok ? '' : ' is-broken'}"
+            <div class="td-nav__item bd-dash-nav__item bd-dash-nav__item--${scope}${key === marked ? ' is-selected' : ''}${e.ok ? '' : ' is-broken'}"
                  data-dashboard="${esc(key)}" data-scope="${scope}" role="button" tabindex="0"
                  title="${esc(tip)}">
                 ${icon(e.ok ? s.icon : 'warning')}<span>${esc(name)}</span>
@@ -79,6 +99,7 @@ export function mountDashboardsRail(host, ctx, { section = DASHBOARD_SECTIONS[0]
     };
 
     const render = () => {
+        marked = openKey();
         host.innerHTML = `
             <div class="td-nav bd-dash-nav" data-section="${esc(section)}">
                 ${group('shared')}
@@ -116,7 +137,7 @@ export function mountDashboardsRail(host, ctx, { section = DASHBOARD_SECTIONS[0]
         const now = entryAt(scope, key);
         if (!r || !now?.ok) return;
         if (r.name === now.name && r.section === sectionOf(now)) return;
-        const raw = { ...JSON.parse(JSON.stringify(now.raw)), name: r.name, section: r.section };
+        const raw = { ...withSection(now.raw, r.section), name: r.name };
         try { await trackWrite(STORE[scope].save(raw)); }
         catch (err) { fail('Not saved', err); return; }
         error = '';
@@ -180,12 +201,16 @@ export function mountDashboardsRail(host, ctx, { section = DASHBOARD_SECTIONS[0]
 
     render();
     const unsub = onLibraryChanged(render);
+    // The main area moved (the queue opened, a tab switched): repaint only when
+    // that changes the mark, so a burst of wm:changed leaves hover and focus be.
+    const wmSub = eventBus?.on?.('wm:changed', () => { if (openKey() !== marked) render(); });
     loadLibrary().catch(() => { /* each list carries its own reason */ });
 
     return {
         section,
         destroy() {
             unsub();
+            try { wmSub?.dispose?.(); } catch { /* already gone */ }
             host.removeEventListener('click', onClick);
             host.removeEventListener('keydown', onKey);
             host.removeEventListener('contextmenu', onMenu);

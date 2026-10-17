@@ -599,6 +599,76 @@ await t('deleting the open dashboard from the rail asks first, then the page mov
     delete server.state['alice/dashboards.json'];
 });
 
+await t('a rename alone keeps a section BugDesk does not know; a move replaces it', async () => {
+    server.list.push({ id: 'weird', name: 'Weird', version: 1, section: 'reports', tiles: [] });
+    const b = mount({}, { section: 'bugs' });
+    await b.page.ready;
+    const row = () => section(b.host, 'shared').find((r) => rowName(r).startsWith('Weird'));
+    row().querySelector('.td-nav__action[data-act="rename"]').click();
+    await answerForm({ name: 'Weird 2' });
+    await tick(10);
+    let saved = server.list.find((e) => e && e.id === 'weird');
+    assert.equal(saved.name, 'Weird 2');
+    assert.equal(saved.section, 'reports', 'the unknown section was overwritten');
+    row().querySelector('.td-nav__action[data-act="rename"]').click();
+    await answerForm({ section: 'backlog' });
+    await tick(10);
+    saved = server.list.find((e) => e && e.id === 'weird');
+    assert.equal(saved.section, 'backlog');
+    b.destroy();
+    server.list = SEED();
+});
+
+await t('a row is marked only in the section whose page shows it, and only while it does', async () => {
+    const b = mount({}, { section: 'bugs' });
+    await b.page.ready;
+    await tick(10);
+    const marked = (host) => [...host.querySelectorAll('.bd-dash-nav__item.is-selected')].map(rowName);
+    assert.deepEqual(marked(b.nav), ['Bugs']);
+    // Another section's rail, its own page not open: 'Bugs' is listed there (no section), not marked.
+    const other = document.createElement('div');
+    document.body.appendChild(other);
+    const rail = mountDashboardsRail(other, ctx, { section: 'backlog' });
+    await tick(10);
+    assert.ok(names(other, 'shared').includes('Bugs'));
+    assert.deepEqual(marked(other), [], 'marked in a section where it is not open');
+    rail.destroy(); other.remove();
+    // The main area shows the queue: the section's own rail has no mark either.
+    const bus = { subs: new Set(), on(n, fn) { this.subs.add(fn); return { dispose: () => this.subs.delete(fn) }; } };
+    let shown = 'dashboards';
+    const tree = { primaryLeafId: () => 'L1', get: () => ({ content: { kind: shown } }) };
+    const wmCtx = { ...ctx, wm: { ...ctx.wm, desktops: { active: () => ({ tree }) } } };
+    const host2 = document.createElement('div');
+    document.body.appendChild(host2);
+    const rail2 = mountDashboardsRail(host2, wmCtx, { section: 'bugs', eventBus: bus });
+    await tick(10);
+    assert.deepEqual(marked(host2), ['Bugs']);
+    shown = 'queues';
+    for (const fn of bus.subs) fn();
+    assert.deepEqual(marked(host2), [], 'still marked while the queue shows');
+    shown = 'dashboards';
+    for (const fn of bus.subs) fn();
+    assert.deepEqual(marked(host2), ['Bugs']);
+    rail2.destroy(); host2.remove();
+    assert.equal(bus.subs.size, 0, 'the rail kept listening after it went');
+    // The page closes: its mark goes with it.
+    b.page.destroy();
+    await tick();
+    assert.deepEqual(marked(b.nav), []);
+    b.rail.destroy(); b.host.remove();
+});
+
+await t('the pane header reads the open dashboard\'s name', async () => {
+    const titles = [];
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const p = content.dashboards(host, { label: 'Bugs' }, { ...ctx, setTitle: (t) => titles.push(t) });
+    assert.equal(p.title, 'Bugs');
+    await p.ready;
+    assert.equal(titles.at(-1), 'Bugs');
+    p.destroy(); host.remove();
+});
+
 /* ── STORY-0036: what the tiles show ─────────────────────────────── */
 
 console.log('\nDashboard tiles over records (STORY-0036)');

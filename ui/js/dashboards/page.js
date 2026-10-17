@@ -48,10 +48,10 @@
 import { makeLoadingOverlay, mountTileBreadcrumb } from '@flexdesk/wm';
 import { openConfirm } from '@flexdesk/widgets';
 import { loadShared, saveShared, deleteShared, savePersonal, deletePersonal } from './store.js';
-import { freeName, newId, readEntry, sectionOf, toEntry } from './model.js';
+import { freeName, newId, readEntry, sectionOf, toEntry, withSection } from './model.js';
 import {
     SCOPES, askDetails, askName, entryFor, firstKey, keyOf, lists, loadLibrary, notifyLibrary,
-    onLibraryChanged, readable, setSelectedKey, trackWrite,
+    onLibraryChanged, readable, selectedKey, setSelectedKey, trackWrite,
 } from './library.js';
 import { DASHBOARD_KIND, DASHBOARD_SECTIONS, dashboardSectionOf, taxonomy } from '../tiling/kind_taxonomy.js';
 import { drillExpr, resolveTile } from './resolve.js';
@@ -192,7 +192,7 @@ function mountDashboards(host, props, ctx, eventBus, kind = 'dashboards') {
         if (remember) {
             try { ctx.wm?.updateActiveTabProps?.(ctx.leafId, { dashboard: key }); } catch { /* best effort */ }
         }
-        setSelectedKey(key);
+        setSelectedKey(key, kind);
         await renderMain();
     }
 
@@ -204,12 +204,16 @@ function mountDashboards(host, props, ctx, eventBus, kind = 'dashboards') {
         lastJson = null;
     }
 
+    /** The pane header reads the open dashboard's name, not the kind's label. */
+    const nameTile = (name) => { try { ctx.setTitle?.(name || null); } catch { /* best effort */ } };
+
     async function renderMain() {
         const mine = ++seq;
         main.innerHTML = '';
         statusEl = null;
         const found = entryFor(selectedId);
         if (!found) {
+            nameTile(null);
             main.append(el('div', 'bd-dash__empty', firstKey(section)
                 ? 'Choose a dashboard under Dashboards in the left rail.'
                 : 'No dashboards here yet. Create one with New dashboard at the top of the left rail; it is saved in the project config and shared with everyone on the repo. A personal dashboard is only yours.'));
@@ -217,6 +221,7 @@ function mountDashboards(host, props, ctx, eventBus, kind = 'dashboards') {
         }
         const { scope, entry } = found;
         const where = SCOPES[scope];
+        nameTile(entry.name || entry.id);
         if (!entry.ok) {
             const panel = el('div', 'bd-dash__broken');
             panel.append(el('h3', null, 'This dashboard could not be read'));
@@ -387,9 +392,10 @@ function mountDashboards(host, props, ctx, eventBus, kind = 'dashboards') {
             name: current.name, section: sectionOf(current), sections: DASHBOARD_SECTIONS, exceptId: current.id,
         });
         if (!r || disposed || !current || (r.name === current.name && r.section === sectionOf(current))) return;
-        current = { ...current, name: r.name, raw: { ...current.raw, section: r.section } };
+        current = { ...current, name: r.name, raw: withSection(current.raw, r.section) };
         await flush();
         main.querySelector('.bd-dash__title').textContent = r.name;
+        nameTile(r.name);
     }
 
     /**
@@ -415,6 +421,7 @@ function mountDashboards(host, props, ctx, eventBus, kind = 'dashboards') {
         lastJson = JSON.stringify(found.entry.raw);
         const title = main.querySelector('.bd-dash__title');
         if (title) title.textContent = current.name;
+        nameTile(current.name);
     }
     const unfollow = onLibraryChanged(followLibrary);
 
@@ -491,12 +498,12 @@ function mountDashboards(host, props, ctx, eventBus, kind = 'dashboards') {
             hideLoading();
             if (disposed) return;
             if (!entryFor(selectedId)) selectedId = firstKey(section);
-            setSelectedKey(selectedId);
+            setSelectedKey(selectedId, kind);
             return renderMain();
         });
 
     return {
-        title: 'Dashboards',
+        title: props.label || 'Dashboards',
         ready,
         /** For tests: the live grid, or null. */
         get grid() { return grid; },
@@ -504,6 +511,7 @@ function mountDashboards(host, props, ctx, eventBus, kind = 'dashboards') {
             if (saveTimer) flush();
             disposed = true;
             unfollow();
+            if (selectedKey(kind) === selectedId) setSelectedKey(null, kind);
             clearTimeout(refreshTimer);
             for (const sub of subs) { try { sub?.dispose?.(); } catch { /* already gone */ } }
             disposeGrid();

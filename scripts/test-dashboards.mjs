@@ -179,6 +179,21 @@ t('a section BugDesk does not know is written back unchanged', () => {
     const e = model.readEntry({ id: 'b', name: 'B', section: 'reports', tiles: [] });
     assert.equal(model.toEntry(e, []).section, 'reports');
 });
+t('a rename that leaves it under All sections keeps a section BugDesk does not know', () => {
+    const raw = { id: 'b', name: 'B', section: 'reports', tiles: [] };
+    assert.equal(model.withSection(raw, 'all').section, 'reports');
+    assert.equal(model.withSection(raw, 'backlog').section, 'backlog');
+    assert.equal(raw.section, 'reports', 'the original was changed');
+    assert.ok(!('section' in model.withSection({ id: 'n', name: 'N' }, 'all')), 'no section, none written for All sections');
+});
+t('a dashboard of a section the project does not have is listed in the ones it has', () => {
+    const e = model.readEntry({ id: 'g', name: 'G', section: 'bugs' });
+    assert.ok(!model.listedIn(e, 'backlog'), 'without the sections present, only its own');
+    assert.ok(model.listedIn(e, 'backlog', ['backlog']), 'a bugs dashboard in a backlog-only project is unreachable');
+    assert.ok(!model.listedIn(e, 'backlog', ['bugs', 'backlog']));
+    // No tracker here (switched off, or not merged): its dashboards wait, unlisted.
+    assert.ok(!model.listedIn(model.readEntry({ id: 't', name: 'T', section: 'tracker' }), 'bugs', ['bugs', 'backlog']));
+});
 
 console.log('\ndashboards: personal (STORY-0035)');
 

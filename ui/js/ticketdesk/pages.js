@@ -1952,7 +1952,7 @@ function mountTicketNav(host, props, ctx) {
         const { mountDashboardsRail } = await import('../dashboards/rail.js');
         if (mine !== dashGeneration) return;
         try { dashRail?.destroy(); } catch { /* not mounted */ }
-        dashRail = mountDashboardsRail(dashBody, ctx, { section: dashSection });
+        dashRail = mountDashboardsRail(dashBody, ctx, { section: dashSection, eventBus: _eventBus });
     };
 
     const show = async (next) => {
