@@ -13,7 +13,7 @@ subsystem: ui
 labels: []
 links: []
 created: 2026-10-16
-updated: 2026-10-17T10:08Z
+updated: 2026-10-17T11:17Z
 ---
 
 ## Description
@@ -53,18 +53,18 @@ with others).
 
 ## Acceptance criteria
 
-- [ ] The Tracker chip (and its F-key) opens the Tracker home as a standard dashboard (the same grid, header and tile settings as every other dashboard), both in standalone TicketDesk and on a project page with the Tracker beside it
-- [ ] With no override saved, the home is the built-in default: Overdue, Due in the next 7 days, Who has what (people), and Needs a name or a date
-- [ ] A record list tile lists a store's open records through a built-in view or a filter, sorted (worst first for Overdue, soonest first by target date), with a count, a line saying what empty means, and "Open as a list"; a click on a row opens the record as a tab in the dashboard's tile, Ctrl/⌘-click opens it the modified way, and Enter/Space does what a click does
-- [ ] Right-clicking a list row shows the menu the old Tracker rows had: Open, Open beside, Open in a window, Everything on <assignee>, Everything in this project, Copy reference, Delete…, and each entry does what it says
-- [ ] A people tile shows open items grouped by assignee, worst first (overdue count, then how late), with Nobody as a row of its own, and overdue / undated / next-date pills; a click opens a flat list of that person's open items
-- [ ] A scope picker (Everyone / Assigned by me / Out with others) sits in the dashboard's header; every tile on it (chart, KPI, list, people) follows the scope, a click-through list carries it, and the choice is kept with the tab across a reload
-- [ ] List and people tiles can be added to any dashboard ("Add list", "Add people") and configured in the tile's settings (records, view or filter, sort, how many rows)
-- [ ] Editing the built-in home (moving, resizing, adding, removing or configuring a tile) saves an override in the tracker's project.json that replaces the built-in; the header then says it is customised and offers "Reset to default"
-- [ ] "Reset to default" asks first, removes the override from project.json, and shows the built-in again without a reload; the override is never listed as an ordinary dashboard in the rail
-- [ ] The list tile, the people tile and the scope picker are FlexDesk's (`@flexdesk/tiles`), with FlexDesk tests, released to npm and synced into BugDesk (`sync-flexdesk.mjs --check` passes); BugDesk adds only the data adapter and the row actions
-- [ ] With the Tracker switched off (STORY-0043), the Tracker home is not reachable and nothing in it is deleted; switched back on, an override saved before is used again
-- [ ] The in-app help, README and CHANGELOG describe the Tracker home dashboard, the list and people tiles, the scope picker and Reset to default
+- [x] The Tracker chip (and its F-key) opens the Tracker home as a standard dashboard (the same grid, header and tile settings as every other dashboard), both in standalone TicketDesk and on a project page with the Tracker beside it
+- [x] With no override saved, the home is the built-in default: Overdue, Due in the next 7 days, Who has what (people), and Needs a name or a date
+- [x] A record list tile lists a store's open records through a built-in view or a filter, sorted (worst first for Overdue, soonest first by target date), with a count, a line saying what empty means, and "Open as a list"; a click on a row opens the record as a tab in the dashboard's tile, Ctrl/⌘-click opens it the modified way, and Enter/Space does what a click does
+- [x] Right-clicking a list row shows the menu the old Tracker rows had: Open, Open beside, Open in a window, Everything on <assignee>, Everything in this project, Copy reference, Delete…, and each entry does what it says
+- [x] A people tile shows open items grouped by assignee, worst first (overdue count, then how late), with Nobody as a row of its own, and overdue / undated / next-date pills; a click opens a flat list of that person's open items
+- [x] A scope picker (Everyone / Assigned by me / Out with others) sits in the dashboard's header; every tile on it (chart, KPI, list, people) follows the scope, a click-through list carries it, and the choice is kept with the tab across a reload
+- [x] List and people tiles can be added to any dashboard ("Add list", "Add people") and configured in the tile's settings (records, view or filter, sort, how many rows)
+- [x] Editing the built-in home (moving, resizing, adding, removing or configuring a tile) saves an override in the tracker's project.json that replaces the built-in; the header then says it is customised and offers "Reset to default"
+- [x] "Reset to default" asks first, removes the override from project.json, and shows the built-in again without a reload; the override is never listed as an ordinary dashboard in the rail
+- [x] The list tile, the people tile and the scope picker are FlexDesk's (`@flexdesk/tiles`), with FlexDesk tests, released to npm and synced into BugDesk (`sync-flexdesk.mjs --check` passes); BugDesk adds only the data adapter and the row actions
+- [x] With the Tracker switched off (STORY-0043), the Tracker home is not reachable and nothing in it is deleted; switched back on, an override saved before is used again
+- [x] The in-app help, README and CHANGELOG describe the Tracker home dashboard, the list and people tiles, the scope picker and Reset to default
 
 ## History
 
@@ -85,3 +85,55 @@ tiles and the scope filter go upstream into FlexDesk; the Tracker home is a
 built-in default whose edits save a project.json override, and Reset removes
 it. 12 criteria, 8 points, under EPIC-0045. Taking it on in the ultra/track-A
 worktree.
+
+### 2026-10-17T11:17Z · norman_agent
+
+Built on branch ultra/track-A (c7afd0b), not merged yet; stays in-progress
+until integration.
+
+- The Tracker chip opens the Tracker home, the page's own dashboards page
+  in "home" mode (`createHomeContent`, `dashboards/homes.js`). In
+  standalone TicketDesk it is also `home`, the landing page. The
+  hand-built `ticketdesk/tracker_pages.js` and its CSS are gone.
+- Built-in default: Overdue, Due in the next 7 days, Who has what, Needs a
+  name or a date, over the tracker's own views. The first edit saves the
+  whole dashboard as `home-tracker` (`"home": "tracker"`) in the
+  TRACKER's `.bugdesk/project.json` (via `/t/api` on a project page), so
+  every project shows the same home. The header badge then reads
+  Customised and Reset to default appears; Reset asks, deletes the entry
+  and redraws the built-in. Overrides are filtered out of the rails.
+- New tiles everywhere: List (source, types, view or filter, order,
+  open-only) and People (open records by assignee, worst first). A list
+  row opens as a tab in the dashboard's tile; Ctrl/⌘ per the setting;
+  Enter/Space; Alt+T/N/Shift+H/Shift+V as in tables; drag to a tile;
+  right-click gives the old Tracker row menu. A new tile's Records start
+  on the dashboard's own section.
+- Everyone / Assigned by me / Out with others in every dashboard's
+  header. Every tile is resolved under it (chart, KPI, list, people),
+  click-throughs carry it, and the tab keeps it (`props.scope`); it is
+  never written into the dashboard. Bugs got a Reporter filter field so
+  "Assigned by me" means the same there.
+- The tiles and the scope are upstream: FlexDesk STORY-0072, released as
+  flexdesk 0.16.1 (not 0.17.0: FlexDesk STORY-0069 reserves 0.17.0 for
+  the EcoSim-migration release now in flight), synced into ui/vendor.
+
+Checked on a scratch server (port 8781) in headless Edge over CDP, with
+real clicks and keys. On a project page: F3 opens the built-in home; row
+click (tab in the tile), Ctrl-click (background tab), Enter; the right-
+click menu's Open beside, Open in a window, Everything on sam, Everything
+in this project, Copy reference and Delete (asked, deleted, row gone);
+a person; Open as a list; the three scopes (byme dropped alice's
+STORY-0006, others dropped norman's and nobody's), the scoped
+click-through, and the scope after a reload; Add list + its settings
+saved the override (Customised, Reset shown, not in the rail), kept
+after a reload, and Reset (asked) put the built-in back; Copy to
+personal; Tracker switched off (no chip, override kept) and on (override
+back). In standalone TicketDesk: lands on the home, a row opens the
+item, an edit and a Reset. A Bugs dashboard: Add list / Add people over
+bugs, a bug row opens the bug. Not exercised there: the menu's own
+Open entry (the same call as a click) and a chart or KPI under a scope
+(covered by test-dashboards and test-dashboards-dom).
+Tests: test-ui 222, test-tracker 35, test-dashboards 58,
+test-dashboards-dom 49, test-dashboards-tracker 14,
+test-dashboards-example 8, test-tracker-off 17, test-dom 201; eslint 0
+errors; check-graph OK; FlexDesk 99 suites green, none skipped.
