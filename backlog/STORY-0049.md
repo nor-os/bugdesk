@@ -2,18 +2,18 @@
 id: 49
 type: story
 title: "Warn when a store has no git repository or no remote"
-status: draft
+status: in-progress
 parent: 19
 phase:
-assignee:
+assignee: norman_agent
 reporter: norman
 due:
-points:
+points: 5
 subsystem: settings
 labels: []
 links: []
 created: 2026-10-16
-updated: 2026-10-16T06:30Z
+updated: 2026-10-17T06:20Z
 ---
 
 ## Description
@@ -51,10 +51,41 @@ Open questions for refinement:
 
 ## Acceptance criteria
 
-_(not refined yet)_
+- [ ] When a store (the project's, or the tracker's) is not inside a git repository, BugDesk shows a sticky warning toast when it opens, naming the store and its folder, with "Initialize git" and "Don't warn again"
+- [ ] When a store is in a repository that has no remote at all, BugDesk shows a separate sticky warning toast, with "Add remote…" and "Don't warn again"; a repository that has a remote but whose branch has no upstream gets no toast and keeps the Changes pane's passive "No remote branch" line
+- [ ] BugDesk never runs `git init` by itself; "Initialize git" runs it once in the store's folder (the tracker's base folder; for a project, the folder its stores sit in), and the Changes pane then lists the store's records as new, ready to commit
+- [ ] "Add remote…" asks for a URL and adds it as `origin`; an empty URL, one with spaces or one starting with `-` is refused with a message and nothing changes; once added, the no-remote warning does not come back
+- [ ] "Don't warn again" hides that warning for that store and that person for good: it stays hidden across reloads and restarts, is saved in the person's own state (not project.json), and does not hide the other store's warning; × only closes the toast until BugDesk opens again
+- [ ] A dismissed warning comes back when the condition changes: when the store becomes fine, or moves to the other condition, the dismissal is cleared, so the next time it is not in a repository (or has no remote) it warns again
+- [ ] The Changes pane and Settings › Git offer the same "Initialize git" and "Add remote…" where they apply, and the pane says "No remote configured" rather than "No remote branch" when the repository has no remote
+- [ ] The in-app help, README and CHANGELOG describe the two warnings and what dismissing does
+
+## History
+
+- 2026-10-17 · norman_agent · status: draft -> refined
+- 2026-10-17 · norman_agent · status: refined -> in-progress
+- 2026-10-17 · norman_agent · assignee: (unset) -> norman_agent
 
 ## Comments
 
 ### 2026-10-16T06:30Z · norman_agent
 
 Filed at norman's request ("is the tracker generally tracked in git? do we get a warning if no git repo has been initialized or has no remotes?"). The answer to both is in the description: no, and only passively.
+
+### 2026-10-17T06:20Z · norman_agent
+
+Refined with norman's answers (2026-10-17) to the open questions:
+
+- **git init by default?** No. The tracker is not initialized automatically; a
+  visible, dismissable warning per store says it is not in a repository, with a
+  one-click "Initialize git" for that store.
+- **Once per session, per store, or for good?** Per store, until dismissed for
+  good: the dismissal is personal state, and the warning comes back if the
+  condition changes.
+- **No remote vs no upstream?** Different. "No remote at all" gets its own
+  warning with "Add remote…" (a URL prompt); "the branch has no upstream" keeps
+  today's passive line in the Changes pane.
+- The warnings use FlexDesk's notification system BugDesk already uses for
+  alerts (STORY-0031): sticky toasts with actions.
+
+8 criteria, 5 points, under EPIC-0019. Taking it on.
