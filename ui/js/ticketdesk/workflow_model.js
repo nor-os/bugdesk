@@ -24,7 +24,7 @@
 
 import { builtinTable } from './builtin_moves.js';
 import {
-    ANY_STORE, defaultActions, emptyFlow, flowUses, liftInlineFlows, newFlowId, statusStep, transitionFlow,
+    ANY_STORE, defaultActions, emptyFlow, flowUses, liftInlineFlows, missingDefaults, newFlowId, statusStep, transitionFlow,
 } from './workflow.js';
 
 const clone = (x) => JSON.parse(JSON.stringify(x ?? null));
@@ -104,7 +104,12 @@ export function withTypeActions(stored, types) {
     for (const { store, type } of types) {
         out.types[store] = out.types[store] || {};
         const own = wf.types?.[store]?.[type];
-        if (Array.isArray(own)) { out.types[store][type] = clone(own); continue; }
+        if (Array.isArray(own)) {
+            // A list saved before a default existed gets it, unless removed on purpose.
+            out.types[store][type] = [...clone(own), ...missingDefaults(wf, store, type, own).map((a) => ({
+                id: a.id, label: a.label, when: a.when, flow: flowFor(store, type, a.label, a.flow, statusStep(a.flow)) }))];
+            continue;
+        }
 
         // Moves, grouped: one action per name, target and what it did.
         const rows = legacyMoves(wf, store, type) || builtinTable(store, [type]);
@@ -177,6 +182,16 @@ export function withoutTypeActions(draft, stored, types) {
         out.types[store][type] = draft.types?.[store]?.[type] || [];
     }
     if (!Object.keys(out.types).length) delete out.types;
+
+    // A default action missing from a type's own list was removed on purpose:
+    // say so, or the next load puts it back (workflow.js typeActions).
+    delete out.removedDefaults;
+    for (const [store, byType] of Object.entries(out.types || {})) {
+        for (const [type, list] of Object.entries(byType)) {
+            const gone = defaultActions(store, type).map((a) => a.id).filter((id) => !list.some((a) => a?.id === id));
+            if (gone.length) (((out.removedDefaults = out.removedDefaults || {})[store] = out.removedDefaults[store] || {})[type] = gone);
+        }
+    }
 
     // The older keys of the types still on them.
     const keep = (store, type) => !mine.has(`${store}.${type}`);

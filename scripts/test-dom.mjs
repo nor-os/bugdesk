@@ -3543,6 +3543,51 @@ console.log('\nLinks and resolutions');
         m.done();
     });
 
+    await t('a type list saved before the default existed still offers it; one removed on purpose stays away', async () => {
+        const TYPES = [{ store: 'bugs', type: 'bug', storeLabel: 'Bugs' }];
+        // What a Settings save wrote before STORY-0050: the type's own list, no duplicate.
+        const legacy = { flows: [{ id: 'close-it', label: 'Close it', store: 'bugs', flow: wf.transitionFlow({ to: 'closed' }) }],
+                         types: { bugs: { bug: [{ id: 'close-it', label: 'Close it', when: ['open'], flow: 'close-it' }] } } };
+        wf.setWorkflow(legacy);
+        try {
+            assert.deepEqual(wf.typeActions('bugs', 'bug').map((a) => a.id), ['close-it', 'duplicate']);
+            const m = await mountTicketPage(bug42());
+            assert.ok([...m.host.querySelectorAll('[data-wf], [data-wfa]')].some((b) => /Mark as duplicate and close/.test(b.textContent)),
+                'an older type list lost Mark as duplicate');
+            m.done();
+        } finally { wf.setWorkflow(null); }
+        const view = model.withTypeActions(legacy, TYPES);
+        assert.deepEqual(view.types.bugs.bug.map((a) => a.id), ['close-it', 'duplicate'], 'Settings › Workflow does not list it');
+        assert.equal(model.withoutTypeActions(view, legacy, TYPES).removedDefaults, undefined);
+        const edited = JSON.parse(JSON.stringify(view));
+        edited.types.bugs.bug = edited.types.bugs.bug.filter((a) => a.id !== 'duplicate');
+        const saved = model.withoutTypeActions(edited, legacy, TYPES);
+        assert.deepEqual(saved.removedDefaults, { bugs: { bug: ['duplicate'] } }, 'the removal is not recorded');
+        wf.setWorkflow(saved);
+        try {
+            assert.deepEqual(wf.typeActions('bugs', 'bug').map((a) => a.id), ['close-it'], 'a removed default came back');
+            assert.deepEqual(model.withTypeActions(saved, TYPES).types.bugs.bug.map((a) => a.id), ['close-it']);
+        } finally { wf.setWorkflow(null); }
+        // Put back: the marker goes.
+        assert.equal(model.withoutTypeActions(view, saved, TYPES).removedDefaults, undefined);
+    });
+
+    await t('a hand-typed resolution survives an ordinary save of the item page; a hidden one is not asked', async () => {
+        const i = await mountItemPage(itemRecord({ status: 'dropped', resolution: 'wontfix' }));
+        assert.equal(i.host.querySelector('[data-f="resolution"]')?.value, 'wontfix', 'the item page reads it as "—"');
+        i.done();
+        const b = await mountTicketPage(bug42({ status: 'closed', stage: 3, resolution: 'wontfix' }));
+        assert.equal(b.host.querySelector('[data-f="resolution"]')?.value, 'wontfix');
+        b.done();
+        const schema = await import(join(UI, 'ticketdesk', 'schema.js'));
+        schema.setSchema({ types: { bugs: { bug: { fields: [], hidden: ['resolution'], statuses: [] } } } });
+        try {
+            const patch = await wf.planMove({ store: 'bugs', record: { status: 'open', title: 'T' },
+                move: { to: 'closed', message: false }, ask: async () => assert.fail('asked how it ended'), askMessage: no });
+            assert.deepEqual(patch, { status: 'closed' });
+        } finally { schema.setSchema(null); }
+    });
+
     await t('the resolution is a field on both pages and in both filter catalogues', async () => {
         const b = await mountTicketPage(bug42({ status: 'closed', stage: 3, resolution: 'cannot-reproduce' }));
         assert.equal(b.host.querySelector('[data-f="resolution"]')?.value, 'cannot-reproduce');

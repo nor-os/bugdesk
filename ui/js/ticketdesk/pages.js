@@ -743,10 +743,13 @@ async function confirmDeleteBug(bug) {
 }
 const STAGE_STATUS = ['Open', 'Investigation', 'Testing', 'Closed'];
 
-/** How it ended (STORY-0050) — set by Close and Duplicate, editable here. */
+/** How it ended (STORY-0050) — set by Close and Duplicate, editable here. A
+ *  value that is not one of the six (typed by hand) is kept as an option of its
+ *  own, or the next ordinary save would quietly remove it. */
 const resolutionSelect = (cur) => `<select class="ea-tin" data-f="resolution">
     <option value=""${cur ? '' : ' selected'}>—</option>
-    ${RESOLUTIONS.map(([v, l]) => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
+    ${(cur && !RESOLUTIONS.some(([v]) => v === cur) ? [...RESOLUTIONS, [cur, cur]] : RESOLUTIONS)
+        .map(([v, l]) => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
 const SEV_PRI = { crash: 1, high: 2, medium: 3, low: 4 };
 
 function maskSections(t, mode) {
@@ -791,7 +794,7 @@ function maskSections(t, mode) {
             ${field('Type', sel('type', ['Bug', 'Regression', 'Chore'], typeLabelOf(t.type)), true)}
             ${hideRow('severity', field('Severity', sel('severity', ['crash', 'high', 'medium', 'low'], t.severity || 'medium'), true))}
             ${hideRow('subsystem', field('Subsystem', tin('subsystem', t.subsystem)))}
-            ${mode === 'edit' ? field('Resolution', resolutionSelect(t.resolution)) : ''}
+            ${mode === 'edit' ? hideRow('resolution', field('Resolution', resolutionSelect(t.resolution))) : ''}
             ${mode === 'search' ? '' : field('Assignee', `<div class="td-assignee">${sel('assignee', assigneeOptions(true, t.assignee), t.assignee || '')}<button type="button" class="ea-btn td-reassign" data-a="reassign" title="Reassign this bug">${icon('person_search')}</button></div>`)}
             ${mode === 'edit' ? field('Reporter', `<div class="td-assignee">${sel('reporter', assigneeOptions(true, t.reporter), t.reporter || '')}<button type="button" class="ea-btn td-reassign" data-a="setreporter" title="Change who this bug goes back to">${icon('person_edit')}</button></div>`) : ''}
             <div class="td-field td-span2" data-row="labels"><label>Labels</label>${tin('labels', (t.labels || []).join(', '))}</div>
@@ -1095,7 +1098,7 @@ function mountTicket(host, props, ctx) {
     let customFieldsCtl = null;
     const syncTypeRows = () => {
         const type = machineType(fval('type')) || 'bug';
-        for (const f of ['severity', 'subsystem', 'labels', 'links']) {
+        for (const f of ['severity', 'subsystem', 'labels', 'links', 'resolution']) {
             setRowVisible(host.querySelector(`[data-row="${f}"]`), !isHidden('bugs', type, f));
         }
         customFieldsCtl?.setType(type);

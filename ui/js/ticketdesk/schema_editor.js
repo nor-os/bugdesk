@@ -49,7 +49,7 @@ const BUILTIN_STATUS = {
 
 const FIELD_LABEL = {
     severity: 'Severity', subsystem: 'Subsystem', labels: 'Labels', links: 'Links',
-    phase: 'Phase', due: 'Due', points: 'Points',
+    phase: 'Phase', due: 'Due', points: 'Points', resolution: 'Resolution',
 };
 
 /** What hiding each built-in also switches off, said where the box is ticked. */
@@ -58,6 +58,7 @@ const HIDE_EFFECT = {
     points: 'also turns off the estimate check in refinement',
     severity: 'the queue then sorts by status and date instead',
     phase: 'phase grouping on the board is turned off',
+    resolution: 'closing or dropping no longer asks how it ended',
 };
 
 /** Numbering when project.json sets none — the server's defaults (Numbering.cs). */

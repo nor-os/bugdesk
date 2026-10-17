@@ -596,9 +596,11 @@ half that tells its reader the two reports were merged.
 It is every type's **default action** (STORY-0050), a flow like the moves'
 (*Ask for input* answering with a record, *Add a link* with a comment for the
 master, *Set a field* resolution, *Add a comment*, *Change the status*), listed
-in Settings › Workflow, where a project can rename, change or remove it. The
-`duplicate-of` routes below still do the same act in one request, for agents
-and scripts.
+in Settings › Workflow, where a project can rename, change or remove it. A
+type whose action list was saved before it existed gets it added; removing it
+there is remembered as `workflow.removedDefaults.<store>.<type>` in
+project.json, so it stays away. The `duplicate-of` routes below still do the
+same act in one request, for agents and scripts.
 
 **Add a link** in any flow sends `addLinks: [{verb, target, note?}]` with the
 record's save: `verb` is one of the seven link verbs, `target` any reference;
@@ -617,7 +619,9 @@ finished status asks for it in the move's message dialog (Fixed first for a
 bug, Won't fix for a drop); a move to `done` does not ask, and a move out of a
 finished status removes the line. A flow that sets or clears `resolution`
 itself is not asked. The field is on both record pages and in both filter
-editors, and a flow can set it, clear it and test it.
+editors, and a flow can set it, clear it and test it. A type can hide it in
+Settings › Record types; its moves then do not ask for it either. A value
+typed by hand that is not one of the six is kept as it is.
 
 ## Finished work gets out of the way
 

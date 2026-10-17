@@ -303,7 +303,8 @@ Works as designed or Duplicate. It is saved as the bug's
 **Resolution**, shown on its page (where it can be changed) and
 offered in the filter editor. A move into a finished status of your own
 asks too; **Reopen** clears it. Backlog items are asked when they are
-dropped (Won't fix first), not when they are done.
+dropped (Won't fix first), not when they are done. A type that hides
+Resolution in **Settings › Record types** is not asked.
 
 ## Mark as duplicate
 
@@ -324,7 +325,8 @@ from either store), set or clear fields (the assignee and the
 resolution too), add a comment, add a link, branch. Custom actions,
 such as "Blocked", sit beside the moves. Mark as duplicate is one of
 every type's actions there, built from those steps, so a project can
-rename it, change what it does or remove it.
+rename it, change what it does or remove it. A removed one stays
+removed.
 
 ## The queue
 

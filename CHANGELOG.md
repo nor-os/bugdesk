@@ -27,12 +27,13 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   its reference and title. **Mark as duplicate and close** (bugs) and **… and
   drop** (backlog) are now every type's default action, built from those steps
   and listed in Settings › Workflow, where a project can rename, change or
-  remove them; with nothing configured they do what they did, in one save,
+  remove them (a type whose actions were saved before keeps getting it until
+  it is removed there); with nothing configured they do what they did, in one save,
   courtesy comment on the master included. `POST …/duplicate-of` still works.
   A `resolution` field (fixed, won't fix, cannot reproduce, not a bug, works as
   designed, duplicate) is asked in the close or drop dialog, cleared on reopen,
-  shown and editable on both record pages, filterable, and settable by flows;
-  a move to `done` does not ask. The bug and backlog patch routes take
+  shown and editable on both record pages, filterable, settable by flows, and
+  hideable per type in Settings › Record types; a move to `done` does not ask. The bug and backlog patch routes take
   `resolution` and `addLinks`.
 
 - **The desktop window draws its own frame on Windows** (STORY-0042). The

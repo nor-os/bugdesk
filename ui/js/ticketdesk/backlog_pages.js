@@ -976,8 +976,12 @@ function mountItem(host, props, ctx) {
             ${field('Assignee', '<select class="ea-tin" data-f="assignee"></select>')}
             ${shows('due') ? field('Target date', dueField()) : ''}
             ${shows('subsystem') ? field('Subsystem', tin('subsystem', item.subsystem)) : ''}
-            ${field('Resolution', sel('resolution', [{ value: '', label: '—' },
-                ...RESOLUTIONS.map(([value, label]) => ({ value, label }))], item.resolution || ''))}
+            ${shows('resolution') ? field('Resolution', sel('resolution', [{ value: '', label: '—' },
+                ...RESOLUTIONS.map(([value, label]) => ({ value, label })),
+                // A value typed by hand is kept as its own option, as on the bug
+                // page: without it the select reads "—" and a save removes it.
+                ...(item.resolution && !RESOLUTIONS.some(([v]) => v === item.resolution)
+                    ? [{ value: item.resolution, label: item.resolution }] : [])], item.resolution || '')) : ''}
             ${field('Reporter', '<select class="ea-tin" data-f="reporter"></select>')}
             ${shows('labels') ? `<div class="td-field td-span2"><label>Labels</label>${tin('labels', (item.labels || []).join(', '))}</div>` : ''}
             ${field('Created', `<input class="ea-tin td-mono" value="${esc(item.created || '—')}" readonly>`)}
@@ -1700,7 +1704,7 @@ function mountItem(host, props, ctx) {
             // line nobody typed.
             if (fval('reporter') !== (item.reporter || '')) patch.reporter = fval('reporter');
             // How it ended (STORY-0050): set by a drop or a duplicate, changeable here.
-            if (fval('resolution') !== (item.resolution || '')) patch.resolution = fval('resolution');
+            if (shows('resolution') && fval('resolution') !== (item.resolution || '')) patch.resolution = fval('resolution');
             // Only send what the rendered form actually had: a row that was not
             // drawn must not reach the record, or retyping a story to a project
             // would post the parent the form never showed.

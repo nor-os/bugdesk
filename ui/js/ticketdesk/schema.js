@@ -29,8 +29,8 @@ function normalise(raw) {
     return {
         types: s.types && typeof s.types === 'object' ? s.types : {},
         warnings: Array.isArray(s.warnings) ? s.warnings : [],
-        hideable: s.hideable || { bugs: ['severity', 'subsystem', 'labels', 'links'],
-            backlog: ['phase', 'due', 'points', 'subsystem', 'labels', 'links'] },
+        hideable: s.hideable || { bugs: ['severity', 'subsystem', 'labels', 'links', 'resolution'],
+            backlog: ['phase', 'due', 'points', 'subsystem', 'labels', 'links', 'resolution'] },
         builtinStatuses: s.builtinStatuses || {},
         fieldTypes: s.fieldTypes?.length ? s.fieldTypes : ['text', 'number', 'date', 'bool', 'choice'],
         categories: s.categories?.length ? s.categories : ['active', 'waiting', 'finished'],

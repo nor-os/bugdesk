@@ -47,7 +47,7 @@
 
 import { CONFIG, apiUrl } from './instance.js';
 import {
-    RESOLUTIONS, STORE_TYPES, customFields, customStatuses, isFinished, resolutionLabel, withCustomStatuses,
+    RESOLUTIONS, STORE_TYPES, customFields, customStatuses, isFinished, isHidden, resolutionLabel, withCustomStatuses,
 } from './schema.js';
 import { bugRef, formatRef, itemRefOf } from './refs.js';
 
@@ -73,10 +73,23 @@ export function setWorkflow(next) {
  * flow}`, and an action whose flow changes the status IS a move. null while
  * the type keeps what it had before: the built-in moves, or a move table and
  * custom actions stored the older way, read below as they always were.
+ *
+ * A list saved before a default action existed does not have it, and gets it
+ * here; one the project removed on purpose is named in
+ * `workflow.removedDefaults.<store>.<type>` and stays away (STORY-0050).
  */
 export function typeActions(store, type) {
     const list = W.types?.[store]?.[type];
-    return Array.isArray(list) ? list : null;
+    if (!Array.isArray(list)) return null;
+    const missing = missingDefaults(W, store, type, list);
+    return missing.length ? [...list, ...missing] : list;
+}
+
+/** The default actions a type's own `list` lacks and `wf` did not remove on purpose. */
+export function missingDefaults(wf, store, type, list) {
+    const removed = wf?.removedDefaults?.[store]?.[type];
+    const gone = new Set(Array.isArray(removed) ? removed : []);
+    return defaultActions(store, type).filter((a) => !gone.has(a.id) && !list.some((x) => x?.id === a.id));
 }
 
 /** The status a flow changes to — its first "Change the status" step — or null. */
@@ -688,7 +701,8 @@ export async function planMove({ store, record, move, ask, askMessage, pick = nu
     const type = record?.type || (store === 'bugs' ? 'bug' : 'story');
     // How it ended (STORY-0050): asked with the message when the move ends the
     // record and its flow does not say; otherwise after the flow, if it did.
-    const decides = !touchesResolution(graph);
+    // Nobody is asked on a type that hides the field (Settings › Record types).
+    const decides = !touchesResolution(graph) && !isHidden(store, type, 'resolution');
     const planned = move.to || statusStep(graph);
     let resolution = null;
     const message = async (prompt) => {

@@ -93,8 +93,8 @@ static class RecordSchema
     /// parent the claim, handback and tree depend on — is always shown.</summary>
     public static readonly Dictionary<string, string[]> Hideable = new()
     {
-        ["bugs"] = new[] { "severity", "subsystem", "labels", "links" },
-        ["backlog"] = new[] { "phase", "due", "points", "subsystem", "labels", "links" },
+        ["bugs"] = new[] { "severity", "subsystem", "labels", "links", "resolution" },
+        ["backlog"] = new[] { "phase", "due", "points", "subsystem", "labels", "links", "resolution" },
     };
 
     /// <summary>The built-in statuses and what each counts as. These cannot be

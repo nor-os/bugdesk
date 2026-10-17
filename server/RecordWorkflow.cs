@@ -177,7 +177,29 @@ static class RecordWorkflow
             }
         if (root["types"] is JsonNode typesNode) CheckTypes(typesNode, schema, problems, flows);
         if (root["massActions"] is JsonNode mass) CheckMassActions(mass, root["actions"], root["types"], problems);
+        if (root["removedDefaults"] is JsonNode removed) CheckRemovedDefaults(removed, problems);
         return problems;
+    }
+
+    /// <summary>
+    /// STORY-0050. <c>removedDefaults.&lt;store&gt;.&lt;type&gt;</c>: the ids of the default
+    /// actions (today <c>duplicate</c>) a type's own list left out on purpose. A
+    /// list saved before a default existed is not named here, and gets it.
+    /// </summary>
+    static void CheckRemovedDefaults(JsonNode node, List<Problem> problems)
+    {
+        if (node is not JsonObject stores) { problems.Add(new("workflow.removedDefaults", "removedDefaults is not an object.")); return; }
+        foreach (var (store, byType) in stores)
+        {
+            var where = $"workflow.removedDefaults.{store}";
+            if (!RecordSchema.TypesOf.ContainsKey(store)) { problems.Add(new(where, $"'{store}' is not bugs or backlog.")); continue; }
+            if (byType is not JsonObject types) { problems.Add(new(where, "not an object of record types.")); continue; }
+            foreach (var (type, list) in types)
+            {
+                if (!RecordSchema.TypesOf[store].Contains(type)) problems.Add(new($"{where}.{type}", $"unknown {store} type '{type}'."));
+                else if (list is not JsonArray arr || arr.Any(x => !FlowId.IsMatch(Str(x)))) problems.Add(new($"{where}.{type}", "not a list of action ids."));
+            }
+        }
     }
 
     /// <summary>
