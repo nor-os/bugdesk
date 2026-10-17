@@ -180,6 +180,16 @@ export const BUILTIN_FILTERS = [
         key: 'on-agent', label: `On ${AGENT_AUTHOR}`, icon: 'smart_toy', builtin: true,
         expr: { kind: 'group', op: 'AND', children: [{ kind: 'clause', field: 'assignee', op: 'is', value: AGENT_AUTHOR }] },
     },
+    // Yours to move, by hand or by your agent: what the Bugs home's "On me or
+    // my agent" lists (STORY-0048). A view rather than names in the tile, so a
+    // home shared through project.json shows each person their own.
+    {
+        key: 'on-us', label: `On me or ${AGENT_AUTHOR}`, icon: 'group', builtin: true,
+        expr: { kind: 'group', op: 'AND', children: [
+            { kind: 'clause', field: 'assignee', op: 'one_of', value: [HUMAN_AUTHOR, AGENT_AUTHOR] },
+            { kind: 'clause', field: 'finished', op: 'is', value: 'no' },
+        ] },
+    },
 ];
 
 /* ── scope-bound store access ────────────────────────────────────────

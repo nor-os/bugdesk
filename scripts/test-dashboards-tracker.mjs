@@ -337,7 +337,7 @@ await t('the built-in home reads the tracker\'s own views', () => {
         const c = resolve.check(trk, tile.config.binding, tile.type === 'flexdesk.people' ? 'people' : 'list');
         assert.ok(!c.empty, `${tile.id}: ${c.empty}`);
     }
-    assert.equal(homes.builtinHome('bugs'), null);
+    assert.equal(homes.builtinHome('reports'), null);
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

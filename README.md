@@ -718,6 +718,26 @@ created in; one without a `section`, saved before the key existed, is listed in
 all of them. Create, rename, move to another section and delete them from the
 rail; the tiles are edited on the dashboard itself.
 
+Above them sits **Home**: the section's home dashboard (STORY-0048), the page
+its chip opens. Bugs and Backlog land on a home rather than on the queue or the
+board, which are one rail click away (a filter opens the queue, the **Backlog**
+view the board), and Home brings the home back. Each home is built into BugDesk
+(`ui/js/dashboards/homes.js`), the Tracker's included (see the Tracker section):
+
+| home | its default tiles |
+|---|---|
+| **Bugs** | Open bugs by severity · Opened and closed per week (the last 12 weeks) · On me or my agent · Needs my reply · In testing |
+| **Backlog** | In progress · In review · Ready to start (refined) · Waiting for refinement · Progress per epic (stories and tasks, stacked by status category) |
+
+Change a home and it is saved as an override in the project's
+`.bugdesk/project.json` (`home-bugs`, `home-backlog`), where it replaces the
+default for everyone on the project; **Reset to default** deletes it. An
+override names no person: "On me or my agent" is the `on-us` view, which every
+page resolves to whoever is looking. The chips' kinds are `bugs-home` and
+`backlog-home`; the queue and the board keep `queues` and `backlog`, so filter
+routes and saved tabs still open them, and a layout saved before the change has
+its Bugs and Backlog page tabs renamed as it is read.
+
 Apart from dashboards, the rail navigates; it does not create.
 
 ## Filing something

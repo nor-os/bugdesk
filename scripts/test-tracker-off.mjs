@@ -78,7 +78,7 @@ console.log('\nThe Tracker switched off for you (STORY-0043)');
 
 await t('no Tracker chip: Bugs and Backlog are the top bar, so F1 and F2 are theirs', () => {
     assert.equal(tax.MERGED_TRACKER, false);
-    assert.deepEqual(tax.taxonomy.topNavEntries().map((e) => e.kind), ['queues', 'backlog']);
+    assert.deepEqual(tax.taxonomy.topNavEntries().map((e) => e.kind), ['bugs-home', 'backlog-home']);
     // Kept as kinds, without a chip, so a saved tracker tab says it is switched
     // off rather than being dropped from the layout.
     for (const k of ['tracker', 'tracker-tickets', 'tracker-item', 'tracker-new', 'tracker-dashboard']) {

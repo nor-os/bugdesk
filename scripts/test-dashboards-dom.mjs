@@ -1034,5 +1034,164 @@ await t('a home override in project.json is never listed in a rail', async () =>
     server.list = server.list.filter((e) => !(e && e.id === 'home-bugs'));
 });
 
+console.log('\nBugs and Backlog homes (STORY-0048)');
+
+const { createHomeContent } = await import(join(UI, 'dashboards', 'page.js'));
+const homes = await import(join(UI, 'dashboards', 'homes.js'));
+const resolveMod = await import(join(UI, 'dashboards', 'resolve.js'));
+const sourcesMod = await import(join(UI, 'dashboards', 'sources.js'));
+const { HOME_KIND } = await import(join(UI, 'tiling', 'kind_taxonomy.js'));
+
+server.records['/bugs'] = { bugs: [
+    { id: 7, type: 'bug', title: 'Crash', status: 'open', severity: 'crash', pri: 1, assignee: 'ann', created: '2026-09-01', updated: '2026-09-01T10:00Z' },
+    { id: 8, type: 'bug', title: 'Mine', status: 'investigation', severity: 'major', pri: 2, assignee: 'alice', created: '2026-09-02', updated: '2026-09-05T10:00Z' },
+    { id: 9, type: 'bug', title: 'Agent\'s', status: 'testing', severity: 'minor', pri: 3, assignee: 'alice_agent', created: '2026-09-03', updated: '2026-09-06T10:00Z',
+        lastCommentAuthor: 'alice_agent' },
+    { id: 10, type: 'bug', title: 'Done', status: 'closed', severity: 'minor', pri: 3, assignee: 'alice', created: '2026-09-03', updated: '2026-09-07T10:00Z' },
+] };
+await bugData.loadData();
+
+const homeNav = [];
+async function mountHomeOf(section, p = {}) {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const hctx = { ...ctx, wm: { ...ctx.wm, openInPrimary: (kind, q) => homeNav.push({ kind, q }),
+        navigate: (kind, q, o) => homeNav.push({ kind, q, dest: o?.dest }) } };
+    const page = createHomeContent({ eventBus: bus, section, kind: HOME_KIND[section] })(host, p, hctx);
+    await page.ready;
+    await tick(30);
+    return { host, page, destroy: () => { page.destroy(); host.remove(); } };
+}
+const titlesOf = (host) => [...host.querySelectorAll('.tile .tile-title')].map((e) => e.textContent);
+const listLeads = (host, id) => [...host.querySelectorAll(`.tile[data-tile-id="${id}"] [data-row-key] .fd-list-tile__lead`)].map((e) => e.textContent);
+const homeWrites = () => projectWrites().filter((c) => (c.body?.dashboard?.id || c.path).includes('home-'));
+
+await t('each section with a store has a home kind, and the Bugs chip is the landing one', () => {
+    assert.deepEqual({ ...HOME_KIND }, { bugs: 'bugs-home', backlog: 'backlog-home' });
+    assert.deepEqual([...homes.HOME_SECTIONS], ['bugs', 'backlog', 'tracker']);
+});
+
+let H;
+await t('with nothing saved, the Bugs home is the built-in default, and opening it writes nothing', async () => {
+    const before = projectWrites().length;
+    H = await mountHomeOf('bugs');
+    assert.deepEqual(titlesOf(H.host), ['Open bugs by severity', 'Opened and closed per week', 'On me or my agent', 'Needs my reply', 'In testing']);
+    assert.equal(H.host.querySelector('.bd-dash__title').textContent, 'Bugs');
+    assert.match(H.host.querySelector('.bd-dash__scope').textContent, /Built in/);
+    assert.equal(H.host.querySelector('[data-action="reset"]').hidden, true);
+    assert.ok(H.host.querySelector('.fd-scope-picker'), 'no scope picker on the home');
+    for (const a of ['rename', 'delete', 'share']) assert.ok(!H.host.querySelector(`[data-action="${a}"]`), `${a} is offered on the home`);
+    await tick(SAVE_DELAY_MS + 50);
+    assert.equal(projectWrites().length, before, 'opening the home wrote project.json');
+});
+
+await t('its lists are the viewer\'s: on me or my agent, the agent\'s comments to answer, what is in testing', () => {
+    assert.deepEqual(listLeads(H.host, 'on-us'), ['#9', '#8'], 'newest update first, closed left out');
+    assert.deepEqual(listLeads(H.host, 'reply'), ['#9']);
+    assert.deepEqual(listLeads(H.host, 'testing'), ['#9']);
+    // No name is written into the built-in: "me" is a view every page resolves to its own person.
+    assert.ok(!JSON.stringify(homes.builtinHome('bugs')).includes('alice'), 'the built-in names a person');
+});
+
+await t('a home row opens the bug as a tab in the home\'s tile, and "Open as a list" opens the queue', async () => {
+    homeNav.length = 0;
+    H.host.querySelector('.tile[data-tile-id="testing"] [data-row-key]').click();
+    assert.deepEqual(homeNav.map((n) => [n.kind, n.q.id]), [['ticket', '#9']]);
+    const action = H.host.querySelector('.tile[data-tile-id="testing"] .fd-list-tile__action, .tile[data-tile-id="testing"] [data-action="list"]');
+    assert.ok(action, 'no Open as a list');
+    action.click();
+    await tick(10);
+    assert.equal(homeNav.at(-1).kind, 'queues');
+    assert.ok(homeNav.at(-1).q.expr, 'the queue was not handed the list\'s records');
+});
+
+await t('changing the Bugs home saves home-bugs in the project\'s project.json, never listed in a rail', async () => {
+    H.page.grid.removeTile('testing');
+    await tick(SAVE_DELAY_MS + 80);
+    const w = homeWrites();
+    assert.equal(w.length, 1, `${w.length} writes`);
+    assert.equal(w[0].path, '/project/dashboards');
+    assert.equal(w[0].body.dashboard.id, 'home-bugs');
+    assert.equal(w[0].body.dashboard.home, 'bugs');
+    assert.deepEqual(w[0].body.dashboard.tiles.map((x) => x.id), ['severity', 'per-week', 'on-us', 'reply']);
+    assert.match(H.host.querySelector('.bd-dash__scope').textContent, /Customised/);
+    assert.equal(H.host.querySelector('[data-action="reset"]').hidden, false);
+    H.destroy();
+    H = await mountHomeOf('bugs');
+    assert.equal(H.host.querySelectorAll('.tile').length, 4, 'the override is not the home after a reopen');
+    const r = mount();
+    await r.page.ready; await tick(10);
+    assert.ok(![...r.nav.querySelectorAll('.bd-dash-nav__item')].some((row) => row.dataset.dashboard === 'home-bugs'), 'the override is listed in the rail');
+    r.destroy();
+});
+
+await t('Reset to default asks, deletes home-bugs and shows the built-in again', async () => {
+    H.host.querySelector('[data-action="reset"]').click();
+    await answerConfirm();
+    await tick(30);
+    assert.deepEqual(homeWrites().at(-1), { method: 'DELETE', path: '/project/dashboards/home-bugs', body: undefined });
+    assert.ok(!server.list.some((e) => e && e.id === 'home-bugs'));
+    assert.equal(H.host.querySelectorAll('.tile').length, 5, 'the built-in is not back');
+    assert.match(H.host.querySelector('.bd-dash__scope').textContent, /Built in/);
+    H.destroy();
+});
+
+await t('the Backlog home is the built-in default over the backlog\'s views', async () => {
+    server.records['/backlog'] = { items: [...ITEMS(), item(5, 'story', 'refined', '', '3'), item(6, 'epic', 'refined', '', '')] };
+    await backlogData.loadBacklog();
+    H = await mountHomeOf('backlog');
+    assert.deepEqual(listLeads(H.host, 'ready'), ['STORY-0005'], 'a refined epic is not ready to start');
+    assert.deepEqual(titlesOf(H.host), ['In progress', 'In review', 'Ready to start', 'Waiting for refinement', 'Progress per epic']);
+    assert.equal(H.host.querySelector('.bd-dash__title').textContent, 'Backlog');
+    assert.deepEqual(listLeads(H.host, 'active'), ['STORY-0002']);
+    assert.deepEqual(listLeads(H.host, 'review'), ['TASK-0003']);
+    assert.deepEqual(listLeads(H.host, 'drafts'), ['STORY-0001']);
+    H.host.querySelector('.tile[data-tile-id="active"] [data-row-key]').click();
+    assert.equal(homeNav.at(-1).kind, 'item');
+    H.destroy();
+    server.records['/backlog'] = { items: ITEMS() };
+    await backlogData.loadBacklog();
+});
+
+await t('every built-in home tile resolves against its store', async () => {
+    for (const section of ['bugs', 'backlog']) {
+        const src = sourcesMod.getSource(section);
+        for (const tile of homes.builtinHome(section).tiles) {
+            const kind = { 'flexdesk.list': 'list', 'flexdesk.people': 'people', 'flexdesk.kpi': 'kpi' }[tile.type] || 'chart';
+            const c = resolveMod.check(src, tile.config.binding, kind);
+            assert.ok(!c.empty, `${section}/${tile.id}: ${c.empty}`);
+        }
+    }
+});
+
+await t('each section\'s rail has a Home row that opens its home and is marked while it shows', async () => {
+    const nav = document.createElement('div');
+    document.body.appendChild(nav);
+    const opened = [];
+    let shown = 'queues';
+    const tree = { primaryLeafId: () => 'L1', get: () => ({ content: { kind: shown } }) };
+    const rctx = { ...ctx, wm: { ...ctx.wm, desktops: { active: () => ({ tree }) }, openInPrimary: (kind, q) => opened.push({ kind, q }) } };
+    const rail = mountDashboardsRail(nav, rctx, { section: 'backlog', eventBus: bus });
+    const home = () => nav.querySelector('[data-home]');
+    assert.ok(home(), 'no Home row');
+    assert.equal(rowName(home()), 'Home');
+    assert.ok(!home().classList.contains('is-selected'), 'marked while the queue shows');
+    home().click();
+    assert.deepEqual(opened, [{ kind: 'backlog-home', q: undefined }]);
+    home().dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    assert.equal(opened.length, 2, 'Enter does not open it');
+    shown = 'backlog-home';
+    bus.emit('wm:changed');
+    assert.ok(home().classList.contains('is-selected'), 'not marked while the home shows');
+    rail.destroy();
+    const bugsRail = mountDashboardsRail(nav, rctx, { section: 'bugs', eventBus: bus });
+    shown = 'home';                                  // the landing leaf is the Bugs home too
+    bus.emit('wm:changed');
+    assert.equal(home().dataset.home, 'bugs-home');
+    assert.ok(home().classList.contains('is-selected'), 'the landing leaf is not the Bugs home');
+    bugsRail.destroy();
+    nav.remove();
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -68,7 +68,7 @@ const records = await import(UI + 'records.js');
 const refs = await import(UI + 'refs.js');
 const links = await import(UI + 'links.js');
 const {
-    taxonomy, activeTopNavKind, DASHBOARD_KIND, DASHBOARD_SECTIONS, dashboardSectionOf,
+    taxonomy, activeTopNavKind, DASHBOARD_KIND, DASHBOARD_SECTIONS, dashboardSectionOf, HOME_KIND, migrateLayout,
 } = await import(TILING + 'kind_taxonomy.js');
 const { REF_TOKENS } = await import('./record-fixtures.mjs');
 
@@ -158,6 +158,13 @@ t('the bug store is absent, not empty', () => {
     // Bugs chip to lead to.
     assert.equal(taxonomy.meta('queues'), undefined);
     assert.equal(taxonomy.meta('ticket'), undefined);
+    // Nor are the project page's Bugs and Backlog homes (STORY-0048): the
+    // Tracker home is the only one, and nothing is renamed in a saved layout.
+    assert.equal(taxonomy.meta('bugs-home'), undefined);
+    assert.equal(taxonomy.meta('backlog-home'), undefined);
+    assert.deepEqual({ ...HOME_KIND }, { tracker: 'tracker' });
+    const blob = { pageTabs: { backlog: { tabs: [] } }, topNav: 'backlog' };
+    assert.deepEqual(migrateLayout(JSON.parse(JSON.stringify(blob))), blob, 'a tracker layout was renamed');
 });
 t('Tickets keeps its kind id, and sits UNDER Tracker', () => {
     // The id is baked into saved tile layouts and every props.filter route;

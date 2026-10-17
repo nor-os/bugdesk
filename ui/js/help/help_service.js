@@ -226,8 +226,8 @@ The chips in the top bar are the pages of the project, in this order:
 
 | Page | What it is | Key |
 |---|---|---|
-| **Bugs** | the bug queue, a sortable, filterable table | **F1** |
-| **Backlog** | the epic → story → task tree | **F2** |
+| **Bugs** | the Bugs home, a dashboard; the bug queue is a filter away in the rail | **F1** |
+| **Backlog** | the Backlog home, a dashboard; the epic → story → task tree is a view away in the rail | **F2** |
 | **Tracker** | the tracker shared by every project, if one is set up | **F3** |
 
 A missing page moves the later ones up a key. Dashboards have no chip:
@@ -245,7 +245,7 @@ the top left.
 
 The **left rail** follows the page in front: the filters on Bugs, the
 views and work packages on Backlog, and on every page that page's
-dashboards at the top. The
+**Home** and dashboards at the top. The
 **right panel** is the team: who is on what. The **bottom panel** has
 two tabs, **Alerts** (what your alert rules flagged) and **Changes**
 (what is not committed or pushed yet). The buttons at the top right
@@ -262,7 +262,7 @@ or move to another desktop. See **Keyboard shortcuts**.
         keywords: ['lifecycle', 'stage', 'status', 'open', 'investigation', 'testing',
                    'closed', 'reopen', 'move', 'transition', 'message', 'action',
                    'workflow', 'custom status', 'duplicate', 'queue', 'resolution', 'wontfix',
-                   'link', 'flow'],
+                   'link', 'flow', 'home', 'reset to default'],
         markdown: `# Bugs and their lifecycle
 
 ## The four stages
@@ -330,9 +330,22 @@ every type's actions there, built from those steps, so a project can
 rename it, change what it does or remove it. A removed one stays
 removed.
 
+## The Bugs home
+
+The **Bugs** chip opens the Bugs home, a dashboard like any other (see
+Dashboards): **Open bugs by severity**, **Opened and closed per week**
+(the last 12 weeks), **On me or my agent**, **Needs my reply** and **In
+testing**. "Me" is whoever is looking at it. Move, resize, add, remove
+or configure a tile, and the changed home is saved in the project's
+\`.bugdesk/project.json\`, where it replaces the built-in default for
+everyone on the project; the header then says **Customised**, and
+**Reset to default** removes it again. **Home** at the top of the left
+rail, or the chip, brings it back from anywhere on the page.
+
 ## The queue
 
-The **Bugs** page lists the bugs the selected filter matches: Pri,
+A filter in the left rail (**Active**, **Open**, **On me**…) opens the
+queue. It lists the bugs the selected filter matches: Pri,
 Bug, Type, Summary, Status, Updated and Assignee, plus any custom field
 you pick from the header's right-click menu. Click a row to open it;
 right-click one (or several selected rows) for its moves, Open in a new
@@ -346,14 +359,20 @@ filter…" and **Delete…**. See **Filters** for what the rail offers.
         category: 'basics',
         keywords: ['backlog', 'epic', 'story', 'task', 'project', 'tree', 'refined',
                    'refinement', 'draft', 'review', 'done', 'dropped', 'points',
-                   'acceptance criteria', 'phase', 'work package'],
+                   'acceptance criteria', 'phase', 'work package', 'home', 'board', 'reset to default'],
         markdown: `# The backlog
 
 The backlog is the planned work: **epics**, the **stories** that make
 them up, and the **tasks** under a story (and, above epics, optional
-**projects**). The Backlog page draws them as a tree; fold a branch
-with its arrow. Its rail has the builtin views, your own filters, and
-the work packages.
+**projects**). The **Backlog** chip opens the Backlog home, a dashboard
+(see Dashboards): **In progress**, **In review**, **Ready to start**
+(refined), **Waiting for refinement** (draft epics and stories) and
+**Progress per epic** (its stories and tasks, stacked by status
+category). Change it and it is saved in the project's
+\`.bugdesk/project.json\` for everyone; **Reset to default** puts the
+built-in back. The rail has **Home**, the builtin views, your own
+filters, and the work packages; the **Backlog** view opens the board,
+which draws the items as a tree: fold a branch with its arrow.
 
 ## Statuses
 

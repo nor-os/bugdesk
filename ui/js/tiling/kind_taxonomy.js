@@ -45,7 +45,7 @@ const TRACKER = (typeof window !== 'undefined'
  * there. */
 const HAS_BUGS = !TRACKER && storeHas('bugs');
 const HAS_BACKLOG = storeHas('backlog');
-const LANDING = TRACKER ? 'tracker' : HAS_BUGS ? 'queues' : 'backlog';
+const LANDING = TRACKER ? 'tracker' : HAS_BUGS ? 'bugs-home' : 'backlog-home';
 
 /* The global TRACKER as a section of a project page, beside Bugs and Backlog.
  * Its records come from the tracker's own copy of the ticketdesk modules (see
@@ -122,11 +122,20 @@ export const taxonomy = createTaxonomy({
         // stranded by the removal, because tracker mode keeps its layouts in its
         // own config directory, so no saved bugs-mode tile can be restored into
         // it.
+        //
+        // THE CHIP IS THE SECTION'S HOME (STORY-0048), not the queue: `bugs-home`
+        // is the Bugs home dashboard (dashboards/homes.js), and `queues` is a
+        // page under it, as `tracker-tickets` is under `tracker`. So the chip,
+        // its F-key and a click on it while already on the page all land on the
+        // home, and the queue is one rail click away. `queues` keeps its id and
+        // its props for the reason above; `ticket` points at the chip kind
+        // because the WM groups a tile's tabs by a single `topNav` hop.
         ...(TRACKER ? {} : {
-            queues: HAS_BUGS
+            'bugs-home': HAS_BUGS
                 ? { label: 'Bugs', icon: 'bug_report', isTopNav: true, order: 20 }
                 : { label: 'Bugs', icon: 'bug_report', topNav: 'home' },
-            ticket: { label: 'Bug', icon: 'bug_report', topNav: 'queues' },
+            queues: { label: 'Bug list', icon: 'list', topNav: 'bugs-home' },
+            ticket: { label: 'Bug', icon: 'bug_report', topNav: 'bugs-home' },
         }),
 
         // TRACKER MODE's landing page: what is late, and whose it is. In tracker
@@ -191,17 +200,23 @@ export const taxonomy = createTaxonomy({
         // open is `props.dashboard`, not a sub-kind.
         dashboards: { label: 'Dashboards', icon: 'monitoring', topNav: LANDING },
         ...(TRACKER ? {} : {
-            'backlog-dashboard': { label: 'Dashboards', icon: 'monitoring', topNav: HAS_BACKLOG ? 'backlog' : 'home' },
+            'backlog-dashboard': { label: 'Dashboards', icon: 'monitoring', topNav: 'backlog-home' },
         }),
         ...(MERGED_TRACKER || TRACKER_SWITCHED_OFF ? {
             'tracker-dashboard': { label: 'Dashboards', icon: 'monitoring', topNav: MERGED_TRACKER ? 'tracker' : 'home' },
         } : {}),
 
-        backlog: TRACKER
-            ? { label: 'Tickets', icon: 'workspaces', topNav: 'tracker' }
-            : HAS_BACKLOG
+        // The Backlog chip is its home too (STORY-0048, as `bugs-home` above),
+        // and the board is a page under it. In tracker mode there is no Backlog
+        // section: the board is the Tracker's Tickets.
+        ...(TRACKER ? {} : {
+            'backlog-home': HAS_BACKLOG
                 ? { label: 'Backlog', icon: 'workspaces', isTopNav: true, order: 30 }
                 : { label: 'Backlog', icon: 'workspaces', topNav: 'home' },
+        }),
+        backlog: TRACKER
+            ? { label: 'Tickets', icon: 'workspaces', topNav: 'tracker' }
+            : { label: 'Backlog board', icon: 'account_tree', topNav: 'backlog-home' },
 
         // `item` points at whatever SECTION its list is in, not at the list.
         //
@@ -219,7 +234,7 @@ export const taxonomy = createTaxonomy({
         // STORY-0007` rather than `Tracker › Tickets › STORY-0007` — which is
         // a fair price for the two kinds agreeing about where they live.
         item: {
-            label: 'Item', icon: 'article', topNav: TRACKER ? 'tracker' : 'backlog',
+            label: 'Item', icon: 'article', topNav: TRACKER ? 'tracker' : 'backlog-home',
             ancestors: (props) => _recordHooks.item?.ancestors?.(props) || [],
             labelOf: (props) => _recordHooks.item?.labelOf?.(props) || props.label || props.id,
         },
@@ -255,6 +270,49 @@ export const DASHBOARD_KIND = Object.freeze({
     backlog: TRACKER ? 'dashboards' : 'backlog-dashboard',
     tracker: TRACKER ? 'dashboards' : 'tracker-dashboard',
 });
+
+/* ── section homes (STORY-0047, STORY-0048) ──────────────────────────
+ *
+ * The kind of each section's home: the page its chip opens, a dashboard
+ * (dashboards/homes.js). Only the sections this page has.
+ */
+export const HOME_KIND = Object.freeze(TRACKER ? { tracker: 'tracker' } : {
+    ...(HAS_BUGS ? { bugs: 'bugs-home' } : {}),
+    ...(HAS_BACKLOG ? { backlog: 'backlog-home' } : {}),
+    ...(MERGED_TRACKER ? { tracker: 'tracker' } : {}),
+});
+
+/** The section whose home is the landing page (`home`, the WM's default leaf). */
+export const LANDING_SECTION = TRACKER ? 'tracker' : HAS_BUGS ? 'bugs' : HAS_BACKLOG ? 'backlog' : null;
+
+/* Before STORY-0048 the Bugs and Backlog chips were the queue and the board
+ * themselves, so a saved layout keeps a tile's other pages under `queues` and
+ * `backlog` (a leaf's `pageTabs`, and the section a back-entry returns to).
+ * Their chips are the homes now; renamed on read, those tabs come back when
+ * the chip is clicked instead of being left in an archive nothing opens. */
+const RENAMED_PAGES = TRACKER ? {} : { queues: 'bugs-home', backlog: 'backlog-home' };
+
+/** A saved layout (the WM's `desktops` blob) with the old page names renamed.
+ *  The blob is changed in place and returned; anything else is returned as is. */
+export function migrateLayout(blob) {
+    const seen = new Set();
+    const walk = (v) => {
+        if (!v || typeof v !== 'object' || seen.has(v)) return;
+        seen.add(v);
+        if (Array.isArray(v)) { v.forEach(walk); return; }
+        if (v.pageTabs && typeof v.pageTabs === 'object' && !Array.isArray(v.pageTabs)) {
+            for (const [from, to] of Object.entries(RENAMED_PAGES)) {
+                if (!(from in v.pageTabs)) continue;
+                if (!(to in v.pageTabs)) v.pageTabs[to] = v.pageTabs[from];
+                delete v.pageTabs[from];
+            }
+        }
+        if (typeof v.topNav === 'string' && RENAMED_PAGES[v.topNav]) v.topNav = RENAMED_PAGES[v.topNav];
+        Object.values(v).forEach(walk);
+    };
+    walk(blob);
+    return blob;
+}
 
 /** The sections this page has, in rail order: where a dashboard can be listed. */
 export const DASHBOARD_SECTIONS = Object.freeze(TRACKER ? ['tracker']

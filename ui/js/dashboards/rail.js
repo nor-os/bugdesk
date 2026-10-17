@@ -10,6 +10,10 @@
  * asks for a name, saves an empty one listed in this section and opens it.
  * A row's hover buttons and its right-click menu rename it, move it to another
  * section and delete it; the page (page.js) has the rest (tiles, copy, share).
+ *
+ * Above them sits the section's HOME (STORY-0048): the dashboard its chip
+ * opens (homes.js). From the queue, the board or a dashboard, it is the way
+ * back, one click as the queue is from the home.
  */
 
 import { openConfirm, showContextMenu } from '@flexdesk/widgets';
@@ -19,13 +23,16 @@ import {
     SCOPES, askDetails, askName, entryFor, keyOf, lists, loadLibrary, notifyLibrary, onLibraryChanged, selectedKey,
     trackWrite,
 } from './library.js';
-import { DASHBOARD_KIND, DASHBOARD_SECTIONS } from '../tiling/kind_taxonomy.js';
+import { DASHBOARD_KIND, DASHBOARD_SECTIONS, HOME_KIND, LANDING_SECTION } from '../tiling/kind_taxonomy.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const icon = (name) => `<span class="material-symbols-outlined">${esc(name)}</span>`;
 const navAction = (act, glyph, label, danger = false) =>
     `<button type="button" class="td-nav__action${danger ? ' td-nav__action--danger' : ''}"
              data-act="${act}" title="${esc(label)}" aria-label="${esc(label)}">${icon(glyph)}</button>`;
+
+/** The mark of the home row: no dashboard key looks like it (keys are ids, or `personal:` ids). */
+const HOME_MARK = ':home';
 
 const STORE = {
     shared: { save: saveShared, remove: deleteShared },
@@ -38,6 +45,16 @@ const STORE = {
  */
 export function mountDashboardsRail(host, ctx, { section = DASHBOARD_SECTIONS[0] || 'bugs', eventBus = null } = {}) {
     const kind = DASHBOARD_KIND[section] || 'dashboards';
+    /** The kinds that show this section's home: its chip's, and the landing `home`. */
+    const homeKind = HOME_KIND[section] || null;
+    const homeKinds = new Set(homeKind ? [homeKind, ...(section === LANDING_SECTION ? ['home'] : [])] : []);
+    /** The kind the primary tile shows, or undefined without a window manager. */
+    const primaryKind = () => {
+        const tree = (ctx.wm || window.__twm?.wm)?.desktops?.active?.()?.tree;
+        if (!tree) return undefined;
+        const id = tree.primaryLeafId?.();
+        return id ? tree.get(id)?.content?.kind ?? null : null;
+    };
     /**
      * The key of the dashboard this section's page shows in the main area, or
      * null. The rail is on every page of the section, so a row is marked only
@@ -46,13 +63,14 @@ export function mountDashboardsRail(host, ctx, { section = DASHBOARD_SECTIONS[0]
      * to ask (tests), the page's own mark is the answer.
      */
     const openKey = () => {
-        const tree = (ctx.wm || window.__twm?.wm)?.desktops?.active?.()?.tree;
-        if (tree) {
-            const id = tree.primaryLeafId?.();
-            if ((id ? tree.get(id)?.content?.kind : null) !== kind) return null;
-        }
+        const shown = primaryKind();
+        if (shown !== undefined && shown !== kind) return null;
         return selectedKey(kind);
     };
+    /** Whether the main area shows the home. */
+    const homeOpen = () => homeKinds.has(primaryKind());
+    /** What is marked, as one value: a dashboard's key, the home, or nothing. */
+    const markOf = () => (homeOpen() ? HOME_MARK : openKey());
     let marked = null;
     // `label` names the tab (the WM titles a tab by it), so the tile reads the
     // dashboard's name rather than the kind id when its page is restored.
@@ -98,10 +116,18 @@ export function mountDashboardsRail(host, ctx, { section = DASHBOARD_SECTIONS[0]
             </div>`}`;
     };
 
+    const homeRow = () => (homeKind ? `
+            <div class="td-nav__item bd-dash-nav__home${marked === HOME_MARK ? ' is-selected' : ''}"
+                 data-home="${esc(homeKind)}" role="button" tabindex="0"
+                 title="The ${esc(SECTION_LABEL[section] || section)} home: the dashboard the chip opens">
+                ${icon('home')}<span>Home</span>
+            </div>` : '');
+
     const render = () => {
-        marked = openKey();
+        marked = markOf();
         host.innerHTML = `
             <div class="td-nav bd-dash-nav" data-section="${esc(section)}">
+                ${homeRow()}
                 ${group('shared')}
                 ${group('personal')}
                 ${error ? `<div class="td-nav__item bd-dash-nav__banner">${icon('error')}<span>${esc(error)}</span></div>` : ''}
@@ -169,8 +195,9 @@ export function mountDashboardsRail(host, ctx, { section = DASHBOARD_SECTIONS[0]
     };
 
     const activate = (target) => {
-        const row = target.closest('[data-dashboard], [data-new]');
+        const row = target.closest('[data-dashboard], [data-new], [data-home]');
         if (!row || !host.contains(row)) return;
+        if (row.dataset.home) { ctx.wm?.openInPrimary?.(row.dataset.home); return; }
         if (row.dataset.new) { create(row.dataset.new); return; }
         const btn = target.closest('.td-nav__action');
         run(btn && row.contains(btn) ? btn.dataset.act : 'open', row);
@@ -203,7 +230,7 @@ export function mountDashboardsRail(host, ctx, { section = DASHBOARD_SECTIONS[0]
     const unsub = onLibraryChanged(render);
     // The main area moved (the queue opened, a tab switched): repaint only when
     // that changes the mark, so a burst of wm:changed leaves hover and focus be.
-    const wmSub = eventBus?.on?.('wm:changed', () => { if (openKey() !== marked) render(); });
+    const wmSub = eventBus?.on?.('wm:changed', () => { if (markOf() !== marked) render(); });
     loadLibrary().catch(() => { /* each list carries its own reason */ });
 
     return {

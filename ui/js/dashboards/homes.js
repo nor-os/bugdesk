@@ -18,8 +18,14 @@
  * page's in standalone TicketDesk, `/t/api` on a project page (the tracker's
  * copy of instance.js). Every project shows the same Tracker home.
  *
- * STORY-0048 adds Bugs and Backlog homes the same way: a builtin here, an
- * override in the project's own project.json.
+ * BUGS AND BACKLOG (STORY-0048) have a home the same way: a builtin here, an
+ * override (`home-bugs`, `home-backlog`) in the project's own project.json. It
+ * is what their chips open; the queue and the board are one rail click away.
+ *
+ * NO NAMES IN A BUILT-IN. An override is shared, so a tile that means "me"
+ * names a built-in view (`on-us`, `needs-reply`), which every person's page
+ * resolves to themselves, never a literal name that would show the person who
+ * edited the home their own bugs.
  */
 
 import { CONFIG, apiUrl, trackerModule } from '../ticketdesk/instance.js';
@@ -32,19 +38,72 @@ const clause = (field, op, value) => ({ kind: 'clause', field, op, value });
 /** What the old hand-built page called its fourth section: nobody on it, or no date. */
 const GAPS = { kind: 'group', op: 'OR', children: [clause('assignee', 'is', 'none'), clause('dueState', 'is', 'none')] };
 
+/** Refined work that can be picked up: an epic is refined too, but nobody starts an epic. */
+const READY = { kind: 'group', op: 'AND', children: [clause('status', 'is', 'refined'), clause('type', 'none_of', ['epic'])] };
+
 /** The sections that have a built-in home. */
-export const HOME_SECTIONS = Object.freeze(['tracker']);
+export const HOME_SECTIONS = Object.freeze(['bugs', 'backlog', 'tracker']);
+
+const listTile = (source, sort) => (id, at, title, empty, binding) => ({
+    id, type: 'flexdesk.list', h: 3, ...at, config: { title, empty_text: empty, binding: { source, sort, ...binding } },
+});
+const chartTile = (id, at, title, chartType, binding) => ({
+    id, type: 'flexdesk.chart', h: 4, ...at, config: { title, chart_type: chartType, binding },
+});
 
 /**
- * The built-in home of `section`, as a raw entry, or null. What the old
- * Tracker page showed, as tiles: what is late, worst first; what falls due
- * this week; who has what; and what the tracker cannot answer.
+ * The Bugs home: how bad, how fast it moves, and what is waiting on you —
+ * your own and your agent's bugs, the agent's comments you have not answered,
+ * and what is in testing. Lists newest update first (bugs have no target date).
+ */
+function bugsHome() {
+    const list = listTile('bugs', 'updated');
+    return {
+        id: homeIdOf('bugs'), name: 'Bugs', version: DASHBOARD_VERSION, home: 'bugs', section: 'bugs',
+        tiles: [
+            chartTile('severity', { x: 0, y: 0, w: 5 }, 'Open bugs by severity', 'bar',
+                { source: 'bugs', filter: { key: 'active' }, plot: 'count', field: 'severity' }),
+            chartTile('per-week', { x: 5, y: 0, w: 7 }, 'Opened and closed per week', 'line',
+                { source: 'bugs', plot: 'perWeek' }),
+            list('on-us', { x: 0, y: 4, w: 6 }, 'On me or my agent', 'Nothing open is on you or your agent.', { filter: { key: 'on-us' } }),
+            list('reply', { x: 6, y: 4, w: 6 }, 'Needs my reply', 'Nothing is waiting for your reply.', { filter: { key: 'needs-reply' } }),
+            list('testing', { x: 0, y: 7, w: 12 }, 'In testing', 'Nothing is in testing.', { filter: { key: 'testing' } }),
+        ],
+    };
+}
+
+/**
+ * The Backlog home: the work in flight (in progress, in review), what can be
+ * picked up next (refined stories), what nobody can start yet (drafts to
+ * refine), and how far each epic has got.
+ */
+function backlogHome() {
+    const list = listTile('backlog', 'updated');
+    return {
+        id: homeIdOf('backlog'), name: 'Backlog', version: DASHBOARD_VERSION, home: 'backlog', section: 'backlog',
+        tiles: [
+            list('active', { x: 0, y: 0, w: 6 }, 'In progress', 'Nothing is in progress.', { filter: { key: 'active' } }),
+            list('review', { x: 6, y: 0, w: 6 }, 'In review', 'Nothing is waiting for a review.', { filter: { key: 'review' } }),
+            list('ready', { x: 0, y: 3, w: 6 }, 'Ready to start', 'Nothing refined is waiting to be picked up.',
+                { sort: 'due', filter: { expr: READY, label: 'Refined, ready to start' } }),
+            list('drafts', { x: 6, y: 3, w: 6 }, 'Waiting for refinement', 'No epic or story is waiting to be refined.',
+                { sort: 'created', filter: { key: 'unrefined' } }),
+            chartTile('per-epic', { x: 0, y: 6, w: 12, h: 5 }, 'Progress per epic', 'bar-stacked',
+                { source: 'backlog', types: ['story', 'task'], plot: 'count', field: 'epic', split: 'statusCategory' }),
+        ],
+    };
+}
+
+/**
+ * The built-in home of `section`, as a raw entry, or null. The Tracker's is
+ * what the old Tracker page showed, as tiles: what is late, worst first; what
+ * falls due this week; who has what; and what the tracker cannot answer.
  */
 export function builtinHome(section) {
+    if (section === 'bugs') return bugsHome();
+    if (section === 'backlog') return backlogHome();
     if (section !== 'tracker') return null;
-    const list = (id, at, title, empty, binding) => ({
-        id, type: 'flexdesk.list', ...at, h: 3, config: { title, empty_text: empty, binding: { source: 'tracker', sort: 'due', ...binding } },
-    });
+    const list = listTile('tracker', 'due');
     return {
         id: homeIdOf('tracker'), name: 'Tracker', version: DASHBOARD_VERSION, home: 'tracker', section: 'tracker',
         tiles: [

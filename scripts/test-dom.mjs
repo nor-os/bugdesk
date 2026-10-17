@@ -2057,7 +2057,8 @@ await t('an item\'s breadcrumb is its hierarchy, and every crumb climbs through 
     assert.deepEqual(labels.map((l) => l.replace(/^\S+ /, '')), ['Backlog', 'PROJ-0001', 'STORY-0002', 'TASK-0003'],
         `the chain is not the hierarchy: ${JSON.stringify(labels)}`);
     for (const btn of crumb.el.querySelectorAll('button')) btn.click();
-    assert.deepEqual(climbed, [['backlog', null], ['item', '1'], ['item', '2']]);
+    // The section's crumb is its chip, the Backlog home (STORY-0048).
+    assert.deepEqual(climbed, [['backlog-home', null], ['item', '1'], ['item', '2']]);
     assert.deepEqual(navigated, [], 'a crumb went around navigateUp');
     crumb.destroy();
 });

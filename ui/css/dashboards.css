@@ -15,7 +15,8 @@
 
 /* The Navigator while Dashboards is in front (rail.js). The rows are the
    rail's own `.td-nav__item`s; these add the open one and the markers. */
-.bd-dash-nav__item.is-selected { background: var(--state-selected, rgb(255 255 255 / 10%)); }
+.bd-dash-nav__item.is-selected,
+.bd-dash-nav__home.is-selected { background: var(--state-selected, rgb(255 255 255 / 10%)); }
 .bd-dash-nav__item--personal .material-symbols-outlined { color: var(--color-info, #2196f3); }
 .bd-dash-nav__item.is-broken .material-symbols-outlined,
 .bd-dash-nav__banner .material-symbols-outlined { color: var(--color-danger, #f07178); }

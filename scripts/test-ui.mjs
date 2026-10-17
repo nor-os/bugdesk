@@ -58,6 +58,7 @@ const { createFilterModel } = await import(UI + 'filter_engine.js');
 const data = await import(UI + 'backlog_data.js');
 const {
     activeTopNavKind, taxonomy: taxonomyDefault, DASHBOARD_KIND, DASHBOARD_SECTIONS, dashboardSectionOf,
+    HOME_KIND, LANDING_SECTION, migrateLayout,
 } = await import(TILING + 'kind_taxonomy.js');
 const newItem = await import(UI + 'new_item.js');
 const live = await import(UI + 'live.js');
@@ -293,29 +294,35 @@ const wmWith = ({ focused = null, primary = null, leaves = {} }) => ({
 console.log('\nactiveTopNavKind');
 
 t('a bug page resolves to the Bugs section', () =>
-    assert.equal(activeTopNavKind(wmWith({ focused: 'a', leaves: { a: 'ticket' } })), 'queues'));
+    assert.equal(activeTopNavKind(wmWith({ focused: 'a', leaves: { a: 'ticket' } })), 'bugs-home'));
+// The chips are the section homes (STORY-0048); the queue and the board are
+// pages under them.
 t('the queue itself resolves to Bugs', () =>
-    assert.equal(activeTopNavKind(wmWith({ focused: 'a', leaves: { a: 'queues' } })), 'queues'));
+    assert.equal(activeTopNavKind(wmWith({ focused: 'a', leaves: { a: 'queues' } })), 'bugs-home'));
 t('a backlog item resolves to the Backlog section', () =>
-    assert.equal(activeTopNavKind(wmWith({ focused: 'a', leaves: { a: 'item' } })), 'backlog'));
+    assert.equal(activeTopNavKind(wmWith({ focused: 'a', leaves: { a: 'item' } })), 'backlog-home'));
 t('the backlog board itself resolves to Backlog', () =>
-    assert.equal(activeTopNavKind(wmWith({ focused: 'a', leaves: { a: 'backlog' } })), 'backlog'));
+    assert.equal(activeTopNavKind(wmWith({ focused: 'a', leaves: { a: 'backlog' } })), 'backlog-home'));
+t('the Bugs and Backlog homes are their own sections\' chips', () => {
+    assert.equal(activeTopNavKind(wmWith({ focused: 'a', leaves: { a: 'bugs-home' } })), 'bugs-home');
+    assert.equal(activeTopNavKind(wmWith({ focused: 'a', leaves: { a: 'backlog-home' } })), 'backlog-home');
+});
 t('home resolves to the first top-nav entry, not nothing', () =>
-    assert.equal(activeTopNavKind(wmWith({ focused: 'a', leaves: { a: 'home' } })), 'queues'));
+    assert.equal(activeTopNavKind(wmWith({ focused: 'a', leaves: { a: 'home' } })), 'bugs-home'));
 
 t('a focused PANEL is ignored in favour of the primary leaf', () => {
     // Otherwise the left rail asking "which section am I in" gets the answer
     // "the left rail" the moment it takes focus.
     const wm = wmWith({ focused: 'p', primary: 'm', leaves: { p: 'panel:left', m: 'item' } });
-    assert.equal(activeTopNavKind(wm), 'backlog');
+    assert.equal(activeTopNavKind(wm), 'backlog-home');
 });
 t('a window-placeholder is ignored the same way', () =>
     assert.equal(activeTopNavKind(wmWith({
         focused: 'w', primary: 'm', leaves: { w: 'window-placeholder', m: 'ticket' },
-    })), 'queues'));
+    })), 'bugs-home'));
 t('focus wins over the primary leaf', () => {
     const wm = wmWith({ focused: 'f', primary: 'm', leaves: { f: 'item', m: 'ticket' } });
-    assert.equal(activeTopNavKind(wm), 'backlog');
+    assert.equal(activeTopNavKind(wm), 'backlog-home');
 });
 t('nothing resolvable yields null, not a wrong guess', () => {
     assert.equal(activeTopNavKind(null), null);
@@ -549,28 +556,63 @@ t('every page declares the section it lives in', () => {
     // beside — makes openInPrimary a cross-page swap, which archives the tabs
     // and DROPS the props it was handed. That is invisible until something
     // routes by props, and then it looks like a click doing nothing.
-    for (const kind of ['home', 'queues', 'ticket', 'backlog', 'item', 'new-item', 'dashboards', 'backlog-dashboard']) {
+    for (const kind of ['home', 'bugs-home', 'queues', 'ticket', 'backlog-home', 'backlog', 'item', 'new-item', 'dashboards', 'backlog-dashboard']) {
         assert.ok(taxonomyDefault.topNavFor(kind), `${kind} declares no section`);
     }
-    assert.equal(taxonomyDefault.topNavFor('home'), 'queues', 'home is not with the page it renders');
+    assert.equal(taxonomyDefault.topNavFor('home'), 'bugs-home', 'home is not with the page it renders');
     assert.equal(taxonomyDefault.topNavFor('item'), taxonomyDefault.topNavFor('backlog'));
     assert.equal(taxonomyDefault.topNavFor('ticket'), taxonomyDefault.topNavFor('queues'));
+    // STORY-0048: the queue and the board are pages of their home's section.
+    assert.equal(taxonomyDefault.topNavFor('queues'), 'bugs-home');
+    assert.equal(taxonomyDefault.topNavFor('backlog'), 'backlog-home');
+    assert.equal(taxonomyDefault.topNavFor(DASHBOARD_KIND.backlog), 'backlog-home');
 });
 t('the default mode has no Tracker chip, and no Dashboards chip either', () =>
     // The tracker-mode counterpart of this lives in test-tracker.mjs, which
     // runs in its own process — the mode is read once, at module load.
     // Dashboards (STORY-0046) are listed in each section's rail, so F1 and F2
     // are the two stores and nothing else.
-    assert.deepEqual(taxonomyDefault.topNavEntries().map((e) => e.kind), ['queues', 'backlog']));
+    // The chips are the two homes (STORY-0048), still labelled Bugs and Backlog.
+    assert.deepEqual(taxonomyDefault.topNavEntries().map((e) => [e.kind, e.label]), [['bugs-home', 'Bugs'], ['backlog-home', 'Backlog']]));
 t('a dashboard opens under the chip of the section it was opened from', () => {
     // STORY-0046. The WM groups a tile's tabs by `topNavFor(kind)`, so a
     // dashboard opened from the Backlog rail must be a Backlog page, or the
     // open is a swap to the Bugs page that drops its props.
     assert.deepEqual(DASHBOARD_SECTIONS, ['bugs', 'backlog']);
-    assert.equal(taxonomyDefault.topNavFor(DASHBOARD_KIND.bugs), 'queues');
-    assert.equal(taxonomyDefault.topNavFor(DASHBOARD_KIND.backlog), 'backlog');
+    assert.equal(taxonomyDefault.topNavFor(DASHBOARD_KIND.bugs), 'bugs-home');
+    assert.equal(taxonomyDefault.topNavFor(DASHBOARD_KIND.backlog), 'backlog-home');
     assert.ok(!taxonomyDefault.meta('dashboards').isTopNav);
     for (const s of DASHBOARD_SECTIONS) assert.equal(dashboardSectionOf(DASHBOARD_KIND[s]), s);
+});
+
+t('each section\'s chip opens its home, and Bugs is the landing one (STORY-0048)', () => {
+    assert.deepEqual({ ...HOME_KIND }, { bugs: 'bugs-home', backlog: 'backlog-home' });
+    assert.equal(LANDING_SECTION, 'bugs');
+    assert.equal(taxonomyDefault.meta('queues').label, 'Bug list');
+    assert.ok(!taxonomyDefault.meta('queues').isTopNav && !taxonomyDefault.meta('backlog').isTopNav,
+        'the queue or the board is still a chip of its own');
+});
+t('a layout saved before the homes keeps its Bugs and Backlog page tabs', () => {
+    // A tile's other pages were archived under the old chip kinds, and a
+    // back-entry names the section it returns to; both now say the homes.
+    const blob = { desktops: [{ tree: { root: { kind: 'leaf', content: { kind: 'item', props: { id: '7' } },
+        tabs: [{ kind: 'item', props: { id: '7' }, history: [{ kind: 'queues', props: { filter: 'open' }, topNav: 'queues' }] }],
+        pageTabs: {
+            queues: { tabs: [{ kind: 'queues', props: { filter: 'open' } }], activeTabIdx: 0 },
+            tracker: { tabs: [{ kind: 'tracker', props: {} }], activeTabIdx: 0 },
+        } } } }] };
+    const out = migrateLayout(blob);
+    const leaf = out.desktops[0].tree.root;
+    assert.deepEqual(Object.keys(leaf.pageTabs).sort(), ['bugs-home', 'tracker']);
+    assert.equal(leaf.pageTabs['bugs-home'].tabs[0].kind, 'queues', 'the queue tab itself was renamed');
+    assert.equal(leaf.tabs[0].history[0].topNav, 'bugs-home');
+    assert.equal(leaf.tabs[0].history[0].kind, 'queues');
+    // Read again (it is written back renamed): nothing changes, and a page
+    // archived under the new name wins over a stale old one.
+    assert.deepEqual(migrateLayout(JSON.parse(JSON.stringify(out))), out);
+    const both = migrateLayout({ pageTabs: { backlog: { tabs: [1] }, 'backlog-home': { tabs: [2] } } });
+    assert.deepEqual(both, { pageTabs: { 'backlog-home': { tabs: [2] } } });
+    assert.equal(migrateLayout(null), null);
 });
 
 /* ── the comment-header regex ────────────────────────────────────────

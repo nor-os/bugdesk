@@ -36,6 +36,25 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   hideable per type in Settings › Record types; a move to `done` does not ask. The bug and backlog patch routes take
   `resolution` and `addLinks`.
 
+- **Bugs and Backlog open on a home dashboard** (STORY-0048). The Bugs and
+  Backlog chips (and F1, F2) open each section's home, a standard dashboard
+  built into BugDesk like the Tracker's (`ui/js/dashboards/homes.js`), and the
+  Bugs home (the Backlog home in a project with no bug store) is the landing
+  page and what a new split shows. Bugs: Open bugs by severity, Opened and
+  closed per week, On me or my agent, Needs my reply, In testing. Backlog: In
+  progress, In review, Ready to start (refined), Waiting for refinement,
+  Progress per epic. The queue and the board are one rail click away (a filter
+  opens the queue, the Backlog view the board), and a new **Home** row at the
+  top of every section's rail brings the home back. Editing a home saves an
+  override in the project's `.bugdesk/project.json` (`home-bugs`,
+  `home-backlog`); **Reset to default** removes it, after asking. A new bug
+  view, **On me or <agent>** (`on-us`), is what the Bugs home lists, so a
+  shared override shows each person their own bugs. The chips are new kinds
+  (`bugs-home`, `backlog-home`); `queues` and `backlog` stay the queue and the
+  board, and a saved layout's Bugs and Backlog page tabs are renamed as it is
+  read. A record's breadcrumb now climbs to its section's home.
+
+
 - **The Tracker home is a standard dashboard** (STORY-0047). The Tracker chip
   opens a dashboard like any other, built into BugDesk
   (`ui/js/dashboards/homes.js`): Overdue, Due in the next 7 days, Who has what

@@ -2,7 +2,7 @@
  * ticketdesk/pages.js — BugDesk content kinds for the tiling WM.
  *
  * Registered kinds:
- *   queues         DataTable master list (also the default 'home' leaf);
+ *   queues         DataTable master list, under the Bugs home (STORY-0048);
  *                  rows open bugs as TABS in the tile
  *   ticket         one mask, three modes: edit (default) / new / search
  *   panel:left     filter rail (builtin filters + the user's own)
@@ -2414,7 +2414,9 @@ const MERGED_TRACKER = CONFIG.mode !== 'tracker' && !!CONFIG.tracker?.available;
 /** Which body a side panel shows for the section in front. */
 function panelSection(topNav) {
     if (topNav === 'tracker' && MERGED_TRACKER) return 'tracker';
-    return topNav === 'backlog' || topNav === 'tracker' ? 'backlog' : 'bugs';
+    // `backlog-home` is the Backlog chip (STORY-0048); `backlog` is still the
+    // tracker-mode Tickets list's kind.
+    return topNav === 'backlog-home' || topNav === 'backlog' || topNav === 'tracker' ? 'backlog' : 'bugs';
 }
 
 /* ── content map ────────────────────────────────────────────────── */
@@ -2452,7 +2454,9 @@ export function createTicketDeskContent({ eventBus } = {}) {
 
     register('queues', shell('queues', mountQueues));
     // WM default leaf is 'home'. A #ticket hash retargets it — used for
-    // headless verification of the ticket detail page.
+    // headless verification of the ticket detail page. Otherwise install.js
+    // replaces it with the Bugs home dashboard (STORY-0048); the queue is the
+    // fallback for a page whose dashboards could not be registered.
     register('home',
         location.hash === '#ticket' ? shell('ticket', mountTicket)
         : shell('queues', mountQueues));

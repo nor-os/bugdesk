@@ -22,7 +22,7 @@
 
 import { createCommandPalette } from './command_palette.js';
 import { installHistoryBack } from './history_nav.js';
-import { taxonomy, activeTopNavKind, MERGED_TRACKER } from './kind_taxonomy.js';
+import { taxonomy, activeTopNavKind, migrateLayout, HOME_KIND, LANDING_SECTION, MERGED_TRACKER } from './kind_taxonomy.js';
 import { trackerOffReason } from '../core/app_identity.js';
 import { createSettingsContent } from '../ticketdesk/settings_content.js';
 
@@ -103,9 +103,6 @@ export async function installTilingShell({ eventBus, logger } = {}) {
 
         ticketDeskContent = createTicketDeskContent({ eventBus });
         backlogContent = { ...createBacklogContent({ eventBus }), ...createNewItemContent({ eventBus }) };
-        // A project with no bug store lands on its backlog, not on a queue
-        // over a folder it does not have.
-        if (!storeHas('bugs') && !trackerMode) backlogContent.home = backlogContent.backlog;
     } catch (err) {
         console.error('[bugdesk] page registration failed', err);
     }
@@ -133,15 +130,23 @@ export async function installTilingShell({ eventBus, logger } = {}) {
     try {
         const dashboards = await import('../dashboards/page.js');
         dashboardsContent = dashboards.createDashboardsContent({ eventBus });
-        // THE TRACKER HOME is a standard dashboard (STORY-0047): the built-in
-        // default of dashboards/homes.js, or the override that replaced it. In
-        // standalone TicketDesk it is `home` too, the page the app opens on: the
-        // WM's default leaf would otherwise be a bug queue over a store this
-        // deployment is not about, with the Tracker chip lit above it.
-        if (trackerMode || trackerCopy) {
-            const home = dashboards.createHomeContent({ eventBus, section: 'tracker', kind: 'tracker' });
-            trackerContent = { ...trackerContent, tracker: home, ...(trackerMode ? { home } : {}) };
+        // EVERY SECTION'S HOME is a standard dashboard (STORY-0047, STORY-0048):
+        // the built-in default of dashboards/homes.js, or the override that
+        // replaced it, under the section's chip kind (`bugs-home`,
+        // `backlog-home`, `tracker`). The landing section's is `home` too, the
+        // WM's default leaf and what a new split is seeded with: the page the
+        // app opens on. A project with no bug store lands on the Backlog home,
+        // and standalone TicketDesk on the Tracker home. (`#ticket` keeps its
+        // headless-verification ticket page as `home`, see pages.js.)
+        const homes = {};
+        for (const [section, kind] of Object.entries(HOME_KIND)) {
+            if (section === 'tracker' && !trackerMode && !trackerCopy) continue;
+            homes[kind] = dashboards.createHomeContent({ eventBus, section, kind });
         }
+        const landing = homes[HOME_KIND[LANDING_SECTION]];
+        if (landing && location.hash !== '#ticket') homes.home = landing;
+        if (homes.tracker) trackerContent = { ...trackerContent, tracker: homes.tracker };
+        dashboardsContent = { ...dashboardsContent, ...homes };
     } catch (err) {
         console.error('[bugdesk] the dashboards page could not be registered', err);
     }
@@ -158,10 +163,19 @@ export async function installTilingShell({ eventBus, logger } = {}) {
     // the checkout — and, unlike before, actually survives a reload: these two
     // calls used to fall through to the permissive catch-all, which answered a
     // read with `{ok:true}` and lost every layout ever saved.
-    const serverHost = createPywebviewHost({
+    const pywebviewHost = createPywebviewHost({
         resolvePath: (key) => `${key}.json`,
         logger: log,
     });
+    // A layout saved before the Bugs and Backlog chips became their homes
+    // (STORY-0048) names their pages by the old kinds: renamed as it is read.
+    const serverHost = pywebviewHost.state ? {
+        ...pywebviewHost,
+        state: { ...pywebviewHost.state, read: async (key) => {
+            const blob = await pywebviewHost.state.read(key);
+            return key === 'desktops' ? migrateLayout(blob) : blob;
+        } },
+    } : pywebviewHost;
     // In the desktop app (desktop/BugDesk.Desktop) the page runs in a Photino
     // window, which answers for itself: its size and place, and the native
     // Save dialog for exports. State still goes to the server, per user, as it
