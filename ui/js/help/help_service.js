@@ -15,7 +15,7 @@
  */
 
 import { setHelpProvider } from '@flexdesk/widgets';
-import { trackerOffReason } from '../core/app_identity.js';
+import { storeHas, trackerOffReason } from '../core/app_identity.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Simple Markdown Parser
@@ -417,7 +417,9 @@ same in every project. BugDesk reloads, and the Tracker chip, its F-key
 (the later chips move up), its dashboards, its tickets in the command
 palette and this topic are gone. Nothing is deleted: switch it back on
 and everything is where it was. A dashboard tile that charts tracker
-records says the Tracker is switched off instead of drawing.
+records says the Tracker is switched off instead of drawing; its settings
+keep what it charts, so you can change its look but not turn it into a
+bugs tile by accident. **Reset** on Behaviour switches it back on.
 
 \`enabled = false\` under \`[tracker]\` in \`projects.toml\` switches
 it off for the whole machine, underneath anyone's own choice.
@@ -760,7 +762,10 @@ back to it.
  * bar: its own topic is not offered, and the topics that list it as a page say
  * the pages that are there. Each pair is [what the topic says, what it says
  * instead]; scripts/test-tracker-off.mjs checks every `from` is still in its
- * topic, so a reworded topic cannot quietly keep the Tracker in.
+ * topic, so a reworded topic cannot quietly keep the Tracker in. An `instead`
+ * that depends on the page is a function: WHY it is off (yours, or the
+ * machine's, where the switch cannot be pressed) and which chips are left (a
+ * project may have only bugs or only a backlog).
  *
  * Read at call time, not at load: this module is evaluated before index.html
  * has the config (see core/app_identity.js), and the config cannot change
@@ -770,7 +775,7 @@ export const TRACKER_OFF_EDITS = {
     'getting-started': [
         ['| **Tracker** | the tracker shared by every project, if one is set up | **F3** |\n', ''],
         ['A missing page moves the later ones up a key.',
-         'A missing page moves the later ones up a key. The Tracker is switched off (Settings › You › Behaviour › Tracker).'],
+         () => `A missing page moves the later ones up a key. ${trackerOffReason()}`],
         ['across both stores (and the\ntracker) plus every command.', 'across both stores plus every command.'],
     ],
     'dashboards': [
@@ -779,21 +784,27 @@ export const TRACKER_OFF_EDITS = {
         ['in every project and the\ntracker alike.', 'in every project alike.'],
     ],
     'keyboard-shortcuts': [
-        ['(Bugs, Backlog, Tracker) | **F1 … F3** |', '(Bugs, Backlog) | **F1 … F2** |'],
+        ['(Bugs, Backlog, Tracker) | **F1 … F3** |', () => {
+            const pages = [storeHas('bugs') && 'Bugs', storeHas('backlog') && 'Backlog'].filter(Boolean);
+            return `(${pages.join(', ')}) | **${pages.length > 1 ? `F1 … F${pages.length}` : 'F1'}** |`;
+        }],
     ],
 };
 
-let _shown = null;
+let _shown = null, _shownFor = null;
 /** The topics this page offers: all of them, or without the Tracker when it is off. */
 function shownTopics() {
-    if (!trackerOffReason()) return HELP_TOPICS;
-    if (_shown) return _shown;
+    const reason = trackerOffReason();
+    if (!reason) return HELP_TOPICS;
+    const key = `${reason}|${storeHas('bugs')}|${storeHas('backlog')}`;
+    if (_shown && _shownFor === key) return _shown;
     const { tracker: _off, ...rest } = HELP_TOPICS;
     for (const [id, edits] of Object.entries(TRACKER_OFF_EDITS)) {
         if (!rest[id]) continue;
-        const markdown = edits.reduce((md, [from, to]) => md.replace(from, to), rest[id].markdown);
+        const markdown = edits.reduce((md, [from, to]) => md.replace(from, typeof to === 'function' ? () => to() : to), rest[id].markdown);
         rest[id] = { ...rest[id], markdown, keywords: rest[id].keywords.filter((k) => !/tracker/i.test(k)) };
     }
+    _shownFor = key;
     return (_shown = rest);
 }
 

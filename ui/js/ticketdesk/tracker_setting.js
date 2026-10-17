@@ -80,42 +80,66 @@ export function mountTrackerSetting(el, { eventBus = null, confirm = null, reloa
 
     const flip = async () => {
         if (state.disabled || busy) return;
-        const next = !state.on;
-        const ask = confirm || (await import('@flexdesk/widgets')).openConfirm;
-        const ok = await ask({
-            title: next ? 'Switch the Tracker on' : 'Switch the Tracker off',
-            message: next
-                ? '<p>BugDesk reloads to bring the Tracker back into the top bar, with its dashboards and its tickets in search.</p>'
-                : '<p>BugDesk reloads to take the Tracker out of the top bar, the F-keys, the rails and search.</p>'
-                  + '<p class="td-dim">Nothing is deleted: its tickets and dashboards stay, and come back when you switch it on. Only you are affected.</p>',
-            confirmLabel: next ? 'Switch on and reload' : 'Switch off and reload',
-            icon: 'space_dashboard',
+        await switchTracker(!state.on, {
+            confirm, reload, eventBus,
+            onBusy: () => { busy = true; render(); },
+            onError: (msg) => { busy = false; error = msg; state = trackerSwitchState(CONFIG); render(); },
         });
-        if (!ok) return;
-        busy = true;
-        render();
-        try {
-            const res = await fetch(apiUrl('/personal/preferences'), {
-                method: 'POST',
-                headers: { 'content-type': 'application/json', accept: 'application/json' },
-                // On is the default, so switching back on clears the key.
-                body: JSON.stringify({ tracker: next ? null : false }),
-            });
-            const j = await res.json().catch(() => null);
-            if (!res.ok || !j?.ok) throw new Error(j?.error || `HTTP ${res.status}`);
-            CONFIG.tracker = { ...(CONFIG.tracker || {}), ...(j.tracker || {}) };
-            (reload || (() => window.location.reload()))();
-        } catch (err) {
-            busy = false;
-            error = `Not saved: ${err?.message || err}`;
-            eventBus?.emit?.('toast:show', { type: 'error', message: `Could not switch the Tracker: ${err?.message || err}` });
-            state = trackerSwitchState(CONFIG);
-            render();
-        }
     };
 
     const onClick = (e) => { if (e.target.closest('[data-slot="tracker-toggle"]')) flip(); };
     el.addEventListener('click', onClick);
     render();
     return () => el.removeEventListener('click', onClick);
+}
+
+/**
+ * Switch the Tracker on or off for you: ask, save, reload. Resolves to whether
+ * it was saved (the page is reloading then); a Cancel saves nothing.
+ *
+ * @param {boolean} next  true to switch it on
+ * @param {object} [o]  `confirm`, `reload`, `eventBus` as for the mount, and
+ *   `onBusy()` / `onError(message)` for the row that shows it
+ */
+export async function switchTracker(next, { confirm = null, reload = null, eventBus = null, onBusy = null, onError = null } = {}) {
+    const ask = confirm || (await import('@flexdesk/widgets')).openConfirm;
+    const ok = await ask({
+        title: next ? 'Switch the Tracker on' : 'Switch the Tracker off',
+        message: next
+            ? '<p>BugDesk reloads to bring the Tracker back into the top bar, with its dashboards and its tickets in search.</p>'
+            : '<p>BugDesk reloads to take the Tracker out of the top bar, the F-keys, the rails and search.</p>'
+              + '<p class="td-dim">Nothing is deleted: its tickets and dashboards stay, and come back when you switch it on. Only you are affected.</p>',
+        confirmLabel: next ? 'Switch on and reload' : 'Switch off and reload',
+        icon: 'space_dashboard',
+    });
+    if (!ok) return false;
+    onBusy?.();
+    try {
+        const res = await fetch(apiUrl('/personal/preferences'), {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', accept: 'application/json' },
+            // On is the default, so switching back on clears the key.
+            body: JSON.stringify({ tracker: next ? null : false }),
+        });
+        const j = await res.json().catch(() => null);
+        if (!res.ok || !j?.ok) throw new Error(j?.error || `HTTP ${res.status}`);
+        CONFIG.tracker = { ...(CONFIG.tracker || {}), ...(j.tracker || {}) };
+        (reload || (() => window.location.reload()))();
+        return true;
+    } catch (err) {
+        onError?.(`Not saved: ${err?.message || err}`);
+        eventBus?.emit?.('toast:show', { type: 'error', message: `Could not switch the Tracker: ${err?.message || err}` });
+        return false;
+    }
+}
+
+/**
+ * Behaviour's Reset puts the switch back to its default, on — which, like the
+ * switch itself, asks first and reloads. Off for the machine, or with no
+ * tracker, there is nothing of yours to reset.
+ */
+export async function resetTrackerSwitch(o = {}) {
+    const state = trackerSwitchState(CONFIG);
+    if (!state.offered || state.disabled || state.on) return false;
+    return switchTracker(true, o);
 }

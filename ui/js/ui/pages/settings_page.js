@@ -947,10 +947,24 @@ export class SettingsPage extends PageBase {
         if (!categoryId) return;
         resetCategory(categoryId);
         this._renderCategory(categoryId);
+        this._resetPanels((def) => def.category === categoryId);
+    }
+
+    /**
+     * A panel row keeps its value outside the settings store (the Tracker
+     * switch, in your profile), so the store's reset cannot reach it: one that
+     * has its own `reset` is asked to do it.
+     */
+    _resetPanels(which) {
+        for (const [path, def] of Object.entries(getSchema())) {
+            if (def.type !== 'panel' || typeof def.reset !== 'function' || !VISIBLE_SETTINGS.has(path) || !which(def)) continue;
+            Promise.resolve(def.reset()).catch((err) => console.error(`[Settings] resetting ${path} failed`, err));
+        }
     }
 
     _handleResetAll() {
         resetAllSettings();
+        this._resetPanels(() => true);
         // Re-render current view
         if (this._searchQuery) {
             this._renderSearchResults(this._searchQuery);

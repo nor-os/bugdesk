@@ -16,7 +16,7 @@
  */
 
 import { openForm } from '@flexdesk/widgets';
-import { KPI_PLOTS, NUMERIC_PLOTS, PLOTS } from './resolve.js';
+import { KPI_PLOTS, NUMERIC_PLOTS, PLOTS, check } from './resolve.js';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const typeName = (src, value) => `bd_t_${src.id}_${String(value).replace(/[^A-Za-z0-9_-]/g, '_')}`;
@@ -217,7 +217,14 @@ export function bindingFrom(result, sources, kind, previous) {
  */
 export async function openTileSettings({ kind, config, schema, sources }) {
     const binding = config?.binding || null;
-    const data = sources.length ? dataFields(sources, binding, kind) : { fields: [], defaults: {} };
+    // A tile over a store this page does not have (the Tracker switched off, by
+    // you or for the machine; a store the project dropped) keeps its data
+    // settings exactly as they are: offering only the stores that ARE here
+    // would quietly turn a shared dashboard's tracker tile into a bugs one on
+    // the next Save (STORY-0043). Only how it looks can be changed.
+    const absent = !!binding?.source && !sources.some((s) => s.id === binding.source);
+    const data = absent ? keptData(binding)
+        : sources.length ? dataFields(sources, binding, kind) : { fields: [], defaults: {} };
     const display = displayFields(schema);
     const shown = new Map((schema?.fields || []).map((f) => [f.name, f.visibleWhen]));
     const fresh = !binding;
@@ -227,7 +234,7 @@ export async function openTileSettings({ kind, config, schema, sources }) {
         defaults: { ...config, ...data.defaults },
         submitLabel: 'Save',
         onFieldChange: (name, _value, api) => {
-            if (sources.length) {
+            if (sources.length && !absent) {
                 if (name === 'bd_plot' || (name === null && fresh)) suitChartType(api, api.get('bd_plot'));
                 syncVisibility(api, sources, kind);
             }
@@ -239,6 +246,21 @@ export async function openTileSettings({ kind, config, schema, sources }) {
     if (!result) return null;
     const next = { ...config };
     for (const [k, v] of Object.entries(result)) if (!k.startsWith('bd_')) next[k] = v;
-    if (sources.length) next.binding = bindingFrom(result, sources, kind, binding);
+    if (absent) next.binding = binding;
+    else if (sources.length) next.binding = bindingFrom(result, sources, kind, binding);
     return next;
+}
+
+/** The data part for a tile whose store is not here: what it reads, and why it cannot be changed now. */
+function keptData(binding) {
+    const label = binding.source === 'tracker' ? 'Tracker' : binding.source;
+    return {
+        fields: [
+            { section: 'Data', name: 'bd_data' },
+            { name: 'bd_source', label: 'Records', type: 'select',
+                options: [{ value: binding.source, label: `${label} (not here now)` }],
+                hint: `${check(null, binding).empty} Its data settings are kept as they are; you can still change how it looks.` },
+        ],
+        defaults: { bd_source: binding.source },
+    };
 }

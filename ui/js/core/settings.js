@@ -264,6 +264,9 @@ export const BUGDESK_SETTINGS_SLICE = {
             icon: 'space_dashboard',
             defaultValue: null,
             mount: panel(async () => (await import('../ticketdesk/tracker_setting.js')).mountTrackerSetting),
+            // Reset puts it back on, asking first, as the switch does: it is
+            // not a stored setting, so the store's own reset never reaches it.
+            reset: async () => (await import('../ticketdesk/tracker_setting.js')).resetTrackerSwitch({ eventBus: pageBus() }),
         },
         // Both answers are reasonable and the difference is about how someone
         // works, not about which is correct — so it is a setting rather than a

@@ -2340,8 +2340,15 @@ app.MapGet("/api/personal/preferences", () =>
 
 app.MapPost("/api/personal/preferences", async (HttpRequest req) =>
 {
-    if (JsonNode.Parse(await new StreamReader(req.Body).ReadToEndAsync()) is not JsonObject patch)
+    JsonNode? body;
+    try { body = JsonNode.Parse(await new StreamReader(req.Body).ReadToEndAsync()); }
+    catch (JsonException) { body = null; }
+    if (body is not JsonObject patch)
         return Results.Json(new { ok = false, error = "expected a JSON object of preferences" }, json, statusCode: 400);
+    // Only the preferences BugDesk reads: the file is the person's, and a typo
+    // or a stray key would sit in it forever doing nothing.
+    if (patch.Select(p => p.Key).FirstOrDefault(k => k != "tracker") is { } unknown)
+        return Results.Json(new { ok = false, error = $"unknown preference: {unknown}" }, json, statusCode: 400);
     if (patch["tracker"] is { } t && t.GetValueKind() is not (JsonValueKind.True or JsonValueKind.False))
         return Results.Json(new { ok = false, error = "tracker must be true, false or null" }, json, statusCode: 400);
     var slug = Req.Store.Users.ActiveSlug;

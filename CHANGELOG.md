@@ -43,8 +43,11 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   touches `project.json`. Switched off, the Tracker chip leaves the top bar and
   gives up its F-key, and its dashboards, its tickets in the command palette, its
   alerts and its help topic go with it; a dashboard tile that charts tracker
-  records says the Tracker is switched off, and so does a saved tracker tab.
-  Nothing is deleted, and switching it back on brings it all back. The switch
+  records says the Tracker is switched off, and so does a saved tracker tab;
+  its settings keep what it charts, so saving its look while the Tracker is off
+  does not turn a shared tracker tile into a bugs one. Behaviour's Reset puts the
+  switch back on (asking first). Nothing is deleted, and switching it back on
+  brings it all back. The switch
   asks first and reloads the page, because the top bar is built once at load.
   `enabled = false` under `[tracker]` in `projects.toml` stays a hard off for
   the machine underneath it: the switch is then off and disabled, and says why.

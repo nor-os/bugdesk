@@ -940,7 +940,9 @@ await t('without a tracker the source is not offered, and a saved tracker tile e
     assert.ok(!tileOf(T, 'c-trk').contentElement.querySelector('.twm-tile-error'), 'shown as an error');
     tileOf(T, 'c-trk')._onConfigClick();
     const form = await fillForm({});
-    assert.deepEqual(options(form, 'bd_source'), ['bugs', 'backlog'], 'the tracker is offered');
+    // Its own source is kept as the only choice, so Save cannot quietly turn
+    // it into a bugs tile (STORY-0043); no other store is offered in its place.
+    assert.deepEqual(options(form, 'bd_source'), ['tracker'], 'the tile can be switched to another store');
     document.querySelectorAll('[data-action="cancel"]').forEach((b) => b.click());
     await tick();
     assert.deepEqual(server.calls.slice(before).filter((c) => /\/t\//.test(c.path)), [], 'the tracker API was asked');

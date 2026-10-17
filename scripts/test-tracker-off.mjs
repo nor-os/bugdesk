@@ -98,7 +98,7 @@ await t('the help offers no Tracker topic, and its pages and keys leave it out',
     const md = async (id) => (await svc.loadTopic(id)).markdown;
     const start = await md('getting-started');
     assert.ok(!start.includes('| **Tracker** |'), 'Getting started lists the Tracker chip');
-    assert.match(start, /The Tracker is switched off \(Settings › You › Behaviour › Tracker\)/);
+    assert.match(start, /A missing page moves the later ones up a key\. The Tracker is switched off for you\. Switch it back on under Settings › You › Behaviour › Tracker\./);
     assert.ok(!/tracker\) plus every command/.test(start), 'the palette still searches the tracker');
     const keys = await md('keyboard-shortcuts');
     assert.match(keys, /\(Bugs, Backlog\) \| \*\*F1 … F2\*\* \|/);
@@ -220,6 +220,62 @@ await t('with projects.toml\'s hard off the switch cannot be pressed', async () 
     assert.equal(toggle().disabled, true);
     assert.match(host.textContent, /enabled = false under \[tracker\] in projects\.toml/);
     stop();
+});
+
+await t('Behaviour\'s Reset switches the Tracker back on, asking first; on already, it asks nothing', async () => {
+    const cfg = (await mod('ticketdesk/instance.js')).CONFIG;
+    cfg.tracker = { ...OFF };
+    answer = { ok: true, preferences: {}, tracker: ON };
+    let asked = null, reloaded = 0;
+    assert.equal(await setting.resetTrackerSwitch({ confirm: async (o) => { asked = o; return true; }, reload: () => { reloaded++; } }), true);
+    assert.match(asked.title, /Switch the Tracker on/);
+    assert.deepEqual(calls.at(-1).body, { tracker: null });
+    assert.equal(reloaded, 1);
+    cfg.tracker = { ...ON };
+    assert.equal(await setting.resetTrackerSwitch({ confirm: async () => { throw new Error('asked'); } }), false);
+    cfg.tracker = { ...MACHINE_OFF };
+    assert.equal(await setting.resetTrackerSwitch({ confirm: async () => { throw new Error('asked'); } }), false);
+    const def = (await mod('core/settings.js')).BUGDESK_SETTINGS_SLICE.schema['bugdesk.tracker'];
+    assert.equal(typeof def.reset, 'function', 'the Behaviour row has no reset');
+});
+
+await t('switched off for the machine, Getting started names projects.toml, not the switch you cannot press', async () => {
+    setTracker(MACHINE_OFF);
+    try {
+        const start = (await new help.HelpService().loadTopic('getting-started')).markdown;
+        assert.match(start, /enabled = false under \[tracker\] in projects\.toml/);
+        assert.ok(!/Settings › You › Behaviour › Tracker/.test(start), 'it points at a disabled switch');
+    } finally { setTracker(OFF); }
+});
+
+await t('in a project with only bugs, Keyboard lists the one page there is', async () => {
+    const store = dom.window.__BUGDESK_CONFIG__.store;
+    store.hasBacklog = false;
+    try {
+        const keys = (await new help.HelpService().loadTopic('keyboard-shortcuts')).markdown;
+        assert.match(keys, /\(Bugs\) \| \*\*F1\*\* \|/);
+    } finally { store.hasBacklog = true; }
+});
+
+await t('a tracker tile\'s settings keep its records and filter while the Tracker is off', async () => {
+    const editor = await mod('dashboards/tile_editor.js');
+    const binding = { source: 'tracker', filter: { key: 'overdue' }, plot: 'count' };
+    const bugs = { id: 'bugs', label: 'Bugs' };
+    const open = editor.openTileSettings({
+        kind: 'kpi', config: { title: 'Overdue', binding },
+        schema: { fields: [{ name: 'title', label: 'Title', type: 'text' }] }, sources: [bugs],
+    });
+    await tick();
+    const form = [...document.querySelectorAll('form.twm-modal__form')].at(-1);
+    assert.ok(form, 'no settings dialog');
+    const sel = form.querySelector('select[name="bd_source"]');
+    assert.deepEqual([...sel.options].map((o) => o.value), ['tracker'], 'it offers stores that would replace the tracker');
+    assert.match(form.textContent, /switched off for you/);
+    form.querySelector('input[name="title"]').value = 'Late';
+    form.requestSubmit();
+    const next = await open;
+    assert.equal(next.title, 'Late');
+    assert.deepEqual(next.binding, binding, 'Save rewrote the tile');
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);
