@@ -49,13 +49,19 @@ static class RecordWorkflow
     public static readonly HashSet<string> StepTypes = new()
     {
         "start", "end", "condition", "require-message", "prompt", "set-field", "clear-field", "add-comment", "set-status",
+        "add-link",
     };
+
+    /// <summary>The verbs a link may have (ui/js/ticketdesk/links.js), and so an
+    /// "Add a link" step (STORY-0050).</summary>
+    public static readonly string[] LinkVerbs =
+        { "duplicates", "blocks", "blocked-by", "requires", "caused-by", "relates-to", "implements" };
 
     /// <summary>Built-in fields a step may set or clear, per store.</summary>
     public static readonly Dictionary<string, string[]> SettableBuiltins = new()
     {
-        ["bugs"] = new[] { "assignee", "severity", "subsystem", "labels", "title" },
-        ["backlog"] = new[] { "assignee", "phase", "due", "points", "subsystem", "labels", "title" },
+        ["bugs"] = new[] { "assignee", "severity", "subsystem", "labels", "title", "resolution" },
+        ["backlog"] = new[] { "assignee", "phase", "due", "points", "subsystem", "labels", "title", "resolution" },
     };
 
     /// <summary>Fields a condition may read, beyond the settable ones.</summary>
@@ -341,6 +347,10 @@ static class RecordWorkflow
                     var field = Str(cfg?["field"]);
                     if (!settable.Contains(field))
                         problems.Add(new(where, $"'{owner}': step '{id}' names the field '{field}', which a flow cannot set here.", id));
+                    // A resolution is one of its words; an inserted answer is checked when it runs.
+                    var value = Str(cfg?["value"]);
+                    if (type == "set-field" && field == "resolution" && !value.Contains("${") && !RecordSchema.Resolutions.Contains(value))
+                        problems.Add(new(where, $"'{owner}': step '{id}' sets the resolution to '{value}', which is not one of {string.Join(", ", RecordSchema.Resolutions)}.", id));
                     break;
                 }
                 case "condition":
@@ -361,6 +371,15 @@ static class RecordWorkflow
                 {
                     if (Str(cfg?["kind"]) == "choice" && (cfg?["choices"] as JsonArray)?.Count is null or 0)
                         problems.Add(new(where, $"'{owner}': prompt '{id}' offers a choice with nothing to choose.", id));
+                    break;
+                }
+                case "add-link":
+                {
+                    var verb = Str(cfg?["verb"]);
+                    if (!LinkVerbs.Contains(verb))
+                        problems.Add(new(where, $"'{owner}': step '{id}' adds a '{verb}' link, which is not a link ({string.Join(", ", LinkVerbs)}).", id));
+                    if (Str(cfg?["target"]).Length == 0)
+                        problems.Add(new(where, $"'{owner}': step '{id}' adds a link to nothing; give it the record to point at.", id));
                     break;
                 }
             }

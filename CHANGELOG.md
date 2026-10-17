@@ -19,6 +19,22 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   buttons. New endpoints: `POST /api/git/init`, `POST /api/git/remote`;
   `GET /api/git` also returns `remotes` and `home`.
 
+- **Flows can add links, Duplicate is an editable action, and finished
+  records have a resolution** (STORY-0050). A flow step, *Add a link*, adds a
+  link (one of the seven verbs) in the same save as the move, merged with the
+  record's links, and can leave a comment on the linked record; *Ask for input*
+  can ask for *A record*, which opens the record picker and gives later steps
+  its reference and title. **Mark as duplicate and close** (bugs) and **… and
+  drop** (backlog) are now every type's default action, built from those steps
+  and listed in Settings › Workflow, where a project can rename, change or
+  remove them; with nothing configured they do what they did, in one save,
+  courtesy comment on the master included. `POST …/duplicate-of` still works.
+  A `resolution` field (fixed, won't fix, cannot reproduce, not a bug, works as
+  designed, duplicate) is asked in the close or drop dialog, cleared on reopen,
+  shown and editable on both record pages, filterable, and settable by flows;
+  a move to `done` does not ask. The bug and backlog patch routes take
+  `resolution` and `addLinks`.
+
 - **The desktop window draws its own frame on Windows** (STORY-0042). The
   Windows title bar is gone: BugDesk's top bar is the top edge of the window,
   with minimise, maximise/restore and close at its right, and the window can be

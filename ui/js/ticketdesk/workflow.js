@@ -18,8 +18,8 @@
  * THE EDITOR ONLY EDITS. This module supplies what it edits with — the step
  * catalogue — and runs what it made:
  *
- *   require a message · ask for input (text or a choice) · set a field ·
- *   clear a field · add a comment · move to a status (actions only) ·
+ *   require a message · ask for input (text, a choice or a record) · set a
+ *   field · clear a field · add a comment · add a link · move to a status ·
  *   If … otherwise on a condition over the record's fields
  *
  * No loops and no parallel blocks: a move is one decision, made in one save.
@@ -34,12 +34,27 @@
  * Nobody types those: the editor's { } button inserts them, and draws each as
  * a chip named after its question (./workflow_editor.js). The message a move
  * asks for is an answer too, under its step's id.
+ *
+ * LINKS AND RESOLUTIONS (STORY-0050). "Add a link" adds `<verb> <target>` to the
+ * record's links in the same save — the target is usually the answer of an "Ask
+ * for input" that asks for A RECORD, which opens the record picker — and may
+ * leave a comment on the record it points at. Built from it, "Mark as duplicate
+ * and close" (bugs) and "… and drop" (backlog) are DEFAULT actions every type
+ * has (defaultActions below), which a project edits like any other. And a move
+ * into a finished status asks how the record ended — its `resolution` — unless
+ * its flow sets that itself; a move out of one clears it.
  */
 
 import { CONFIG, apiUrl } from './instance.js';
-import { STORE_TYPES, customFields, customStatuses, isFinished, withCustomStatuses } from './schema.js';
+import {
+    RESOLUTIONS, STORE_TYPES, customFields, customStatuses, isFinished, resolutionLabel, withCustomStatuses,
+} from './schema.js';
+import { bugRef, formatRef, itemRefOf } from './refs.js';
 
 /* ── the configuration ──────────────────────────────────────────────── */
+
+/** Is this record finished with — so a move's "from: *" never offers itself on it? */
+export const finished = (store, type, status) => isFinished(store, type, status);
 
 let W = (CONFIG.workflow && typeof CONFIG.workflow === 'object') ? CONFIG.workflow : {};
 
@@ -189,6 +204,42 @@ export function transitionFlow({ to, message = false, prompt = '', toLabel = to 
     return { nodes, connections: nodes.slice(1).map((n, i) => ({ source: nodes[i].id, sourcePort: 'out', target: n.id, targetPort: 'in' })) };
 }
 
+/**
+ * "Mark as duplicate and close" (bugs) or "… and drop" (backlog) as a flow
+ * (STORY-0050): pick the master, link `duplicates <master>` with a comment on
+ * the master, set the resolution, say so on the record, and end it — one save,
+ * as POST …/duplicate-of always made it.
+ */
+export function duplicateFlow(store) {
+    const P = { x: 0, y: 0 };
+    const bugs = store === 'bugs';
+    const ended = bugs ? 'closed' : 'dropped';
+    const nodes = [
+        { id: 'start', type: 'start', label: 'Start', config: {}, position: P },
+        { id: 'master', type: 'prompt', label: 'Pick the master', position: P,
+          config: { question: 'What is this a duplicate of?', kind: 'record', required: true } },
+        { id: 'link', type: 'add-link', label: 'Link it as a duplicate', position: P,
+          config: { verb: 'duplicates', target: '${input.master}', note: `\${record.ref} was ${ended} as a duplicate of this.` } },
+        { id: 'resolution', type: 'set-field', label: 'Resolution: duplicate', position: P,
+          config: { field: 'resolution', value: 'duplicate' } },
+        { id: 'say', type: 'add-comment', label: 'Say what it was folded into', position: P,
+          config: { body: `${bugs ? 'Closed' : 'Dropped'} as a duplicate of \${input.master} — \${input.master.title}.` } },
+        { id: 'status', type: 'set-status', label: `Change status to ${ended}`, position: P, config: { status: ended } },
+    ];
+    return { nodes, connections: nodes.slice(1).map((n, i) => ({ source: nodes[i].id, sourcePort: 'out', target: n.id, targetPort: 'in' })) };
+}
+
+/**
+ * The actions every type has besides its moves, until the project changes
+ * them (Settings › Workflow): today, marking it a duplicate. `{id, label, when,
+ * flow}` with the flow as a graph; offered in every status that is not finished.
+ */
+export function defaultActions(store, type) {
+    const label = store === 'bugs' ? 'Mark as duplicate and close' : 'Mark as duplicate and drop';
+    const when = statusesOf(store, type).filter((st) => !finished(store, type, st));
+    return [{ id: 'duplicate', label, when, flow: duplicateFlow(store) }];
+}
+
 /** The custom actions of a store and type (STORY-0007). */
 export const configuredActions = (store, type) => {
     const list = W.actions?.[store]?.[type];
@@ -258,10 +309,19 @@ const OUT = F('out', 'output');
 
 /** Built-in fields a step may set or clear (mirrors RecordWorkflow.SettableBuiltins). */
 export const SETTABLE = {
-    bugs: [['assignee', 'Assignee'], ['severity', 'Severity'], ['subsystem', 'Subsystem'], ['labels', 'Labels'], ['title', 'Title']],
+    bugs: [['assignee', 'Assignee'], ['severity', 'Severity'], ['subsystem', 'Subsystem'], ['labels', 'Labels'], ['title', 'Title'],
+           ['resolution', 'Resolution']],
     backlog: [['assignee', 'Assignee'], ['phase', 'Phase'], ['due', 'Target date'], ['points', 'Estimate'],
-              ['subsystem', 'Subsystem'], ['labels', 'Labels'], ['title', 'Title']],
+              ['subsystem', 'Subsystem'], ['labels', 'Labels'], ['title', 'Title'], ['resolution', 'Resolution']],
 };
+
+export { RESOLUTIONS, resolutionLabel };
+
+/** The verbs a link may have (./links.js), `[value, label]`. */
+export const LINK_VERBS = [
+    ['duplicates', 'duplicates'], ['blocks', 'blocks'], ['blocked-by', 'is blocked by'], ['requires', 'requires'],
+    ['caused-by', 'is caused by'], ['relates-to', 'relates to'], ['implements', 'implements'],
+];
 const READABLE = [['status', 'Status'], ['type', 'Type'], ['reporter', 'Reporter']];
 
 /** The fields of a store's types, `[name, label]`, built-ins first. A flow
@@ -329,11 +389,11 @@ export function stepTypes(store, types, { actions: _actions = false } = {}) {
           config_schema: { type: 'object', properties: {
               prompt: { type: 'string', title: 'Question', 'x-ui-placeholder': 'Why is it moving?' } } } },
         { type_id: 'prompt', label: 'Ask for input', category: 'ask', icon: 'help',
-          description: 'Asks a question. Later steps insert the answer with the { } button beside their text.',
+          description: 'Asks a question. Later steps insert the answer with the { } button beside their text. A record is picked from both stores; its answer is the record\'s reference.',
           ports: [IN, OUT],
           config_schema: { type: 'object', required: ['question'], properties: {
               question: { type: 'string', minLength: 1, title: 'Question' },
-              kind: enumOf([['text', 'Text'], ['choice', 'A choice']], 'Answer', { default: 'text' }),
+              kind: enumOf([['text', 'Text'], ['choice', 'A choice'], ['record', 'A record']], 'Answer', { default: 'text' }),
               choices: { type: 'array', title: 'Choices', 'x-ui-widget': 'string-list', items: { type: 'string' },
                          'x-ui-when': { field: 'kind', in: ['choice'] } },
               required: { type: 'boolean', title: 'An answer is required', default: true } } } },
@@ -351,6 +411,15 @@ export function stepTypes(store, types, { actions: _actions = false } = {}) {
           config_schema: { type: 'object', required: ['body'], properties: {
               body: { type: 'string', minLength: 1, title: 'Comment', 'x-ui-widget': 'template', 'x-ui-multiline': true },
               tag: { type: 'string', title: 'Tag', 'x-ui-placeholder': 'e.g. blocked — shown on the comment' } } } },
+        { type_id: 'add-link', label: 'Add a link', category: 'record', icon: 'link',
+          description: 'Links the record to another one, in the same save — usually the record an earlier question asked for. Can leave a comment on that record too.',
+          ports: [IN, OUT],
+          config_schema: { type: 'object', required: ['verb', 'target'], properties: {
+              verb: enumOf(LINK_VERBS, 'Link', { default: 'relates-to' }),
+              target: { type: 'string', minLength: 1, title: 'To', 'x-ui-widget': 'template',
+                        'x-ui-placeholder': 'A reference, or insert the record a question asked for' },
+              note: { type: 'string', title: 'Comment on that record', 'x-ui-widget': 'template', 'x-ui-multiline': true,
+                      'x-ui-placeholder': 'Optional — e.g. ${record.ref} was closed as a duplicate of this.' } } } },
         { type_id: 'set-status', label: 'Change the status', category: 'record', icon: 'swap_horiz',
           description: 'Moves the record to this status when the flow is done. In a move\'s flow it is the move itself: the status the move goes to.',
           ports: [IN, OUT],
@@ -405,13 +474,21 @@ export function checkFlow(graph, store, types, { actions = false } = {}) {
         if (n.type === 'prompt' && c.kind === 'choice' && !(Array.isArray(c.choices) && c.choices.length)) {
             err('no_choices', 'A choice needs something to choose from.', 'choices');
         }
+        if (n.type === 'add-link') {
+            if (!LINK_VERBS.some(([v]) => v === c.verb)) err('unknown_link', c.verb ? `“${c.verb}” is not a link.` : 'Choose the link.', 'verb');
+            if (!String(c.target || '').trim()) err('no_target', 'Say which record to link to.', 'target');
+        }
+        if (n.type === 'set-field' && c.field === 'resolution' && !/\$\{/.test(String(c.value || ''))
+            && !RESOLUTIONS.some(([v]) => v === String(c.value || '').trim())) {
+            err('unknown_resolution', `A resolution is one of: ${RESOLUTIONS.map(([v]) => v).join(', ')}.`, 'value');
+        }
         // A reference to a step that is not in the flow, or to a field the records lack.
         for (const [key, val] of Object.entries(c)) {
             if (typeof val !== 'string') continue;
             for (const m of val.matchAll(REF)) {
                 const [scope, name] = m[1].split('.');
                 if (scope === 'input' && !ids.has(name)) err('unknown_reference', `\${${m[1]}} names a step that is not in this flow.`, key);
-                if (scope === 'record' && !readable.has(name) && name !== 'id') err('unknown_reference', `\${${m[1]}} names a field these records do not have.`, key);
+                if (scope === 'record' && !readable.has(name) && name !== 'id' && name !== 'ref') err('unknown_reference', `\${${m[1]}} names a field these records do not have.`, key);
             }
         }
     }
@@ -420,9 +497,16 @@ export function checkFlow(graph, store, types, { actions = false } = {}) {
 
 /* ── running a flow ────────────────────────────────────────────────── */
 
+/** A record's own reference as a sentence names it — always prefixed. */
+export function selfRef(store, record) {
+    if (!(Number(record?.id) > 0)) return '';
+    return store === 'bugs' ? formatRef(bugRef(record.id), 'backlog') : formatRef(itemRefOf(record), 'bugs');
+}
+
 /** A record's value for a field, built-in or custom, as text. */
 function valueOf(record, name) {
     if (!record) return '';
+    if (name === 'ref') return String(record.ref || '');
     if (Object.prototype.hasOwnProperty.call(record.fields || {}, name)) return String(record.fields[name] ?? '');
     const v = record[name];
     return Array.isArray(v) ? v.join(', ') : String(v ?? '');
@@ -463,17 +547,19 @@ function test(record, { field, op, value }, ctx) {
  * @param {Function} o.ask    `(form) => Promise<object|null>` — openForm's shape
  * @param {Function} [o.message]  `(prompt) => Promise<string|null>` for "Ask for the comment"
  * @param {string} [o.said]  the comment the move asked for before the flow ran
+ * @param {Function} [o.pick]  `(question) => Promise<{ref, title}|null>` for a
+ *                              record question; the record picker by default
  */
-export async function runFlow(graph, { store, record, ask, message, said = '' }) {
+export async function runFlow(graph, { store, record, ask, message, said = '', pick = null }) {
     const nodes = new Map((graph?.nodes || []).map((n) => [n.id, n]));
     const next = (id, port = 'out') => (graph?.connections || [])
         .find((c) => c.source === id && (c.sourcePort || 'out') === port)?.target;
-    const out = { status: null, set: {}, fields: {}, comments: [], tag: '', message: null };
+    const out = { status: null, set: {}, fields: {}, comments: [], tag: '', message: null, links: [] };
     const inputs = {};
     const custom = (name) => !SETTABLE[store].some(([n]) => n === name);
     // The record as the flow has changed it so far, so a later condition sees an
     // earlier step's work.
-    const view = () => ({ ...record, ...out.set, fields: { ...(record?.fields || {}), ...out.fields },
+    const view = () => ({ ...record, ref: selfRef(store, record), ...out.set, fields: { ...(record?.fields || {}), ...out.fields },
                           status: out.status || record?.status });
     let at = [...nodes.values()].find((n) => n.type === 'start')?.id;
     const seen = new Set();
@@ -498,6 +584,14 @@ export async function runFlow(graph, { store, record, ask, message, said = '' })
                 break;
             }
             case 'prompt': {
+                if (c.kind === 'record') {
+                    // The answer is the picked record's reference; `${input.<id>.title}` its title.
+                    const got = await (pick || pickRecord)(c.question || n.label || 'Which record?', { store, record });
+                    if (!got?.ref) return null;
+                    inputs[n.id] = got.ref;
+                    inputs[`${n.id}.title`] = String(got.title || '');
+                    break;
+                }
                 const choice = c.kind === 'choice';
                 const result = await ask({
                     title: n.label || c.question,
@@ -527,6 +621,13 @@ export async function runFlow(graph, { store, record, ask, message, said = '' })
                 if (c.tag) out.tag = String(c.tag).trim();
                 break;
             }
+            case 'add-link': {
+                const target = renderTemplate(c.target, ctx).trim();
+                if (!target) throw new Error(`“${n.label || 'Add a link'}” has no record to link to.`);
+                const note = renderTemplate(c.note, ctx).trim();
+                out.links.push({ verb: c.verb, target, ...(note ? { note } : {}) });
+                break;
+            }
             case 'set-status': out.status = c.status; break;
             default: break;
         }
@@ -534,6 +635,37 @@ export async function runFlow(graph, { store, record, ask, message, said = '' })
     }
     return out;
 }
+
+/** The record picker, over every store this deployment has, minus the record itself. */
+async function pickRecord(question, { store, record }) {
+    const [{ openRecordPicker }, { storesAvailable }] = await Promise.all([import('./item_picker.js'), import('./records.js')]);
+    const self = Number(record?.id) > 0 ? (store === 'bugs' ? bugRef(record.id) : itemRefOf(record)) : 0;
+    const picked = await openRecordPicker({ title: question, stores: storesAvailable(), exclude: self });
+    if (!picked?.target) return null;
+    // Always prefixed, so the reference means the same record in either store.
+    return { ref: formatRef(picked.target, picked.target.store === 'bugs' ? 'backlog' : 'bugs'), title: picked.title || '' };
+}
+
+/**
+ * Does moving a record into `to` end it — so the move asks how? A finished
+ * status does, but a backlog item's `done`: done already says how it ended.
+ */
+export function endsRecord(store, type, from, to) {
+    if (!to || to === from || (store === 'backlog' && to === 'done')) return false;
+    return finished(store, type, to) && !finished(store, type, from);
+}
+
+/** The resolution a move into `to` offers first. */
+export const defaultResolution = (store, to) => (store === 'backlog' || to === 'dropped' ? 'wont-fix' : 'fixed');
+
+/** The form field that asks how a record ended — for a move's message dialog. */
+export const resolutionField = () => ({
+    name: 'resolution', label: 'Resolution', type: 'select', required: true,
+    options: RESOLUTIONS.map(([value, label]) => ({ value, label })),
+});
+
+const touchesResolution = (graph) => (Array.isArray(graph?.nodes) ? graph.nodes : [])
+    .some((n) => (n?.type === 'set-field' || n?.type === 'clear-field') && n?.config?.field === 'resolution');
 
 /**
  * The patch a move (or an action) saves: the status, what its flow collected
@@ -545,26 +677,51 @@ export async function runFlow(graph, { store, record, ask, message, said = '' })
  * @param {object} o.move       `{to?, message, flow}` — an action has no `to`;
  *                              `flow` is a named flow's id, or a graph
  * @param {Function} o.ask      openForm
- * @param {Function} o.askMessage  `(prompt) => Promise<{comment}|{tagRecentComment}|null>`
+ * @param {Function} o.askMessage  `(prompt, {resolution}) => Promise<{comment, resolution?}|{tagRecentComment}|null>`;
+ *                  given `resolution` (the value to offer first), the dialog asks for it too
+ * @param {Function} [o.pick]   the record picker, for a flow's record question (tests)
  */
-export async function planMove({ store, record, move, ask, askMessage }) {
+export async function planMove({ store, record, move, ask, askMessage, pick = null }) {
     let msg = null;              // {comment} | {tagRecentComment: true}
+    // A named flow (STORY-0028), or one stored inside the move the old way.
+    const graph = flowGraph(move.flow);
+    const type = record?.type || (store === 'bugs' ? 'bug' : 'story');
+    // How it ended (STORY-0050): asked with the message when the move ends the
+    // record and its flow does not say; otherwise after the flow, if it did.
+    const decides = !touchesResolution(graph);
+    const planned = move.to || statusStep(graph);
+    let resolution = null;
     const message = async (prompt) => {
-        const r = await askMessage(prompt);
+        const offer = decides && resolution == null && endsRecord(store, type, record?.status, planned)
+            ? { resolution: defaultResolution(store, planned) } : {};
+        const r = await askMessage(prompt, offer);
         if (!r) return null;
         msg = r;
+        if (r.resolution) resolution = r.resolution;
         return r.comment || '';
     };
     if (move.message) {
         if ((await message('')) == null) return null;
     }
-    // A named flow (STORY-0028), or one stored inside the move the old way.
-    const graph = flowGraph(move.flow);
-    const run = graph ? await runFlow(graph, { store, record, ask, message: msg ? null : message, said: msg?.comment || '' }) : null;
+    const run = graph ? await runFlow(graph, { store, record, ask, message: msg ? null : message, said: msg?.comment || '', pick }) : null;
     if (graph && !run) return null;
     const patch = {};
     const status = run?.status || move.to;
     if (status && status !== record.status) patch.status = status;
+    if (decides && endsRecord(store, type, record?.status, status)) {
+        if (resolution == null) {
+            const r = await ask({
+                title: `${move.label || 'Close'} — how did it end?`,
+                fields: [resolutionField()], defaults: { resolution: defaultResolution(store, status) },
+                submitLabel: move.label || 'Close',
+            });
+            if (!r?.resolution) return null;
+            resolution = r.resolution;
+        }
+        patch.resolution = resolution;
+    } else if (decides && status && finished(store, type, record?.status) && !finished(store, type, status) && record?.resolution) {
+        patch.resolution = '';     // reopened: it has not ended any more
+    }
     for (const [k, v] of Object.entries(run?.set || {})) {
         patch[k] = k === 'labels' ? String(v).split(',').map((s) => s.trim()).filter(Boolean) : v;
     }
@@ -573,11 +730,9 @@ export async function planMove({ store, record, move, ask, askMessage }) {
     if (parts.length) patch.comment = parts.join('\n\n');
     else if (msg?.tagRecentComment) patch.tagRecentComment = true;
     if (run?.tag) patch.commentNote = run.tag;
+    if (run?.links.length) patch.addLinks = run.links;
     return patch;
 }
-
-/** Is this record finished with — so a move's "from: *" never offers itself on it? */
-export const finished = (store, type, status) => isFinished(store, type, status);
 
 /* ── saving ───────────────────────────────────────────────────────── */
 

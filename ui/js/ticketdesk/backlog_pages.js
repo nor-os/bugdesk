@@ -34,7 +34,7 @@ import {
     displayValue, hiddenForAll, isHidden, snoozeNotice, sortValue as schemaSortValue, statusKnown, storeFields,
     withCustomStatuses,
 } from './schema.js';
-import { actionsFor, movesFor, planMove } from './workflow.js';
+import { actionsFor, defaultActions, movesFor, planMove, RESOLUTIONS, resolutionField, typeActions } from './workflow.js';
 import { convertRecord, convertedBanner } from './convert.js';
 import { attachAutosave, autosaveMode } from './autosave.js';
 import { watchRecord } from './live.js';
@@ -63,7 +63,7 @@ import {
 import {
     ALL_TYPES, ITEMS, PHASES, TRACKER, TYPES, TYPE_ICON,
     DUE_LABEL, collapsibleIds, dueState, duePhrase, fetchItem, humanizeItemStatus,
-    dueOf, dueOverrun, duplicateItem, isClosedItem, isGated, itemLabel, itemRef, LADDER, ladderFor,
+    dueOf, dueOverrun, isClosedItem, isGated, itemLabel, itemRef, LADDER, ladderFor,
     loadBacklog, parentTypesFor,
     patchItem, postItemComment,
     REFINEMENT_RULES, refinementGaps, flatRows, stageActions, stageOf, treeRows,
@@ -94,13 +94,14 @@ const typeGlyph = (type) =>
     `<span class="bd-type bd-type--${esc(type)}" title="${esc(typeLabelOf(type))}">${icon(TYPE_ICON[type] || 'task')}</span>`;
 
 /** Actions that are NOT a step along the ladder. They sit after the stage
- *  buttons and are offered wherever `when` says they make sense. A
- *  duplicate-and-drop is not a rung on any type's lifecycle, so it does not get
- *  a fake entry in `stageActions`, whose values are target statuses. */
+ *  buttons and are offered wherever `when` says they make sense. Duplicate is
+ *  the type's DEFAULT action (STORY-0050), a flow like any other: it is drawn
+ *  here only while the type has no action list of its own — once it has, the
+ *  list says whether (and how) it is offered, among the moves. */
 const WORKFLOW_ACTIONS = [
     { id: 'duplicate', label: 'Mark as duplicate and drop', icon: 'content_copy',
       title: 'Pick the record this duplicates, link it, and drop this one',
-      when: (closed) => !closed },
+      when: (closed, type) => !closed && !typeActions('backlog', type) },
     { id: 'convert', label: 'Convert to bug…', icon: 'swap_horiz',
       title: 'It is a defect: move it to the bug store, with its comments and history',
       when: (closed) => !closed && storesAvailable().includes('bugs') },
@@ -179,22 +180,27 @@ async function askItem(form) {
 export async function planItemMove(it, move) {
     return planMove({
         store: 'backlog', record: it, move, ask: askItem,
-        askMessage: async (prompt) => {
+        askMessage: async (prompt, offer = {}) => {
+            // How it ended (STORY-0050), in the same dialog, when the move ends it.
             const r = await askItem({
                 title: `${move.label} — ${itemRef(it)}`,
-                fields: [{ name: 'message', label: prompt || 'Message', type: 'textarea', rows: 6, required: true }],
+                fields: [...(offer.resolution ? [resolutionField()] : []),
+                    { name: 'message', label: prompt || 'Message', type: 'textarea', rows: 6, required: true }],
+                ...(offer.resolution ? { defaults: { resolution: offer.resolution } } : {}),
                 submitLabel: move.label || 'Move',
             });
             const text = String(r?.message || '').trim();
-            return text ? { comment: text } : null;
+            if (!text) return null;
+            return offer.resolution && r?.resolution ? { comment: text, resolution: r.resolution } : { comment: text };
         },
     });
 }
 
 /** Run one of the project's actions on an item: its flow, then ONE save.
- *  Resolves the saved item, or null when nothing was saved. */
-export async function runItemAction(it, id) {
-    const act = actionsFor('backlog', it.type, it.status).find((a) => a.id === id);
+ *  Resolves the saved item, or null when nothing was saved. `given` is an
+ *  action not in the type's list — the default Duplicate (STORY-0050). */
+export async function runItemAction(it, id, given = null) {
+    const act = given || actionsFor('backlog', it.type, it.status).find((a) => a.id === id);
     if (!act) return null;
     try {
         const patch = await planItemMove(it, { label: act.label, message: false, flow: act.flow || null });
@@ -970,6 +976,8 @@ function mountItem(host, props, ctx) {
             ${field('Assignee', '<select class="ea-tin" data-f="assignee"></select>')}
             ${shows('due') ? field('Target date', dueField()) : ''}
             ${shows('subsystem') ? field('Subsystem', tin('subsystem', item.subsystem)) : ''}
+            ${field('Resolution', sel('resolution', [{ value: '', label: '—' },
+                ...RESOLUTIONS.map(([value, label]) => ({ value, label }))], item.resolution || ''))}
             ${field('Reporter', '<select class="ea-tin" data-f="reporter"></select>')}
             ${shows('labels') ? `<div class="td-field td-span2"><label>Labels</label>${tin('labels', (item.labels || []).join(', '))}</div>` : ''}
             ${field('Created', `<input class="ea-tin td-mono" value="${esc(item.created || '—')}" readonly>`)}
@@ -1099,7 +1107,7 @@ function mountItem(host, props, ctx) {
             // The project's own actions (Settings › Workflow), after the moves.
             + actionsFor('backlog', item.type, item.status).map((a) =>
                 `<button class="ea-btn td-stageaction td-stageaction--custom" data-wact="${esc(a.id)}">${icon('bolt')} ${esc(a.label)}</button>`).join('')
-            + WORKFLOW_ACTIONS.filter((a) => a.when(closed)).map((a) =>
+            + WORKFLOW_ACTIONS.filter((a) => a.when(closed, item.type)).map((a) =>
                 `<button class="ea-btn td-stageaction td-stageaction--alt" data-wfa="${esc(a.id)}"
                          title="${esc(a.title)}">${icon(a.icon)} ${esc(a.label)}</button>`).join('');
     };
@@ -1691,6 +1699,8 @@ function mountItem(host, props, ctx) {
             // record written before the field existed must not insert a `reporter:`
             // line nobody typed.
             if (fval('reporter') !== (item.reporter || '')) patch.reporter = fval('reporter');
+            // How it ended (STORY-0050): set by a drop or a duplicate, changeable here.
+            if (fval('resolution') !== (item.resolution || '')) patch.resolution = fval('resolution');
             // Only send what the rendered form actually had: a row that was not
             // drawn must not reach the record, or retyping a story to a project
             // would post the parent the form never showed.
@@ -1772,29 +1782,17 @@ function mountItem(host, props, ctx) {
     };
 
     /* Marking a duplicate is ONE act with four consequences — a link, a dropped status,
-     * a history line, and a comment on each side — so it is one request. Four calls from
-     * here would leave an item linked but open, or dropped with nothing saying why, every
-     * time one of them failed. An item DROPS rather than closes: `done` would claim the
-     * work was finished, and the backlog ladder has no `closed`. No confirmation dialog:
-     * the picker IS the confirmation, and a status is one click back. */
+     * a history line, and a comment on each side — so it is one save: the type's
+     * default Duplicate action (STORY-0050), whose flow picks the master, adds the
+     * link and the courtesy comment on it, sets the resolution and drops. An item
+     * DROPS rather than closes: `done` would claim the work was finished. No
+     * confirmation dialog: the picker IS the confirmation, and a status is one click back. */
     const markDuplicate = async () => {
-        const picked = await openRecordPicker({
-            title: `What is ${itemRef(item)} a duplicate of?`,
-            stores: storesAvailable(),
-            exclude: itemRefOf(item),
-        });
-        if (!picked?.target) return;     // cancelled: say nothing, change nothing
-        if (!host.isConnected) return;   // the tile closed while the picker was open
-        try {
-            const res = await duplicateItem(item.id, {
-                target: formatRef(picked.target, 'backlog'), actor: HUMAN_AUTHOR });
-            apply(res.item);
-            await broadcast();
-            live.clear();
-            statusLine(res.targetNoted
-                ? `${itemRef(item)} dropped as a duplicate of ${res.target.ref}.`
-                : `${itemRef(item)} dropped as a duplicate of ${res.target.ref} — could not comment on ${res.target.ref}.`);
-        } catch (err) { statusLine(`Could not drop as a duplicate: ${err?.message || err}`); }
+        const saved = await runItemAction(item, 'duplicate', defaultActions('backlog', item.type)[0]);
+        if (!saved || !host.isConnected) return;
+        apply(saved);
+        await broadcast();
+        live.clear();
     };
 
     /* ── wiring ─────────────────────────────────────────────────── */

@@ -2611,6 +2611,8 @@ await t('a Ctrl-click does not navigate the tile you are reading', async () => {
  * One request for one act: link, close, record the transition, comment on both
  * records. Two requests would be a half-applied duplicate whenever the second
  * one failed, and the record would then be closed with nothing saying why.
+ * Since STORY-0050 it is the type's default action, a flow: that one request
+ * is the record's own save, carrying the link and the master's comment.
  */
 
 console.log('\nDuplicate and close');
@@ -2657,8 +2659,13 @@ await t('picking a master issues exactly ONE post, and repaints from it', async 
 
     assert.equal(m.posts.length, 1,
         `${m.posts.length} writes for one act: ${JSON.stringify(m.posts)}`);
-    assert.ok(m.posts[0].path.endsWith('/api/bugs/42/duplicate-of'), m.posts[0].path);
-    assert.equal(m.posts[0].body.target, 'STORY-0007');
+    assert.ok(m.posts[0].path.endsWith('/api/bugs/42'), m.posts[0].path);
+    const body = m.posts[0].body;
+    assert.deepEqual(body.addLinks, [{ verb: 'duplicates', target: 'STORY-0007',
+        note: 'BUG-0042 was closed as a duplicate of this.' }]);
+    assert.equal(body.status, 'closed');
+    assert.equal(body.resolution, 'duplicate');
+    assert.equal(body.comment, `Closed as a duplicate of STORY-0007 — ${STORY_7.title}.`);
     // Repainted from the response, with no follow-up GET.
     assert.ok(m.host.querySelector('.td-stage--active')?.textContent.includes('Closed'));
     assert.match(m.host.querySelector('[data-slot="links"]').textContent, /duplicates/);
@@ -3259,8 +3266,8 @@ console.log('\nWorkflow');
         assert.equal(wf.flowGraph(ask), ask, 'a graph stored the old way is itself');
         const move = wf.movesFor('bugs', 'bug', 'open')[0];
         const patch = await wf.planMove({ store: 'bugs', record: { status: 'open' }, move,
-            ask: async () => ({ answer: 'done' }), askMessage: async () => null });
-        assert.deepEqual(patch, { status: 'closed', comment: 'Because done' });
+            ask: async () => ({ answer: 'done', resolution: 'fixed' }), askMessage: async () => null });
+        assert.deepEqual(patch, { status: 'closed', resolution: 'fixed', comment: 'Because done' }, 'closing asks how it ended (STORY-0050)');
         assert.deepEqual(wf.configuredFlows('backlog'), [], 'flows are per store');
         wf.setWorkflow(null);
     });
@@ -3356,7 +3363,8 @@ console.log('\nOne workflow');
     await t('saved, only a type that differs is written; the rest keep what they had', () => {
         const stored = { actions: { bugs: { bug: [{ id: 'park', label: 'Park', when: ['open'], flow: null }] } } };
         const view = model.withTypeActions(stored, TYPES);
-        assert.deepEqual(view.types.bugs.bug.at(-1), { id: 'park', label: 'Park', when: ['open'], flow: null }, 'custom actions follow the moves');
+        assert.deepEqual(view.types.bugs.bug.find((a) => a.id === 'park'), { id: 'park', label: 'Park', when: ['open'], flow: null }, 'custom actions follow the moves');
+        assert.equal(view.types.bugs.bug.at(-1).id, 'duplicate', 'and the default duplicate comes last (STORY-0050)');
         assert.deepEqual(model.withoutTypeActions(view, stored, TYPES), stored, 'nothing changed, nothing written');
         const edited = JSON.parse(JSON.stringify(view));
         edited.types.backlog.story.find((a) => a.label === 'Drop').label = 'Abandon';
@@ -3372,7 +3380,7 @@ console.log('\nOne workflow');
         const view = model.withTypeActions({}, TYPES);
         wf.setWorkflow({ types: { bugs: { bug: view.types.bugs.bug } }, flows: view.flows });
         assert.deepEqual(wf.movesFor('bugs', 'bug', 'open', [['ignored', 'x']]).map((m) => [m.label, m.to]),
-            [['Start investigation', 'investigation'], ['Close', 'closed']]);
+            [['Start investigation', 'investigation'], ['Close', 'closed'], ['Mark as duplicate and close', 'closed']]);
         assert.deepEqual(wf.actionsFor('bugs', 'bug', 'open'), [], 'no action here leaves the status alone');
         assert.equal(wf.typeActions('bugs', 'regression'), null, 'a type not listed keeps its older way');
         wf.setWorkflow(null);
@@ -3391,6 +3399,164 @@ console.log('\nOne workflow');
         while (at) { order.push(at); at = g.connections.find((c) => c.source === at)?.target; }
         assert.deepEqual(order.map((id) => g.nodes.find((n) => n.id === id).type), ['start', 'require-message', 'set-status', 'clear-field']);
         assert.deepEqual(flowOf(view, 'unassign').flow, side, 'the older flow itself is left as it was');
+    });
+}
+
+/* ── links, the default duplicate and resolutions (STORY-0050) ─────── */
+
+console.log('\nLinks and resolutions');
+{
+    const wf = await import(join(UI, 'ticketdesk', 'workflow.js'));
+    const model = await import(join(UI, 'ticketdesk', 'workflow_model.js'));
+    const flow = (nodes, links) => ({
+        nodes: [{ id: 'start', type: 'start', config: {} }, ...nodes],
+        connections: links.map(([source, target, sourcePort = 'out']) => ({ source, target, sourcePort, targetPort: 'in' })),
+    });
+    const no = async () => null;
+
+    await t('a record question and "Add a link" put the link, and the comment for the other record, in the same patch', async () => {
+        wf.setWorkflow(null);
+        const graph = flow([
+            { id: 'which', type: 'prompt', config: { question: 'Blocked by what?', kind: 'record' } },
+            { id: 'link', type: 'add-link', config: { verb: 'blocked-by', target: '${input.which}', note: '${record.ref} waits for this.' } },
+            { id: 'say', type: 'add-comment', config: { body: 'Waiting for ${input.which} (${input.which.title}).' } },
+        ], [['start', 'which'], ['which', 'link'], ['link', 'say']]);
+        const asked = [];
+        const patch = await wf.planMove({ store: 'bugs', record: { id: 9, status: 'open', type: 'bug' },
+            move: { label: 'Wait', flow: graph }, ask: no, askMessage: no,
+            pick: async (q) => { asked.push(q); return { ref: 'STORY-0007', title: 'SSO' }; } });
+        assert.deepEqual(asked, ['Blocked by what?']);
+        assert.deepEqual(patch, {
+            addLinks: [{ verb: 'blocked-by', target: 'STORY-0007', note: 'BUG-0009 waits for this.' }],
+            comment: 'Waiting for STORY-0007 (SSO).',
+        });
+        assert.deepEqual(wf.checkFlow(graph, 'bugs', ['bug']), [], 'the title of a picked record is a known reference');
+        assert.equal(await wf.planMove({ store: 'bugs', record: { id: 9, status: 'open' }, move: { label: 'Wait', flow: graph },
+            ask: no, askMessage: no, pick: no }), null, 'no record picked: nothing to save');
+    });
+
+    await t('a link step with no link or no target, and a resolution that is no resolution, are found on their step', () => {
+        const graph = flow([
+            { id: 'l', type: 'add-link', config: { verb: 'likes', target: '' } },
+            { id: 'r', type: 'set-field', config: { field: 'resolution', value: 'meh' } },
+            { id: 'ok', type: 'set-field', config: { field: 'resolution', value: 'wont-fix' } },
+        ], [['start', 'l'], ['l', 'r'], ['r', 'ok']]);
+        assert.deepEqual(wf.checkFlow(graph, 'backlog', ['story']).map((f) => [f.code, f.node_id]).sort(),
+            [['no_target', 'l'], ['unknown_link', 'l'], ['unknown_resolution', 'r']]);
+    });
+
+    await t('closing asks how it ended in the message dialog; reopening clears it; a flow that decides is not second-guessed', async () => {
+        wf.setWorkflow(null);
+        let offered = null;
+        const close = await wf.planMove({ store: 'bugs', record: { status: 'testing', type: 'bug' },
+            move: { label: 'Close', to: 'closed', message: true }, ask: no,
+            askMessage: async (_q, offer) => { offered = offer; return { comment: 'Not ours', resolution: 'not-a-bug' }; } });
+        assert.deepEqual(offered, { resolution: 'fixed' }, 'offered with the message, Fixed first');
+        assert.deepEqual(close, { status: 'closed', resolution: 'not-a-bug', comment: 'Not ours' });
+        const reopen = await wf.planMove({ store: 'bugs', record: { status: 'closed', type: 'bug', resolution: 'not-a-bug' },
+            move: { label: 'Reopen', to: 'open', message: true }, ask: no,
+            askMessage: async (_q, offer) => { offered = offer; return { comment: 'It is ours' }; } });
+        assert.deepEqual(offered, {}, 'a reopen is not asked how it ended');
+        assert.deepEqual(reopen, { status: 'open', resolution: '', comment: 'It is ours' });
+        const decided = flow([{ id: 'r', type: 'set-field', config: { field: 'resolution', value: 'wont-fix' } },
+            { id: 's', type: 'set-status', config: { status: 'closed' } }], [['start', 'r'], ['r', 's']]);
+        const quiet = await wf.planMove({ store: 'bugs', record: { status: 'open', type: 'bug' },
+            move: { label: 'Won\'t fix', flow: decided }, ask: async () => { throw new Error('asked'); }, askMessage: no });
+        assert.deepEqual(quiet, { status: 'closed', resolution: 'wont-fix' });
+    });
+
+    await t('a backlog drop offers Won\'t fix and asks after the flow when there is no dialog; done is not asked', async () => {
+        const asked = [];
+        const drop = await wf.planMove({ store: 'backlog', record: { status: 'refined', type: 'story' },
+            move: { label: 'Drop', to: 'dropped', message: false },
+            ask: async (form) => { asked.push(form); return { resolution: form.defaults.resolution }; }, askMessage: no });
+        assert.equal(asked.length, 1);
+        assert.deepEqual(asked[0].fields.map((f) => f.name), ['resolution']);
+        assert.deepEqual(drop, { status: 'dropped', resolution: 'wont-fix' });
+        const done = await wf.planMove({ store: 'backlog', record: { status: 'review', type: 'story' },
+            move: { label: 'Done', to: 'done' }, ask: async () => { throw new Error('asked'); }, askMessage: no });
+        assert.deepEqual(done, { status: 'done' });
+        assert.equal(await wf.planMove({ store: 'backlog', record: { status: 'refined', type: 'story' },
+            move: { label: 'Drop', to: 'dropped' }, ask: no, askMessage: no }), null, 'cancelling the question cancels the drop');
+    });
+
+    await t('Duplicate is a default action of every type, offered until it is finished, and its flow passes the checks', async () => {
+        const [bugDup] = wf.defaultActions('bugs', 'bug');
+        assert.equal(bugDup.label, 'Mark as duplicate and close');
+        assert.deepEqual(bugDup.when, ['open', 'investigation', 'testing']);
+        assert.equal(wf.statusStep(bugDup.flow), 'closed');
+        const [itemDup] = wf.defaultActions('backlog', 'story');
+        assert.equal(itemDup.label, 'Mark as duplicate and drop');
+        assert.equal(wf.statusStep(itemDup.flow), 'dropped');
+        assert.ok(!itemDup.when.includes('done') && !itemDup.when.includes('dropped'));
+        assert.deepEqual(wf.checkFlow(bugDup.flow, 'bugs', ['bug']), []);
+        assert.deepEqual(wf.checkFlow(itemDup.flow, 'backlog', ['story']), []);
+        const patch = await wf.planMove({ store: 'backlog', record: { id: 12, type: 'story', status: 'draft' },
+            move: { label: itemDup.label, flow: itemDup.flow }, ask: no, askMessage: no,
+            pick: async () => ({ ref: 'BUG-0003', title: 'Crash on save' }) });
+        assert.deepEqual(patch, {
+            status: 'dropped', resolution: 'duplicate', comment: 'Dropped as a duplicate of BUG-0003 — Crash on save.',
+            addLinks: [{ verb: 'duplicates', target: 'BUG-0003', note: 'STORY-0012 was dropped as a duplicate of this.' }],
+        });
+    });
+
+    await t('Settings › Workflow lists it among each type\'s actions; removing it there takes it off the record page', async () => {
+        const TYPES = [{ store: 'bugs', type: 'bug', storeLabel: 'Bugs' }, { store: 'backlog', type: 'story', storeLabel: 'Backlog' }];
+        const view = model.withTypeActions({}, TYPES);
+        for (const [store, type, label] of [['bugs', 'bug', 'Mark as duplicate and close'], ['backlog', 'story', 'Mark as duplicate and drop']]) {
+            const a = view.types[store][type].find((x) => x.id === 'duplicate');
+            assert.equal(a?.label, label);
+            assert.deepEqual(view.flows.find((f) => f.id === a.flow).flow, wf.duplicateFlow(store));
+        }
+        assert.deepEqual(model.withoutTypeActions(view, {}, TYPES), {}, 'an untouched default is not saved');
+        const edited = JSON.parse(JSON.stringify(view));
+        edited.types.backlog.story = edited.types.backlog.story.filter((a) => a.id !== 'duplicate');
+        const saved = model.withoutTypeActions(edited, {}, TYPES);
+        wf.setWorkflow(saved);
+        try {
+            const m = await mountItemPage(itemRecord());
+            assert.equal(m.host.querySelector('[data-wfa="duplicate"]'), null, 'the removed default is still drawn');
+            assert.ok(![...m.host.querySelectorAll('[data-wf]')].some((b) => /duplicate/i.test(b.textContent)), 'nor offered as a move');
+            m.done();
+        } finally { wf.setWorkflow(null); }
+    });
+
+    await t('an item marked as a duplicate is one save: link, comment on the master, resolution, dropped', async () => {
+        wf.setWorkflow(null);
+        const m = await mountItemPage(itemRecord());
+        m.host.querySelector('[data-wfa="duplicate"]').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+        await tick(); await tick();
+        const row = [...document.querySelectorAll('.bd-picker [data-pick^="backlog:"]')].find((r) => r.dataset.pick !== 'backlog:4');
+        assert.ok(row, 'no master to pick');
+        const master = Number(row.dataset.pick.split(':')[1]);
+        row.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+        for (let i = 0; i < 6; i++) await tick();
+        assert.equal(m.posts.length, 1, JSON.stringify(m.posts));
+        const [body] = m.posts;
+        assert.equal(body.status, 'dropped');
+        assert.equal(body.resolution, 'duplicate');
+        assert.equal(body.addLinks.length, 1);
+        assert.equal(body.addLinks[0].verb, 'duplicates');
+        assert.match(body.addLinks[0].target, new RegExp(`^[A-Z]+-0*${master}$`));
+        assert.equal(body.addLinks[0].note, 'STORY-0004 was dropped as a duplicate of this.');
+        assert.match(body.comment, /^Dropped as a duplicate of /);
+        m.done();
+    });
+
+    await t('the resolution is a field on both pages and in both filter catalogues', async () => {
+        const b = await mountTicketPage(bug42({ status: 'closed', stage: 3, resolution: 'cannot-reproduce' }));
+        assert.equal(b.host.querySelector('[data-f="resolution"]')?.value, 'cannot-reproduce');
+        b.done();
+        const i = await mountItemPage(itemRecord({ status: 'dropped', resolution: 'wont-fix' }));
+        assert.equal(i.host.querySelector('[data-f="resolution"]')?.value, 'wont-fix');
+        i.done();
+        const bugFilters = await import(join(UI, 'ticketdesk', 'filters.js'));
+        const itemFilters = await import(join(UI, 'ticketdesk', 'backlog_filters.js'));
+        const clause = (value) => ({ kind: 'group', op: 'AND', children: [{ kind: 'clause', field: 'resolution', op: 'is', value }] });
+        const rows = [{ id: '#1', resolution: 'duplicate' }, { id: '#2', resolution: '' }];
+        assert.deepEqual(rows.filter(bugFilters.MODEL.matcherFor(clause('duplicate'))).map((r) => r.id), ['#1']);
+        assert.deepEqual(rows.filter(bugFilters.MODEL.matcherFor(clause('none'))).map((r) => r.id), ['#2']);
+        assert.ok(itemFilters.FILTER_FIELDS.some((f) => f.key === 'resolution'), 'the backlog filters have no Resolution');
     });
 }
 
@@ -3441,9 +3607,9 @@ console.log('\nMass actions');
         const target = mass.commonTargets(recs).find((x) => x.to === 'closed');
         let asked = 0;
         const saved = [];
-        const msg = await mass.massMove(recs, target, { ask: async () => { asked++; return { message: 'Fixed in 1.2' }; }, ...io(saved) });
-        assert.equal(asked, 1);
-        assert.deepEqual(saved, recs.map((r) => [r.ref, { status: 'closed', comment: 'Fixed in 1.2' }]));
+        const msg = await mass.massMove(recs, target, { ask: async () => { asked++; return { message: 'Fixed in 1.2', resolution: 'fixed' }; }, ...io(saved) });
+        assert.equal(asked, 1, 'the resolution is asked in the same dialog (STORY-0050)');
+        assert.deepEqual(saved, recs.map((r) => [r.ref, { status: 'closed', resolution: 'fixed', comment: 'Fixed in 1.2' }]));
         assert.match(msg, /3 records changed/);
     });
 

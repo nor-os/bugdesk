@@ -16,13 +16,16 @@
  * withTypeActions shows any of them as the third — built-in and older moves
  * grouped into actions ("Close", offered in open, investigation and testing),
  * each with a flow that asks for the move's message, if it took one, and
- * changes the status — and withoutTypeActions saves back only the types that
+ * changes the status, then the type's default actions ("Mark as duplicate and
+ * close", STORY-0050) — and withoutTypeActions saves back only the types that
  * differ from that, so an untouched type keeps following whatever it followed.
  * Pure: no DOM, no fetch.
  */
 
 import { builtinTable } from './builtin_moves.js';
-import { ANY_STORE, emptyFlow, flowUses, liftInlineFlows, newFlowId, statusStep, transitionFlow } from './workflow.js';
+import {
+    ANY_STORE, defaultActions, emptyFlow, flowUses, liftInlineFlows, newFlowId, statusStep, transitionFlow,
+} from './workflow.js';
 
 const clone = (x) => JSON.parse(JSON.stringify(x ?? null));
 const TYPE_WORD = { bugs: { bug: 'Bug', regression: 'Regression', task: 'Chore' } };
@@ -124,6 +127,11 @@ export function withTypeActions(stored, types) {
         for (const a of wf.actions?.[store]?.[type] || []) {
             list.push({ id: uniqueId(slug(a.id || a.label), taken), label: a.label || '', when: Array.isArray(a.when) ? [...a.when] : ['*'],
                         flow: a.flow || null });
+        }
+        // Then the defaults every type has — duplicate — built from the same steps.
+        for (const a of defaultActions(store, type)) {
+            list.push({ id: uniqueId(a.id, taken), label: a.label, when: a.when,
+                        flow: flowFor(store, type, a.label, a.flow, statusStep(a.flow)) });
         }
         out.types[store][type] = list;
     }

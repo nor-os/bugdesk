@@ -634,6 +634,78 @@ app.MapPost("/api/convert", async (HttpRequest req) =>
     return Results.Json(new { ok = true, created = new { store = toStore, id = newId, @ref = newRef, type = toType, title } }, json);
 });
 
+// ---- Links and resolutions a flow writes (STORY-0050) ----------------------
+// A move or an action is ONE save. When its flow has an "Add a link" step, the
+// save carries `addLinks: [{verb, target, note}]`: each target is resolved before
+// anything is written (a record that does not exist, or the record itself, refuses
+// the whole save), the tokens are MERGED into the record's links — the patch's
+// `links` array is full-replace, which is exactly what a flow must not do — and
+// each `note` is a comment for the linked record, written only after the record
+// itself, the way the duplicate-of acts below write their courtesy comment.
+
+(string? Error, string Text, List<(string Path, string Display, string Note)> Notes) AddLinks(
+    string text, string selfStore, int selfId, Dictionary<string, JsonElement> patch)
+{
+    var notes = new List<(string Path, string Display, string Note)>();
+    if (!patch.TryGetValue("addLinks", out var al) || al.ValueKind != JsonValueKind.Array) return (null, text, notes);
+    var links = Md.List(Md.GetFrontmatter(text, "links"));
+    foreach (var e in al.EnumerateArray())
+    {
+        string Str(string key) => e.ValueKind == JsonValueKind.Object && e.TryGetProperty(key, out var v)
+            && v.ValueKind == JsonValueKind.String ? (v.GetString() ?? "").Trim() : "";
+        var verb = Str("verb").ToLowerInvariant();
+        var raw = Str("target");
+        if (!RecordWorkflow.LinkVerbs.Contains(verb))
+            return ($"'{verb}' is not a link ({string.Join(", ", RecordWorkflow.LinkVerbs)})", text, notes);
+        if (raw.Length == 0) return ("a link needs a record to point at", text, notes);
+        var r = Refs.Parse(raw, selfStore);
+        if (!r.Ok) return ($"'{raw}' is not a record reference", text, notes);
+        if (r.Store == selfStore && r.Id == selfId) return ("a record cannot be linked to itself", text, notes);
+        string type, path, display;
+        if (r.Store == "bugs")
+        {
+            if (LoadOne(Req.Store.BugsDir, r.Id) is null) return ($"no bug #{r.Id} to link to", text, notes);
+            type = "";
+            path = BugPath(Req.Store.BugsDir, r.Id);
+        }
+        else
+        {
+            var target = LoadBacklog(Req.Store.BacklogDir).FirstOrDefault(i => i.Id == r.Id);
+            if (target is null) return ($"no backlog item #{r.Id} to link to", text, notes);
+            type = target.Type;
+            path = Path.Combine(Req.Store.BacklogDir, target.FileName);
+        }
+        display = Refs.Display(r, type);
+        var token = $"{verb} {Refs.Format(r, selfStore, type)}";
+        if (!links.Any(l => string.Equals(l.Trim(), token, StringComparison.OrdinalIgnoreCase))) links.Add(token);
+        var note = Str("note");
+        if (note.Length > 0) notes.Add((path, display, note));
+    }
+    return (null, Md.SetFrontmatter(text, "links", Md.ListValue(links)), notes);
+}
+
+// The courtesy comments, after the record's own write. A failure leaves the
+// record linked and the other record merely uninformed, and is only logged.
+async Task WriteLinkNotes(IEnumerable<(string Path, string Display, string Note)> notes, string actor)
+{
+    foreach (var (path, display, note) in notes)
+    {
+        try { await Req.Store.WriteRecord(path, Md.AppendComment(await File.ReadAllTextAsync(path), actor, note)); }
+        catch (Exception ex) { app.Logger.LogWarning(ex, "could not leave the link's comment on {Ref}", display); }
+    }
+}
+
+// `resolution: <word>` — one of RecordSchema.Resolutions, or empty to take the
+// line out. Placed after `status`, where a person reads how the record ended.
+(string? Error, string Text) SetResolution(string text, string value)
+{
+    var v = value.Trim().ToLowerInvariant();
+    if (v.Length == 0) return (null, Md.RemoveFrontmatter(text, "resolution"));
+    if (!RecordSchema.Resolutions.Contains(v))
+        return ($"resolution must be one of {string.Join(", ", RecordSchema.Resolutions)} (got '{value}')", text);
+    return (null, Md.SetFrontmatterAfter(text, "resolution", v, "status"));
+}
+
 // ---- Bugs -----------------------------------------------------------------
 
 app.MapGet("/api/bugs", () =>
@@ -707,7 +779,17 @@ app.MapPost("/api/bugs/{id:int}", async (int id, HttpRequest req) =>
         }
         else if (key is "labels" or "links" && v.ValueKind == JsonValueKind.Array)
             text = Md.SetFrontmatter(text, key, Md.ListValue(v.EnumerateArray().Select(e => e.GetString() ?? "")));
+        else if (key == "resolution" && v.ValueKind == JsonValueKind.String)
+        {
+            var (resError, withRes) = SetResolution(text, v.GetString() ?? "");
+            if (resError is not null) return Results.Json(new { ok = false, error = resError }, json, statusCode: 400);
+            text = withRes;
+        }
     }
+    // After the loop, so a `links` array in the same patch is merged into, not over.
+    var (linkError, linked, linkNotes) = AddLinks(text, "bugs", id, patch);
+    if (linkError is not null) return Results.Json(new { ok = false, error = linkError }, json, statusCode: 400);
+    text = linked;
 
     var bugType = (Md.GetFrontmatter(text, "type") ?? "bug").Trim();
     if (ApplyFields(ref text, "bugs", bugType, patch, creating: false) is { } fieldError)
@@ -740,6 +822,7 @@ app.MapPost("/api/bugs/{id:int}", async (int id, HttpRequest req) =>
     else if (statusNote is not null && patch.TryGetValue("tagRecentComment", out var tv) && tv.ValueKind == JsonValueKind.True)
         text = Md.TagRecentComment(text, actor, statusNote, DateTime.UtcNow).Text;
     await Req.Store.WriteRecord(path, text, commit: !IsAutosave(patch));
+    await WriteLinkNotes(linkNotes, actor);
     return Results.Json(new { ok = true, bug = LoadOne(Req.Store.BugsDir, id) }, json);
 });
 
@@ -818,6 +901,7 @@ app.MapPost("/api/bugs/{id:int}/duplicate-of", async (int id, HttpRequest req) =
         text = Md.SetFrontmatter(text, "status", "closed");
         text = RecordHistory.Append(text, actor, new[] { new FieldChange("status", was, "closed") });
     }
+    text = SetResolution(text, "duplicate").Text;     // STORY-0050: how it ended
     // AppendComment is LAST in any multi-step write: it appends at end of file and
     // bumps `updated`, and History must already be above the thread.
     text = Md.AppendComment(text, actor,
@@ -1194,6 +1278,13 @@ app.MapPost("/api/backlog/{id:int}", async (int id, HttpRequest req) =>
             case "labels" or "links" when v.ValueKind == JsonValueKind.Array:
                 text = Md.SetFrontmatter(text, key, Md.ListValue(v.EnumerateArray().Select(e => e.GetString() ?? "")));
                 break;
+            case "resolution" when v.ValueKind == JsonValueKind.String:
+            {
+                var (resError, withRes) = SetResolution(text, str);
+                if (resError is not null) return Results.Json(new { ok = false, error = resError }, json, statusCode: 400);
+                text = withRes;
+                break;
+            }
             case "description":
                 text = Md.SetSection(text, "## Description", str);
                 break;
@@ -1204,6 +1295,11 @@ app.MapPost("/api/backlog/{id:int}", async (int id, HttpRequest req) =>
                 break;
         }
     }
+
+    // After the loop, so a `links` array in the same patch is merged into, not over.
+    var (linkError, linked, linkNotes) = AddLinks(text, "backlog", id, patch);
+    if (linkError is not null) return Results.Json(new { ok = false, error = linkError }, json, statusCode: 400);
+    text = linked;
 
     // A retype can strand the item on a status its new ladder does not have —
     // a story in `review` demoted to a task. Clamp AFTER the loop: JSON object
@@ -1265,6 +1361,7 @@ app.MapPost("/api/backlog/{id:int}", async (int id, HttpRequest req) =>
     {
         await Req.Store.WriteRecord(path, text, commit: !IsAutosave(patch));
     }
+    await WriteLinkNotes(linkNotes, actor);
 
     var reloaded = LoadBacklog(Req.Store.BacklogDir);
     return Results.Json(new { ok = true, item = FullItem(reloaded, reloaded.First(i => i.Id == id)) }, json);
@@ -1493,6 +1590,7 @@ app.MapPost("/api/backlog/{id:int}/duplicate-of", async (int id, HttpRequest req
         text = Md.SetFrontmatter(text, "status", "dropped");
         text = RecordHistory.Append(text, actor, new[] { new FieldChange("status", was, "dropped") });
     }
+    text = SetResolution(text, "duplicate").Text;     // STORY-0050: how it ended
     // AppendComment is LAST in any multi-step write: it appends at end of file and
     // bumps `updated`, and History must already be above the thread.
     text = Md.AppendComment(text, actor,
@@ -2839,7 +2937,7 @@ static object FullItem(IReadOnlyList<BacklogItem> all, BacklogItem item)
         assignee = item.Assignee, reporter = item.Reporter,
         due = item.Due, effectiveDue = EffectiveDue(all, item),
         points = item.Points, subsystem = item.Subsystem,
-        labels = item.Labels, links = item.Links, created = item.Created, updated = item.Updated,
+        labels = item.Labels, links = item.Links, resolution = item.Resolution, created = item.Created, updated = item.Updated,
         fields = item.Fields, convertedTo = item.ConvertedTo, convertedFrom = item.ConvertedFrom,
         description = item.Description, acceptance = item.Acceptance, criteria = item.Criteria(),
         comments = item.Comments, history = item.History, children = childCount,

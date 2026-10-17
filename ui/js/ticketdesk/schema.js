@@ -66,6 +66,14 @@ export function typeSpec(store, type) {
 }
 
 /** A type's custom fields, in their configured order. */
+/** How a finished record ended (STORY-0050; mirrors RecordSchema.Resolutions),
+ *  `[value, label]` — the `resolution` line a close, a drop or a duplicate writes. */
+export const RESOLUTIONS = [
+    ['fixed', 'Fixed'], ['wont-fix', 'Won\'t fix'], ['cannot-reproduce', 'Cannot reproduce'],
+    ['not-a-bug', 'Not a bug'], ['works-as-designed', 'Works as designed'], ['duplicate', 'Duplicate'],
+];
+export const resolutionLabel = (v) => RESOLUTIONS.find(([x]) => x === v)?.[1] || String(v || '');
+
 export const customFields = (store, type) => typeSpec(store, type).fields;
 
 /**

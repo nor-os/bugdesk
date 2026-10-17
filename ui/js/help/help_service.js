@@ -259,7 +259,8 @@ or move to another desktop. See **Keyboard shortcuts**.
         category: 'basics',
         keywords: ['lifecycle', 'stage', 'status', 'open', 'investigation', 'testing',
                    'closed', 'reopen', 'move', 'transition', 'message', 'action',
-                   'workflow', 'custom status', 'duplicate', 'queue'],
+                   'workflow', 'custom status', 'duplicate', 'queue', 'resolution', 'wontfix',
+                   'link', 'flow'],
         markdown: `# Bugs and their lifecycle
 
 ## The four stages
@@ -294,15 +295,36 @@ minutes, that comment becomes the message and no dialog opens. A move
 saves the bug at once, together with any edits still pending in its
 form.
 
+## How it ended: the resolution
+
+**Close** also asks how the bug ended, in the same dialog as the
+message: Fixed (the default), Won't fix, Cannot reproduce, Not a bug,
+Works as designed or Duplicate. It is saved as the bug's
+**Resolution**, shown on its page (where it can be changed) and
+offered in the filter editor. A move into a finished status of your own
+asks too; **Reopen** clears it. Backlog items are asked when they are
+dropped (Won't fix first), not when they are done.
+
+## Mark as duplicate
+
+**Mark as duplicate and close** picks the bug or item this one
+duplicates, links it \`duplicates\`, sets the resolution to Duplicate,
+says so in a comment, closes this bug and leaves a comment on the
+other record, all in one save. On a backlog item it is **Mark as
+duplicate and drop**. Cancelling the picker changes nothing.
+
 ## Making it your own
 
 The four stages are the default. In **Settings › Record types** a
 project can add statuses of its own (each one active, waiting or
 finished), and they show up as "Move to …" moves and as filters. In
 **Settings › Workflow** each type's moves can be changed, and a move
-can run a flow: ask questions, set or clear fields (the assignee too),
-add a comment, branch. Custom actions, such as "Blocked", sit beside
-the moves.
+can run a flow: ask questions (text, a choice, or a record picked
+from either store), set or clear fields (the assignee and the
+resolution too), add a comment, add a link, branch. Custom actions,
+such as "Blocked", sit beside the moves. Mark as duplicate is one of
+every type's actions there, built from those steps, so a project can
+rename it, change what it does or remove it.
 
 ## The queue
 

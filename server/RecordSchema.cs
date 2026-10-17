@@ -62,14 +62,22 @@ static class RecordSchema
         ["bugs"] = new(StringComparer.OrdinalIgnoreCase)
         {
             "id", "title", "status", "severity", "type", "subsystem", "assignee", "reporter",
-            "labels", "links", "created", "updated", "converted_to", "converted_from",
+            "labels", "links", "resolution", "created", "updated", "converted_to", "converted_from",
         },
         ["backlog"] = new(StringComparer.OrdinalIgnoreCase)
         {
             "id", "type", "title", "status", "parent", "phase", "assignee", "reporter", "due",
-            "points", "subsystem", "labels", "links", "created", "updated", "converted_to", "converted_from",
+            "points", "subsystem", "labels", "links", "resolution", "created", "updated", "converted_to", "converted_from",
         },
     };
+
+    /// <summary>
+    /// How a finished record ended (STORY-0050): the <c>resolution</c> line a
+    /// close, a drop or a duplicate writes, the same words in both stores. Empty
+    /// (no line at all) while the record is not finished, or when nobody said.
+    /// </summary>
+    public static readonly string[] Resolutions =
+        { "fixed", "wont-fix", "cannot-reproduce", "not-a-bug", "works-as-designed", "duplicate" };
 
     /// <summary>Names a custom field may never take, in either store: every
     /// built-in key, and the words the API already uses for a record's parts.</summary>

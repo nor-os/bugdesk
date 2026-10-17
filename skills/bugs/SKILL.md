@@ -306,6 +306,10 @@ Field notes:
   read that as the configured human and **leave the file alone**. A backfilled
   guess is indistinguishable on disk from a recorded fact, which is worse than
   an honest gap.
+- **resolution**: how a closed bug ended — `fixed`, `wont-fix`,
+  `cannot-reproduce`, `not-a-bug`, `works-as-designed` or `duplicate` — one
+  line right after `status:`, written when you close it and removed when you
+  reopen it. No line at all while it is open. BugDesk asks for it on Close.
 - **labels**, **links**: bracketed, comma-separated. A link is
   `"<verb> <target>"`, and the verbs are `duplicates`, `blocks`, `blocked-by`,
   `requires`, `caused-by`, `relates-to` and `implements` — those seven, because
@@ -676,8 +680,8 @@ in place, append the matching `## History` line for each one you changed, bump
 `updated`. Don't touch anything else in the file. Commit and push it.
 
 **Duplicate** — add `duplicates <target>` to the duplicate's `links` (a bare
-number for another bug, a prefixed ref for a backlog item), set `status: closed`,
-append the history line, and comment saying which record it was folded into. Put
+number for another bug, a prefixed ref for a backlog item), set `status: closed`
+and `resolution: duplicate`, append the history line, and comment saying which record it was folded into. Put
 a one-line comment on the master too, so somebody reading it knows what arrived.
 Only the duplicate's file carries the link — the master derives the inverse.
 

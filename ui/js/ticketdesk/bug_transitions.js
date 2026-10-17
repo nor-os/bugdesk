@@ -21,7 +21,7 @@
 
 import { HUMAN_AUTHOR, fetchBug, humanizeStatus, patchBug } from './data.js';
 import { customStatus, customStatuses, isFinished } from './schema.js';
-import { movesFor, planMove } from './workflow.js';
+import { movesFor, planMove, resolutionField } from './workflow.js';
 
 /** Moves per status, primary (the usual next step) first: `[label, target]`. */
 //
@@ -110,13 +110,15 @@ export function recentMessage(comments, author, now = Date.now()) {
  * Find out how a move gets its message. Resolves to `null` when the user
  * cancelled, else to the extra fields the status patch carries: `{ comment }`
  * from the dialog, `{ tagRecentComment: true }` when a recent comment is the
- * message, or `{}` when the move needs none.
+ * message, or `{}` when the move needs none. Given `resolution` (the value to
+ * offer first), the dialog also asks how the bug ended (STORY-0050), and the
+ * answer comes back as `resolution` beside the comment.
  *
  * @param {{bugId:number, from:string, to:string, label:string, title?:string,
  *          author?:string, ask?:Function}} o  `ask` stands in for the dialog in tests
  */
 export async function resolveMoveMessage({ bugId, from, to, label, title = '', author = HUMAN_AUTHOR, ask = null,
-                                          required = null, prompt: question = '', comments = null }) {
+                                          required = null, prompt: question = '', comments = null, resolution = null }) {
     // `required` is the configured move's rule (Settings › Workflow); without one,
     // the built-in rule: every move but starting work.
     if (!(required ?? needsMessage(from, to))) return {};
@@ -131,11 +133,14 @@ export async function resolveMoveMessage({ bugId, from, to, label, title = '', a
     });
     const result = await open({
         title: `${label} — #${bugId}${title ? ` ${title}` : ''}`,
-        fields: [{ name: 'message', label: prompt, type: 'textarea', rows: 6, required: true }],
+        fields: [...(resolution ? [resolutionField()] : []),
+            { name: 'message', label: prompt, type: 'textarea', rows: 6, required: true }],
+        ...(resolution ? { defaults: { resolution } } : {}),
         submitLabel: label,
     });
     const message = String(result?.message || '').trim();
-    return message ? { comment: message } : null;
+    if (!message) return null;
+    return resolution && result?.resolution ? { comment: message, resolution: result.resolution } : { comment: message };
 }
 
 /**
@@ -171,9 +176,9 @@ export async function planBugMove({ bugId, bug, move, from, title = '', author =
     });
     return planMove({
         store: 'bugs', record: bug, move, ask: open,
-        askMessage: (prompt) => resolveMoveMessage({
+        askMessage: (prompt, offer = {}) => resolveMoveMessage({
             bugId, from, to: move.to || from, label: move.label, title, author, ask: open,
-            required: true, prompt, comments: bug?.comments || null,
+            required: true, prompt, comments: bug?.comments || null, resolution: offer.resolution || null,
         }),
     });
 }

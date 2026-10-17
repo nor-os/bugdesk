@@ -388,6 +388,7 @@ function mapBug(b) {
         stage: b.stage,          // 0..3 → STAGES chevrons
         subsystem: b.subsystem || 'unsorted',
         severity: b.severity,
+        resolution: b.resolution || '',   // how it ended (STORY-0050); '' while open
         labels: Array.isArray(b.labels) ? b.labels : [],
         // Relationships to other bugs ("blocks 47"). Only this bug's own side —
         // see links.js for why the inverse is derived rather than stored.

@@ -14,7 +14,7 @@
  */
 
 import {
-    customFilterFields, isFinished, isSnoozed, markHiddenFilterFields, snoozeConfigured, storeStatuses,
+    RESOLUTIONS, customFilterFields, isFinished, isSnoozed, markHiddenFilterFields, snoozeConfigured, storeStatuses,
 } from './schema.js';
 import { createFilterModel, FILTER_ICONS, emptyExpr } from './filter_engine.js';
 import {
@@ -75,6 +75,12 @@ export const FILTER_FIELDS = [
         key: 'snoozed', label: 'Snoozed', type: 'enum',
         options: [{ value: 'no', label: 'no' }, { value: 'yes', label: 'yes' }],
         get: (t) => (isSnoozed('bugs', t.rawType || 'bug', t.fields) ? 'yes' : 'no'),
+    },
+    {
+        // How it ended (STORY-0050): '' — "none" — while it has not.
+        key: 'resolution', label: 'Resolution', type: 'enum',
+        options: [...RESOLUTIONS.map(([value, label]) => ({ value, label })), { value: 'none', label: 'none' }],
+        get: (r) => r.resolution || 'none',
     },
     { key: 'summary', label: 'Summary', type: 'text', get: (t) => t.summary || '' },
     { key: 'subsystem', label: 'Subsystem', type: 'text', get: (t) => t.subsystem || '' },

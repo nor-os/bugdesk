@@ -31,7 +31,7 @@
  */
 
 import { createFilterModel, emptyExpr } from './filter_engine.js';
-import { customFilterFields, isSnoozed, markHiddenFilterFields, snoozeConfigured } from './schema.js';
+import { RESOLUTIONS, customFilterFields, isSnoozed, markHiddenFilterFields, snoozeConfigured } from './schema.js';
 import {
     deleteFilter as storeDelete, duplicateFilter as storeDuplicate,
     getFilter as storeGet, listFilters as storeList, saveFilter as storeSave,
@@ -129,6 +129,12 @@ export const FILTER_FIELDS = [
         get: (i) => i.dueState || 'none',
     },
     { key: 'points', label: 'Estimate', type: 'number', get: (i) => i.points },
+    {
+        // How it ended (STORY-0050): '' — "none" — while it has not.
+        key: 'resolution', label: 'Resolution', type: 'enum',
+        options: [...RESOLUTIONS.map(([value, label]) => ({ value, label })), { value: 'none', label: 'none' }],
+        get: (r) => r.resolution || 'none',
+    },
     { key: 'subsystem', label: 'Subsystem', type: 'text', get: (i) => i.subsystem || '' },
     { key: 'labels', label: 'Labels', type: 'set', get: (i) => Array.isArray(i.labels) ? i.labels : [] },
     { key: 'children', label: 'Children', type: 'number', get: (i) => i.children || 0 },

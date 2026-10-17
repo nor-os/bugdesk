@@ -278,6 +278,10 @@ Field notes:
 - **points**: a relative estimate, free text (`1`, `3`, `M`, whatever the
   project uses). Empty means *not estimated* — a real state, distinct from `0`,
   and one of the refinement checks.
+- **resolution**: how a dropped item ended — `wont-fix`, `duplicate`,
+  `not-a-bug`, `works-as-designed`, `cannot-reproduce` or `fixed` — one line
+  right after `status:`, written when you drop it and removed when you restore
+  it. A `done` item needs none: done already says how it ended.
 - **labels**, **links**: bracketed, comma-separated. A link is
   `"<verb> <target>"`, and the verbs are `duplicates`, `blocks`, `blocked-by`,
   `requires`, `caused-by`, `relates-to` and `implements` — those seven, because
@@ -607,7 +611,7 @@ append the two `## History` lines, comment, commit and push.
 
 **Duplicate** — add `duplicates <target>` to the duplicate's `links` (a bare
 number for another backlog item, a prefixed ref for a bug), set
-`status: dropped`, append the history line, and comment saying which record it
+`status: dropped` and `resolution: duplicate`, append the history line, and comment saying which record it
 was folded into. Put a one-line comment on the master too. `dropped`, not
 `done`: `dropped` is the only terminal every type allows, and `done` would claim
 the work was finished when nothing was built. Only the duplicate's file carries

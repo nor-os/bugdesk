@@ -29,7 +29,7 @@
 import { HUMAN_AUTHOR, assigneeOptions, esc, fetchBug, humanizeStatus, patchBug } from './data.js';
 import { fetchItem, humanizeItemStatus, isGated, patchItem, refinementGaps, stageActions } from './backlog_data.js';
 import { bugMovesFor, messagePrompt } from './bug_transitions.js';
-import { actionsFor, massActionsOf, movesFor, planMove } from './workflow.js';
+import { actionsFor, massActionsOf, movesFor, planMove, resolutionField } from './workflow.js';
 
 const icon = (name) => `<span class="material-symbols-outlined">${name}</span>`;
 
@@ -201,15 +201,18 @@ export async function massMove(records, target, { ask = defaultAsk, ...io } = {}
     // it…") when every ticked bug would be asked the same.
     const asks = new Set(records.map((r) => (r.store === 'bugs' ? messagePrompt(r.status, target.to) : '')));
     const question = asks.size === 1 ? [...asks][0] : '';
-    const askMessage = async (prompt) => {
+    const askMessage = async (prompt, offer = {}) => {
         if (message) return message;
+        // How they ended (STORY-0050), asked once with the message when the move ends them.
         const r = await once({
             title: `${target.label} — ${records.length} record${records.length === 1 ? '' : 's'}`,
-            fields: [{ name: 'message', label: `${prompt || question || 'Message'} — saved on every record`, type: 'textarea', rows: 6, required: true }],
+            fields: [...(offer.resolution ? [resolutionField()] : []),
+                { name: 'message', label: `${prompt || question || 'Message'} — saved on every record`, type: 'textarea', rows: 6, required: true }],
+            ...(offer.resolution ? { defaults: { resolution: offer.resolution } } : {}),
             submitLabel: target.label,
         });
         const text = String(r?.message || '').trim();
-        message = text ? { comment: text } : null;
+        message = text ? { comment: text, ...(offer.resolution && r?.resolution ? { resolution: r.resolution } : {}) } : null;
         return message;
     };
     const run = await runMass(records, (r, full) => planMove({

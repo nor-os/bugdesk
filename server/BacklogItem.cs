@@ -172,6 +172,10 @@ class BacklogItem
     public string Subsystem { get; set; } = "unsorted";
     public List<string> Labels { get; set; } = new();
     public List<string> Links { get; set; } = new();
+
+    /// <summary>How it ended, once dropped or otherwise finished
+    /// (RecordSchema.Resolutions) — '' when nobody said.</summary>
+    public string Resolution { get; set; } = "";
     /// <summary>Custom fields: every frontmatter key an item does not use for itself
     /// (see RecordSchema), in file order — kept whether or not the schema names it.</summary>
     public Dictionary<string, string> Fields { get; set; } = new();
@@ -241,7 +245,7 @@ class BacklogItem
         parent = Parent, phase = Phase, effectivePhase = phase,
         assignee = Assignee, reporter = Reporter, due = Due, effectiveDue,
         points = Points, subsystem = Subsystem,
-        labels = Labels, links = Links, fields = Fields, convertedTo = ConvertedTo, convertedFrom = ConvertedFrom, created = Created, updated = Updated,
+        labels = Labels, links = Links, resolution = Resolution, fields = Fields, convertedTo = ConvertedTo, convertedFrom = ConvertedFrom, created = Created, updated = Updated,
         typeOrder = TypeOrder, children = childCount,
         criteria = Criteria(), comments = Comments.Count, history = History.Count,
         lastCommentAuthor = Comments.Count > 0 ? Comments[^1].Author : null,
@@ -276,6 +280,7 @@ class BacklogItem
                 case "updated": item.Updated = val; break;
                 case "labels": item.Labels = Md.List(val); break;
                 case "links": item.Links = Md.List(val); break;
+                case "resolution": item.Resolution = val; break;
             }
         }
         // The filename is authoritative for the type: a `type:` line that

@@ -65,7 +65,7 @@ export function mountFlowEditor(host, { store, types, graph = null, actions = fa
     // Insert a value: what earlier prompts answered, and the record's fields.
     const fieldGroup = {
         id: 'record', label: 'This record', sub: 'its value when the action runs',
-        items: [...fieldChoices(store, types, { readable: true }), ['id', 'Id']]
+        items: [...fieldChoices(store, types, { readable: true }), ['id', 'Id'], ['ref', 'Reference']]
             .map(([n, l]) => ({ label: l, type: 'field', ref: `\${record.${n}}` })),
     };
     let editor = null;
@@ -77,23 +77,27 @@ export function mountFlowEditor(host, { store, types, graph = null, actions = fa
         return [
             { id: 'input', label: 'Answers', sub: 'from the questions asked before this step',
               empty: 'No question is asked before this step.',
-              items: asked.map((n) => ({ label: answerName(n), type: 'answer', ref: `\${input.${n.id}}` })) },
+              // A record question answers with a reference, and the record's title beside it.
+              items: asked.flatMap((n) => [{ label: answerName(n), type: 'answer', ref: `\${input.${n.id}}` },
+                  ...(n.type === 'prompt' && n.config?.kind === 'record'
+                      ? [{ label: `${answerName(n)} — its title`, type: 'answer', ref: `\${input.${n.id}.title}` }] : [])]) },
             fieldGroup,
         ];
     };
 
     // A reference reads as what it stands for — "Answer: Why?", "Severity" —
     // not as the step id it is stored by, which the editor never shows.
-    const fieldLabels = new Map([...fieldChoices(store, types, { readable: true }), ['id', 'Id']]);
+    const fieldLabels = new Map([...fieldChoices(store, types, { readable: true }), ['id', 'Id'], ['ref', 'Reference']]);
     const references = createReferenceSyntax({
         name: TEMPLATE_REFERENCES.name, pattern: TEMPLATE_REFERENCES.pattern, format: TEMPLATE_REFERENCES.format,
         stepScope: 'input',
         describe: (match) => {
-            const [scope, name] = String(match.path || '').split('.');
+            const [scope, name, part] = String(match.path || '').split('.');
             if (scope === 'input') {
                 const n = stepsById().get(name);
                 // Before the editor has its graph, every step is still unknown.
                 if (!editor) return { label: 'Answer', tone: 'amber' };
+                if (part === 'title' && n) return { label: `Title: ${answerName(n)}`, tone: 'amber' };
                 return n && ASKS.has(n.type) ? { label: `Answer: ${answerName(n)}`, tone: 'amber' }
                     : { label: `Answer: ${name}`, tone: 'amber', known: false };
             }
@@ -154,6 +158,7 @@ function summariseStep(node) {
         case 'clear-field': return `clear ${c.field || '?'}`;
         case 'add-comment': return String(c.body || '').split('\n')[0] || 'Add a comment';
         case 'set-status': return `→ ${c.status || '?'}`;
+        case 'add-link': return `${c.verb || '?'} ${c.target || '?'}${c.note ? ' — and a comment there' : ''}`;
         default: return '';
     }
 }

@@ -27,6 +27,10 @@ class Bug
 
     public List<string> Labels { get; set; } = new();
 
+    /// <summary>How it ended, once closed (RecordSchema.Resolutions) — '' when
+    /// nobody said, or while it is still open.</summary>
+    public string Resolution { get; set; } = "";
+
     /// <summary>
     /// Relationships to other records, as "&lt;type&gt; &lt;id&gt;" tokens — e.g. "blocks 47".
     /// <para>
@@ -75,7 +79,7 @@ class Bug
     {
         id = Id, title = Title, status = Status, severity = Severity, type = Type,
         subsystem = Subsystem, assignee = Assignee, reporter = Reporter,
-        labels = Labels, links = Links, fields = Fields, convertedTo = ConvertedTo, convertedFrom = ConvertedFrom,
+        labels = Labels, links = Links, resolution = Resolution, fields = Fields, convertedTo = ConvertedTo, convertedFrom = ConvertedFrom,
         created = Created, updated = Updated, stage = Stage, pri = Pri,
         comments = Comments.Count, history = History.Count,
         // Last comment's author/date (or null) so the UI can build a
@@ -109,6 +113,7 @@ class Bug
                 case "updated": bug.Updated = val; break;
                 case "labels": bug.Labels = Md.List(val); break;
                 case "links": bug.Links = Md.List(val); break;
+                case "resolution": bug.Resolution = val; break;
             }
         }
 

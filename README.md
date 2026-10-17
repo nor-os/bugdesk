@@ -418,14 +418,14 @@ Same-origin JSON, backed by the markdown files:
 | GET  | `/api/bugs` | list (summaries, sorted by priority) |
 | GET  | `/api/bugs/{id}` | one bug: frontmatter + description + parsed comments + history |
 | POST | `/api/bugs` | create; the id is assigned server-side |
-| POST | `/api/bugs/{id}` | update frontmatter (status/severity/assignee/reporter/subsystem/labels/…) |
+| POST | `/api/bugs/{id}` | update frontmatter (status/severity/assignee/reporter/subsystem/labels/resolution/…); `addLinks` merges links and comments on their targets |
 | POST | `/api/bugs/{id}/comments` | append a `### date · author` comment |
 | POST | `/api/bugs/{id}/duplicate-of` | close this bug as a duplicate of another record — link, status, history and both comments in one request |
 | GET  | `/api/meta` | aggregate counts by status/subsystem/assignee/severity |
 | GET  | `/api/backlog` | list, already in **tree order** (epic, its stories, their tasks) |
 | GET  | `/api/backlog/{id}` | one item + ancestors + children + criteria + comments + history |
 | POST | `/api/backlog` | create; id assigned server-side, parent validated |
-| POST | `/api/backlog/{id}` | update frontmatter, `## Description` or `## Acceptance criteria` |
+| POST | `/api/backlog/{id}` | update frontmatter, `## Description` or `## Acceptance criteria`; takes `resolution` and `addLinks` as the bug route does |
 | POST | `/api/backlog/{id}/comments` | append a comment |
 | POST | `/api/backlog/{id}/criteria` | tick / add / edit / remove one acceptance criterion |
 | POST | `/api/backlog/{id}/duplicate-of` | the same act for an item — it **drops** rather than closes |
@@ -585,13 +585,39 @@ links loads the other store first, once, so an inbound cross-store row does not
 depend on which store you happened to open earlier.
 
 **Mark as duplicate and close** is on both detail pages. Pick the master in the
-cross-store picker and one request does the whole act: add the `duplicates`
-link, close this record (`closed` for a bug, `dropped` for an item), append the
-status line to `## History`, comment here saying what it was folded into, and
-comment on the master saying what arrived. The master gets a comment rather than
-a reverse link, for the reason above — and that comment is the half people
-skipped when they did this by hand, which is the half that tells its reader the
-two reports were merged.
+cross-store picker and one save does the whole act: add the `duplicates`
+link, close this record (`closed` for a bug, `dropped` for an item), set
+`resolution: duplicate`, append the status line to `## History`, comment here
+saying what it was folded into, and comment on the master saying what arrived.
+The master gets a comment rather than a reverse link, for the reason above — and
+that comment is the half people skipped when they did this by hand, which is the
+half that tells its reader the two reports were merged.
+
+It is every type's **default action** (STORY-0050), a flow like the moves'
+(*Ask for input* answering with a record, *Add a link* with a comment for the
+master, *Set a field* resolution, *Add a comment*, *Change the status*), listed
+in Settings › Workflow, where a project can rename, change or remove it. The
+`duplicate-of` routes below still do the same act in one request, for agents
+and scripts.
+
+**Add a link** in any flow sends `addLinks: [{verb, target, note?}]` with the
+record's save: `verb` is one of the seven link verbs, `target` any reference;
+the server resolves each target first and refuses the whole save (400, nothing
+written) for an unknown verb, a record that does not exist, or the record
+itself. The tokens are merged into `links`, never replacing them, and each
+`note` is appended as a comment on that target after the record is written.
+
+## Resolutions
+
+A finished record says how it ended in one frontmatter line, `resolution:`,
+one of `fixed`, `wont-fix`, `cannot-reproduce`, `not-a-bug`,
+`works-as-designed` or `duplicate` (both stores; no line while it has not
+ended). Closing a bug, dropping an item, or moving either into a custom
+finished status asks for it in the move's message dialog (Fixed first for a
+bug, Won't fix for a drop); a move to `done` does not ask, and a move out of a
+finished status removes the line. A flow that sets or clears `resolution`
+itself is not asked. The field is on both record pages and in both filter
+editors, and a flow can set it, clear it and test it.
 
 ## Finished work gets out of the way
 

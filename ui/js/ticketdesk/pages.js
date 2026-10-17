@@ -65,7 +65,7 @@ import {
     customStatus, displayValue, isHidden, snoozeNotice, sortValue as schemaSortValue, statusKnown,
     storeFields as customColumns, withCustomStatuses,
 } from './schema.js';
-import { actionsFor } from './workflow.js';
+import { RESOLUTIONS, actionsFor, defaultActions, typeActions } from './workflow.js';
 import { convertRecord, convertedBanner } from './convert.js';
 import { attachAutosave, autosaveMode } from './autosave.js';
 import { attachTagInput } from './tag_input.js';
@@ -77,7 +77,7 @@ import { attachCommentEditing, editButtonHTML } from './comment_edit.js';
 import { paintRecordCount, publishRecordCount } from './record_count.js';
 import {
     esc, STAGES, TICKETS, TEAM, HUMAN_AUTHOR, AGENT_AUTHOR, assigneeOptions, formatStamp,
-    fetchBug, patchBug, postComment, createBug, deleteBug, duplicateBug, loadData, initials, teamNames,
+    fetchBug, patchBug, postComment, createBug, deleteBug, loadData, initials, teamNames,
     machineStatus, machineType, typeCode, typeLabelOf, humanizeStatus, isClosed,
 } from './data.js';
 
@@ -698,13 +698,14 @@ export function statusTag(note) {
     return `<span class="td-chip td-chip--status" title="${esc(text)}">${esc(label)}</span>`;
 }
 /** Actions that are NOT a step along the ladder. They sit after the stage
- *  buttons and are offered wherever `when` says they make sense. A
- *  duplicate-and-close is not a rung on the lifecycle, so it does not get a
- *  fake entry in STAGE_ACTIONS, whose values are target statuses. */
+ *  buttons and are offered wherever `when` says they make sense. Duplicate is
+ *  the type's DEFAULT action (STORY-0050), a flow like any other: it is drawn
+ *  here only while the type has no action list of its own — once it has, the
+ *  list says whether (and how) it is offered, among the moves. */
 const WORKFLOW_ACTIONS = [
     { id: 'duplicate', label: 'Mark as duplicate and close', icon: 'content_copy',
       title: 'Pick the record this duplicates, link it, and close this one',
-      when: (closed) => !closed },
+      when: (closed, type) => !closed && !typeActions('bugs', type) },
     { id: 'convert', label: 'Convert to backlog item…', icon: 'swap_horiz',
       title: 'It is feature work: move it to the backlog, with its comments and history',
       when: (closed) => !closed && storesAvailable().includes('backlog') },
@@ -741,6 +742,11 @@ async function confirmDeleteBug(bug) {
     }
 }
 const STAGE_STATUS = ['Open', 'Investigation', 'Testing', 'Closed'];
+
+/** How it ended (STORY-0050) — set by Close and Duplicate, editable here. */
+const resolutionSelect = (cur) => `<select class="ea-tin" data-f="resolution">
+    <option value=""${cur ? '' : ' selected'}>—</option>
+    ${RESOLUTIONS.map(([v, l]) => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
 const SEV_PRI = { crash: 1, high: 2, medium: 3, low: 4 };
 
 function maskSections(t, mode) {
@@ -785,6 +791,7 @@ function maskSections(t, mode) {
             ${field('Type', sel('type', ['Bug', 'Regression', 'Chore'], typeLabelOf(t.type)), true)}
             ${hideRow('severity', field('Severity', sel('severity', ['crash', 'high', 'medium', 'low'], t.severity || 'medium'), true))}
             ${hideRow('subsystem', field('Subsystem', tin('subsystem', t.subsystem)))}
+            ${mode === 'edit' ? field('Resolution', resolutionSelect(t.resolution)) : ''}
             ${mode === 'search' ? '' : field('Assignee', `<div class="td-assignee">${sel('assignee', assigneeOptions(true, t.assignee), t.assignee || '')}<button type="button" class="ea-btn td-reassign" data-a="reassign" title="Reassign this bug">${icon('person_search')}</button></div>`)}
             ${mode === 'edit' ? field('Reporter', `<div class="td-assignee">${sel('reporter', assigneeOptions(true, t.reporter), t.reporter || '')}<button type="button" class="ea-btn td-reassign" data-a="setreporter" title="Change who this bug goes back to">${icon('person_edit')}</button></div>`) : ''}
             <div class="td-field td-span2" data-row="labels"><label>Labels</label>${tin('labels', (t.labels || []).join(', '))}</div>
@@ -1386,7 +1393,7 @@ function mountTicket(host, props, ctx) {
             .map(({ label, to: target }, i) => `<button class="ea-btn td-stageaction ${i === 0 ? 'ea-btn--primary td-stageaction--primary' : ''}" data-wf="${esc(target)}">${esc(label)}</button>`).join('')
             + actionsFor('bugs', type, state.status).map((a) =>
                 `<button class="ea-btn td-stageaction td-stageaction--custom" data-wact="${esc(a.id)}">${icon('bolt')} ${esc(a.label)}</button>`).join('')
-            + WORKFLOW_ACTIONS.filter((a) => a.when(closed)).map((a) =>
+            + WORKFLOW_ACTIONS.filter((a) => a.when(closed, type)).map((a) =>
                 `<button class="ea-btn td-stageaction td-stageaction--alt" data-wfa="${esc(a.id)}"
                          title="${esc(a.title)}">${icon(a.icon)} ${esc(a.label)}</button>`).join('');
     };
@@ -1430,6 +1437,7 @@ function mountTicket(host, props, ctx) {
         // Sent only when it CHANGED. An ordinary save of a record written before the
         // field existed must not insert a `reporter:` line nobody typed.
         if (fval('reporter') !== (t.reporter || '')) patch.reporter = fval('reporter');
+        if (fval('resolution') !== (t.resolution || '')) patch.resolution = fval('resolution');
         // Only the custom fields that changed — see custom_fields.js.
         const fields = customFieldsCtl?.collect() || {};
         if (Object.keys(fields).length) patch.fields = fields;
@@ -1457,6 +1465,7 @@ function mountTicket(host, props, ctx) {
         setV('type', typeLabelOf(typeCode(bug.type)));
         setV('assignee', bug.assignee || '');
         setV('reporter', bug.reporter || '');
+        setV('resolution', bug.resolution || '');
         setV('updated', formatStamp(bug.updated) || '—');
         state.updated = bug.updated || '';
         customFieldsCtl?.set(bug.fields || {});
@@ -1469,7 +1478,7 @@ function mountTicket(host, props, ctx) {
         markStatus();
         Object.assign(t, {
             summary: bug.title, status: humanizeStatus(bug.status), rawStatus: bug.status,
-            assignee: bug.assignee || HUMAN_AUTHOR, reporter: bug.reporter || '',
+            assignee: bug.assignee || HUMAN_AUTHOR, reporter: bug.reporter || '', resolution: bug.resolution || '',
             severity: bug.severity, subsystem: bug.subsystem || 'unsorted',
             stage: bug.stage, sla: formatStamp(bug.updated), type: typeCode(bug.type), pri: SEV_PRI[bug.severity] || 3,
             labels: Array.isArray(bug.labels) ? bug.labels : [],
@@ -1692,9 +1701,9 @@ function mountTicket(host, props, ctx) {
 
     // One of the project's actions (Settings › Workflow): its flow, then this
     // page's ONE save, as a move is — and a cancelled question saves nothing.
-    const applyAction = async (id) => {
+    const applyAction = async (id, given = null) => {
         const type = machineType(fval('type')) || t.rawType || 'bug';
-        const act = actionsFor('bugs', type, state.status).find((a) => a.id === id);
+        const act = given || actionsFor('bugs', type, state.status).find((a) => a.id === id);
         if (!act || !t.bugId) return;
         let bug = null;
         try { bug = await fetchBug(t.bugId); } catch { /* the plan asks rather than guesses */ }
@@ -1706,6 +1715,7 @@ function mountTicket(host, props, ctx) {
             });
         } catch (err) { statusLine(`${act.label}: ${err?.message || err}`); return; }
         if (!patch) { statusLine(`${act.label}: cancelled, nothing changed.`); return; }
+        if (!host.isConnected) return;   // the tile closed while a question was open
         const { status: next, ...extra } = patch;
         state.moveMessage = Object.keys(extra).length ? extra : null;
         if (next) gotoStatus(next); else setDirty(true);
@@ -1751,33 +1761,14 @@ function mountTicket(host, props, ctx) {
     });
 
     /* Marking a duplicate is ONE act with four consequences — a link, a closed status,
-     * a history line, and a comment on each side — so it is one request. Four calls from
-     * here would leave a bug linked but open, or closed with nothing saying why, every
-     * time one of them failed. No confirmation dialog: the picker IS the confirmation,
-     * and Reopen is one click. */
+     * a history line, and a comment on each side — so it is one save: the type's
+     * default Duplicate action (STORY-0050), whose flow picks the master, adds the
+     * link and the courtesy comment on it, sets the resolution and closes. No
+     * confirmation dialog: the picker IS the confirmation, and Reopen is one click. */
     const markDuplicate = async () => {
         if (!t.bugId) { statusLine('Local bug — nothing to close.'); return; }
-        const picked = await openRecordPicker({
-            title: `What is #${t.bugId} a duplicate of?`,
-            stores: storesAvailable(),
-            exclude: bugRef(t.bugId),
-        });
-        if (!picked?.target) return;     // cancelled: say nothing, change nothing
-        if (!host.isConnected) return;   // the tile closed while the picker was open
-        try {
-            const res = await duplicateBug(t.bugId, {
-                target: formatRef(picked.target, 'bugs'), actor: HUMAN_AUTHOR });
-            applyRecord(res.bug);
-            // Our own write fires no SSE frame (the watcher suppresses the echo), so keep
-            // the shared store in step by hand, the way commitLinks already does.
-            const stored = TICKETS.find((x) => x.bugId === t.bugId);
-            if (stored) Object.assign(stored, { links: res.bug.links || [], rawStatus: res.bug.status,
-                status: humanizeStatus(res.bug.status), stage: res.bug.stage });
-            live.clear();
-            statusLine(res.targetNoted
-                ? `#${t.bugId} closed as a duplicate of ${res.target.ref}.`
-                : `#${t.bugId} closed as a duplicate of ${res.target.ref} — could not comment on ${res.target.ref}.`);
-        } catch (err) { statusLine(`Could not close as a duplicate: ${err.message}`); }
+        const type = machineType(fval('type')) || t.rawType || 'bug';
+        await applyAction('duplicate', defaultActions('bugs', type)[0]);
     };
 
     // [data-wfa], not [data-wf]: a `data-wf` value is a target STATUS, and these are not
