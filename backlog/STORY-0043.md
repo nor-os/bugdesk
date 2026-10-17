@@ -13,7 +13,7 @@ subsystem: settings
 labels: []
 links: []
 created: 2026-10-14
-updated: 2026-10-17T08:02Z
+updated: 2026-10-17T08:34Z
 ---
 
 ## Description
@@ -54,13 +54,13 @@ top-bar element at all since STORY-0046, so only the Tracker is switched here):
 
 ## Acceptance criteria
 
-- [ ] Settings › You › Behaviour has a **Tracker** switch, on by default, that says it is yours alone; its value is saved to your personal state (one file per profile in BugDesk's state folder, shared by every project), never to `project.json`
-- [ ] Changing the switch first asks to confirm, saying BugDesk reloads and nothing is deleted; Cancel leaves it as it was, OK saves it and reloads the page
-- [ ] Switched off: the Tracker chip is gone from the top bar and F1, F2 go to Bugs and Backlog with no F-key for the Tracker; the command palette returns no tracker tickets; the left rails and the bottom panel show nothing of the tracker; the help's Getting around and Keyboard topics no longer list it and the Tracker topic is not offered
-- [ ] Switched off, a dashboard tile that charts tracker records shows a note that the Tracker is switched off and where to switch it on; a saved tab of a tracker page says the same instead of failing
-- [ ] Nothing is deleted: switching back on brings back the chip at its old F-key, the Tracker's dashboards in its rail, its tickets in the palette and its help, with the tracker's records untouched
-- [ ] With `[tracker] enabled = false` in `projects.toml` the switch is off and disabled, naming that file; with no tracker set up it is disabled and says so; standalone TicketDesk (`--tracker`) does not offer it
-- [ ] The in-app help, README and CHANGELOG describe the switch
+- [x] Settings › You › Behaviour has a **Tracker** switch, on by default, that says it is yours alone; its value is saved to your personal state (one file per profile in BugDesk's state folder, shared by every project), never to `project.json`
+- [x] Changing the switch first asks to confirm, saying BugDesk reloads and nothing is deleted; Cancel leaves it as it was, OK saves it and reloads the page
+- [x] Switched off: the Tracker chip is gone from the top bar and F1, F2 go to Bugs and Backlog with no F-key for the Tracker; the command palette returns no tracker tickets; the left rails and the bottom panel show nothing of the tracker; the help's Getting around and Keyboard topics no longer list it and the Tracker topic is not offered
+- [x] Switched off, a dashboard tile that charts tracker records shows a note that the Tracker is switched off and where to switch it on; a saved tab of a tracker page says the same instead of failing
+- [x] Nothing is deleted: switching back on brings back the chip at its old F-key, the Tracker's dashboards in its rail, its tickets in the palette and its help, with the tracker's records untouched
+- [x] With `[tracker] enabled = false` in `projects.toml` the switch is off and disabled, naming that file; with no tracker set up it is disabled and says so; standalone TicketDesk (`--tracker`) does not offer it
+- [x] The in-app help, README and CHANGELOG describe the switch
 
 ## History
 
@@ -84,3 +84,46 @@ the Tracker only, a personal switch under Settings › You, `[tracker] enabled`
 stays a hard off underneath, tracker tiles show a "switched off" note, and an
 announced reload rather than a live change. 7 criteria, 3 points. Taking it on
 in the ultra/track-A worktree.
+
+### 2026-10-17T08:34Z · norman_agent
+
+Built on branch ultra/track-A (b0bac7b), not merged yet; stays in-progress
+until integration. All 7 criteria ticked after a check on a scratch instance.
+
+- Settings › You › Behaviour has a new **Pages** group with the **Tracker**
+  switch (`ticketdesk/tracker_setting.js`). Its value is `tracker` in
+  `preferences.json` in BugDesk's state folder, per profile, beside the
+  personal dashboards (`GET/POST /api/personal/preferences`); on is the
+  default, so switching on clears the key. `/api/config` folds it into
+  `tracker.available` and reports `switchedOff` and `machineOff`.
+- The switch asks first ("BugDesk reloads … Nothing is deleted … Only you
+  are affected"), then saves and reloads by itself.
+- Off: the taxonomy has no Tracker chip, so F1/F2 are Bugs/Backlog and F3
+  does nothing; the palette does not ask the tracker; the help drops the
+  Tracker topic and leaves it out of Getting started, Dashboards and
+  Keyboard (F1 … F2). The tracker kinds stay defined without a chip, so
+  saved tracker tabs stay in the layout and come back when it is switched
+  on; one that shows while off says why.
+- A dashboard tile over tracker records says "The Tracker is switched off
+  for you. Switch it back on under Settings › You › Behaviour › Tracker."
+  With `enabled = false` it names projects.toml instead.
+
+Checked on a scratch server (8781) in headless Edge over CDP, with real
+clicks and keys: Cancel on the confirm (nothing saved); OK switched it off
+and the page reloaded by itself, then chips Bugs, Backlog, F3 stayed on
+Backlog, Ctrl+K "vendor" found nothing (three tracker tickets before),
+the help had no Tracker topic, and the Mixed dashboard's tracker KPI showed
+the note while its bugs KPI showed 8. Switching on brought back the chip
+at F3, "My tracker" in the Tracker rail, the palette hits, the help topic
+and the KPI (2). The tracker's records were untouched. A tracker tab put in
+the saved layout (by editing desktops.json while off) showed the banner.
+`enabled = false` showed the switch off and disabled with the projects.toml
+note; no `[tracker]` showed "No tracker is set up"; `--tracker` showed the
+row with no switch, and ignored a saved `tracker: false`. A second project
+on the same server saw the same choice. Not covered: a floating tracker
+window does not survive a reload with the Tracker on or off, because the
+WM does not save floating windows; that is not new with this story.
+Tests: test-tracker-off 13 (new), test-dom 198, test-ui 222,
+test-tracker 35, test-dashboards 52, test-dashboards-dom 46,
+test-dashboards-tracker 7, test-dashboards-example 8; eslint 0 errors;
+check-graph OK.
