@@ -2,18 +2,18 @@
 id: 47
 type: story
 title: "The Tracker home is a standard, customisable dashboard"
-status: draft
+status: in-progress
 parent: 45
 phase:
-assignee:
+assignee: norman_agent
 reporter: norman
 due:
-points:
+points: 8
 subsystem: ui
 labels: []
 links: []
 created: 2026-10-16
-updated: 2026-10-16T06:30Z
+updated: 2026-10-17T10:08Z
 ---
 
 ## Description
@@ -32,20 +32,56 @@ the Tracker home shows needs more tile types than that:
 - the **scope picker** (Everyone / Assigned by me / Out with others), as a
   dashboard-level filter that every tile follows
 
-Open questions for refinement:
+Open questions for refinement, with norman's answers (2026-10-17):
 
 - Do the new tile types belong in FlexDesk (upstream TileGrid tiles) or in
-  BugDesk? Per the FlexDesk-first rule, a generic list tile goes upstream.
+  BugDesk? **FlexDesk.** The record list tile (with its row context menu), the
+  people tile and the dashboard-level scope filter are generic, so they are
+  built upstream in `@flexdesk/tiles` with FlexDesk tests, and released to npm.
+  BugDesk keeps only the adapters: the data source over its records and the row
+  menu's actions.
 - Is the default home a dashboard that is seeded into `project.json` (and can
-  then drift), or a built-in that the user forks to edit?
-- What does "reset to default" do?
+  then drift), or a built-in that the user forks to edit? **A built-in.** The
+  default Tracker home is defined in BugDesk's code. Editing it saves a project
+  dashboard override (in project.json) that replaces it.
+- What does "reset to default" do? **It removes the override**, so the built-in
+  shows again.
+
+The Tracker home must still show Overdue, Due in the next N days, People, and
+Needs a name or a date, with the scope picker (Everyone / Assigned by me / Out
+with others).
 
 ## Acceptance criteria
 
-_(not refined yet)_
+- [ ] The Tracker chip (and its F-key) opens the Tracker home as a standard dashboard (the same grid, header and tile settings as every other dashboard), both in standalone TicketDesk and on a project page with the Tracker beside it
+- [ ] With no override saved, the home is the built-in default: Overdue, Due in the next 7 days, Who has what (people), and Needs a name or a date
+- [ ] A record list tile lists a store's open records through a built-in view or a filter, sorted (worst first for Overdue, soonest first by target date), with a count, a line saying what empty means, and "Open as a list"; a click on a row opens the record as a tab in the dashboard's tile, Ctrl/⌘-click opens it the modified way, and Enter/Space does what a click does
+- [ ] Right-clicking a list row shows the menu the old Tracker rows had: Open, Open beside, Open in a window, Everything on <assignee>, Everything in this project, Copy reference, Delete…, and each entry does what it says
+- [ ] A people tile shows open items grouped by assignee, worst first (overdue count, then how late), with Nobody as a row of its own, and overdue / undated / next-date pills; a click opens a flat list of that person's open items
+- [ ] A scope picker (Everyone / Assigned by me / Out with others) sits in the dashboard's header; every tile on it (chart, KPI, list, people) follows the scope, a click-through list carries it, and the choice is kept with the tab across a reload
+- [ ] List and people tiles can be added to any dashboard ("Add list", "Add people") and configured in the tile's settings (records, view or filter, sort, how many rows)
+- [ ] Editing the built-in home (moving, resizing, adding, removing or configuring a tile) saves an override in the tracker's project.json that replaces the built-in; the header then says it is customised and offers "Reset to default"
+- [ ] "Reset to default" asks first, removes the override from project.json, and shows the built-in again without a reload; the override is never listed as an ordinary dashboard in the rail
+- [ ] The list tile, the people tile and the scope picker are FlexDesk's (`@flexdesk/tiles`), with FlexDesk tests, released to npm and synced into BugDesk (`sync-flexdesk.mjs --check` passes); BugDesk adds only the data adapter and the row actions
+- [ ] With the Tracker switched off (STORY-0043), the Tracker home is not reachable and nothing in it is deleted; switched back on, an override saved before is used again
+- [ ] The in-app help, README and CHANGELOG describe the Tracker home dashboard, the list and people tiles, the scope picker and Reset to default
+
+## History
+
+- 2026-10-17 · norman_agent · status: draft -> refined
+- 2026-10-17 · norman_agent · status: refined -> in-progress
+- 2026-10-17 · norman_agent · assignee: (unset) -> norman_agent
 
 ## Comments
 
 ### 2026-10-16T06:30Z · norman_agent
 
 Filed at norman's request under EPIC-0045. Probably the largest of the three, because the tile types it needs don't exist yet.
+
+### 2026-10-17T10:08Z · norman_agent
+
+Refined with norman's answers of 2026-10-17 (see the description): the new
+tiles and the scope filter go upstream into FlexDesk; the Tracker home is a
+built-in default whose edits save a project.json override, and Reset removes
+it. 12 criteria, 8 points, under EPIC-0045. Taking it on in the ultra/track-A
+worktree.
