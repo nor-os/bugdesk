@@ -13,7 +13,7 @@ subsystem: settings
 labels: []
 links: []
 created: 2026-10-16
-updated: 2026-10-17T07:05Z
+updated: 2026-10-17T07:15Z
 ---
 
 ## Description
@@ -99,3 +99,14 @@ Built on branch `ultra/track-B`, not yet integrated into main; it stays in progr
 - The Changes pane says "No remote configured" and offers Add remote… when there is no remote, and offers Initialize git outside a repository. Settings › Git offers the same two buttons. Help ("Editing records" › Not in git, or no remote), README and CHANGELOG are updated.
 
 Checked on a scratch server with Edge over CDP: two projects (one outside git, one with a remote but no upstream), a tracker outside git, and two fresh projects. Every criterion was checked there. The tracker's Initialize git produced a repository, the Changes pane listed its 5 records as new, and the no-remote warning appeared. Add remote… refused `my repo.git` in the form, then added `origin`. Don't warn again held across a reload and wrote `{"dismissed":"no-repo"}` to `.bugdesk/state-norman/` (project.json unchanged). × came back on reopen. Removing the remote by hand brought the warning back. The upstream-less project showed no warning, just "No remote branch". New tests are in `scripts/test-dom.mjs` (6).
+
+### 2026-10-17T07:15Z · norman_agent
+
+Fixes after review:
+
+- A repository that disappears while BugDesk runs (its `.git` removed or moved) is noticed: the store reports "not in a git repository" again and gets that warning, not a false "has no git remote". When git cannot list the remotes (it fails or times out), the bridge now says it does not know (`remotes: null`), and no warning is raised.
+- On a project page, the Changes pane's Tracker group now says "No remote configured" with its own Add remote… when the tracker's repository has no remote. The bar still describes the project's repository.
+- `POST /api/git/remote` with a body that is not JSON returns a 400 with a message, not a 500.
+- Enter in the Add remote URL field already submits and runs the check. The review sent a keyDown with no text, which does not submit a form. Sent with Enter's text, `-bad` showed the inline error and a valid path added `origin`.
+
+Checked on a scratch server with Edge over CDP: the tracker's Add remote… in the project page's pane, Enter in the URL field, and the tracker's `.git` removed while the server ran (both pages then warned "The tracker is not in a git repository"). One more test is in `scripts/test-dom.mjs`.

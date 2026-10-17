@@ -1922,8 +1922,11 @@ app.MapPost("/api/git/init", () =>
 
 app.MapPost("/api/git/remote", async (HttpRequest req) =>
 {
-    var body = await JsonSerializer.DeserializeAsync<Dictionary<string, JsonElement>>(req.Body, json) ?? new();
+    Dictionary<string, JsonElement> body;
+    try { body = await JsonSerializer.DeserializeAsync<Dictionary<string, JsonElement>>(req.Body, json) ?? new(); }
+    catch (JsonException) { return Results.Json(new { ok = false, error = "the body must be JSON, with the remote's url" }, json, statusCode: 400); }
     var store = Req.Store;
+    store.RefreshGit();
     if (!store.Git.Enabled) return Results.Json(new { ok = false, error = "this store is not in a git repository" }, json, statusCode: 409);
     var url = body.TryGetValue("url", out var uv) && uv.ValueKind == JsonValueKind.String ? uv.GetString() ?? "" : "";
     var error = store.Git.AddRemote(url);

@@ -45,11 +45,12 @@ sealed class Store : IDisposable
     public GitService Git => _git ??= new GitService(BugsDir, BacklogDir) { ConfigDir = ConfigDir };
     GitService? _git;
 
-    /// <summary>Look for the repository again when there was none: somebody may
-    /// have run <c>git init</c> since — here (Initialize git) or by hand.</summary>
+    /// <summary>Look for the repository again when there was none — somebody may
+    /// have run <c>git init</c> since, here (Initialize git) or by hand — or when
+    /// the one found has gone (its <c>.git</c> removed or moved).</summary>
     public void RefreshGit()
     {
-        if (_git is { Enabled: false }) _git = null;
+        if (_git is { Enabled: false } or { StillThere: false }) _git = null;
     }
 
     /// <summary>Where Initialize git puts a repository (STORY-0049): the folder

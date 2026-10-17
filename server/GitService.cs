@@ -198,13 +198,21 @@ sealed class GitService
 
     /// <summary>The repository's remotes, by name; empty when it has none at all
     /// — which is not the same as the branch having no upstream (<see cref="Ahead"/>
-    /// is -1 for both). Settings › Git and the warnings tell the two apart (STORY-0049).</summary>
-    public List<string> Remotes()
+    /// is -1 for both). Settings › Git and the warnings tell the two apart (STORY-0049).
+    /// Null when git could not say (it failed, or timed out): not knowing is
+    /// not "no remote", and must not raise that warning.</summary>
+    public List<string>? Remotes()
     {
         if (Root is null) return new();
         var (ok, output, _) = Run(Root, Timeout, "remote");
-        return ok ? output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList() : new();
+        return ok ? output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList() : null;
     }
+
+    /// <summary>Is the repository found at start still there? Somebody may have
+    /// removed or moved its <c>.git</c> while BugDesk runs (a worktree's or
+    /// submodule's <c>.git</c> is a file).</summary>
+    public bool StillThere => Root is not null
+        && (Directory.Exists(Path.Combine(Root, ".git")) || File.Exists(Path.Combine(Root, ".git")));
 
     /// <summary>
     /// Add <paramref name="url"/> as the repository's <c>origin</c>. Offered only
@@ -221,7 +229,9 @@ sealed class GitService
             return $"'{url}' is not a remote URL: it may not contain spaces or start with '-'.";
         lock (_gate)
         {
-            if (Remotes().Count > 0) return "This repository already has a remote.";
+            var remotes = Remotes();
+            if (remotes is null) return "git could not list this repository's remotes.";
+            if (remotes.Count > 0) return "This repository already has a remote.";
             var (ok, _, err) = Run(Root, Timeout, "remote", "add", "origin", url);
             return ok ? null : err.Trim();
         }

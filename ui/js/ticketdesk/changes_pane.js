@@ -114,6 +114,8 @@ export function mountChangesPane(host, { eventBus = null, sources = null, onCoun
         ? `<button type="button" class="ea-btn bd-changes__init" data-init="${si}" ${busy ? 'disabled' : ''}
             title="git init in ${esc(srcs[si].state.home || 'the store\'s folder')}">${icon('add_circle')} Initialize git</button>` : '');
     const noRemote = (st) => Array.isArray(st.remotes) && st.remotes.length === 0;
+    // Add remote…, for the source at `si` (the bar's is the page's own).
+    const remoteButton = (si) => `<button type="button" class="ea-btn bd-changes__remote" data-remote="${si}" ${busy ? 'disabled' : ''}>${icon('add_link')} Add remote…</button>`;
 
     const fileRow = ({ s, f, key }) => {
         const t = s.texts.get(f.path);
@@ -147,10 +149,19 @@ export function mountChangesPane(host, { eventBus = null, sources = null, onCoun
             }
             const halves = s.inst.IS_TRACKER_COPY ? [['all', st.files]]
                 : [['bugs', st.files.filter((f) => f.store === 'bugs')], ['backlog', st.files.filter((f) => f.store !== 'bugs')]];
+            let shown = false;
             for (const [half, files] of halves) {
                 if (!files.length) continue;
+                shown = true;
                 groups.push(`<div class="bd-changes__group">${esc(s.inst.storeLabelOf(half).toUpperCase())}<span>${files.length}</span></div>`
                     + files.map((f) => fileRow({ s, f, key: keyOf(si, f.path) })).join(''));
+            }
+            // The bar speaks for the page's own repository; another store's
+            // repository with no remote says so in its group (the tracker's,
+            // on a project page), with its own Add remote….
+            if (si > 0 && noRemote(st)) {
+                if (!shown) groups.push(`<div class="bd-changes__group">${esc(s.inst.storeLabelOf(s.inst.IS_TRACKER_COPY ? 'all' : 'backlog').toUpperCase())}</div>`);
+                groups.push(`<div class="bd-changes__note">No remote configured, so its commits stay on this computer. ${remoteButton(si)}</div>`);
             }
         });
         const any = allFiles().length > 0;
@@ -213,7 +224,7 @@ export function mountChangesPane(host, { eventBus = null, sources = null, onCoun
             <div class="bd-changes__bar">
                 <span class="bd-changes__branch">${icon('fork_right')}${esc(st.branch || '?')}</span>
                 <span class="td-dim">${esc(ahead)}</span>
-                ${noRemote(st) ? `<button type="button" class="ea-btn bd-changes__remote" data-act="remote" ${busy ? 'disabled' : ''}>${icon('add_link')} Add remote…</button>` : ''}
+                ${noRemote(st) ? remoteButton(0) : ''}
                 <span class="td-spacer"></span>
                 <div class="bd-changes__auto" role="group" aria-label="Automatic commits">
                     <span class="bd-changes__autolabel">AUTO</span>
@@ -381,8 +392,9 @@ export function mountChangesPane(host, { eventBus = null, sources = null, onCoun
         }
         const disc = e.target.closest('[data-discard]')?.dataset.discard;
         const init = e.target.closest('[data-init]')?.dataset.init;
+        const remote = e.target.closest('[data-remote]')?.dataset.remote;
         const act = e.target.closest('[data-act]')?.dataset.act;
-        if (!disc && !act && init === undefined) return;
+        if (!disc && !act && init === undefined && remote === undefined) return;
         if (act === 'refresh') { refresh(); return; }
         busy = true; error = '';
         render();
@@ -392,9 +404,10 @@ export function mountChangesPane(host, { eventBus = null, sources = null, onCoun
                 const s = srcs[Number(init)];
                 s.state = await initRepo(s.api);
                 eventBus?.emit?.(s.inst.ev('git:changed'), {});
-            } else if (act === 'remote') {
-                const next = await promptRemote(main.api);
-                if (next) { main.state = next; eventBus?.emit?.(main.inst.ev('git:changed'), {}); }
+            } else if (remote !== undefined) {
+                const s = srcs[Number(remote)];
+                const next = await promptRemote(s.api);
+                if (next) { s.state = next; eventBus?.emit?.(s.inst.ev('git:changed'), {}); }
             } else if (act === 'commit') await commit();
             else if (act === 'push') main.state = await callAt(main.api, '/git/push', {});
         } catch (err) { error = err.message; }

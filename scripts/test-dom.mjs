@@ -3782,6 +3782,7 @@ console.log('\nGit warnings: no repository, no remote (STORY-0049)');
         assert.equal(gw.gitCondition({ ok: true, enabled: true, remotes: ['origin'], ahead: 0 }), null);
         assert.equal(gw.gitCondition(null), null, 'a bridge that could not be asked says nothing');
         assert.equal(gw.gitCondition({ ok: true, enabled: true }), null, 'a bridge too old to list remotes says nothing');
+        assert.equal(gw.gitCondition({ ok: true, enabled: true, remotes: null }), null, 'git could not list the remotes: not "no remote"');
     });
 
     await t('a dismissal holds for its own condition only, and is forgotten once the condition changes', () => {
@@ -3919,13 +3920,41 @@ console.log('\nGit warnings: no repository, no remote (STORY-0049)');
             await settle();
             assert.deepEqual(b.posted, ['init']);
             assert.match(host.querySelector('.bd-changes__bar').textContent, /No remote configured, so nothing to push/);
-            assert.ok(host.querySelector('[data-act="remote"]'), 'no Add remote… with no remote');
+            assert.ok(host.querySelector('[data-remote="0"]'), 'no Add remote… with no remote');
             assert.equal(host.querySelector('[data-act="push"]').title, 'This repository has no remote');
             // A remote but no upstream: the passive line, no button.
             b.state = { ...b.state, remotes: ['origin'], ahead: -1 };
             await pane.refresh();
             assert.match(host.querySelector('.bd-changes__bar').textContent, /No remote branch, so nothing to push/);
-            assert.equal(host.querySelector('[data-act="remote"]'), null);
+            assert.equal(host.querySelector('[data-remote="0"]'), null);
+        } finally {
+            pane.destroy();
+            host.remove();
+            globalThis.fetch = realFetch;
+        }
+    });
+
+    await t('on a project page the tracker\'s repository with no remote gets its own Add remote… in the pane', async () => {
+        const page = bridge({ ok: true, enabled: true, root: '/p', home: '/p', remotes: ['origin'], ahead: -1, branch: 'main', files: [], others: [] });
+        const tracker = bridge({ ok: true, enabled: true, root: '/t', home: '/t', remotes: [], ahead: -1, branch: 'master', files: [], others: [] });
+        const inst = (b, isTracker) => ({
+            IS_TRACKER_COPY: isTracker, ev: (n) => n, storeLabelOf: (h) => (isTracker ? 'Tracker' : h === 'bugs' ? 'Bugs' : 'Backlog'),
+            apiUrl: (p) => `${isTracker ? '/t' : '/p/x'}/api${p}`,
+        });
+        const realFetch = globalThis.fetch;
+        globalThis.fetch = (url, init) => (String(url).startsWith('/t/') ? tracker : page).fetch(url, init);
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        const pane = (await import(join(UI, 'ticketdesk', 'changes_pane.js'))).mountChangesPane(host, { sources: [{ inst: inst(page, false) }, { inst: inst(tracker, true) }] });
+        try {
+            await settle();
+            assert.match(host.querySelector('.bd-changes__bar').textContent, /No remote branch, so nothing to push/);
+            assert.equal(host.querySelector('.bd-changes__bar [data-remote]'), null, 'the bar offered Add remote… for a repository with a remote');
+            assert.match(host.querySelector('.bd-changes__list').textContent, /TRACKER[\s\S]*No remote configured/);
+            assert.ok(host.querySelector('.bd-changes__list [data-remote="1"]'), 'no Add remote… for the tracker');
+            tracker.state = { ...tracker.state, remotes: ['origin'] };
+            await pane.refresh();
+            assert.equal(host.querySelector('[data-remote]'), null, 'Add remote… stayed after the tracker got a remote');
         } finally {
             pane.destroy();
             host.remove();
