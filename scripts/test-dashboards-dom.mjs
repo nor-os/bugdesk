@@ -980,9 +980,10 @@ await t('a list and a people tile are added, configured and saved like any tile'
     list._onConfigClick();
     let form = await fillForm({ bd_source: 'backlog' });
     assert.ok(!form.querySelector('[name="bd_plot"]'), 'a list tile asks what to plot');
-    assert.deepEqual(options(form, 'bd_sort'), ['due', 'updated', 'created', 'ref']);
+    assert.deepEqual(options(form, 'bd_sort_backlog'), ['due', 'updated', 'created', 'ref']);
+    assert.deepEqual(options(form, 'bd_sort_bugs'), ['updated', 'created', 'ref'], 'bugs have no target date to order by');
     assert.ok(form.querySelector('[name="empty_text"]') && form.querySelector('[name="max_rows"]'), 'FlexDesk\'s own settings are not offered');
-    form = await fillForm({ bd_source: 'backlog', bd_t_backlog_story: true, bd_sort: 'ref', title: 'Stories', empty_text: 'No stories.' });
+    form = await fillForm({ bd_source: 'backlog', bd_t_backlog_story: true, bd_sort_backlog: 'ref', title: 'Stories', empty_text: 'No stories.' });
     await submit(form);
     assert.deepEqual([...list.contentElement.querySelectorAll('[data-row-key]')].map((r) => r.dataset.rowKey), ['1', '2']);
     assert.match(list.contentElement.textContent, /STORY-0001.*Item 1.*ann/s);

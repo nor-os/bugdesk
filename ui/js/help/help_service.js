@@ -474,7 +474,8 @@ remove, move and resize tiles, and configure each one:
 - **KPI**: a single count, sum or average.
 - **List** (**Add list**): the records themselves, open ones only unless
   you say otherwise, in target-date order (the most late first) or by
-  update, creation or reference. Click a row to open it as a tab beside
+  update, creation or reference (bugs have no target date: newest update
+  first). Click a row to open it as a tab beside
   the dashboard, right-click for more; **Open as a list** opens them all.
 - **People** (**Add people**): the open records grouped by assignee,
   the most overdue first, with *Nobody* as a row of its own. Click a

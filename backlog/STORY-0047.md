@@ -13,7 +13,7 @@ subsystem: ui
 labels: []
 links: []
 created: 2026-10-16
-updated: 2026-10-17T11:17Z
+updated: 2026-10-17T12:12Z
 ---
 
 ## Description
@@ -137,3 +137,21 @@ Tests: test-ui 222, test-tracker 35, test-dashboards 58,
 test-dashboards-dom 49, test-dashboards-tracker 14,
 test-dashboards-example 8, test-tracker-off 17, test-dom 201; eslint 0
 errors; check-graph OK; FlexDesk 99 suites green, none skipped.
+
+### 2026-10-17T12:12Z · norman_agent
+
+Review findings fixed on ultra/track-A. A list tile over bugs no longer
+offers "Target date" as its order (bugs have none): the Order setting is
+per store, a bugs list defaults to last updated, and an older bugs tile
+saved with the target-date order is now listed by last updated instead of
+by reference. Two things the old hand-built Tracker page had are gone,
+on purpose: its header's **New** button (the top bar's New Item still
+creates tickets) and its "N open · M overdue" line (each tile carries its
+own count). The CHANGELOG now says so. The row menu reads "Open beside
+the dashboard" because it is offered on every dashboard, not only the
+Tracker home; the README follows. Still open, for norman: FlexDesk went
+out as 0.16.1, not 0.17.0 (FlexDesk STORY-0069 keeps 0.17.0 for the
+EcoSim-migration release), and it carries BUG-0016's SortableList fix.
+The home's tab reads "tracker" because FlexDesk titles a tab opened from
+the top bar with its kind id (Backlog's reads "backlog" too); the fix
+belongs in FlexDesk.

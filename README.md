@@ -938,7 +938,7 @@ see who had it; losing the list of everything else that was late is not a
 reasonable price.
 
 Not a split, either: two half-width tiles means a ticket whose description wraps
-every four words. **Open beside the tracker** is in the right-click menu for when
+every four words. **Open beside the dashboard** is in the right-click menu for when
 you do want them side by side — a deliberate choice rather than the default.
 
 ### The project level

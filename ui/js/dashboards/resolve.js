@@ -238,7 +238,8 @@ export function sortRows(src, rows, sort = 'due') {
     const stamp = (get) => (r) => String(get?.(r) || '');
     const desc = (get) => (a, b) => (stamp(get)(b) || '').localeCompare(stamp(get)(a) || '') || ref(a, b);
     const out = [...rows];
-    if (sort === 'updated') return out.sort(desc(src.updatedOf));
+    // By target date over a store that has none (bugs): last updated instead.
+    if (sort === 'updated' || (sort === 'due' && !src.dueOf)) return out.sort(desc(src.updatedOf));
     if (sort === 'created') return out.sort(desc(src.createdOf));
     if (sort === 'due' && src.dueOf) {
         return out.sort((a, b) => {

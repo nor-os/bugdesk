@@ -44,10 +44,13 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (`home-tracker`), which then replaces the default for everyone; **Reset to
   default** in its header removes it, after asking. The override is not listed
   in any rail. The hand-built Tracker page (`ticketdesk/tracker_pages.js`) is
-  gone. Two new tile types, on every dashboard: **List** (records through a
-  view or a filter, sorted, with a count, *Open as a list*, a click that opens
-  the record as a tab beside the dashboard, and the old Tracker row menu on
-  right-click) and **People** (open records by assignee, the most overdue
+  gone, and with it two things its header had: the **New** button (the top
+  bar's *New Item* still creates tickets) and the "N open · M overdue" line
+  (each tile now carries its own count). Two new tile types, on every
+  dashboard: **List** (records through a view or a filter, sorted, with a
+  count, *Open as a list*, a click that opens the record as a tab beside the
+  dashboard, and the old Tracker row menu on right-click; a list of bugs, which
+  have no target date, is ordered by last updated) and **People** (open records by assignee, the most overdue
   first). Every dashboard gets **Everyone / Assigned by me / Out with others**
   in its header: every tile follows it, a click-through carries it, and the tab
   keeps it. The tiles and the scope picker are FlexDesk's (`flexdesk.list`,

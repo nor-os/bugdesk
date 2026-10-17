@@ -145,6 +145,11 @@ export function dataFields(sources, binding, kind, preferred = null) {
     return { fields, defaults };
 }
 
+/** The orders a list over `src` can take: by target date only where the store has them. */
+const listSortsOf = (src) => (src.dueOf ? LIST_SORTS
+    : Object.fromEntries(Object.entries(LIST_SORTS).filter(([value]) => value !== 'due')));
+const defaultSortOf = (src) => (src.dueOf ? 'due' : 'updated');
+
 /** The types and filter of each store, and a list's order: a list or people tile's data part. */
 function rowsFields(sources, binding, kind, fields, defaults) {
     for (const src of sources) {
@@ -158,11 +163,15 @@ function rowsFields(sources, binding, kind, fields, defaults) {
             options: filterOptions(src, mine),
             hint: 'A saved filter is copied into the tile, so everyone who sees the tile sees the same records.' });
         defaults[`bd_filter_${src.id}`] = filterValue(mine);
+        // A store without target dates (bugs) is not offered an order by them.
+        if (kind === 'list') {
+            const sorts = listSortsOf(src);
+            fields.push({ name: `bd_sort_${src.id}`, label: 'Order', type: 'select',
+                options: Object.entries(sorts).map(([value, label]) => ({ value, label })) });
+            defaults[`bd_sort_${src.id}`] = sorts[mine?.sort] ? mine.sort : defaultSortOf(src);
+        }
     }
     if (kind === 'list') {
-        fields.push({ name: 'bd_sort', label: 'Order', type: 'select',
-            options: Object.entries(LIST_SORTS).map(([value, label]) => ({ value, label })) });
-        defaults.bd_sort = LIST_SORTS[binding?.sort] ? binding.sort : 'due';
         fields.push({ name: 'bd_open', label: 'Open records only', type: 'checkbox',
             hint: 'Leave a finished record out even when the filter would list it.' });
         defaults.bd_open = binding?.open !== false;
@@ -180,6 +189,7 @@ export function syncVisibility(api, sources, kind) {
             api.setVisible(`bd_types_${src.id}`, on);
             for (const t of src.types()) api.setVisible(typeName(src, t.value), on);
             api.setVisible(`bd_filter_${src.id}`, on);
+            api.setVisible(`bd_sort_${src.id}`, on);
         }
         return;
     }
@@ -234,7 +244,8 @@ export function bindingFrom(result, sources, kind, previous) {
     } else if (f === 'keep' && previous?.filter?.expr) binding.filter = previous.filter;
     if (isRows(kind)) {
         if (kind === 'list') {
-            binding.sort = LIST_SORTS[result.bd_sort] ? result.bd_sort : 'due';
+            const sort = result[`bd_sort_${src.id}`];
+            binding.sort = listSortsOf(src)[sort] ? sort : defaultSortOf(src);
             if (result.bd_open === false) binding.open = false;
         }
         return binding;

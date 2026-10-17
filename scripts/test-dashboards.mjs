@@ -495,6 +495,12 @@ ta('a list tile\'s other orders', async () => {
     assert.deepEqual(keys(await listOf({ sort: 'ref' })), ['1', '2', '4', '5']);
 });
 
+ta('a list over a store without target dates (bugs) orders "by target date" by last updated', async () => {
+    const undated = { ...rowsSource(LIST_ROWS), dueOf: undefined };
+    const r = await resolve.resolveTile(undated, { source: 'bugs', sort: 'due' }, { kind: 'list', today: '2026-10-08' });
+    assert.deepEqual(keys(r), ['2', '4', '1', '5']);
+});
+
 ta('every tile follows the board\'s scope: a list, a KPI and a chart', async () => {
     assert.deepEqual(keys(await listOf({}, { scope: 'byme' })), ['2', '1'], 'Assigned by me reads the reporter');
     assert.deepEqual(keys(await listOf({}, { scope: 'others' })), ['5', '2'], 'Out with others: on somebody else, not on nobody');
