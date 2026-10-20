@@ -28,6 +28,12 @@
  *
  * Styled as the Ctrl+K palette (it reuses its classes): one keyboard model for
  * "type, arrow, Enter" wherever BugDesk offers it.
+ *
+ * PAGE CHROME, and only BugDesk's own page's. It is reached from install.js's
+ * top bar alone, never from the content kinds, so a copy embedded in another
+ * application (README, "Embedding BugDesk") never loads it — and must not: a
+ * switch here navigates the whole window to another /p/<name>/. So its `api/`
+ * stays relative to the page and its project is the page-wide config's.
  */
 
 const ROOT_ID = 'twm-projects';

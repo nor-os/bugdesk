@@ -27,7 +27,7 @@
  * Nothing here is a copy of any of them.
  */
 
-import { CONFIG, apiUrl, ev, storeLabelOf, IS_TRACKER_COPY } from './instance.js';
+import { CONFIG, apiUrl, busEvent, ev, storeLabelOf, IS_TRACKER_COPY } from './instance.js';
 import { createAlertLog, mountAlertsPane } from '@flexdesk/widgets';
 import { esc } from './data.js';
 import { appName } from '../core/app_identity.js';
@@ -213,7 +213,7 @@ export async function installAlerts({ eventBus } = {}) {
         }, 300);
     };
     // A change from outside: live.js has already reloaded the stores.
-    for (const name of ['bugs:changed', ev('backlog:changed'), ev('store:changed')]) eventBus?.on?.(name, () => soon(false));
+    for (const name of [busEvent('bugs:changed'), ev('backlog:changed'), ev('store:changed')]) eventBus?.on?.(name, () => soon(false));
     // A save from this page: the stores may not have been reloaded.
     window.addEventListener('bugdesk:saved', () => soon(true));
 }

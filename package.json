@@ -10,7 +10,7 @@
     "check:flexdesk": "node scripts/sync-flexdesk.mjs --check",
     "check:graph": "node scripts/check-graph.mjs",
     "lint": "eslint ui/js scripts",
-    "test": "node scripts/check-graph.mjs && eslint ui/js scripts && node scripts/test-ui.mjs && node scripts/test-tracker.mjs && node scripts/test-dashboards.mjs && node scripts/test-dom.mjs && node scripts/test-dashboards-dom.mjs && node scripts/test-dashboards-tracker.mjs && node scripts/test-dashboards-example.mjs && node scripts/test-tracker-off.mjs"
+    "test": "node scripts/check-graph.mjs && eslint ui/js scripts && node scripts/test-ui.mjs && node scripts/test-tracker.mjs && node scripts/test-dashboards.mjs && node scripts/test-dom.mjs && node scripts/test-dashboards-dom.mjs && node scripts/test-dashboards-tracker.mjs && node scripts/test-dashboards-example.mjs && node scripts/test-tracker-off.mjs && node scripts/test-embed.mjs"
   },
   "devDependencies": {
     "eslint": "^9.39.5",

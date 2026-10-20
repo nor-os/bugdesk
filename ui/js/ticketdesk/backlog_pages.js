@@ -28,6 +28,8 @@ import { showContextMenu } from '@flexdesk/widgets';
 import { renderMarkdown } from './markdown.js';
 import { attachMarkdownEditor } from './md_editor.js';
 import { attachTagInput } from './tag_input.js';
+import { namespaceContent } from '../tiling/kind_taxonomy.js';
+import { setKindPrefix } from '../core/page_config.js';
 import { attachSelect, setRowVisible } from './select_field.js';
 import { mountCustomFields } from './custom_fields.js';
 import {
@@ -69,7 +71,7 @@ import {
     REFINEMENT_RULES, refinementGaps, flatRows, stageActions, stageOf, treeRows,
     typeLabelOf,
 } from './backlog_data.js';
-import { apiUrl, ev, KIND } from './instance.js';
+import { apiUrl, busEvent, ev, KIND } from './instance.js';
 
 /** Set by createBacklogContent at registration, before any mount runs. */
 let _eventBus = null;
@@ -1938,7 +1940,7 @@ function mountItem(host, props, ctx) {
             const { loadData } = await import('./data.js');
             await loadData();
             await broadcast();
-            _eventBus?.emit?.('bugs:changed', { store: 'bugs', id: made.id });
+            _eventBus?.emit?.(busEvent('bugs:changed'), { store: 'bugs', id: made.id });
             live.clear();
             statusLine(`${itemRef(item)} converted to ${made.ref}.`);
             openRow(ctx.wm, ctx, { store: 'bugs', id: made.id });
@@ -2305,10 +2307,13 @@ export function mountBacklogRail(host, ctx) {
  * ticketdesk's — the two own disjoint kinds, so order between them does not
  * matter (unlike the page stubs, which these deliberately shadow).
  */
-export function createBacklogContent({ eventBus } = {}) {
+/** The backlog's kinds: the board / list and the item page. `kindPrefix` as
+ *  for pages.js's createTicketDeskContent — embedded only. */
+export function createBacklogContent({ eventBus, kindPrefix } = {}) {
+    if (kindPrefix !== undefined) setKindPrefix(kindPrefix);
     _eventBus = eventBus || null;
-    return {
+    return namespaceContent({
         [KIND.list]: shell(KIND.list, mountBacklogBoard),
         [KIND.item]: shell(KIND.item, mountItem),
-    };
+    });
 }

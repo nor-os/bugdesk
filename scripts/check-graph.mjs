@@ -33,8 +33,12 @@ const IMPORT_MAP = {
 
 const ENTRIES = [
     `${UI}/js/bootstrap/boot.js`,
+    `${UI}/js/core/page_config.js`,
     `${UI}/js/ticketdesk/first_run.js`,
     `${UI}/js/tiling/install.js`,
+    // Not loaded by index.html: what another FlexDesk application imports to
+    // embed a project (README, "Embedding BugDesk"). Its graph is checked the same way.
+    `${UI}/js/ticketdesk/embed.js`,
 ];
 
 const IMPORT_RE =

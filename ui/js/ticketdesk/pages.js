@@ -39,7 +39,8 @@
  */
 
 import { createBottomPanelTabs, mountTileBreadcrumb } from '@flexdesk/wm';
-import { activeTopNavKind, taxonomy } from '../tiling/kind_taxonomy.js';
+import { activeTopNavKind, namespaceContent, taxonomy } from '../tiling/kind_taxonomy.js';
+import { setKindPrefix } from '../core/page_config.js';
 import { installRecordDragSource, markDragCell, openRecordAs } from './record_dnd.js';
 import { createTable, fileSlug } from './bd_table.js';
 import { openConfirm, showContextMenu } from '@flexdesk/widgets';
@@ -57,7 +58,7 @@ import {
 import { bugRef, displayRef, formatRef, parseKey, parseRef, refKey } from './refs.js';
 import { allRows, canonRef, findRow, openRow, storesAvailable } from './records.js';
 import { renderHistory } from './history.js';
-import { CONFIG, ev, KIND, trackerModule } from './instance.js';
+import { CONFIG, busEvent, ev, KIND, trackerModule } from './instance.js';
 import { attachRecordTypeahead, openRecordPicker } from './item_picker.js';
 import { attachSelect, setRowVisible } from './select_field.js';
 import { mountCustomFields } from './custom_fields.js';
@@ -488,7 +489,7 @@ function mountQueues(host, props, ctx) {
         recordsOf: (indices, t) => indices.map((i) => t.config.rows[i])
             .map((r) => TICKETS.find((x) => x.id === r?.[QUEUE_ID_COL])).filter(Boolean).map(bugRecord),
         report: statusLine,
-        afterChange: async () => { await loadData(); _eventBus?.emit?.('bugs:changed', { store: 'bugs' }); },
+        afterChange: async () => { await loadData(); _eventBus?.emit?.(busEvent('bugs:changed'), { store: 'bugs' }); },
     });
     const table = createTable(host.querySelector('.td-tablehost'), {
         ...mass.tableOptions,
@@ -589,7 +590,7 @@ function mountQueues(host, props, ctx) {
 
     // The store changed under us — a git pull, an agent, somebody's editor.
     // Nobody is mid-sentence in a table, so this simply repaints.
-    const liveSub = _eventBus?.on?.('bugs:changed', () => {
+    const liveSub = _eventBus?.on?.(busEvent('bugs:changed'), () => {
         table.setData({ rows: TICKETS.filter(resolved.match).map(queueRow) });
     });
 
@@ -660,7 +661,7 @@ async function runStatusMenuAction(action, bug) {
         if (!saved) { statusLine('Status unchanged.'); return; }
         statusLine(`Bug ${bug.id}: ${humanizeStatus(bug.rawStatus)} → ${humanizeStatus(target)}.`);
         await loadData();
-        _eventBus?.emit?.('bugs:changed', { store: 'bugs', id: bug.bugId });
+        _eventBus?.emit?.(busEvent('bugs:changed'), { store: 'bugs', id: bug.bugId });
     } catch (err) {
         statusLine(`Could not move bug ${bug.id}: ${err?.message || err}`);
     }
@@ -682,7 +683,7 @@ async function runBugAction(bug, id) {
         await patchBug(bug.bugId, patch);
         statusLine(`Bug ${bug.id}: ${act.label}.`);
         await loadData();
-        _eventBus?.emit?.('bugs:changed', { store: 'bugs', id: bug.bugId });
+        _eventBus?.emit?.(busEvent('bugs:changed'), { store: 'bugs', id: bug.bugId });
     } catch (err) {
         statusLine(`${act.label} failed on bug ${bug.id}: ${err?.message || err}`);
     }
@@ -734,7 +735,7 @@ async function confirmDeleteBug(bug) {
         await deleteBug(bug.bugId);
         statusLine(`Bug #${bug.bugId} deleted (moved to the trash).`);
         await loadData();
-        _eventBus?.emit?.('bugs:changed', { store: 'bugs', id: bug.bugId });
+        _eventBus?.emit?.(busEvent('bugs:changed'), { store: 'bugs', id: bug.bugId });
         return true;
     } catch (err) {
         statusLine(`Could not delete bug #${bug.bugId}: ${err?.message || err}`);
@@ -1245,7 +1246,7 @@ function mountTicket(host, props, ctx) {
                 afterChange: async () => {
                     await loadData();
                     try { await loadBacklog(); } catch { /* backlog-less store */ }
-                    _eventBus?.emit?.('bugs:changed', { store: 'bugs' });
+                    _eventBus?.emit?.(busEvent('bugs:changed'), { store: 'bugs' });
                     _eventBus?.emit?.(ev('backlog:changed'), {});
                     doSearch();
                 },
@@ -1792,7 +1793,7 @@ function mountTicket(host, props, ctx) {
             if (!made) { statusLine('Not converted.'); return; }
             await loadData();
             await loadBacklog();
-            _eventBus?.emit?.('bugs:changed', { store: 'bugs', id: t.bugId });
+            _eventBus?.emit?.(busEvent('bugs:changed'), { store: 'bugs', id: t.bugId });
             _eventBus?.emit?.(ev('backlog:changed'), { id: made.id });
             live.clear();
             statusLine(`#${t.bugId} converted to ${made.ref}.`);
@@ -1963,7 +1964,10 @@ function mountTicketNav(host, props, ctx) {
         try { backlogRail?.destroy(); } catch { /* not mounted */ }
         backlogRail = null;
         body.innerHTML = '';
-        showDashboards(next);
+        // A host that embeds this rail without BugDesk's dashboards (README,
+        // "Embedding BugDesk") turns their group off: its rows would open kinds
+        // the host never registered.
+        if (props?.dashboards !== false) showDashboards(next);
         if (next === 'bugs') { renderFilters(); mounted = mine; return; }
         // Imported lazily so the bug rail — the thing on screen at boot — never
         // waits on the backlog module to parse.
@@ -1978,6 +1982,9 @@ function mountTicketNav(host, props, ctx) {
     /** Follow the top nav. An unresolvable section (nothing focused yet) leaves
      *  whatever is already showing rather than flickering back to Bugs. */
     const syncToTopNav = () => {
+        // A host that mounts this rail for one section (its own Bugs or Backlog
+        // mode, README "Embedding BugDesk") pins it with `props.section`.
+        if (props?.section === 'bugs' || props?.section === 'backlog') { show(props.section); return; }
         const topNav = activeTopNavKind(getWm());
         if (!topNav) { if (!shown) show('bugs'); return; }
         // The Tracker dashboard is a view over the backlog store, so it gets the
@@ -2293,8 +2300,8 @@ function mountTicketInspector(host, props, ctx) {
     const sub = _eventBus?.on?.('wm:changed', () => render());
     const backlogSub = _eventBus?.on?.(ev('backlog:changed'), () => render({ force: true }));
     const trackerSub = MERGED_TRACKER
-        ? _eventBus?.on?.('tracker/backlog:changed', () => render({ force: true })) : null;
-    const bugSub = _eventBus?.on?.('bugs:changed', () => render({ force: true }));
+        ? _eventBus?.on?.(busEvent('tracker/backlog:changed'), () => render({ force: true })) : null;
+    const bugSub = _eventBus?.on?.(busEvent('bugs:changed'), () => render({ force: true }));
     return {
         title: 'Inspector',
         destroy: () => {
@@ -2438,7 +2445,17 @@ export function useEventBus(eventBus) {
     _eventBus = eventBus || null;
 }
 
-export function createTicketDeskContent({ eventBus } = {}) {
+/**
+ * @param {object} [o]
+ * @param {object} [o.eventBus]   the bus every page of this copy talks on
+ * @param {string} [o.kindPrefix] EMBEDDED ONLY (README, "Embedding BugDesk"):
+ *        register and open this copy's kinds as `<kindPrefix><kind>`, and scope
+ *        its store events the same way, so two projects can share one shell.
+ *        Set once per project; BugDesk's own page passes none.
+ * @returns {Object<string, Function>} `{ kind: factory }`
+ */
+export function createTicketDeskContent({ eventBus, kindPrefix } = {}) {
+    if (kindPrefix !== undefined) setKindPrefix(kindPrefix);
     _eventBus = eventBus || null;
     // Pull the user's custom filters. This is deliberately NOT awaited —
     // createTicketDeskContent is synchronous and install.js builds the
@@ -2465,5 +2482,5 @@ export function createTicketDeskContent({ eventBus } = {}) {
     register('panel:right', mountTicketInspector);
     register('panel:bottom', mountTicketBottomPanel);
 
-    return content;
+    return namespaceContent(content);
 }

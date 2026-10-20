@@ -25,6 +25,7 @@
  */
 
 import { getSetting } from '../core/settings.js';
+import { kindPrefix, nsKind } from '../core/page_config.js';
 
 /** Our own type, so a drag from anywhere else is ignored rather than guessed at. */
 export const RECORD_MIME = 'application/x-bugdesk-record';
@@ -161,8 +162,12 @@ export function installRecordDragSource(host, resolve) {
     if (!host) return { destroy() {} };
 
     const onDragStart = (ev) => {
-        const payload = resolve(ev.target);
-        if (!payload?.kind) return;
+        const resolved = resolve(ev.target);
+        if (!resolved?.kind) return;
+        // The kind as the WM it is dropped on knows it: namespaced when this copy
+        // is embedded under a prefix (core/page_config.js), so a record dragged
+        // from one project's list opens that project's page wherever it lands.
+        const payload = { ...resolved, kind: nsKind(resolved.kind) };
         try {
             ev.dataTransfer.setData(RECORD_MIME, JSON.stringify(payload));
             // The outside-the-app fallback. Firefox also refuses to start a
@@ -253,6 +258,9 @@ export function installRecordDropTargets({ wm } = {}) {
 
     const onDrop = (ev) => {
         const payload = readRecordDrag(ev);
+        // Under a prefix, every embedded project installs this pair: each opens
+        // only its own records, or one drop would open the record twice.
+        if (payload && kindPrefix() && !String(payload.kind).startsWith(kindPrefix())) return;
         const hit = tileUnder(ev.target);
         clear();
         if (!payload || !hit) return;

@@ -36,10 +36,13 @@ export const STAGES = ['Open', 'Investigation', 'Testing', 'Closed'];
  * and an agent (investigates, typically via the /bugs skill).
  *
  * Resolution order, highest precedence first:
- *   1. window.__BUGDESK_CONFIG__ — index.html populates this from
+ *   1. this copy's config (instance.js's CONFIG) — on BugDesk's own page
+ *      window.__BUGDESK_CONFIG__, which index.html populates from
  *      GET /api/config before this module (or anything that imports it) is
- *      ever evaluated, so it's already resolved by the time we read it here.
- *      This is THE PROFILE ON DISK, and it is the source of truth.
+ *      ever evaluated; embedded in another application, the copy fetches it
+ *      from its own API before then (core/page_config.js). Either way it is
+ *      resolved by the time we read it here. This is THE PROFILE ON DISK,
+ *      and it is the source of truth.
  *   2. the settings store's `bugdesk.humanName` / `bugdesk.agentName` — a
  *      per-browser value set from Settings → General → Authorship
  *      (core/settings.js). A FALLBACK, for a run with no reachable bridge.

@@ -11,10 +11,15 @@
  * imports) is evaluated BEFORE index.html has resolved the config, so a
  * module-level constant would always say BugDesk. The first-run prompt runs
  * before the config exists at all, so it passes the app in.
+ *
+ * The config is THIS COPY'S (core/page_config.js): the page's own on BugDesk's
+ * page, the one fetched from the copy's own API when embedded in another
+ * application, where the page-wide global is not BugDesk's to read.
  */
 
-const currentApp = () =>
-    (typeof window !== 'undefined' && window.__BUGDESK_CONFIG__?.app) || 'bugdesk';
+import { pageConfig } from './page_config.js';
+
+const currentApp = () => pageConfig().app || 'bugdesk';
 
 /** "BugDesk" or "TicketDesk". */
 export function appName(app = currentApp()) {
@@ -35,7 +40,7 @@ export function appSlug(app = currentApp()) {
  * @param {'bugs'|'backlog'} half
  */
 export function storeHas(half) {
-    const store = typeof window !== 'undefined' ? window.__BUGDESK_CONFIG__?.store : null;
+    const store = pageConfig().store;
     if (!store) return true;
     return half === 'bugs' ? store.hasBugs !== false : store.hasBacklog !== false;
 }
@@ -48,7 +53,7 @@ export function storeHas(half) {
  * way wherever a tracker page or tile would have been.
  */
 export function trackerOffReason() {
-    const t = typeof window !== 'undefined' ? window.__BUGDESK_CONFIG__?.tracker : null;
+    const t = pageConfig().tracker;
     if (!t || t.available) return null;
     if (t.machineOff) return 'The Tracker is switched off for this machine: enabled = false under [tracker] in projects.toml.';
     if (t.switchedOff) return 'The Tracker is switched off for you. Switch it back on under Settings › You › Behaviour › Tracker.';

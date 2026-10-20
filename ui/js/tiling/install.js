@@ -24,6 +24,7 @@ import { createCommandPalette } from './command_palette.js';
 import { installHistoryBack } from './history_nav.js';
 import { taxonomy, activeTopNavKind, migrateLayout, HOME_KIND, LANDING_SECTION, MERGED_TRACKER } from './kind_taxonomy.js';
 import { trackerOffReason } from '../core/app_identity.js';
+import { fetchConfig, shapeTrackerConfig, trackerApiUrl } from '../core/page_config.js';
 import { createSettingsContent } from '../ticketdesk/settings_content.js';
 
 import { installRecordCount, paintRecordCount } from '../ticketdesk/record_count.js';
@@ -622,25 +623,7 @@ function _trackerOffContent() {
  * person uses everywhere.
  */
 async function _loadTrackerCopy({ eventBus }) {
-    const res = await fetch('/t/api/config', { headers: { accept: 'application/json' } });
-    const cfg = await res.json().catch(() => null);
-    if (!res.ok || !cfg?.ok) throw new Error(cfg?.error || `GET /t/api/config → ${res.status}`);
-    window.__BUGDESK_TRACKER_CONFIG__ = {
-        mode: 'tracker',
-        agentsAssignable: false,
-        fromBridge: true,
-        humanAuthor: cfg.humanAuthor || 'reviewer',
-        agentAuthor: cfg.agentAuthor || 'agent',
-        collaborators: Array.isArray(cfg.collaborators) ? cfg.collaborators : [],
-        assignees: Array.isArray(cfg.assignees) ? cfg.assignees : [],
-        store: cfg.store || { kind: 'tracker', hasBugs: false, hasBacklog: true },
-        schema: cfg.schema || null,
-        workflow: cfg.workflow || null,
-        numbering: cfg.numbering || null,
-        saving: cfg.saving || null,
-        alerts: Array.isArray(cfg.alerts) ? cfg.alerts : [],
-        tracker: cfg.tracker || { available: true },
-    };
+    window.__BUGDESK_TRACKER_CONFIG__ = shapeTrackerConfig(await fetchConfig(trackerApiUrl('/config')));
     const T = '../ticketdesk@t/';
     const [data, pages, backlogPages, newItem, live, links, alerts, gitWarnings] = await Promise.all([
         import(`${T}backlog_data.js`), import(`${T}pages.js`), import(`${T}backlog_pages.js`),

@@ -148,6 +148,13 @@ await t('Behaviour holds the Tracker switch, Ctrl-click, animate minimize and au
     const { host, page, done } = await mountSettings();
     page._switchCategory('behaviour');
     await tick(); await tick();
+    // The auto-save row is a panel whose module is imported on first show, and
+    // the first import of the ticketdesk modules can take longer than two ticks
+    // (it did, every run, on a WSL checkout under /mnt/c). Wait for the row,
+    // with a deadline, rather than for a number of ticks.
+    for (let i = 0; i < 100 && !host.querySelector('[data-panel="bugdesk.autosave"] [data-path="bugdesk.autosave"]'); i++) {
+        await new Promise((r) => setTimeout(r, 20));
+    }
     for (const path of ['bugdesk.modifierOpen', 'window.animateMinimize']) {
         assert.ok(host.querySelector(`[data-path="${path}"]`), `${path} is not on Behaviour`);
     }

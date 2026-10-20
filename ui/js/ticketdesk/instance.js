@@ -23,19 +23,33 @@
  *   the tracker's copy  the global tracker inside a project page — config and
  *                       API at /t/, and page kinds of its own so its tabs and
  *                       its breadcrumbs never collide with the backlog's
+ *
+ * EMBEDDED in another FlexDesk application (EPIC-0051) the page is not
+ * BugDesk's, so neither the page's config nor a relative API is this copy's:
+ * both come from the copy's own URL instead, through core/page_config.js — the
+ * API at `<root>/api` (the tracker's at `/t/api` of the same server) and the
+ * config fetched from there before any module that imports this one runs.
  */
+
+import {
+    EMBEDDED, API_BASE, TRACKER_API_BASE, fetchConfig, kindPrefix, pageConfig, shapeTrackerConfig,
+} from '../core/page_config.js';
 
 export const IS_TRACKER_COPY = /\/ticketdesk@t\//.test(import.meta.url);
 
-/** The config this copy reads: the page's own, or the tracker's, which the page
- *  fetched before loading this copy (see tiling/install.js). */
-export const CONFIG = (typeof window === 'undefined' ? null
-    : IS_TRACKER_COPY ? window.__BUGDESK_TRACKER_CONFIG__ : window.__BUGDESK_CONFIG__) || {};
-
-/** This copy's API. The page's own is RELATIVE, so it follows whatever prefix
- *  the page was served under; the tracker's is always at /t/. */
-const API = IS_TRACKER_COPY ? '/t/api' : 'api';
+/** This copy's API. The page's own is RELATIVE on BugDesk's page, so it follows
+ *  whatever prefix the page was served under, and absolute when embedded; the
+ *  tracker's is always at /t/. */
+const API = IS_TRACKER_COPY ? TRACKER_API_BASE : API_BASE;
 export const apiUrl = (path) => `${API}${String(path).startsWith('/') ? '' : '/'}${path}`;
+
+/** The config this copy reads: the page's own, or the tracker's, which the page
+ *  fetched before loading this copy (see tiling/install.js) — or, embedded, the
+ *  one this copy fetched from its own API. */
+export const CONFIG = (typeof window === 'undefined' ? null
+    : !IS_TRACKER_COPY ? pageConfig()
+    : EMBEDDED ? shapeTrackerConfig(await fetchConfig(apiUrl('/config')))
+    : window.__BUGDESK_TRACKER_CONFIG__) || {};
 
 /**
  * The page kinds this copy registers and opens. The page's copy keeps the names
@@ -47,9 +61,20 @@ export const KIND = IS_TRACKER_COPY
     ? { list: 'tracker-tickets', item: 'tracker-item', newItem: 'tracker-new', dashboard: 'tracker' }
     : { list: 'backlog', item: 'item', newItem: 'new-item', dashboard: 'tracker' };
 
+/** An event name on the SHARED bus, scoped to this PROJECT: what the host's
+ *  kind prefix makes of it (see core/page_config.js), so two projects mounted in
+ *  one shell do not reload each other's lists or claim each other's records.
+ *  On BugDesk's own page the prefix is '' and the name is unchanged. */
+export const busEvent = (name) => `${kindPrefix()}${name}`;
+
 /** An event name on the SHARED bus, scoped to this copy — the tracker's
  *  "backlog changed" must not make the project's backlog reload, and vice versa. */
-export const ev = (name) => (IS_TRACKER_COPY ? `tracker/${name}` : name);
+export const ev = (name) => busEvent(IS_TRACKER_COPY ? `tracker/${name}` : name);
+
+/** Which copy rendered a record link (markdown.js), so only that copy's click
+ *  handler opens it (ref_autolink.js): '' for the page's copy on BugDesk's own
+ *  page, as it always was. */
+export const copyId = () => `${kindPrefix()}${IS_TRACKER_COPY ? 'tracker' : ''}`;
 
 /** Whether THIS copy's store has its bugs or its backlog half — the copy-local
  *  counterpart of core/app_identity.js's storeHas, which answers for the page. */
