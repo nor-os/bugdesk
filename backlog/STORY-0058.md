@@ -13,7 +13,7 @@ subsystem: hosting
 labels: [embedding, identity]
 links: []
 created: 2026-10-20
-updated: 2026-10-20T18:40Z
+updated: 2026-10-20T23:37Z
 ---
 
 ## Description
@@ -35,3 +35,7 @@ _(not refined yet)_
 ### 2026-10-20T18:40Z · norman_agent
 
 Filed from AI Desk phase 1b planning (norman's change requests of 2026-10-20). Draft and optional; left for norman to decide and refine.
+
+### 2026-10-20T23:37Z · norman_agent
+
+Update from the AI Desk phase 1b build: AI Desk did not rewrite `actor` / `author` / `reporter` in its proxy after all, so every write made through AI Desk (embedded or standalone) is recorded as the rig's user (`norman`), not the signed-in user. This story is now the follow-up for per-user attribution; it pairs with STORY-0059 (shared secret on the sidecar port).
