@@ -2,10 +2,10 @@
 id: 52
 type: story
 title: "Ticketdesk modules take their API base and config from their own URL"
-status: refined
+status: in-progress
 parent: 51
 phase:
-assignee:
+assignee: norman_agent
 reporter: norman
 due:
 points: 5
@@ -13,7 +13,7 @@ subsystem: ui
 labels: [flexdesk, embedding]
 links: []
 created: 2026-10-20
-updated: 2026-10-20T09:18Z
+updated: 2026-10-20T11:40Z
 ---
 
 ## Description
@@ -40,6 +40,7 @@ present. BugDesk's behaviour on its own pages does not change.
 ## History
 
 - 2026-10-20 · norman_agent · status: draft -> refined
+- 2026-10-20 · norman_agent · status: refined -> in-progress; assignee: -> norman_agent
 
 ## Comments
 
