@@ -14,8 +14,9 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   config from its own `api/config` when the page has none, and keeps its
   records, numbering, filters and events apart from any other project's copy
   in the same page. A host namespaces the content kinds with `kindPrefix`
-  without renaming the kinds BugDesk's saved layouts use. See *Embedding
-  BugDesk* in the README. On BugDesk's own pages nothing changes.
+  without renaming the kinds BugDesk's saved layouts use (panels become
+  `panel:<prefix>left`, so the host's WM still treats them as panels). See
+  *Embedding BugDesk* in the README. On BugDesk's own pages nothing changes.
 
 - **A warning when a store is not backed up** (STORY-0049). When BugDesk opens,
   a store that is not in a git repository — the tracker, by default — shows a

@@ -24,7 +24,8 @@ import { API_BASE, COPY_ROOT, EMBEDDED, kindPrefix as currentPrefix, nsKind, set
 import { storeHas } from '../core/app_identity.js';
 import { embedKinds, namespaceWm } from '../tiling/kind_taxonomy.js';
 import { CONFIG, apiUrl, busEvent } from './instance.js';
-import { createTicketDeskContent, statusLine } from './pages.js';
+import { createTicketDeskContent, filtersLoaded, statusLine } from './pages.js';
+import { onFiltersChanged } from './filter_store.js';
 import { createBacklogContent } from './backlog_pages.js';
 import { createNewItemContent } from './new_item.js';
 import { TICKETS, loadData } from './data.js';
@@ -60,6 +61,11 @@ export async function createBugDeskEmbed({ eventBus, kindPrefix = '', logger } =
         ...createBacklogContent({ eventBus, kindPrefix }),
         ...createNewItemContent({ eventBus, kindPrefix }),
     };
+    // The saved filters, so filters() is whole when this resolves; after that,
+    // every change to them (made in this copy's rail or editor) is put on the
+    // host's bus, for a host that draws its own rail.
+    await filtersLoaded();
+    onFiltersChanged(() => eventBus?.emit?.(busEvent('filters:changed'), {}));
 
     let started = null;
     return {
@@ -81,11 +87,13 @@ export async function createBugDeskEmbed({ eventBus, kindPrefix = '', logger } =
          *  `'new-item'`) as the host's WM knows it. */
         kind: nsKind,
         /** A store event as it appears on the host's bus: `'bugs:changed'`,
-         *  `'backlog:changed'`, `'store:changed'`, `'git:changed'`. */
+         *  `'backlog:changed'`, `'store:changed'`, `'git:changed'`,
+         *  `'filters:changed'`. */
         event: busEvent,
         /** The rail's filters with their counts now, per store — for a host
-         *  that draws its own rail. Recount on `event('bugs:changed')` and
-         *  `event('backlog:changed')`. */
+         *  that draws its own rail. Complete (saved filters loaded) once the
+         *  embed has resolved. Redraw on `event('bugs:changed')`,
+         *  `event('backlog:changed')` and `event('filters:changed')`. */
         filters: () => ({
             bugs: storeHas('bugs') ? counted(bugFilters, TICKETS) : [],
             backlog: storeHas('backlog') ? counted(backlogFilters, ITEMS) : [],

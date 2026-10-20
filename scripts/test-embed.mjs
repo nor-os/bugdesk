@@ -87,7 +87,8 @@ dom.window.Element.prototype.scrollIntoView = function scrollIntoView() {};
 /* ── the BugDesk behind the proxy: two projects, told apart by everything ── */
 
 const PROJECTS = {
-    alpha: { human: 'alice', prefix: 'ALP', pad: 4, bug: 'Alpha crashes on save', story: 'Alpha onboarding' },
+    alpha: { human: 'alice', prefix: 'ALP', pad: 4, bug: 'Alpha crashes on save', story: 'Alpha onboarding',
+        filters: [{ id: 'f-mine', scope: 'bugs', label: 'Mine', icon: 'person', expr: { kind: 'group', op: 'AND', children: [] } }] },
     beta: { human: 'bob', prefix: 'BET', pad: 3, bug: 'Beta loses the draft', story: 'Beta billing' },
 };
 const configOf = (name) => {
@@ -127,7 +128,7 @@ put('fetch', async (input, init = {}) => {
     if (path === 'backlog') return json({ ok: true, items: [storyOf(name)] });
     if (path === 'backlog/7') return json({ ok: true, item: { ...storyOf(name), description: '', comments: [], history: [] } });
     if (path === 'backlog/meta') return json({ ok: true, phases: [] });
-    if (path === 'filters') return json({ ok: true, filters: [] });
+    if (path === 'filters') return json({ ok: true, filters: PROJECTS[name].filters || [] });
     return json({ ok: true, settings: {}, filters: [], items: [] });
 });
 
@@ -170,7 +171,7 @@ const copy = (name) => `${SERVER}p/${name}/js/`;
 console.log('\nBugDesk embedded in another page (STORY-0052)');
 
 const { EventBus } = await import('@flexdesk/core');
-const { createTaxonomy } = await import('@flexdesk/wm');
+const { createTaxonomy, TileTree, makeLeaf } = await import('@flexdesk/wm');
 const bus = new EventBus();
 const emitted = [];
 const realEmit = bus.emit.bind(bus);
@@ -241,11 +242,20 @@ await t('every API call of a copy went to its own project, none to the host page
 
 await t('content kinds are namespaced for the host; BugDesk\'s own kind names are not renamed', () => {
     for (const [embed, ns] of [[alpha, 'alpha/'], [beta, 'beta/']]) {
-        for (const k of ['queues', 'ticket', 'backlog', 'item', 'new-item', 'panel:left', 'panel:right', 'panel:bottom']) {
+        for (const k of ['queues', 'ticket', 'backlog', 'item', 'new-item']) {
             assert.equal(typeof embed.content[`${ns}${k}`], 'function', `${ns}${k} is not registered`);
         }
-        assert.deepEqual(Object.keys(embed.content).filter((k) => !k.startsWith(ns)), [], 'a kind without the prefix');
+        // Panels keep FlexDesk's `panel:` marker in front: the prefix goes after it.
+        for (const side of ['left', 'right', 'bottom']) {
+            assert.equal(typeof embed.content[`panel:${ns}${side}`], 'function', `panel:${ns}${side} is not registered`);
+            assert.equal(embed.kind(`panel:${side}`), `panel:${ns}${side}`);
+        }
+        const page = embed === alpha ? alphaPage : betaPage;
+        assert.deepEqual(Object.keys(embed.content).filter((k) => page.localKind(k) === null), [], 'a kind without the prefix');
+        assert.equal(page.localKind(`panel:${ns}left`), 'panel:left');
+        assert.equal(page.localKind('panel:left'), null);
         assert.equal(embed.kind('ticket'), `${ns}ticket`);
+        assert.equal(embed.kind(embed.kind('panel:left')), `panel:${ns}left`, 'nsKind is not idempotent');
     }
     // Inside a copy the kinds are what BugDesk's saved layouts call them.
     assert.deepEqual(alphaInst.KIND, { list: 'backlog', item: 'item', newItem: 'new-item', dashboard: 'tracker' });
@@ -290,7 +300,7 @@ await t('the filter rail opens the bug list under its own project\'s kind', asyn
     const wm = fakeWm();
     const el = document.createElement('div');
     document.body.appendChild(el);
-    const rail = beta.content['beta/panel:left'](el, { section: 'bugs' }, { wm });
+    const rail = beta.content[beta.kind('panel:left')](el, { section: 'bugs' }, { wm });
     await settle();
     const row = el.querySelector('[data-filter="open"]');
     assert.ok(row, 'no Open filter in the rail');
@@ -299,6 +309,59 @@ await t('the filter rail opens the bug list under its own project\'s kind', asyn
     assert.equal(wm.calls[0][2].filter, 'open');
     rail.destroy?.();
     el.remove();
+});
+
+await t('an embedded rail stays chrome to a stock FlexDesk TileTree: clicking it does not make it the primary tile', () => {
+    const tree = new TileTree();
+    const list = tree.setRoot(makeLeaf({ content: { kind: alpha.kind('queues'), props: {} } }));
+    const railId = tree.split(list, 'h');
+    tree.setLeafContent(railId, { kind: alpha.kind('panel:left'), props: {} });
+    tree.focus(railId);                      // a mousedown on the rail does this
+    assert.equal(tree.primaryLeafId(), list, 'the rail became the primary tile: openInPrimary would replace it');
+});
+
+await t('a record dropped on an embedded panel tile is not opened over it', async () => {
+    const { installRecordDropTargets, RECORD_MIME } = await import(`${copy('alpha')}ticketdesk/record_dnd.js`);
+    const kinds = { 'leaf-rail': alpha.kind('panel:left'), 'leaf-list': alpha.kind('queues') };
+    const wm = { ...fakeWm(), desktops: { active: () => ({ tree: { get: (id) => ({ content: { kind: kinds[id] } }) } }) } };
+    const dnd = installRecordDropTargets({ wm });
+    const drop = (leafId) => {
+        const tile = document.createElement('div');
+        tile.className = 'twm-leaf';
+        tile.dataset.leafId = leafId;
+        document.body.appendChild(tile);
+        const ev = new window.Event('drop', { bubbles: true, cancelable: true });
+        const data = { [RECORD_MIME]: JSON.stringify({ kind: alpha.kind('ticket'), props: { id: '#1' } }) };
+        Object.defineProperty(ev, 'dataTransfer', { value: { types: [RECORD_MIME], getData: (t) => data[t] || '' } });
+        tile.dispatchEvent(ev);
+        tile.remove();
+    };
+    drop('leaf-rail');
+    assert.deepEqual(wm.calls, [], 'the drop navigated the rail');
+    drop('leaf-list');
+    assert.deepEqual(wm.calls.map(([fn, kind]) => [fn, kind]), [['navigate', 'alpha/ticket']]);
+    dnd?.destroy?.();
+});
+
+await t('saved filters are in filters() when the embed resolves, and changes reach the host bus', async () => {
+    const saved = alpha.filters().bugs.find((f) => !f.builtin);
+    assert.ok(saved, 'alpha\'s saved filter is missing');
+    assert.equal(saved.key, 'f-mine');
+    assert.equal(saved.label, 'Mine');
+    assert.equal(beta.filters().bugs.filter((f) => !f.builtin).length, 0, 'alpha\'s saved filter leaked into beta');
+    emitted.length = 0;
+    const store = await import(`${copy('alpha')}ticketdesk/filter_store.js`);
+    await store.loadFilters();
+    assert.deepEqual(emitted.filter((n) => n.endsWith('filters:changed')), ['alpha/filters:changed']);
+    assert.equal(alpha.event('filters:changed'), 'alpha/filters:changed');
+});
+
+await t('an embedded copy does not open BugDesk\'s Settings page from the snooze notice', async () => {
+    const { snoozeNotice } = await import(`${copy('alpha')}ticketdesk/schema.js`);
+    const el = snoozeNotice('bugs', bus);
+    assert.ok(el, 'no snooze notice: the test config has a snooze field');
+    assert.equal(el.querySelector('button'), null, 'the notice still offers a Settings button');
+    assert.match(el.textContent, /Settings › Record types/);
 });
 
 await t('filters() counts each project\'s own rows', () => {

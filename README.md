@@ -1261,7 +1261,7 @@ BugDesk's own page".
 | import from `<root>/js/…` | export | what it is |
 |---|---|---|
 | `ticketdesk/embed.js` | `createBugDeskEmbed({ eventBus, kindPrefix, logger })` → `Promise<embed>` | loads both stores, then builds every kind below; the convenient way in |
-| `ticketdesk/pages.js` | `createTicketDeskContent({ eventBus, kindPrefix })` → `{ kind: factory }` | the bug pages: `queues`, `ticket`, `home`, `panel:left`, `panel:right`, `panel:bottom` |
+| `ticketdesk/pages.js` | `createTicketDeskContent({ eventBus, kindPrefix })` → `{ kind: factory }`; `filtersLoaded()` | the bug pages: `queues`, `ticket`, `home`, `panel:left`, `panel:right`, `panel:bottom`; a promise for the saved filters it started loading |
 | `ticketdesk/backlog_pages.js` | `createBacklogContent({ eventBus, kindPrefix })` | `backlog` (board / list), `item` |
 | `ticketdesk/new_item.js` | `createNewItemContent({ eventBus, kindPrefix })` | `new-item` |
 | `ticketdesk/live.js` | `installLiveUpdates({ eventBus, logger })` | the copy's SSE stream |
@@ -1276,9 +1276,9 @@ and returns:
 |---|---|
 | `content` | `{ '<prefix><kind>': factory }` for the host's `createContentRegistry` |
 | `kinds` | the same kinds as `createTaxonomy({ kinds })` entries, `topNav` and record ancestors namespaced; merge them into the host's taxonomy (re-point the sections `<prefix>bugs-home` / `<prefix>backlog-home` / `<prefix>home` at the host's own if it likes) |
-| `kind(name)` | a BugDesk kind as the host's WM knows it: `kind('ticket')` → `'bugdesk:alpha/ticket'` |
-| `event(name)` | a store event as it appears on the host's bus |
-| `filters()` | `{ bugs: [...], backlog: [...] }` — the rail's builtin and saved filters, `{ key, label, icon, builtin, count }`, counted now |
+| `kind(name)` | a BugDesk kind as the host's WM knows it: `kind('ticket')` → `'bugdesk:alpha/ticket'`, `kind('panel:left')` → `'panel:bugdesk:alpha/left'` |
+| `event(name)` | a store event as it appears on the host's bus: `bugs:changed`, `backlog:changed`, `store:changed`, `project:changed`, `git:changed`, `filters:changed` |
+| `filters()` | `{ bugs: [...], backlog: [...] }` — the rail's builtin and saved filters, `{ key, label, icon, builtin, count }`, counted now. The saved filters are loaded before `createBugDeskEmbed` resolves. Redraw on `event('bugs:changed')`, `event('backlog:changed')` and `event('filters:changed')` (a saved filter added, renamed or deleted) |
 | `start({ wm })` | after the host's WM exists: opens `<root>/api/events`, and installs the record-link click and record drop handlers (document-level, each copy answers only for its own); idempotent, returns `{ stop() }` |
 | `reload()` | re-read both stores (the stream does this by itself) |
 | `config`, `root`, `apiBase`, `apiUrl(path)` | what the copy found out about itself |
@@ -1306,7 +1306,11 @@ ticket in a tab, a crumb walks up — always under their own project's names.
 BugDesk's kinds are plain words (`queues`, `ticket`, `backlog`, `item`), its
 saved layouts name them, and they do not change. Two projects in one shell would
 register the same words, so a host passes **`kindPrefix`**, and every kind the
-copy registers — and every kind its pages open — is `<kindPrefix><kind>`. The
+copy registers — and every kind its pages open — is `<kindPrefix><kind>`,
+except the panels: FlexDesk's WM knows a panel only by the leading `panel:` of
+its kind, so the prefix goes after that marker — `panel:<kindPrefix>left`,
+`…right`, `…bottom` — and an embedded filter rail stays chrome (never the
+"primary" tile its own clicks would replace, no split buttons). The
 pages are handed a window manager that adds the prefix to each kind it is asked
 to open (`namespaceWm`), and BugDesk's own taxonomy for their breadcrumbs, so
 nothing inside the copy is renamed. The same prefix scopes the copy's store
@@ -1344,6 +1348,12 @@ the kinds are BugDesk's own words.
   `css/tiling/tile.css`, `css/ticketdesk.css`, `css/ticketdesk_filters.css`,
   `css/ticketdesk_md.css`, `css/backlog.css`. Not `base.css` or
   `main_new.css`: they style BugDesk's page itself. A copy injects no styles.
+  **Three of these are global, not scoped to BugDesk's pages:** `css/tokens.css`
+  and `css/bugdesk_controls.css` set `:root` tokens, and `css/tiling/tile.css`
+  styles every `.twm-*` tile, splitter and tab of the host's WM (it is BugDesk's
+  tile chrome). Load them before the host's own theme so the host's tokens and
+  tile chrome win, or leave `tile.css` out and accept the stock FlexDesk tile
+  chrome around BugDesk's pages; the rest only style BugDesk's own classes.
 - **`/attachments/` routed to BugDesk.** Images in records are written as
   root-relative `/attachments/<name>` and stay that way; the server finds the
   file in whichever store has it.
@@ -1355,7 +1365,8 @@ the kinds are BugDesk's own words.
 
 What a copy does **not** bring along is BugDesk's page chrome: the top bar,
 the project switcher (it navigates the whole window to another `/p/<name>/`,
-and keeps its page-relative `api/`), the Ctrl+K palette, the Settings page, the
+and keeps its page-relative `api/`), the Ctrl+K palette, the Settings page (an
+embedded snooze notice names Settings › Record types instead of opening it), the
 alert rules, the Changes pane's git warnings and the dashboards (including the
 section homes `bugs-home` / `backlog-home`, whose kinds `embedKinds()` still
 lists so the taxonomy's pointers resolve). Those are `tiling/install.js`'s, for

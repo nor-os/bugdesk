@@ -183,13 +183,28 @@ export function setKindPrefix(prefix = '') {
 /** The prefix in force: '' on BugDesk's own page. */
 export const kindPrefix = () => PREFIX;
 
+/* A FlexDesk WM knows a panel — the filter rail, the inspector — by nothing but
+ * the leading `panel:` of its kind (wm.js `_isPanel`, `primaryLeafId`, the tile
+ * chrome, Backspace). So the prefix goes AFTER that marker, not before it:
+ * `panel:left` is `panel:<prefix>left`, and stays chrome to the host's WM. A
+ * `<prefix>panel:left` would be content, the rail would become the "primary"
+ * tile once clicked, and its own openInPrimary would replace it with the list. */
+const PANEL = 'panel:';
+
 /** A kind of this copy as the host's WM knows it. Idempotent. */
-export const nsKind = (kind) => (!PREFIX || !kind || String(kind).startsWith(PREFIX) ? kind : `${PREFIX}${kind}`);
+export const nsKind = (kind) => {
+    if (!PREFIX || !kind || localKind(kind) !== null) return kind;
+    const k = String(kind);
+    return k.startsWith(PANEL) ? `${PANEL}${PREFIX}${k.slice(PANEL.length)}` : `${PREFIX}${k}`;
+};
 
 /** A kind from the host's WM as this copy knows it — or null when it is not
  *  one of this copy's (another project's, or the host's own). */
-export const localKind = (kind) => {
+export function localKind(kind) {
     if (!kind) return null;
     if (!PREFIX) return kind;
-    return String(kind).startsWith(PREFIX) ? String(kind).slice(PREFIX.length) : null;
-};
+    const k = String(kind);
+    if (k.startsWith(PREFIX)) return k.slice(PREFIX.length);
+    if (k.startsWith(PANEL + PREFIX)) return PANEL + k.slice(PANEL.length + PREFIX.length);
+    return null;
+}

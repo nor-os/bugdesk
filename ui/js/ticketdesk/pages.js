@@ -2454,6 +2454,13 @@ export function useEventBus(eventBus) {
  *        Set once per project; BugDesk's own page passes none.
  * @returns {Object<string, Function>} `{ kind: factory }`
  */
+let _filtersLoaded = Promise.resolve();
+
+/** Settles once the saved-filter load createTicketDeskContent started has
+ *  landed (or failed over to the mirror) — for an embed that must hand its host
+ *  the full filter list, not just the builtins (ticketdesk/embed.js). */
+export const filtersLoaded = () => _filtersLoaded;
+
 export function createTicketDeskContent({ eventBus, kindPrefix } = {}) {
     if (kindPrefix !== undefined) setKindPrefix(kindPrefix);
     _eventBus = eventBus || null;
@@ -2464,7 +2471,7 @@ export function createTicketDeskContent({ eventBus, kindPrefix } = {}) {
     // custom id resolves to 'all'); the notify() at the end of loadFilters
     // then re-renders the rail and every open queue through their
     // onFiltersChanged subscription.
-    loadFilters().catch((err) => console.warn('[bugdesk] filter store load failed', err));
+    _filtersLoaded = loadFilters().catch((err) => console.warn('[bugdesk] filter store load failed', err));
 
     const content = {};
     const register = (kind, factory) => { content[kind] = factory; };

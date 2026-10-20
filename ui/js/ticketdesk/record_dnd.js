@@ -25,7 +25,7 @@
  */
 
 import { getSetting } from '../core/settings.js';
-import { kindPrefix, nsKind } from '../core/page_config.js';
+import { kindPrefix, localKind, nsKind } from '../core/page_config.js';
 
 /** Our own type, so a drag from anywhere else is ignored rather than guessed at. */
 export const RECORD_MIME = 'application/x-bugdesk-record';
@@ -228,7 +228,8 @@ export function installRecordDropTargets({ wm } = {}) {
         // A tile's content kind is not in its DOM, so ask the tree. Panels — the
         // left rail, the inspector — are chrome: dropping a bug onto a filter
         // list means nothing, and a zone that lights up over something it cannot
-        // accept is worse than one that never lights up.
+        // accept is worse than one that never lights up. Any copy's panel too:
+        // an embedded one is `panel:<prefix>left` (core/page_config.js nsKind).
         const content = wm?.desktops?.active?.()?.tree?.get?.(id)?.content?.kind || '';
         if (String(content).startsWith('panel:')) return null;
         return { leaf, id };
@@ -260,7 +261,7 @@ export function installRecordDropTargets({ wm } = {}) {
         const payload = readRecordDrag(ev);
         // Under a prefix, every embedded project installs this pair: each opens
         // only its own records, or one drop would open the record twice.
-        if (payload && kindPrefix() && !String(payload.kind).startsWith(kindPrefix())) return;
+        if (payload && kindPrefix() && localKind(payload.kind) === null) return;
         const hit = tileUnder(ev.target);
         clear();
         if (!payload || !hit) return;
