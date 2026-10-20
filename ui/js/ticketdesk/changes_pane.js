@@ -45,7 +45,7 @@ import * as instance from './instance.js';
 import { changeSummary, fieldChanges, textChanges } from './record_diff.js';
 import { initRepo, promptRemote } from './git_warnings.js';
 
-const { CONFIG, apiUrl, ev } = instance;
+const { CONFIG, apiUrl, busEvent, ev } = instance;
 
 const icon = (name) => `<span class="material-symbols-outlined">${name}</span>`;
 
@@ -436,7 +436,7 @@ export function mountChangesPane(host, { eventBus = null, sources = null, onCoun
         render();
     });
 
-    const names = new Set(['bugs:changed']);
+    const names = new Set([busEvent('bugs:changed')]);
     for (const s of srcs) for (const n of ['backlog:changed', 'git:changed', 'store:changed']) names.add(s.inst.ev(n));
     let soon = null;
     const later = () => { clearTimeout(soon); soon = setTimeout(refresh, 150); };

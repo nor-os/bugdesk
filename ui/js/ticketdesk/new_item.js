@@ -24,7 +24,8 @@
 
 import { ev, has, KIND } from './instance.js';
 import { mountTileBreadcrumb } from '@flexdesk/wm';
-import { taxonomy } from '../tiling/kind_taxonomy.js';
+import { namespaceContent, taxonomy } from '../tiling/kind_taxonomy.js';
+import { setKindPrefix } from '../core/page_config.js';
 import { attachMarkdownEditor } from './md_editor.js';
 import { attachTagInput } from './tag_input.js';
 import { attachSelect, setRowVisible } from './select_field.js';
@@ -402,9 +403,11 @@ export function mountNewItem(host, props, ctx) {
     };
 }
 
-/** The content kind, wrapped in the standard page shell. */
-export function createNewItemContent({ eventBus } = {}) {
-    return {
+/** The content kind, wrapped in the standard page shell. `kindPrefix` as for
+ *  pages.js's createTicketDeskContent — embedded only. */
+export function createNewItemContent({ eventBus, kindPrefix } = {}) {
+    if (kindPrefix !== undefined) setKindPrefix(kindPrefix);
+    return namespaceContent({
         [KIND.newItem]: (hostEl, props, ctx) => {
             hostEl.classList.add('twm-page-shell', 'td-shell');
             hostEl.innerHTML = '';
@@ -426,7 +429,7 @@ export function createNewItemContent({ eventBus } = {}) {
                 destroy: () => { try { crumb?.destroy?.(); } catch { /* gone */ } ret.destroy?.(); },
             };
         },
-    };
+    });
 }
 
 /**

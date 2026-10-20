@@ -24,6 +24,7 @@ import {
     trackWrite,
 } from './library.js';
 import { DASHBOARD_KIND, DASHBOARD_SECTIONS, HOME_KIND, LANDING_SECTION } from '../tiling/kind_taxonomy.js';
+import { localKind } from '../core/page_config.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const icon = (name) => `<span class="material-symbols-outlined">${esc(name)}</span>`;
@@ -53,7 +54,7 @@ export function mountDashboardsRail(host, ctx, { section = DASHBOARD_SECTIONS[0]
         const tree = (ctx.wm || window.__twm?.wm)?.desktops?.active?.()?.tree;
         if (!tree) return undefined;
         const id = tree.primaryLeafId?.();
-        return id ? tree.get(id)?.content?.kind ?? null : null;
+        return id ? localKind(tree.get(id)?.content?.kind) ?? null : null;
     };
     /**
      * The key of the dashboard this section's page shows in the main area, or

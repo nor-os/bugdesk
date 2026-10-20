@@ -1216,13 +1216,161 @@ npm run check:flexdesk     # verify the vendored copy matches, change nothing
 `check:flexdesk` exists because a stale vendor directory is otherwise
 invisible: the app boots perfectly well on last release's code.
 
-The tiling window manager itself (`ui/js/tiling/wm.js` and friends) stays
-local: it carries bugdesk-specific behavior FlexDesk's generalized version
-doesn't have (tab-opener tracking so Backspace returns to the tab that opened a
-drill-down, store-specific breadcrumb segments), and its chrome is styled to
-match the rest of BugDesk's UI rather than FlexDesk's own default look. See
-`ui/js/tiling/kind_taxonomy.js` and `install.js` for exactly where the package
-boundary sits.
+The window manager is FlexDesk's own (`WindowManager` from `@flexdesk/wm`), not
+a copy: the local fork that used to live in `ui/js/tiling/wm.js` is gone. What
+stays in `ui/js/tiling/` is BugDesk's side of the boundary — the taxonomy of its
+kinds (`kind_taxonomy.js`), the shell glue that builds the page around the WM
+(`install.js`: top bar, desktops, the WM options BugDesk switches on), its own
+Ctrl+K palette (`command_palette.js`), Back-button handling (`history_nav.js`)
+and the project switcher (`project_switcher.js`).
+
+## Embedding BugDesk
+
+Another FlexDesk application (AI Desk, for one) can show BugDesk's own pages —
+the bug list, the ticket mask, the backlog board and item, the New item page,
+the filter rail — in its own tiles and floating windows, one project per copy,
+side by side, against a stock BugDesk server. Nothing is forked or proxied into
+shape; the host imports the modules from the project's own URL.
+
+### Loading a copy
+
+```js
+// Behind the host's proxy, BugDesk's /p/alpha/ is at /bugdesk/p/alpha/.
+const alpha = await (await import('/bugdesk/p/alpha/js/ticketdesk/embed.js'))
+    .createBugDeskEmbed({ eventBus, kindPrefix: 'bugdesk:alpha/' });
+```
+
+Each project prefix is its own module graph — a different URL is a different
+module instance — so each copy has its own records, config, saved filters and
+event stream. **A copy works out where it lives from its own URL**
+(`import.meta.url`): its API is `<root>/api` (here `/bugdesk/p/alpha/api/`),
+the live stream `<root>/api/events`, the tracker's API `/t/api` of the same
+server (here `/bugdesk/t/api`). With no `window.__BUGDESK_CONFIG__` on the page,
+importing the copy **fetches its config from its own `api/config` before any
+module that reads it is evaluated** (a top-level await in
+`ui/js/core/page_config.js`), so the import resolves only once the copy knows
+who it is; if that request fails, the import fails with the address that did.
+On BugDesk's own pages none of this changes: the API is relative and the
+config is the one `index.html` publishes.
+
+The host must not set `window.__BUGDESK_CONFIG__`: its presence means "this is
+BugDesk's own page".
+
+### The entry points
+
+| import from `<root>/js/…` | export | what it is |
+|---|---|---|
+| `ticketdesk/embed.js` | `createBugDeskEmbed({ eventBus, kindPrefix, logger })` → `Promise<embed>` | loads both stores, then builds every kind below; the convenient way in |
+| `ticketdesk/pages.js` | `createTicketDeskContent({ eventBus, kindPrefix })` → `{ kind: factory }`; `filtersLoaded()` | the bug pages: `queues`, `ticket`, `home`, `panel:left`, `panel:right`, `panel:bottom`; a promise for the saved filters it started loading |
+| `ticketdesk/backlog_pages.js` | `createBacklogContent({ eventBus, kindPrefix })` | `backlog` (board / list), `item` |
+| `ticketdesk/new_item.js` | `createNewItemContent({ eventBus, kindPrefix })` | `new-item` |
+| `ticketdesk/live.js` | `installLiveUpdates({ eventBus, logger })` | the copy's SSE stream |
+| `tiling/kind_taxonomy.js` | `embedKinds()`, `namespaceWm(wm)` | taxonomy entries for the host; the WM as the copy's pages see it |
+
+Used directly, `pages.js`'s content needs the copy's stores loaded first
+(`loadData()` from `data.js`, `loadBacklog()` from `backlog_data.js`), as
+`tiling/install.js` does for BugDesk's own page. `createBugDeskEmbed` does that
+and returns:
+
+| member | |
+|---|---|
+| `content` | `{ '<prefix><kind>': factory }` for the host's `createContentRegistry` |
+| `kinds` | the same kinds as `createTaxonomy({ kinds })` entries, `topNav` and record ancestors namespaced; merge them into the host's taxonomy (re-point the sections `<prefix>bugs-home` / `<prefix>backlog-home` / `<prefix>home` at the host's own if it likes) |
+| `kind(name)` | a BugDesk kind as the host's WM knows it: `kind('ticket')` → `'bugdesk:alpha/ticket'`, `kind('panel:left')` → `'panel:bugdesk:alpha/left'` |
+| `event(name)` | a store event as it appears on the host's bus: `bugs:changed`, `backlog:changed`, `store:changed`, `project:changed`, `git:changed`, `filters:changed` |
+| `filters()` | `{ bugs: [...], backlog: [...] }` — the rail's builtin and saved filters, `{ key, label, icon, builtin, count }`, counted now. The saved filters are loaded before `createBugDeskEmbed` resolves. Redraw on `event('bugs:changed')`, `event('backlog:changed')` and `event('filters:changed')` (a saved filter added, renamed or deleted) |
+| `start({ wm })` | after the host's WM exists: opens `<root>/api/events`, and installs the record-link click and record drop handlers (document-level, each copy answers only for its own); idempotent, returns `{ stop() }` |
+| `reload()` | re-read both stores (the stream does this by itself) |
+| `config`, `root`, `apiBase`, `apiUrl(path)` | what the copy found out about itself |
+
+### Opening BugDesk's pages in the host
+
+Through the host's FlexDesk `WindowManager`, with the namespaced kind:
+
+| page | kind | props |
+|---|---|---|
+| bug list | `kind('queues')` | `{ filter: 'active' }` — a builtin key (`needs-reply`, `active`, `all`, `open`, `investigation`, `testing`, `snoozed`, `closed`) or a saved filter's id; or `{ expr, label }` for an unsaved one |
+| ticket mask | `kind('ticket')` | `{ id: '#42', label: '#42' }`; `{ mode: 'new' }` files a bug, `{ mode: 'search' }` searches |
+| backlog board / list | `kind('backlog')` | `{ filter: 'board' }` (or `active`, `mine`, `all`, …, a saved id), `{ expr, label, flat: true }` |
+| backlog item | `kind('item')` | `{ id: '7', label: 'STORY-0007' }` |
+| New item | `kind('new-item')` | `{ kind: 'bug' \| 'story' \| …, parent }` |
+| filter rail | `kind('panel:left')` | `{ section: 'bugs' \| 'backlog', dashboards: false }` — pinned to one store, without the Dashboards group |
+
+e.g. `wm.openInPrimary(alpha.kind('queues'), { filter: 'active', label: 'Active' })`,
+or `wm.navigate(alpha.kind('ticket'), { id: '#42' }, { dest: 'window' })` for a
+floating window. Inside, the pages navigate by themselves — a row opens its
+ticket in a tab, a crumb walks up — always under their own project's names.
+
+### Namespacing kinds
+
+BugDesk's kinds are plain words (`queues`, `ticket`, `backlog`, `item`), its
+saved layouts name them, and they do not change. Two projects in one shell would
+register the same words, so a host passes **`kindPrefix`**, and every kind the
+copy registers — and every kind its pages open — is `<kindPrefix><kind>`,
+except the panels: FlexDesk's WM knows a panel only by the leading `panel:` of
+its kind, so the prefix goes after that marker — `panel:<kindPrefix>left`,
+`…right`, `…bottom` — and an embedded filter rail stays chrome (never the
+"primary" tile its own clicks would replace, no split buttons). The
+pages are handed a window manager that adds the prefix to each kind it is asked
+to open (`namespaceWm`), and BugDesk's own taxonomy for their breadcrumbs, so
+nothing inside the copy is renamed. The same prefix scopes the copy's store
+events on the host's bus (`<kindPrefix>bugs:changed`, `…backlog:changed`,
+`…store:changed`, `…project:changed`, `…git:changed`), so one project's change
+never reloads or claims another's open record. Set it once per copy and keep
+it stable: a host's saved layouts store the namespaced kinds, and a second,
+different prefix for the same copy is refused. With one project and no prefix
+the kinds are BugDesk's own words.
+
+### What the host provides
+
+- **FlexDesk 0.16.1**, under the import map names BugDesk uses
+  (`@flexdesk/core`, `/wm`, `/widgets`, `/host`, `/tiles`, `/charts`, `/canvas`,
+  `/flow`). The copy's bare imports resolve through the host's map, so the
+  copy shares the host's FlexDesk — one `WindowManager`, one settings store, one
+  tooltip service. Use the version `ui/vendor/flexdesk/VERSION` names.
+- **An event bus** (`EventBus` from `@flexdesk/core`), the one the host's WM is
+  built with: the pages emit `toast:show` and `notification:show` (the host's
+  `NotificationCenter` shows them) and follow `wm:changed`.
+- **A stock `WindowManager`** passing `ctx.wm` to its content (FlexDesk does).
+  The pages call `navigate`, `navigateUp`, `openInPrimary`,
+  `openInTabFromContext` and read `desktops.active().tree`. BugDesk switches on
+  `backToOpenList`, `floatActiveTab`, `promoteInPlace` and `snapPromotion`
+  (`tiling/install.js`); the pages work without them, but Backspace and
+  floating behave as they do in BugDesk only with them. Optional in `ctx`:
+  `tableStore` (`createTableStateStore`), which keeps a list's sort and columns
+  across tab switches.
+- **Material Symbols Outlined** (the `material-symbols-outlined` class): every
+  icon in the pages is a ligature of it.
+- **Tokens and styles.** FlexDesk's `tokens.css` and `flexdesk.css`, then
+  BugDesk's component stylesheets from the BugDesk server (any project prefix;
+  the files are the same): `css/tokens.css`, `css/components/controls.css`,
+  `css/components/containers.css`, `css/bugdesk_controls.css`,
+  `css/tiling/tile.css`, `css/ticketdesk.css`, `css/ticketdesk_filters.css`,
+  `css/ticketdesk_md.css`, `css/backlog.css`. Not `base.css` or
+  `main_new.css`: they style BugDesk's page itself. A copy injects no styles.
+  **Three of these are global, not scoped to BugDesk's pages:** `css/tokens.css`
+  and `css/bugdesk_controls.css` set `:root` tokens, and `css/tiling/tile.css`
+  styles every `.twm-*` tile, splitter and tab of the host's WM (it is BugDesk's
+  tile chrome). Load them before the host's own theme so the host's tokens and
+  tile chrome win, or leave `tile.css` out and accept the stock FlexDesk tile
+  chrome around BugDesk's pages; the rest only style BugDesk's own classes.
+- **`/attachments/` routed to BugDesk.** Images in records are written as
+  root-relative `/attachments/<name>` and stay that way; the server finds the
+  file in whichever store has it.
+- **A configured user.** An embedded copy cannot show the first-run name
+  prompt: start BugDesk with `BUGDESK_USER`, or a `[user]` in projects.toml, or
+  comments are signed `reviewer`.
+- Optional: an element `#sim-status`, where the pages write their one-line
+  status ("Saved #42"); without it those lines go nowhere.
+
+What a copy does **not** bring along is BugDesk's page chrome: the top bar,
+the project switcher (it navigates the whole window to another `/p/<name>/`,
+and keeps its page-relative `api/`), the Ctrl+K palette, the Settings page (an
+embedded snooze notice names Settings › Record types instead of opening it), the
+alert rules, the Changes pane's git warnings and the dashboards (including the
+section homes `bugs-home` / `backlog-home`, whose kinds `embedKinds()` still
+lists so the taxonomy's pointers resolve). Those are `tiling/install.js`'s, for
+BugDesk's own page.
 
 ## Changelog
 

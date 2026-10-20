@@ -26,7 +26,7 @@
 import { loadData } from './data.js';
 import { loadBacklog } from './backlog_data.js';
 import { appName } from '../core/app_identity.js';
-import { apiUrl, ev } from './instance.js';
+import { apiUrl, busEvent, ev } from './instance.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -64,7 +64,7 @@ export function installLiveUpdates({ eventBus, logger } = {}) {
         if (stores.has('backlog')) loads.push(loadBacklog().catch((err) => log.warn?.('[bugdesk] backlog reload failed', err)));
         await Promise.all(loads);
 
-        if (stores.has('bugs')) _bus?.emit?.('bugs:changed', payload);
+        if (stores.has('bugs')) _bus?.emit?.(busEvent('bugs:changed'), payload);
         if (stores.has('backlog')) _bus?.emit?.(ev('backlog:changed'), payload);
         if (stores.has('project')) _bus?.emit?.(ev('project:changed'), payload);
         // Carries the per-file detail, which is what an open record page needs

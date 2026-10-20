@@ -1,9 +1,9 @@
 /**
  * ticketdesk/refs.js — what a record REFERENCE is, on both sides of the store line.
  *
- * IMPORTS NOTHING, deliberately: `scripts/test-ui.mjs` can exercise it with no store stubs and no
- * `fetch`, and it can never create a cycle, so every other ticketdesk module is free to reach for
- * it. `BACKLOG_PREFIXES` is a copy of backlog_data.js's `TYPE_PREFIX` for that same reason; a drift
+ * IMPORTS NOTHING BUT instance.js, deliberately — which itself imports only core/page_config.js:
+ * `scripts/test-ui.mjs` can exercise it with no store stubs and no `fetch`, and it can never
+ * create a cycle, so every other ticketdesk module is free to reach for it. `BACKLOG_PREFIXES` is a copy of backlog_data.js's `TYPE_PREFIX` for that same reason; a drift
  * test pins the two together and against `server/BacklogItem.cs`'s `Prefixes`, so the copy cannot
  * wander.
  *
@@ -17,18 +17,19 @@
  * re-derives it from the record it resolved rather than from what was typed.
  */
 
+import { CONFIG } from './instance.js';
+
 /** @typedef {{store:'bugs'|'backlog', id:number, prefix:string, type:string}} Ref */
 
 /* ── the project's numbering ──────────────────────────────────────────
  * A project may rename its prefixes, pad differently, and start or step its
  * numbers its own way (`numbering` in project.json, server/Numbering.cs). New
  * records take the current prefix; records written before keep theirs, so
- * every prefix the store has used still parses. Read straight off the page's
- * config rather than through instance.js, to keep this module import-free —
- * the same test instance.js makes decides which copy's config it is. */
-const TRACKER_COPY = /\/ticketdesk@t\//.test(import.meta.url);
-const NUMBERING = (typeof window === 'undefined' ? null
-    : (TRACKER_COPY ? window.__BUGDESK_TRACKER_CONFIG__ : window.__BUGDESK_CONFIG__)?.numbering) || {};
+ * every prefix the store has used still parses. THIS COPY'S config, through
+ * instance.js: it used to be read straight off the page-wide global, which an
+ * embedded copy (EPIC-0051) does not have, and which two projects in one page
+ * could never share. */
+const NUMBERING = CONFIG.numbering || {};
 
 const DEFAULT_BACKLOG = { project: 'PROJ', epic: 'EPIC', story: 'STORY', task: 'TASK' };
 

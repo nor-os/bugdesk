@@ -22,6 +22,9 @@
  */
 
 import { appName, appIcon } from '../core/app_identity.js';
+// The page's own API, the same `api/` it always was on BugDesk's page — and the
+// copy's own when embedded, where a relative `api/` is the host's server.
+import { pageApiUrl } from '../core/page_config.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -119,7 +122,7 @@ export function askForName(cfg) {
             goEl.disabled = true;
             goEl.textContent = 'Saving…';
             try {
-                const res = await fetch('api/config/user', {
+                const res = await fetch(pageApiUrl('/config/user'), {
                     method: 'POST',
                     headers: { 'content-type': 'application/json', accept: 'application/json' },
                     body: JSON.stringify({ name: clean, agentName: String(agentName || '').trim() }),
@@ -162,7 +165,7 @@ export async function resolveIdentity() {
     const fallback = { humanAuthor: 'reviewer', agentAuthor: 'agent', configured: false };
     let cfg;
     try {
-        const res = await fetch('api/config', { headers: { accept: 'application/json' } });
+        const res = await fetch(pageApiUrl('/config'), { headers: { accept: 'application/json' } });
         cfg = res.ok ? await res.json() : null;
         if (!cfg?.ok) throw new Error('bridge returned no config');
     } catch (err) {
@@ -281,7 +284,7 @@ export function installAuthorshipWriteThrough({ eventBus, getSetting } = {}) {
         const live = (typeof window !== 'undefined' && window.__BUGDESK_CONFIG__) || {};
         if (name === (live.humanAuthor || '') && agent === (live.agentAuthor || '')) return;
         try {
-            const res = await fetch('api/config/user', {
+            const res = await fetch(pageApiUrl('/config/user'), {
                 method: 'POST',
                 headers: { 'content-type': 'application/json', accept: 'application/json' },
                 body: JSON.stringify({ name, agentName: agent }),
@@ -336,7 +339,7 @@ export async function openIdentityDialog({ eventBus } = {}) {
 
     let profiles = [];
     try {
-        const res = await fetch('api/config', { headers: { accept: 'application/json' } });
+        const res = await fetch(pageApiUrl('/config'), { headers: { accept: 'application/json' } });
         const j = res.ok ? await res.json() : null;
         if (j?.ok) {
             profiles = Array.isArray(j.profiles) ? j.profiles : [];
@@ -390,7 +393,7 @@ export async function openIdentityDialog({ eventBus } = {}) {
     if (!name) return null;
 
     try {
-        const res = await fetch('api/config/user', {
+        const res = await fetch(pageApiUrl('/config/user'), {
             method: 'POST',
             headers: { 'content-type': 'application/json', accept: 'application/json' },
             body: JSON.stringify({ name, agentName: String(result.agentName || '').trim() }),

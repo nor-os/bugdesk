@@ -28,7 +28,7 @@ import { ALL_PREFIXES, formatRef, parseRef } from './refs.js';
 import { findRow, openRow, storesAvailable } from './records.js';
 import { TICKETS, loadData } from './data.js';
 import { ITEMS, loadBacklog } from './backlog_data.js';
-import { IS_TRACKER_COPY } from './instance.js';
+import { copyId } from './instance.js';
 
 const PREFIXES = ALL_PREFIXES;
 
@@ -210,7 +210,7 @@ export function installRecordLinkClicks({ wm, onStatus = null } = {}) {
         if (!a) return;
         // Each copy of these modules installs this handler; a link belongs to
         // the copy that rendered it (see markdown.js), and only that one opens it.
-        if ((a.dataset.copy === 'tracker') !== IS_TRACKER_COPY) return;
+        if ((a.dataset.copy || '') !== copyId()) return;
         e.preventDefault();
         const ref = parseRef(a.dataset.ref || '', 'bugs');
         if (!ref) return;

@@ -19,6 +19,7 @@
  */
 
 import { CONFIG, apiUrl } from './instance.js';
+import { EMBEDDED } from '../core/page_config.js';
 
 const EMPTY = { types: {}, warnings: [], hideable: {}, builtinStatuses: {}, fieldTypes: [], categories: [] };
 
@@ -311,6 +312,14 @@ export function snoozeNotice(store, eventBus = null) {
     el.innerHTML = `<span class="material-symbols-outlined">snooze</span>
         <span>Snoozing a record needs a <b>Snooze until</b> date field (named <code>not_before</code>) on its type. No type here has one.</span>
         <button type="button" class="ea-btn ea-btn--primary"><span class="material-symbols-outlined">tune</span> Record types</button>`;
+    // Settings is BugDesk's page chrome (it reads the page's own bus and
+    // tracker config): an embedded copy names the place instead of opening it.
+    if (EMBEDDED) {
+        el.querySelector('button').replaceWith(Object.assign(document.createElement('span'), {
+            textContent: 'Add it in BugDesk: Settings › Record types.',
+        }));
+        return el;
+    }
     el.querySelector('button').addEventListener('click', async () => {
         const { openSettings } = await import('./settings_content.js');
         openSettings('recordTypes', { store });

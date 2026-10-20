@@ -28,6 +28,7 @@ import { HelpModal, showAboutDialog } from '@flexdesk/widgets';
 import { registerSettings, registerSettingsEventBus, BUGDESK_SETTINGS_SLICE } from '../core/settings.js';
 import { installHelp } from '../help/help_service.js';
 import { appName, appIcon, appSlug } from '../core/app_identity.js';
+import { pageConfig } from '../core/page_config.js';
 
 /**
  * Boot BugDesk up to the point where the tiling shell can be installed.
@@ -116,7 +117,7 @@ function buildTopBar() {
  * plus the native window the desktop app runs in.
  */
 function aboutProduct() {
-    const config = window.__BUGDESK_CONFIG__ || {};
+    const config = pageConfig();
     const ticketDesk = appSlug() === 'ticketdesk';
     const version = config.version
         ? (config.commit ? `${config.version} (${config.commit})` : config.version)
