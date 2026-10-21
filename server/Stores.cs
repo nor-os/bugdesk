@@ -125,6 +125,7 @@ sealed class StoreRegistry
     readonly Dictionary<string, Store> _stores = new(StringComparer.OrdinalIgnoreCase);
     readonly ProjectsFile _file;
     readonly ILogger _log;
+    readonly HashSet<string> _warnedLegacy = new(StringComparer.OrdinalIgnoreCase);
     readonly string? _envUser, _envHuman, _envAgent;
     readonly string _lastUsedPath;
     readonly string _stateDir;
@@ -430,6 +431,13 @@ sealed class StoreRegistry
         // a host that keeps a project's settings out of the checkout must not find
         // a legacy root bugdesk.json written behind its back.
         var roster = def.Config is null ? Roster(root, config) : Path.Combine(config, UserStore.SharedFileName);
+        // The one case where that changes what a standalone user had: config was set before (undocumented) and
+        // the checkout still carries a legacy root bugdesk.json. Its roster is not read any more; say so once
+        // rather than let the roster look lost (the Roster() note below).
+        var legacy = Path.Combine(root, "bugdesk.json");
+        if (def.Config is not null && !System.IO.File.Exists(roster) && System.IO.File.Exists(legacy) && _warnedLegacy.Add(def.Name))
+            _log.LogWarning("BugDesk: project {name} has config = '{config}' in projects.toml, so its legacy {legacy} is not read; "
+                + "copy it to {roster} to keep its roster and settings", def.Name, config, legacy, roster);
         return new Spec(def.Name, "project", bugs, backlog, attach, config, roster);
     }
 

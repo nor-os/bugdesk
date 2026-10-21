@@ -5,6 +5,16 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+### Changed
+
+- **A configured `config` folder no longer falls back to a legacy root
+  `bugdesk.json`** (STORY-0060). A project that already had `config = …` in
+  `projects.toml` (undocumented before) and a root `bugdesk.json` in its
+  checkout now reads `<config>/project.json` only; BugDesk logs a warning
+  naming both files when the folder has no `project.json` yet, so copy the
+  legacy file there to keep its roster. Projects without `config` are
+  unchanged.
+
 ### Added
 
 - **A project's settings folder can live outside the checkout** (STORY-0060).

@@ -115,6 +115,12 @@ try {
         assert.ok(!(p.assignees || []).includes('tracked'), "the checkout's .bugdesk/project.json must not be read");
     });
 
+    await t('a legacy root bugdesk.json passed over for a configured folder is named in the log, once', async () => {
+        const hits = log.split('\n').filter((l) => l.includes('legacy') && l.includes(join(hosted, 'bugdesk.json')));
+        assert.equal(hits.length, 1, log);
+        assert.ok(!log.includes(join(plain, 'bugdesk.json') + ' is not read'), 'not for a project without config');
+    });
+
     await t('a settings write lands in the configured folder; the checkout stays clean', async () => {
         const r = await post('/p/hosted/api/project/collaborators', { collaborators: [{ name: 'bob', agent: 'bob_agent' }] });
         assert.equal(r.status, 200, JSON.stringify(r.body));
