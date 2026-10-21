@@ -1283,6 +1283,29 @@ that project's `project.json` and per-user files there, and the host's writes
 through `POST /api/project/*` land there too. Check `GET /api/project` › `path`
 to see that it took.
 
+**Only the host on the port.** A host that runs BugDesk as a sidecar on a
+loopback port and puts its own sign-in in its proxy (AI Desk does) leaves the
+port itself open to every local process, which could read and write records
+there without passing the host's checks. Set `BUGDESK_HOST_SECRET` and BugDesk
+answers only requests that carry the same value in an `X-BugDesk-Host-Secret`
+header: every other request, with the header missing or wrong, gets `401` and
+`{ "ok": false, "error": … }` and nothing else, whether it asks for the API,
+the `api/events` stream or the UI's own pages and scripts. With the right value
+BugDesk behaves exactly as without the setting. Unset or empty, nothing
+changes. The value is never logged or returned (not in `api/config` either);
+at start-up the log says once that host-secret mode is on. The host's side:
+
+- generate a fresh, unguessable secret for each start (32 random bytes, say);
+- pass it to BugDesk in `BUGDESK_HOST_SECRET` at start, never on the command
+  line, where other local users can read it;
+- add `X-BugDesk-Host-Secret` to every request its proxy forwards, the event
+  stream included, and to its own calls (a readiness probe on `api/projects`);
+- strip any `X-BugDesk-Host-Secret` a browser sent before adding its own.
+
+The check runs before anything else, so a header that names the user (a
+trusted user header, STORY-0058) is only ever read from a request that proved
+it came through the host.
+
 ### The entry points
 
 | import from `<root>/js/…` | export | what it is |
