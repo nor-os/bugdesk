@@ -7,6 +7,17 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **A project's settings folder can live outside the checkout** (STORY-0060).
+  `config = '<folder>'` under a project in `projects.toml` (read before, now
+  documented) is the whole answer for that project: its `project.json` and
+  per-user files are read and written there, and a legacy root `bugdesk.json`
+  or a `.bugdesk/project.json` in the checkout is no longer read for it. A host
+  that manages BugDesk's settings (AI Desk) keeps the project's repository
+  clean this way. The Changes pane still names non-record changes when that
+  folder is outside the repository (git refused the whole call before).
+  Without `config` nothing changes. `npm run test:server` runs the built server
+  over a throwaway layout to cover it.
+
 - **BugDesk's pages can be embedded in another FlexDesk application**
   (STORY-0052). A copy of the UI modules imported from a project's URL
   (`<bugdesk>/p/<name>/js/ticketdesk/embed.js`) takes its API and its live

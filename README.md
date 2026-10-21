@@ -190,6 +190,25 @@ to the file; single quotes keep Windows backslashes as typed. `--bugs-dir` and
 `BUGDESK_BUGS` still work — a store named that way that the file does not list
 is served for that run, without being written in.
 
+Two more keys per project, both optional:
+
+```toml
+[projects.tables]
+backlog     = 'C:\repos\tables\backlog'
+config      = 'C:\Users\alice\AppData\Roaming\MyHost\tables'   # the settings folder
+attachments = 'C:\repos\tables\backlog\attachments'
+```
+
+- `config` is the project's **settings folder**: the shared `project.json`
+  (roster, record types, workflow, numbering, alerts, dashboards) and the
+  per-user files beside it. Unset, it is `.bugdesk/` in the checkout. Set, it
+  is the whole answer: BugDesk reads and writes `<config>/project.json` and
+  nothing in the checkout — not `.bugdesk/project.json`, not a legacy root
+  `bugdesk.json`. A folder outside the repository is not committed (the Changes
+  pane leaves it out). `GET /api/project` reports the `path` in force.
+- `attachments` is where pasted images go. Unset, `attachments/` in the bugs
+  folder (else the backlog folder).
+
 **Each project has its own address**, `/p/<name>/`, and `/` opens the one you
 used last. Switching project is a navigation, so the back button returns and two
 tabs can sit on two projects.
@@ -1255,6 +1274,14 @@ config is the one `index.html` publishes.
 
 The host must not set `window.__BUGDESK_CONFIG__`: its presence means "this is
 BugDesk's own page".
+
+**Settings outside the checkout.** A host that manages a project's settings
+itself (and must not leave uncommitted changes in the project's repository)
+names a folder of its own as the project's `config` in the `projects.toml` it
+passes with `BUGDESK_PROJECTS` (see [Projects](#projects)). BugDesk then keeps
+that project's `project.json` and per-user files there, and the host's writes
+through `POST /api/project/*` land there too. Check `GET /api/project` › `path`
+to see that it took.
 
 ### The entry points
 

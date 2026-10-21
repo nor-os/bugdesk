@@ -63,6 +63,14 @@ sealed class GitService
             && _dirs.Any(d => string.Equals(Path.GetDirectoryName(full), d, StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>Is <paramref name="path"/> the repository root or below it?</summary>
+    static bool Inside(string root, string path)
+    {
+        var rel = Path.GetRelativePath(root, path);
+        return !Path.IsPathRooted(rel) && rel != ".." && !rel.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+            && !rel.StartsWith("../", StringComparison.Ordinal);
+    }
+
     /// <summary>The store's uncommitted record files: `{path (repo-relative), status}`.</summary>
     public List<(string Path, string Status)> Changes()
     {
@@ -95,7 +103,11 @@ sealed class GitService
         if (Root is null) return list;
         var args = new List<string> { "status", "--porcelain=v1", "-uall", "--" };
         args.AddRange(_dirs.Select(d => Path.GetRelativePath(Root, d)));
-        if (ConfigDir is { Length: > 0 } cfg && Directory.Exists(cfg)) args.Add(Path.GetRelativePath(Root, Path.GetFullPath(cfg)));
+        // A settings folder outside the repository (a host keeps it elsewhere,
+        // STORY-0060) is not git's to report — and naming it would make git
+        // refuse the whole call ("outside repository"), hiding every other change.
+        if (ConfigDir is { Length: > 0 } cfg && Directory.Exists(cfg) && Inside(Root, Path.GetFullPath(cfg)))
+            args.Add(Path.GetRelativePath(Root, Path.GetFullPath(cfg)));
         var (ok, output, _) = Run(Root, Timeout, args.ToArray());
         if (!ok) return list;
         foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))

@@ -426,7 +426,11 @@ sealed class StoreRegistry
         var config = def.Config is { } c ? _file.Resolve(c) : Path.Combine(root, ".bugdesk");
         var attach = def.Attachments is { } a ? _file.Resolve(a)
             : Path.Combine(bugs.Length > 0 ? bugs : backlog.Length > 0 ? backlog : config, "attachments");
-        return new Spec(def.Name, "project", bugs, backlog, attach, config, Roster(root, config));
+        // A settings folder NAMED in projects.toml is the whole answer (STORY-0060):
+        // a host that keeps a project's settings out of the checkout must not find
+        // a legacy root bugdesk.json written behind its back.
+        var roster = def.Config is null ? Roster(root, config) : Path.Combine(config, UserStore.SharedFileName);
+        return new Spec(def.Name, "project", bugs, backlog, attach, config, roster);
     }
 
     static Spec PlanTracker(string basePath)
@@ -473,6 +477,11 @@ sealed class StoreRegistry
     /// <c>bugdesk.json</c> from before that move still wins when one exists:
     /// repos created earlier have it committed, and silently reading a different,
     /// empty file would look exactly like BugDesk losing the roster.
+    /// </para>
+    /// <para>
+    /// Only for the default folder. A project whose <c>config</c> is set in
+    /// projects.toml reads <c>&lt;config&gt;/project.json</c> and nothing in the
+    /// checkout (STORY-0060) — see <see cref="Plan"/>.
     /// </para>
     /// </summary>
     static string Roster(string root, string config)
