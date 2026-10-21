@@ -11,9 +11,10 @@
  * A row's hover buttons and its right-click menu rename it, move it to another
  * section and delete it; the page (page.js) has the rest (tiles, copy, share).
  *
- * Above them sits the section's HOME (STORY-0048): the dashboard its chip
- * opens (homes.js). From the queue, the board or a dashboard, it is the way
- * back, one click as the queue is from the home.
+ * The section's HOME (STORY-0048), the dashboard its chip opens (homes.js),
+ * is the first of the project dashboards: it is shared like them, kept in
+ * project.json once changed. From the queue, the board or a dashboard, it is
+ * the way back, one click as the queue is from the home.
  */
 
 import { openConfirm, showContextMenu } from '@flexdesk/widgets';
@@ -84,9 +85,19 @@ export function mountDashboardsRail(host, ctx, { section = DASHBOARD_SECTIONS[0]
     /** `[entry, its index in the whole list]` for the entries this section lists. */
     const here = (scope) => lists[scope].entries.map((e, i) => [e, i]).filter(([e]) => listedIn(e, section, DASHBOARD_SECTIONS));
 
+    const homeRow = () => (homeKind ? `
+            <div class="td-nav__item bd-dash-nav__home${marked === HOME_MARK ? ' is-selected' : ''}"
+                 data-home="${esc(homeKind)}" role="button" tabindex="0"
+                 title="The ${esc(SECTION_LABEL[section] || section)} home: the dashboard the chip opens. ${esc(SCOPES.shared.tip)}">
+                ${icon('home')}<span>Home</span>
+            </div>` : '');
+
     const group = (scope) => {
         const s = SCOPES[scope];
         const { broken } = lists[scope];
+        // The home is a project dashboard; it is read on its own (homes.js), so
+        // it is listed even when the rest of project.json cannot be.
+        const home = scope === 'shared' ? homeRow() : '';
         const rows = here(scope).map(([e, i]) => {
             const key = keyOf(scope, e, i);
             const name = e.name || e.id || `Entry ${i + 1}`;
@@ -110,25 +121,17 @@ export function mountDashboardsRail(host, ctx, { section = DASHBOARD_SECTIONS[0]
         return `
             <div class="td-nav__section">${s.heading} dashboards</div>
             ${broken ? `<div class="td-nav__item bd-dash-nav__banner">${icon('warning')}<span>${s.heading} dashboards cannot be read: ${esc(broken)}. Nothing is saved to them until ${esc(s.file)} is fixed.</span></div>` : ''}
-            ${rows || (broken ? '' : `<div class="td-nav__item" title="${esc(s.emptyTip)}"><span class="td-dim">${esc(s.empty)}</span></div>`)}
+            ${home}${rows || (broken || home ? '' : `<div class="td-nav__item" title="${esc(s.emptyTip)}"><span class="td-dim">${esc(s.empty)}</span></div>`)}
             ${broken ? '' : `
             <div class="td-nav__item" data-new="${scope}" role="button" tabindex="0">
                 ${icon('add')}<span class="td-dim">${scope === 'shared' ? 'New dashboard' : 'New personal dashboard'}</span>
             </div>`}`;
     };
 
-    const homeRow = () => (homeKind ? `
-            <div class="td-nav__item bd-dash-nav__home${marked === HOME_MARK ? ' is-selected' : ''}"
-                 data-home="${esc(homeKind)}" role="button" tabindex="0"
-                 title="The ${esc(SECTION_LABEL[section] || section)} home: the dashboard the chip opens">
-                ${icon('home')}<span>Home</span>
-            </div>` : '');
-
     const render = () => {
         marked = markOf();
         host.innerHTML = `
             <div class="td-nav bd-dash-nav" data-section="${esc(section)}">
-                ${homeRow()}
                 ${group('shared')}
                 ${group('personal')}
                 ${error ? `<div class="td-nav__item bd-dash-nav__banner">${icon('error')}<span>${esc(error)}</span></div>` : ''}

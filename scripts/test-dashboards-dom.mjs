@@ -1175,6 +1175,9 @@ await t('each section\'s rail has a Home row that opens its home and is marked w
     const home = () => nav.querySelector('[data-home]');
     assert.ok(home(), 'no Home row');
     assert.equal(rowName(home()), 'Home');
+    const order = [...nav.querySelectorAll('.td-nav__section, [data-home]')].map((e) => e.dataset.home ? 'home' : e.textContent);
+    assert.deepEqual(order, ['Project dashboards', 'home', 'Personal dashboards'], 'the home is not listed with the project dashboards');
+    assert.ok(!/No project dashboards here yet/.test(nav.innerHTML), 'the project group says it is empty beside its home');
     assert.ok(!home().classList.contains('is-selected'), 'marked while the queue shows');
     home().click();
     assert.deepEqual(opened, [{ kind: 'backlog-home', q: undefined }]);

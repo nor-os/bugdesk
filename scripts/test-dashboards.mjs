@@ -386,6 +386,20 @@ ta('a status-category bar drills down to the statuses behind it', async () => {
     assert.deepEqual(d.expr.children[0], { kind: 'clause', field: 'status', op: 'one_of', value: ['done'] });
 });
 
+ta('a ref field (epic) puts the ref alone on the axis and its title in the hover', async () => {
+    const src = fakeSource(ROWS);
+    const epic = { key: 'epic', label: 'Epic', type: 'enum', refTicks: true,
+        options: [{ value: 'EPIC-0001', label: 'EPIC-0001 — Login' }], get: (i) => (i.id === 1 ? 'EPIC-0001' : '') };
+    src.fields.push(epic);
+    const r = await resolve.resolveTile(src, { source: 'backlog', plot: 'count', field: 'epic', split: 'statusCategory' });
+    for (const s of r.data.series) {
+        assert.deepEqual(s.x, ['EPIC-0001', '(none)']);
+        assert.deepEqual(s.hovertext, ['EPIC-0001 — Login', '(none)']);
+    }
+    const plain = await resolve.resolveTile(src, { source: 'backlog', plot: 'count', field: 'assignee' });
+    assert.equal(plain.data.series[0].hovertext, undefined, 'a plain field has its own hover');
+});
+
 ta('the filter is the views\' own: a built-in view by key, or a copied expression', async () => {
     const src = fakeSource(ROWS);
     const board = await resolve.resolveTile(src, { source: 'backlog', filter: { key: 'board' }, plot: 'count' }, { kind: 'kpi' });

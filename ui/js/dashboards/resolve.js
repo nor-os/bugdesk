@@ -87,6 +87,15 @@ export const LIST_SORTS = Object.freeze({
 export const NUMERIC_PLOTS = new Set(['sum', 'avg', 'histogram']);
 
 const nameOf = (key) => String(key || '').replace(/^cf\./, '');
+/**
+ * A grouped series' x and hover. A field whose labels are "EPIC-0033 — its
+ * title" (`refTicks`) puts the ref alone on the axis, where a row of titles
+ * would crowd it, and the whole label in the hover.
+ */
+const ticks = (field, g) => (field.refTicks
+    ? { x: g.keys.map((k) => (k === '' ? keyLabel(field, k) : String(k))), hovertext: g.x }
+    : { x: g.x });
+
 const removed = (key) => ({ empty: `The field '${nameOf(key)}' is no longer in this project's schema, so this tile has nothing to show. Pick another field in the tile's settings.` });
 
 /** The filter a binding names, as `{expr, label}`, or `{empty}` when it cannot be used. */
@@ -186,19 +195,19 @@ export async function resolveTile(src, binding, { kind = 'chart', today = todayI
         const g = groupCountSplit(rows, field, split);
         if (!g.keys.length) return { empty: 'No records match this tile\'s filter.' };
         return { data: { series: g.series.map((s) => ({
-            x: g.x, y: s.y, name: keyLabel(split, s.key), customdata: g.keys.map((k) => [k, s.key]),
+            ...ticks(field, g), y: s.y, name: keyLabel(split, s.key), customdata: g.keys.map((k) => [k, s.key]),
         })) } };
     }
     if (plot === 'count') {
         const g = groupCount(rows, field);
         if (!g.keys.length) return { empty: 'No records match this tile\'s filter.' };
-        return { data: { series: [{ x: g.x, y: g.y, name: 'Records', customdata: g.keys }] } };
+        return { data: { series: [{ ...ticks(field, g), y: g.y, name: 'Records', customdata: g.keys }] } };
     }
     if (plot === 'sum' || plot === 'avg') {
         const g = aggregate(rows, field, readValue, plot);
         const note = valueNote(g.skipped);
         if (!g.keys.length) return { empty: `No ${valueField.label} values to show.` + (note ? ` ${note}.` : '') };
-        return { data: { series: [{ x: g.x, y: g.y, name: `${PLOTS[plot].split(' ')[0]} of ${valueField.label}`, customdata: g.keys }], note } };
+        return { data: { series: [{ ...ticks(field, g), y: g.y, name: `${PLOTS[plot].split(' ')[0]} of ${valueField.label}`, customdata: g.keys }], note } };
     }
     if (plot === 'histogram') {
         const { values, skipped } = numericValues(rows, readValue);

@@ -91,7 +91,8 @@ export const FILTER_FIELDS = [
     },
     {
         // The whole work package, at any depth — an epic answers for itself.
-        key: 'epic', label: 'Epic', type: 'enum',
+        // On a chart axis the ref alone (`refTicks`); its title is in the hover.
+        key: 'epic', label: 'Epic', type: 'enum', refTicks: true,
         get options() { return epicOptions(); },
         get: (i) => i.epicRef || '',
     },
@@ -99,7 +100,7 @@ export const FILTER_FIELDS = [
         // The whole project, at any depth — the tracker's equivalent of `epic`
         // one level up, and what "everything I am tracking for this client"
         // resolves to as a single clause.
-        key: 'project', label: 'Project', type: 'enum',
+        key: 'project', label: 'Project', type: 'enum', refTicks: true,
         get options() { return refOptionsFor('project'); },
         get: (i) => i.projectRef || '',
     },
