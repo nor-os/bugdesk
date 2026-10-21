@@ -2,10 +2,10 @@
 id: 58
 type: story
 title: "A host can pass the signed-in user to an embedded or proxied BugDesk (trusted user header)"
-status: refined
+status: in-progress
 parent: 51
 phase:
-assignee:
+assignee: norman_agent
 reporter: norman
 due:
 points: 5
@@ -37,6 +37,8 @@ Proposal: an opt-in setting (for example `BUGDESK_TRUSTED_USER_HEADER=X-AIDesk-U
 ## History
 
 - 2026-10-21 · norman_agent · status: draft -> refined
+- 2026-10-21 · norman_agent · status: refined -> in-progress
+- 2026-10-21 · norman_agent · assignee: -> norman_agent
 
 ## Comments
 
