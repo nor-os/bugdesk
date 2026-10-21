@@ -17,6 +17,16 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **A host can name the signed-in user per request** (STORY-0058).
+  `BUGDESK_TRUSTED_USER_HEADER=<header>` (for example `X-AIDesk-User`) makes a
+  request that carries that header act as the user it names: `/api/config`,
+  the default comment author, history actor, reporter and assignee, and that
+  user's own saved filters, settings and layout. Honoured only while BugDesk
+  listens on loopback (otherwise ignored, with one warning at start-up); a
+  missing or empty header is the process user. The host strips incoming copies
+  and sets its own — README › Behind a host's sign-in. Unset, nothing changes.
+  `npm run test:server` covers it.
+
 - **A project's settings folder can live outside the checkout** (STORY-0060).
   `config = '<folder>'` under a project in `projects.toml` (read before, now
   documented) is the whole answer for that project: its `project.json` and

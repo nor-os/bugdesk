@@ -223,6 +223,41 @@ string legacyFiltersPath = Path.Combine(ResolveStateDir(app.Environment.ContentR
 if (mode != "tracker" && stores.DefaultProject is { } firstProject)
     stores.Project(firstProject.Name)?.Users.MigrateLegacyFilters(legacyFiltersPath);
 
+// ---- A host's signed-in user (STORY-0058, README "Behind a host's sign-in") ----------
+// BugDesk has ONE user per process. A host that puts its own sign-in in front
+// of it (AI Desk's proxy) can name the signed-in user per request in a header
+// it sets itself — BUGDESK_TRUSTED_USER_HEADER says which. Opt-in, and only
+// while every address BugDesk listens on is loopback: anybody who can reach the
+// port can send any header, so off the machine it would let anyone be anyone.
+// Which addresses those are is known only once the server has bound them, which
+// is also before the first request can arrive — so it is decided on first use,
+// and at start-up, whichever comes first, and said once.
+string? trustedUserSetting = Env("BUGDESK_TRUSTED_USER_HEADER");
+var trustedUserHeader = new Lazy<string?>(() =>
+{
+    if (trustedUserSetting is null) return null;
+    if (!trustedUserSetting.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.'))
+    {
+        app.Logger.LogWarning("BugDesk: BUGDESK_TRUSTED_USER_HEADER '{header}' is not a header name — ignored; every request is the process user",
+            trustedUserSetting);
+        return null;
+    }
+    var addresses = app.Services.GetRequiredService<Microsoft.AspNetCore.Hosting.Server.IServer>()
+        .Features.Get<Microsoft.AspNetCore.Hosting.Server.Features.IServerAddressesFeature>()?.Addresses.ToList() ?? new();
+    var open = addresses.Where(a => !IsLoopbackAddress(a)).ToList();
+    if (addresses.Count == 0 || open.Count > 0)
+    {
+        app.Logger.LogWarning("BugDesk: BUGDESK_TRUSTED_USER_HEADER is set, but BugDesk listens on {addresses}, not only on loopback — "
+            + "the {header} header is NOT honoured; every request is the process user",
+            addresses.Count == 0 ? "(unknown)" : string.Join(", ", open), trustedUserSetting);
+        return null;
+    }
+    app.Logger.LogInformation("BugDesk: requests name their user in {header} (BUGDESK_TRUSTED_USER_HEADER); without it, the process user",
+        trustedUserSetting);
+    return trustedUserSetting;
+}, LazyThreadSafetyMode.ExecutionAndPublication);
+if (trustedUserSetting is not null) app.Lifetime.ApplicationStarted.Register(() => _ = trustedUserHeader.Value);
+
 // ---- Routing: which store a request is for ---------------------------------
 // The UI is served UNDER its store's prefix — /p/bugdesk/, /t/ — and addresses
 // its API relatively, so everything a page asks for reaches the store it was
@@ -307,7 +342,20 @@ app.Use(async (http, next) =>
     if (http.Request.Path.Value is { } js && js.StartsWith("/js/ticketdesk@t/", StringComparison.Ordinal))
         http.Request.Path = "/js/ticketdesk/" + js["/js/ticketdesk@t/".Length..];
 
+    // Missing or empty: the process user, exactly as without the setting. A
+    // value that cannot be a name — too long, a control character, the header
+    // twice — is refused rather than quietly filed under somebody else.
+    string? user = null;
+    if (trustedUserHeader.Value is { } header && http.Request.Headers.TryGetValue(header, out var named))
+    {
+        var value = named.Count == 1 ? (named[0] ?? "").Trim() : null;
+        if (value is null || value.Length > 60 || value.Any(char.IsControl))
+        { await Fail(http, 400, $"the {header} header must name one user, 60 characters or fewer"); return; }
+        if (value.Length > 0) user = value;
+    }
+
     Req.Maybe = store;
+    Req.User = user;
     await next();
 });
 // Explicit, and AFTER the rewrite: left implicit, WebApplication matches routes
@@ -1791,6 +1839,12 @@ app.MapPost("/api/config/user", async (HttpRequest req) =>
     if (name.Length > 60)
         return Results.Json(new { ok = false, error = "name must be 60 characters or fewer" }, json, statusCode: 400);
 
+    // The host named this request's user (STORY-0058): who they are is the
+    // host's business, and this endpoint would rename the PROCESS user.
+    if (Req.User is not null)
+        return Results.Json(new { ok = false, error = "your name is set by the host you signed in to; nothing was changed" },
+            json, statusCode: 409);
+
     var typed = body.TryGetValue("agentName", out var a) ? (a.GetString() ?? "").Trim() : "";
     var s = Req.Store;
     // An unnamed agent is DERIVED, not left generic: every person's assistant
@@ -2710,6 +2764,17 @@ static string? ImageContentType(string name) => Path.GetExtension(name).ToLowerI
 };
 
 /// <summary>An API refusal, in the shape every endpoint answers with.</summary>
+/// <summary>Whether a server address (<c>http://127.0.0.1:8781</c>,
+/// <c>http://localhost:5000</c>, <c>http://[::]:80</c>, <c>http://*:80</c>) is
+/// reachable from this machine only. A wildcard host is not.</summary>
+static bool IsLoopbackAddress(string address)
+{
+    var normalised = address.Replace("://*", "://0.0.0.0").Replace("://+", "://0.0.0.0");
+    if (!Uri.TryCreate(normalised, UriKind.Absolute, out var uri)) return false;
+    if (string.Equals(uri.Host, "localhost", StringComparison.OrdinalIgnoreCase)) return true;
+    return System.Net.IPAddress.TryParse(uri.Host.Trim('[', ']'), out var ip) && System.Net.IPAddress.IsLoopback(ip);
+}
+
 static Task Fail(HttpContext http, int status, string error)
 {
     http.Response.StatusCode = status;

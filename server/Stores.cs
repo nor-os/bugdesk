@@ -111,6 +111,39 @@ static class Req
         get => _current.Value;
         set => _current.Value = value;
     }
+
+    static readonly AsyncLocal<string?> _user = new();
+
+    /// <summary>
+    /// The signed-in user a trusted host named for this request
+    /// (<c>BUGDESK_TRUSTED_USER_HEADER</c>, STORY-0058), or null: the process
+    /// user. Set by the routing middleware beside <see cref="Maybe"/>; every
+    /// <see cref="UserStore"/> answer — the name, the profile, the filters and
+    /// the layout — follows it for this request only.
+    /// </summary>
+    public static string? User
+    {
+        get => _user.Value;
+        set => _user.Value = value;
+    }
+
+    /// <summary>
+    /// Step out of the request's user until disposed: for the code that keeps
+    /// the PROCESS user's profile in line with projects.toml
+    /// (<c>StoreRegistry.Sync</c>), which must never adopt whoever a host
+    /// named for the request that happened to open the store.
+    /// </summary>
+    public static IDisposable AsProcess()
+    {
+        var was = _user.Value;
+        _user.Value = null;
+        return new Restore(() => _user.Value = was);
+    }
+
+    sealed class Restore(Action undo) : IDisposable
+    {
+        public void Dispose() => undo();
+    }
 }
 
 /// <summary>
@@ -404,6 +437,7 @@ sealed class StoreRegistry
     void Sync(Store s)
     {
         if (_envUser is not null) return;   // a per-process override: leave it alone
+        using var _ = Req.AsProcess();      // the file names the process user, never a request's
         var model = _file.Current;
         var name = model.UserName;
         if (name is null)
