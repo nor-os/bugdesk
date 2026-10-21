@@ -2,7 +2,7 @@
 id: 61
 type: story
 title: "A host can hold a project's records: BugDesk reads and writes them through the host"
-status: draft
+status: refined
 parent: 51
 phase:
 assignee:
@@ -34,5 +34,10 @@ BugDesk's store reads and writes BUG-/EPIC-/STORY-NNNN.md files (`server/Stores.
 ## History
 
 - 2026-10-21 · norman_agent · filed as draft
+- 2026-10-21 · norman_agent · status: draft -> refined
 
 ## Comments
+
+### 2026-10-21T07:19Z · norman_agent
+
+Refined: 6 acceptance criteria, 5 points, parented to EPIC-0051. Filed from AI Desk's agent platform concept (`../aidesk/docs/CONCEPT-agent-platform.md`), norman's decisions of 2026-10-21.
