@@ -381,6 +381,7 @@ Resolution order, highest first:
 
 | source | notes |
 |---|---|
+| a trusted host's header | only with `BUGDESK_TRUSTED_USER_HEADER` set and BugDesk on loopback: the signed-in user a host in front of BugDesk names per request. See [Behind a host's sign-in](#behind-a-hosts-sign-in). |
 | the per-user profile | `.bugdesk/user-<name>.json` — what the first-run screen and "change your name" write. **The normal case, and the authority.** |
 | `BUGDESK_HUMAN` / `BUGDESK_AGENT` | environment. A **seed**, not an override: used when there is no profile yet, and a profile is written from it on the spot — which is what **suppresses the first-run prompt** for a scripted deployment. |
 | `reviewer` / `agent` | generic fallback |
@@ -1409,7 +1410,8 @@ the kinds are BugDesk's own words.
   file in whichever store has it.
 - **A configured user.** An embedded copy cannot show the first-run name
   prompt: start BugDesk with `BUGDESK_USER`, or a `[user]` in projects.toml, or
-  comments are signed `reviewer`.
+  comments are signed `reviewer`. A host with its own sign-in can also name the
+  signed-in user per request — see [Behind a host's sign-in](#behind-a-hosts-sign-in).
 - Optional: an element `#sim-status`, where the pages write their one-line
   status ("Saved #42"); without it those lines go nowhere.
 
@@ -1421,6 +1423,55 @@ alert rules, the Changes pane's git warnings and the dashboards (including the
 section homes `bugs-home` / `backlog-home`, whose kinds `embedKinds()` still
 lists so the taxonomy's pointers resolve). Those are `tiling/install.js`'s, for
 BugDesk's own page.
+
+### Behind a host's sign-in
+
+BugDesk has one user per process. A host that puts its own sign-in in front of
+BugDesk (AI Desk's `/bugdesk/` proxy) can name the signed-in user **per
+request** instead, so records, filters and settings are that person's rather
+than the process user's:
+
+```sh
+BUGDESK_TRUSTED_USER_HEADER=X-AIDesk-User   # the header the host sets
+```
+
+With it set, a request carrying `X-AIDesk-User: ada` is ada's:
+
+- `GET /api/config` answers `humanAuthor: "ada"` and `agentAuthor:
+  "ada_agent"` (or the agent ada's profile names), `user: "ada"`;
+- what the UI writes defaults to ada: the comment author, the `## History`
+  actor, the default `reporter` and `assignee` of a new bug or backlog item;
+- ada's saved filters, settings and layout live in her own
+  `user-ada.json` / `state-ada/` beside the process user's, created on her
+  first save. Two people behind one host never see each other's, and neither
+  changes the process user's profile or `active.json`;
+- `POST /api/config/user` is refused (409): who ada is is the host's business.
+- ada is **not** added to the project's roster (`collaborators`) on her own:
+  the header names who is asking, not who belongs to the project, and a
+  request must not rewrite the shared settings. Until someone adds her in
+  Settings, the assignee pickers do not offer her — her records are still
+  filed as `ada`.
+
+The header's value is the user's name exactly: `oidc_x` and `oidc-x` are two
+people with two profiles, where two names typed at the name prompt that differ
+only in case or punctuation are one. A request without the header, or with an
+empty one, is the process user, as without the setting. A value BugDesk cannot
+file under a name (over 128 characters, a control character, the header twice)
+is refused with 400.
+
+**Loopback only.** Anybody who can reach BugDesk's port can send any header. The
+header is honoured only while every address BugDesk listens on is loopback
+(`127.0.0.1`, `::1`, `localhost`); listening anywhere else (`0.0.0.0`, `*`, a
+LAN address), BugDesk ignores it and says so once at start-up, naming the
+setting.
+
+**The host's duty.** The host must **strip every incoming copy of the header**
+from the browser's request and set its own, from its own session — otherwise
+any signed-in user can name any other. And since any process on the machine can
+reach a loopback port, a host that relies on the attribution should also keep
+other local processes out with `BUGDESK_HOST_SECRET` (**Only the host on the
+port**, under [Loading a copy](#loading-a-copy)); that check runs before the
+header is read.
 
 ## Changelog
 

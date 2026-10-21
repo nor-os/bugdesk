@@ -79,8 +79,21 @@ class UserStore
 
     public string ConfigDir { get; }
 
-    /// <summary>Slug of the profile in use, or null when there is none yet.</summary>
-    public string? ActiveSlug { get; private set; }
+    /// <summary>The PROCESS user's slug: projects.toml's <c>[user]</c>,
+    /// <c>BUGDESK_USER</c> or <c>active.json</c>.</summary>
+    string? _slug;
+
+    /// <summary>
+    /// Slug of the profile in use, or null when there is none yet. For a request
+    /// a trusted host named a user for (<see cref="Req.User"/>, STORY-0058) it
+    /// is THAT user's profile — their own file beside the process user's, so
+    /// two people behind one host never share filters, settings or a layout.
+    /// </summary>
+    public string? ActiveSlug => Req.User is { } user ? HostSlugOf(user) : _slug;
+
+    /// <summary>The longest name a host may send (STORY-0058): AI Desk's
+    /// path-safe user names run to 128 characters.</summary>
+    public const int MaxHostNamedLength = 128;
 
     public UserStore(string configDir, string? envUser, string? envHuman, string? envAgent,
                      bool deriveAgent = true)
@@ -97,17 +110,17 @@ class UserStore
         // BUGDESK_USER names a profile for this process only — it must not
         // rewrite active.json, or one `BUGDESK_USER=bob ./run.sh` would silently
         // repoint the checkout's default.
-        ActiveSlug = _envUser is not null
+        _slug = _envUser is not null
             ? SlugOf(_envUser)
             : ReadJson(ActivePath)?["user"]?.GetValue<string>();
 
-        if (ActiveSlug is not null && !File.Exists(ProfilePath(ActiveSlug)))
+        if (_slug is not null && !File.Exists(ProfilePath(_slug)))
         {
             // BUGDESK_USER for someone who has never run BugDesk here is a
             // legitimate first run FOR THEM: materialise the profile rather than
             // booting nameless.
             if (_envUser is not null) NewProfile(_envUser, _envAgent);
-            else ActiveSlug = null;   // stale pointer (profile deleted) — ask again
+            else _slug = null;   // stale pointer (profile deleted) — ask again
         }
 
         // BUGDESK_HUMAN with nothing configured: SEED a profile from it, rather
@@ -119,7 +132,7 @@ class UserStore
         // not: one `BUGDESK_HUMAN=bob ./run.sh` must not silently repoint the
         // checkout's default for everyone else who runs it. Changing the name in
         // the UI is an explicit act and does persist.
-        if (ActiveSlug is null && _envHuman is not null) NewProfile(_envHuman, _envAgent);
+        if (_slug is null && _envHuman is not null) NewProfile(_envHuman, _envAgent);
     }
 
     /* ── identity ──────────────────────────────────────────────────── */
@@ -136,11 +149,19 @@ class UserStore
     /// use. See the class remarks: an env var starts a process, a profile is
     /// what the user changed, and the second is the more recent statement.
     /// </summary>
-    public string HumanAuthor =>
-        Str(Active()?["name"]) ?? _envHuman ?? "reviewer";
+    public string HumanAuthor => Req.User ?? (
+        Str(Active()?["name"]) ?? _envHuman ?? "reviewer");
 
-    public string AgentAuthor =>
-        Str(Active()?["agentName"]) ?? _envAgent ?? "agent";
+    /// <summary>
+    /// A host-named user's agent is the one their profile names, else DERIVED
+    /// (<c>&lt;name&gt;_agent</c>) — never the process user's, which would sign
+    /// one person's assistant with another person's name. From the exact name,
+    /// not its slug, for the reason <see cref="HostSlugOf"/> gives: the agents
+    /// of <c>oidc_x</c> and <c>oidc-x</c> are two.
+    /// </summary>
+    public string AgentAuthor => Req.User is { } user
+        ? Str(Active()?["agentName"]) ?? (_deriveAgent ? $"{user}_agent" : "agent")
+        : Str(Active()?["agentName"]) ?? _envAgent ?? "agent";
 
     /* ── profiles ──────────────────────────────────────────────────── */
 
@@ -181,7 +202,7 @@ class UserStore
             doc["updated"] = Md.Today();
             WriteJson(ProfilePath(slug), doc);
 
-            ActiveSlug = slug;
+            _slug = slug;
             // Not written when BUGDESK_USER is in force: that variable is this
             // process's business, and persisting it would leak into every other
             // run from the same checkout.
@@ -326,7 +347,7 @@ class UserStore
         doc["agentName"] = Blank(agentName)
             ? (_deriveAgent ? ProjectConfig.AgentNameFor(name) : "")
             : agentName!.Trim();
-        ActiveSlug = slug;
+        _slug = slug;
         WriteJson(ProfilePath(slug), doc);
         return doc;
     }
@@ -448,5 +469,22 @@ class UserStore
         }
         var slug = sb.ToString().Trim('-');
         return slug.Length == 0 ? "user" : slug;
+    }
+
+    /// <summary>
+    /// The profile key of a user a host named (STORY-0058). Unlike a typed
+    /// display name, a host's name IS the identity: <c>oidc_x</c> and
+    /// <c>oidc-x</c> are two people, and so are two names of punctuation only.
+    /// A name <see cref="SlugOf"/> keeps as it is is its own key, so the host's
+    /// <c>alice</c> is the <c>alice</c> who runs BugDesk; any other gets a hash
+    /// of the exact name after a <c>--</c>, which no <see cref="SlugOf"/> result
+    /// contains — two different names never share a file.
+    /// </summary>
+    public static string HostSlugOf(string name)
+    {
+        var slug = SlugOf(name);
+        if (slug == name) return slug;
+        var hash = System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(name));
+        return $"{slug}--{Convert.ToHexStringLower(hash)[..12]}";
     }
 }
