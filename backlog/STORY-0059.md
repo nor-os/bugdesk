@@ -2,10 +2,10 @@
 id: 59
 type: story
 title: "A host can require a shared secret on every request to a loopback BugDesk"
-status: refined
+status: in-progress
 parent: 51
 phase:
-assignee:
+assignee: norman_agent
 reporter: norman
 due:
 points: 3
@@ -13,7 +13,7 @@ subsystem: hosting
 labels: [embedding, security]
 links: [relates-to 58]
 created: 2026-10-20
-updated: 2026-10-21T18:08Z
+updated: 2026-10-21T18:09Z
 ---
 
 ## Description
@@ -35,6 +35,8 @@ Related: STORY-0058 (trusted user header), which only makes sense when the port 
 ## History
 
 - 2026-10-21 · norman_agent · status: draft -> refined
+- 2026-10-21 · norman_agent · status: refined -> in-progress
+- 2026-10-21 · norman_agent · assignee: -> norman_agent
 
 ## Comments
 
