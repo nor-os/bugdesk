@@ -223,6 +223,41 @@ string legacyFiltersPath = Path.Combine(ResolveStateDir(app.Environment.ContentR
 if (mode != "tracker" && stores.DefaultProject is { } firstProject)
     stores.Project(firstProject.Name)?.Users.MigrateLegacyFilters(legacyFiltersPath);
 
+// ---- Host secret -----------------------------------------------------------
+// A host that runs BugDesk as a sidecar on a loopback port (AI Desk) puts its
+// own sign-in in front of it, in its proxy. The port itself has none, so any
+// local process could skip the host's checks by talking to it directly.
+// BUGDESK_HOST_SECRET closes that: once set, a request is answered only if it
+// carries the same value in X-BugDesk-Host-Secret — the API, the event stream
+// and the UI's own files alike — and everything else gets a bare 401. The host
+// generates the secret per start, adds the header in its proxy and strips any
+// copy a browser sent. Unset or empty, nothing changes.
+//
+// FIRST in the pipeline, before the routing below can redirect or 404 and so
+// tell a stranger which projects exist. The value is never logged, and it is
+// taken out of this process's environment once read, so git and its hooks do
+// not inherit it.
+const string HostSecretHeader = "X-BugDesk-Host-Secret";
+if (Env("BUGDESK_HOST_SECRET") is { } hostSecret)
+{
+    Environment.SetEnvironmentVariable("BUGDESK_HOST_SECRET", null);
+    // Compared as hashes, in constant time: a plain string compare returns at
+    // the first wrong character, and FixedTimeEquals on the raw bytes still
+    // returns early on a wrong LENGTH.
+    var expected = System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(hostSecret));
+    app.Logger.LogInformation("BugDesk: host-secret mode is on — every request must carry {header}", HostSecretHeader);
+    app.Use(async (http, next) =>
+    {
+        var given = http.Request.Headers[HostSecretHeader];
+        var ok = given.Count == 1 && System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
+            System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(given[0] ?? "")), expected);
+        if (!ok) { await Fail(http, 401, $"this BugDesk answers only its host (missing or wrong {HostSecretHeader})"); return; }
+        // Nothing past here needs it, so nothing past here can echo it.
+        http.Request.Headers.Remove(HostSecretHeader);
+        await next();
+    });
+}
+
 // ---- Routing: which store a request is for ---------------------------------
 // The UI is served UNDER its store's prefix — /p/bugdesk/, /t/ — and addresses
 // its API relatively, so everything a page asks for reaches the store it was

@@ -17,6 +17,13 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **A host can require a shared secret on every request** (STORY-0059).
+  With `BUGDESK_HOST_SECRET` set, BugDesk answers only requests carrying the
+  same value in `X-BugDesk-Host-Secret` and refuses every other one (API, event
+  stream, UI files) with `401`, so a loopback sidecar answers nothing useful to
+  a local process that bypasses its host's proxy. The value is compared in
+  constant time and never logged. Unset or empty, nothing changes. Covered by
+  `npm run test:server`.
 - **A project's settings folder can live outside the checkout** (STORY-0060).
   `config = '<folder>'` under a project in `projects.toml` (read before, now
   documented) is the whole answer for that project: its `project.json` and
