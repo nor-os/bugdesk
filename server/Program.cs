@@ -344,13 +344,19 @@ app.Use(async (http, next) =>
 
     // Missing or empty: the process user, exactly as without the setting. A
     // value that cannot be a name — too long, a control character, the header
-    // twice — is refused rather than quietly filed under somebody else.
+    // twice — is refused rather than quietly filed under somebody else. The
+    // limit is the host's, not the name prompt's 60: AI Desk names a Tables
+    // user by a path-safe form of their sign-in of up to 128 characters, and a
+    // shorter limit here would lock a long one out of BugDesk altogether.
     string? user = null;
     if (trustedUserHeader.Value is { } header && http.Request.Headers.TryGetValue(header, out var named))
     {
         var value = named.Count == 1 ? (named[0] ?? "").Trim() : null;
-        if (value is null || value.Length > 60 || value.Any(char.IsControl))
-        { await Fail(http, 400, $"the {header} header must name one user, 60 characters or fewer"); return; }
+        if (value is null || value.Length > UserStore.MaxHostNamedLength || value.Any(char.IsControl))
+        {
+            await Fail(http, 400, $"the {header} header must name one user, {UserStore.MaxHostNamedLength} characters or fewer");
+            return;
+        }
         if (value.Length > 0) user = value;
     }
 
@@ -2763,7 +2769,6 @@ static string? ImageContentType(string name) => Path.GetExtension(name).ToLowerI
     _ => null,
 };
 
-/// <summary>An API refusal, in the shape every endpoint answers with.</summary>
 /// <summary>Whether a server address (<c>http://127.0.0.1:8781</c>,
 /// <c>http://localhost:5000</c>, <c>http://[::]:80</c>, <c>http://*:80</c>) is
 /// reachable from this machine only. A wildcard host is not.</summary>
@@ -2775,6 +2780,7 @@ static bool IsLoopbackAddress(string address)
     return System.Net.IPAddress.TryParse(uri.Host.Trim('[', ']'), out var ip) && System.Net.IPAddress.IsLoopback(ip);
 }
 
+/// <summary>An API refusal, in the shape every endpoint answers with.</summary>
 static Task Fail(HttpContext http, int status, string error)
 {
     http.Response.StatusCode = status;

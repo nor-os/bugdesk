@@ -1423,10 +1423,18 @@ With it set, a request carrying `X-AIDesk-User: ada` is ada's:
   first save. Two people behind one host never see each other's, and neither
   changes the process user's profile or `active.json`;
 - `POST /api/config/user` is refused (409): who ada is is the host's business.
+- ada is **not** added to the project's roster (`collaborators`) on her own:
+  the header names who is asking, not who belongs to the project, and a
+  request must not rewrite the shared settings. Until someone adds her in
+  Settings, the assignee pickers do not offer her — her records are still
+  filed as `ada`.
 
-A request without the header, or with an empty one, is the process user, as
-without the setting. A value BugDesk cannot file under a name (over 60
-characters, a control character, the header twice) is refused with 400.
+The header's value is the user's name exactly: `oidc_x` and `oidc-x` are two
+people with two profiles, where two names typed at the name prompt that differ
+only in case or punctuation are one. A request without the header, or with an
+empty one, is the process user, as without the setting. A value BugDesk cannot
+file under a name (over 128 characters, a control character, the header twice)
+is refused with 400.
 
 **Loopback only.** Anybody who can reach BugDesk's port can send any header. The
 header is honoured only while every address BugDesk listens on is loopback
@@ -1440,6 +1448,7 @@ any signed-in user can name any other. And since any process on the machine can
 reach a loopback port, a host that relies on the attribution should also keep
 other local processes out (STORY-0059, a shared secret on every request).
 
+## Changelog
 
 See [`CHANGELOG.md`](CHANGELOG.md).
 

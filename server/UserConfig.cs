@@ -89,7 +89,11 @@ class UserStore
     /// is THAT user's profile — their own file beside the process user's, so
     /// two people behind one host never share filters, settings or a layout.
     /// </summary>
-    public string? ActiveSlug => Req.User is { } user ? SlugOf(user) : _slug;
+    public string? ActiveSlug => Req.User is { } user ? HostSlugOf(user) : _slug;
+
+    /// <summary>The longest name a host may send (STORY-0058): AI Desk's
+    /// path-safe user names run to 128 characters.</summary>
+    public const int MaxHostNamedLength = 128;
 
     public UserStore(string configDir, string? envUser, string? envHuman, string? envAgent,
                      bool deriveAgent = true)
@@ -151,10 +155,12 @@ class UserStore
     /// <summary>
     /// A host-named user's agent is the one their profile names, else DERIVED
     /// (<c>&lt;name&gt;_agent</c>) — never the process user's, which would sign
-    /// one person's assistant with another person's name.
+    /// one person's assistant with another person's name. From the exact name,
+    /// not its slug, for the reason <see cref="HostSlugOf"/> gives: the agents
+    /// of <c>oidc_x</c> and <c>oidc-x</c> are two.
     /// </summary>
     public string AgentAuthor => Req.User is { } user
-        ? Str(Active()?["agentName"]) ?? (_deriveAgent ? ProjectConfig.AgentNameFor(user) : "agent")
+        ? Str(Active()?["agentName"]) ?? (_deriveAgent ? $"{user}_agent" : "agent")
         : Str(Active()?["agentName"]) ?? _envAgent ?? "agent";
 
     /* ── profiles ──────────────────────────────────────────────────── */
@@ -463,5 +469,22 @@ class UserStore
         }
         var slug = sb.ToString().Trim('-');
         return slug.Length == 0 ? "user" : slug;
+    }
+
+    /// <summary>
+    /// The profile key of a user a host named (STORY-0058). Unlike a typed
+    /// display name, a host's name IS the identity: <c>oidc_x</c> and
+    /// <c>oidc-x</c> are two people, and so are two names of punctuation only.
+    /// A name <see cref="SlugOf"/> keeps as it is is its own key, so the host's
+    /// <c>alice</c> is the <c>alice</c> who runs BugDesk; any other gets a hash
+    /// of the exact name after a <c>--</c>, which no <see cref="SlugOf"/> result
+    /// contains — two different names never share a file.
+    /// </summary>
+    public static string HostSlugOf(string name)
+    {
+        var slug = SlugOf(name);
+        if (slug == name) return slug;
+        var hash = System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(name));
+        return $"{slug}--{Convert.ToHexStringLower(hash)[..12]}";
     }
 }
