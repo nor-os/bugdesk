@@ -7,6 +7,17 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **The top bar matches EcoSim's and EcoAgent's** (STORY-0062). The menu is
+  FlexDesk's menu bar drawn as a hamburger at the far left, before the brand:
+  **BugDesk** (Settings, Team…, Change your name…) and **Help** (Help Topics,
+  Keyboard shortcuts, About) fly out of it, and Alt or F10 reaches it from the
+  keyboard. The command-palette button moved to the right of the panel
+  toggles, and the left and right panel toggles now show their own side.
+
+- **FlexDesk 0.17.18** (from 0.16.1), vendored with `npm run sync:flexdesk`.
+  A dashboard tile's settings dialog reads FlexDesk 0.17's config schema
+  (`key`, `description`); without that it showed no display settings at all.
+
 - **A configured `config` folder no longer falls back to a legacy root
   `bugdesk.json`** (STORY-0060). A project that already had `config = …` in
   `projects.toml` (undocumented before) and a root `bugdesk.json` in its

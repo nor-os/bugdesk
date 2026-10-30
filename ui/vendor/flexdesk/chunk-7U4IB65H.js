@@ -1,9 +1,23 @@
 import {
-  DragReorder
-} from "./chunk-WVFGV5FT.js";
+  revealInStrip,
+  wheelStripSideways
+} from "./chunk-N7HC3ADV.js";
+import {
+  DragReorder,
+  focusMenuItem,
+  moveMenuFocus,
+  placeMenuInViewport
+} from "./chunk-WUFLGETN.js";
 
 // src/editor/notebook_tab_bar.js
-var TAB_MIME = "application/x-ecosim-tab";
+var DEFAULT_TAB_DRAG_MIME = "application/x-flexdesk-tab";
+var _tabMime = DEFAULT_TAB_DRAG_MIME;
+function setTabDragMime(mime = DEFAULT_TAB_DRAG_MIME) {
+  _tabMime = typeof mime === "string" && mime ? mime : DEFAULT_TAB_DRAG_MIME;
+}
+function getTabDragMime() {
+  return _tabMime;
+}
 var NotebookTabBar = class _NotebookTabBar {
   /** @type {HTMLElement} */
   #container = null;
@@ -16,6 +30,8 @@ var NotebookTabBar = class _NotebookTabBar {
   // ─── Context menu ────────────────────────────────────────────────────────
   /** @type {HTMLElement|null} */
   #contextMenuEl = null;
+  /** BUG-0040. What had focus when the menu opened. @type {Element|null} */
+  #contextMenuReturnFocus = null;
   /** @type {Function|null} */
   #boundHideContextMenu = null;
   // ─── Drag and drop ───────────────────────────────────────────────────────
@@ -42,7 +58,7 @@ var NotebookTabBar = class _NotebookTabBar {
       },
       onDragStart: (e, key, item) => {
         try {
-          e.dataTransfer.setData(TAB_MIME, key);
+          e.dataTransfer.setData(_tabMime, key);
         } catch (_) {
         }
         try {
@@ -174,55 +190,21 @@ var NotebookTabBar = class _NotebookTabBar {
   #revealedKey = null;
   /** @type {number} a pending retry, for a strip not yet laid out */
   #revealFrame = 0;
-  /** Bring the active tab fully into the strip — and ONLY the strip. Not
-   *  `scrollIntoView`, which scrolls every scrollable ancestor as well and
-   *  would drag the tile, the window or the page along with the tab. */
+  /** Bring the active tab fully into the strip (`revealInStrip`). */
   #revealActive(retry = false) {
     const el = this.#container;
     if (!el) return;
     const active = el.querySelector(":scope > .tab.active");
     if (!active) return;
-    if (!el.isConnected || el.clientWidth === 0) {
-      if (retry && !this.#revealFrame && typeof requestAnimationFrame === "function") {
-        this.#revealFrame = requestAnimationFrame(() => {
-          this.#revealFrame = 0;
-          this.#revealActive(false);
-        });
-      }
-      return;
+    if (!revealInStrip(el, active) && retry && !this.#revealFrame && typeof requestAnimationFrame === "function") {
+      this.#revealFrame = requestAnimationFrame(() => {
+        this.#revealFrame = 0;
+        this.#revealActive(false);
+      });
     }
-    const box = el.getBoundingClientRect();
-    const tab = active.getBoundingClientRect();
-    const scale = (el.offsetWidth ? box.width / el.offsetWidth : 1) || 1;
-    const left = (tab.left - box.left) / scale + el.scrollLeft;
-    const right = left + tab.width / scale;
-    if (left < el.scrollLeft) el.scrollLeft = left;
-    else if (right > el.scrollLeft + el.clientWidth) el.scrollLeft = right - el.clientWidth;
   }
-  /**
-   * A VERTICAL WHEEL SCROLLS THE STRIP SIDEWAYS. Chromium and Firefox scroll
-   * an element that overflows only horizontally with Shift+wheel or a
-   * touchpad, and not with the plain wheel most people have — so with the
-   * scrollbar hidden, every tab past the edge was unreachable with a mouse.
-   *
-   * The wheel is taken from the page only while the strip can actually move
-   * that way: at either end it is left alone, so a wheel over a strip that
-   * has nothing more to show still scrolls whatever is behind it. A gesture
-   * that is already horizontal (a touchpad, Shift+wheel) and Ctrl+wheel (zoom)
-   * are the browser's, untouched.
-   */
-  #onWheel = (e) => {
-    const el = this.#container;
-    if (!el || e.ctrlKey || e.shiftKey) return;
-    if (Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return;
-    const room = el.scrollWidth - el.clientWidth;
-    if (room <= 0) return;
-    const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? el.clientWidth : 1;
-    const next = Math.max(0, Math.min(room, el.scrollLeft + e.deltaY * unit));
-    if (Math.abs(next - el.scrollLeft) < 0.5) return;
-    e.preventDefault();
-    el.scrollLeft = next;
-  };
+  /** A vertical wheel scrolls the strip sideways (`wheelStripSideways`). */
+  #onWheel = (e) => wheelStripSideways(this.#container, e);
   // ═════════════════════════════════════════════════════════════════════════
   //  Drag and drop reordering (same-pane + cross-pane)
   // ═════════════════════════════════════════════════════════════════════════
@@ -242,7 +224,7 @@ var NotebookTabBar = class _NotebookTabBar {
    *
    *  C33. A HOST MAY NAME A SECOND MIME, at mount, as
    *  `callbacks.externalTabMimes` — the tile renderer's tabs are not editor
-   *  tabs and do not carry `application/x-ecosim-tab`, so without this the
+   *  tabs and do not carry the editor tab MIME (getTabDragMime()), so without this the
    *  strip in tile B would refuse a tab dragged out of tile A's strip. Empty
    *  by default, so every existing consumer keeps exactly today's admission
    *  test.
@@ -259,7 +241,7 @@ var NotebookTabBar = class _NotebookTabBar {
     const extra = Array.isArray(this.#callbacks.externalTabMimes) ? this.#callbacks.externalTabMimes : [];
     try {
       const types = e.dataTransfer.types;
-      return types.includes(TAB_MIME) || extra.some((m) => types.includes(m));
+      return types.includes(_tabMime) || extra.some((m) => types.includes(m));
     } catch {
       return false;
     }
@@ -282,7 +264,7 @@ var NotebookTabBar = class _NotebookTabBar {
     if (this.#isExternalTabDrag(e)) {
       e.preventDefault();
       this.#container.classList.remove("notebook-tabs--drop-target");
-      const filePath = e.dataTransfer.getData(TAB_MIME) || e.dataTransfer.getData("text/plain");
+      const filePath = e.dataTransfer.getData(_tabMime) || e.dataTransfer.getData("text/plain");
       if (filePath) {
         this.#callbacks.onDropFromOtherPane?.(filePath);
       }
@@ -328,6 +310,7 @@ var NotebookTabBar = class _NotebookTabBar {
     while (cleaned.length > 0 && cleaned[cleaned.length - 1].separator) cleaned.pop();
     const menu = document.createElement("div");
     menu.className = "nb-context-menu";
+    menu.setAttribute("role", "menu");
     for (const item of cleaned) {
       if (item.separator) {
         const sep = document.createElement("div");
@@ -336,6 +319,8 @@ var NotebookTabBar = class _NotebookTabBar {
         continue;
       }
       const btn = document.createElement("button");
+      btn.type = "button";
+      btn.setAttribute("role", "menuitem");
       btn.className = "nb-context-menu__item";
       if (item.danger) btn.classList.add("nb-context-menu__item--danger");
       if (item.disabled) btn.classList.add("nb-context-menu__item--disabled");
@@ -349,13 +334,11 @@ var NotebookTabBar = class _NotebookTabBar {
       }
       menu.appendChild(btn);
     }
+    this.#contextMenuReturnFocus = document.activeElement;
     document.body.appendChild(menu);
     this.#contextMenuEl = menu;
-    const rect = menu.getBoundingClientRect();
-    const left = Math.min(x, window.innerWidth - rect.width - 8);
-    const top = Math.min(y, window.innerHeight - rect.height - 8);
-    menu.style.left = `${Math.max(0, left)}px`;
-    menu.style.top = `${Math.max(0, top)}px`;
+    placeMenuInViewport(menu, x, y);
+    focusMenuItem(this.#contextMenuItems()[0]);
     requestAnimationFrame(() => menu.classList.add("visible"));
     setTimeout(() => {
       document.addEventListener("click", this.#boundHideContextMenu, true);
@@ -365,14 +348,26 @@ var NotebookTabBar = class _NotebookTabBar {
   }
   #hideContextMenu() {
     if (!this.#contextMenuEl) return;
+    const returnTo = this.#contextMenuReturnFocus;
+    const held = this.#contextMenuEl.contains(document.activeElement);
     this.#contextMenuEl.remove();
     this.#contextMenuEl = null;
+    this.#contextMenuReturnFocus = null;
     document.removeEventListener("click", this.#boundHideContextMenu, true);
     document.removeEventListener("contextmenu", this.#boundHideContextMenu, true);
     document.removeEventListener("keydown", this.#onKeyDown);
+    if (held && returnTo?.isConnected) returnTo.focus?.({ preventScroll: true });
+  }
+  /** BUG-0040. The menu's items the keyboard can land on. */
+  #contextMenuItems() {
+    return this.#contextMenuEl ? [...this.#contextMenuEl.querySelectorAll(".nb-context-menu__item:not(.nb-context-menu__item--disabled)")] : [];
   }
   #onKeyDown = (e) => {
-    if (e.key === "Escape") this.#hideContextMenu();
+    if (e.key === "Escape") {
+      this.#hideContextMenu();
+      return;
+    }
+    moveMenuFocus(e, this.#contextMenuItems());
   };
   #handleContextMenuAction(action, filePath) {
     switch (action) {
@@ -474,6 +469,9 @@ var NotebookTabBar = class _NotebookTabBar {
 };
 
 export {
+  DEFAULT_TAB_DRAG_MIME,
+  setTabDragMime,
+  getTabDragMime,
   NotebookTabBar
 };
-//# sourceMappingURL=chunk-NLTOY57M.js.map
+//# sourceMappingURL=chunk-7U4IB65H.js.map

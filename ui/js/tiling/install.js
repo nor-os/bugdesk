@@ -6,8 +6,8 @@
  *   1. The shell mounts its two bars (global-top-bar, global-bottom-bar)
  *      with the space between them left empty for us.
  *   2. installProjectSelector resolves the active project.
- *   3. Fill the top bar: page shortcuts in the centre, the menu folded
- *      into a hamburger beside the brand.
+ *   3. Fill the top bar: page shortcuts in the centre, the menu (FlexDesk's
+ *      menu bar as a hamburger) beside the brand.
  *   4. Insert the WM host between the two bars and mount the window
  *      manager in it, with the palette, the keymap and the desktop strip.
  *
@@ -23,7 +23,8 @@
 import { createCommandPalette } from './command_palette.js';
 import { installHistoryBack } from './history_nav.js';
 import { taxonomy, activeTopNavKind, migrateLayout, HOME_KIND, LANDING_SECTION, MERGED_TRACKER } from './kind_taxonomy.js';
-import { trackerOffReason } from '../core/app_identity.js';
+import { appName, trackerOffReason } from '../core/app_identity.js';
+import { showAbout } from '../bootstrap/boot.js';
 import { fetchConfig, shapeTrackerConfig, trackerApiUrl } from '../core/page_config.js';
 import { createSettingsContent } from '../ticketdesk/settings_content.js';
 
@@ -34,8 +35,8 @@ import {
 } from '@flexdesk/wm';
 import { createPhotinoHost, createPywebviewHost, isPhotinoWindow, routeExternalLinks } from '@flexdesk/host';
 import {
-    HelpModal, WindowChromeController, createTableStateStore, installAutoScrollbars, openForm, showContextMenu,
-    suppressNativeContextMenu,
+    HelpModal, WindowChromeController, createMenuBar, createTableStateStore, installAutoScrollbars, openForm,
+    showContextMenu, suppressNativeContextMenu,
 } from '@flexdesk/widgets';
 
 export async function installTilingShell({ eventBus, logger } = {}) {
@@ -53,9 +54,9 @@ export async function installTilingShell({ eventBus, logger } = {}) {
     // by the server at launch, and nothing to choose.
 
     // 1. Fill the top bar: page shortcuts in the centre, and the menu
-    //    collapsed into a single hamburger button beside the brand.
+    //    (FlexDesk's hamburger) beside the brand.
     _installPageShortcuts();
-    _installHamburgerMenu();
+    installAppMenu();
 
     // 2. Make body a 3-row flex column: top bar / WM host / bottom bar.
     document.body.classList.add('twm-body');
@@ -714,123 +715,50 @@ function _installTicketActions(wm, trackerMode = false) {
 }
 
 
-/** Insert a hamburger button to the LEFT of the EcoAgent brand. Clicking
- *  it opens a unified context menu listing the entries of every
- *  remaining .menu-item dropdown (File / Edit / Help). Their `.menu-entry`
- *  buttons are kept in the DOM (just hidden) so we can trigger their
- *  existing handlers via .click() — no need to re-implement file/save/
- *  about logic here. */
-function _installHamburgerMenu() {
-    const menu = document.querySelector('.global-top-bar .app-menu');
-    if (!menu) return;
-    const brand = menu.querySelector('.ecoagent-brand');
-    if (!brand) return;
-
-    const ham = document.createElement('button');
-    ham.type = 'button';
-    ham.id = 'twm-hamburger-btn';
-    ham.className = 'twm-hamburger-btn has-tooltip';
-    ham.dataset.tooltip = 'Menu';
-    ham.dataset.tooltipPlacement = 'bottom';
-    ham.setAttribute('aria-label', 'Open menu');
-    ham.innerHTML = '<span class="material-symbols-outlined">menu</span>';
-
-    ham.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const items = [];
-        const menuItems = menu.querySelectorAll('.menu-item');
-        menuItems.forEach((mi, idx) => {
-            if (idx > 0 && items.length > 0) items.push({ separator: true });
-            for (const child of mi.querySelectorAll('.menu-dropdown > *')) {
-                if (child.tagName === 'HR') {
-                    items.push({ separator: true });
-                    continue;
-                }
-                if (child.classList?.contains?.('menu-entry')) {
-                    if (!child.id) continue;
-                    const disabled = child.disabled
-                                  || child.classList.contains('disabled')
-                                  || child.getAttribute('aria-disabled') === 'true';
-                    // Extract label without the shortcut hint span.
-                    const label = (child.firstChild?.textContent
-                                ?? child.textContent
-                                ?? child.id).trim();
-                    items.push({
-                        label,
-                        action: child.id,
-                        disabled,
-                    });
-                }
-            }
-        });
-        // Settings: not a top-bar shortcut anymore, so we surface it
-        // here. The hidden DOM id `twm-open-settings` is a virtual
-        // action handled at the callback below — no real menu-entry
-        // button needs to exist.
-        // The collapsed Help dropdown only exposes "Help Topics" + "About",
-        // so surface a direct jump to the keyboard-shortcuts topic of the
-        // existing Help modal (a virtual action, like Settings below).
-        if (items.length > 0) items.push({ separator: true });
-        items.push({
-            label: 'Keyboard shortcuts',
-            icon: 'keyboard',
-            action: 'twm-open-shortcuts',
-        });
-        items.push({
-            label: 'Settings',
-            icon: 'settings',
-            action: 'twm-open-settings',
-        });
-        items.push({
-            label: 'Change your name…',
-            icon: 'badge',
-            action: 'twm-change-name',
-        });
-        // Settings › Team, as a window. Here too because "who can I assign this
-        // to" is a question you have while looking at a record, not while
-        // browsing settings.
-        items.push({
-            label: 'Team…',
-            icon: 'group',
-            action: 'twm-collaborators',
-        });
-        const rect = ham.getBoundingClientRect();
-        showContextMenu(rect.left, rect.bottom, items, (action) => {
-            if (action === 'twm-open-shortcuts') {
-                HelpModal.open('keyboard-shortcuts');
-                return;
-            }
-            if (action === 'twm-open-settings') {
-                import('../ticketdesk/settings_content.js')
-                    .then((m) => m.openSettings())
-                    .catch((err) => console.error('[bugdesk] settings dialog failed', err));
-                return;
-            }
-            if (action === 'twm-collaborators') {
-                import('../ticketdesk/collaborators.js')
-                    .then((m) => m.openCollaborators({ eventBus: window.__bugdesk?.eventBus }))
-                    .catch((err) => console.error('[bugdesk] team dialog failed', err));
-                return;
-            }
-            if (action === 'twm-change-name') {
-                // A dialog, not the Settings page: opened in the primary tile
-                // from a focused side tile, the page change happened somewhere
-                // the user was not looking and read as "nothing happened".
-                import('../ticketdesk/first_run.js')
-                    .then((m) => m.openIdentityDialog({ eventBus: window.__bugdesk?.eventBus }))
-                    .catch((err) => console.error('[bugdesk] identity dialog failed', err));
-                return;
-            }
-            document.getElementById(action)?.click();
-        });
-    });
-
-    menu.insertBefore(ham, brand);
-    // Hide the now-redundant File/Edit/Help dropdowns. The .menu-entry
-    // buttons inside stay in the DOM (just unreachable visually) so
-    // their existing click handlers remain callable.
-    menu.querySelectorAll('.menu-item').forEach((mi) => {
-        mi.classList.add('twm-hidden-menu-item');
+/** The application menu: FlexDesk's menu bar drawn as a hamburger
+ *  (`style: 'hamburger'`) at the top bar's left, before the brand, as in
+ *  EcoSim and EcoAgent. Two menus fly out of it: the app's own (Settings,
+ *  Team, your name) and Help. The dialogs are imported when picked, and are
+ *  handed the bus through `window.__bugdesk` because the menu is built
+ *  before the shell exists. */
+export function installAppMenu() {
+    const el = document.getElementById('bugdesk-menu-bar');
+    if (!el) return null;
+    const bus = () => window.__bugdesk?.eventBus;
+    const lazy = (load, run) => () => load()
+        .then(run)
+        .catch((err) => console.error('[bugdesk] menu action failed', err));
+    const ACTIONS = {
+        settings: lazy(() => import('../ticketdesk/settings_content.js'), (m) => m.openSettings()),
+        // Settings › Team, as a window: "who can I assign this to" is a
+        // question you have while looking at a record, not while browsing settings.
+        team: lazy(() => import('../ticketdesk/collaborators.js'), (m) => m.openCollaborators({ eventBus: bus() })),
+        // A dialog, not the Settings page: opened in the primary tile from a
+        // focused side tile, the page change happened somewhere the user was
+        // not looking and read as "nothing happened".
+        name: lazy(() => import('../ticketdesk/first_run.js'), (m) => m.openIdentityDialog({ eventBus: bus() })),
+        // No "F1" hint: FlexDesk's keymap owns F1..F12 as "jump to the Nth page".
+        'help-topics': () => HelpModal.open(),
+        'help-shortcuts': () => HelpModal.open('keyboard-shortcuts'),
+        'help-about': () => showAbout(),
+    };
+    return createMenuBar(el, {
+        label: 'Application menu',
+        style: 'hamburger',
+        menus: [
+            { id: 'app', label: appName(), items: [
+                { id: 'settings', label: 'Settings' },
+                { id: 'team', label: 'Team…' },
+                { id: 'name', label: 'Change your name…' },
+            ] },
+            { id: 'help', label: 'Help', items: [
+                { id: 'help-topics', label: 'Help Topics' },
+                { id: 'help-shortcuts', label: 'Keyboard shortcuts' },
+                { separator: true },
+                { id: 'help-about', label: `About ${appName()}` },
+            ] },
+        ],
+        onAction: (id) => ACTIONS[id]?.(),
     });
 }
 
@@ -955,8 +883,10 @@ function _syncPanelToggleButtons(wm) {
     }
 }
 
+/** The palette button, after the panel toggles (the rightmost app control,
+ *  before the window controls), as in EcoSim and EcoAgent. */
 function _installPaletteButton(palette) {
-    const host = document.querySelector('.global-top-bar .panel-toggles');
+    const host = document.getElementById('bugdesk-palette-button');
     if (!host) return;
     if (host.querySelector('#twm-palette-btn')) return;
     const btn = document.createElement('button');
@@ -976,21 +906,21 @@ function _installPaletteButton(palette) {
  * empty center, so the content fits iff (left section + center + right section)
  * width ≤ the bar's width. When it doesn't, drop items in priority order:
  *   1. the command-palette button (#twm-palette-btn) — still reachable via Ctrl+K
- *   2. the "EcoAgent" brand wordmark (.ecoagent-brand) — purely decorative
+ *   2. the brand (.ecoagent-brand) — purely decorative
  * Driven by a ResizeObserver on the bar so it reacts live to window resizing.
  */
 function _installTopBarResponsive() {
     const topBar = document.querySelector('.global-top-bar');
     if (!topBar) return;
-    const appMenu = topBar.querySelector('.app-menu');
+    const barLeft = topBar.querySelector('.bar-left');
     const barCenter = topBar.querySelector('.bar-center');
     const barRight = topBar.querySelector('.bar-right');
-    if (!appMenu || !barRight) return;
+    if (!barLeft || !barRight) return;
 
     // Re-query the collapsible targets on each pass: the palette button is
     // inserted just before this runs, and the brand lives in the shell markup.
     const overflows = () => {
-        const need = appMenu.scrollWidth
+        const need = barLeft.scrollWidth
             + (barCenter ? barCenter.scrollWidth : 0)
             + barRight.scrollWidth;
         return need > topBar.clientWidth + 1; // 1px slack for sub-pixel rounding

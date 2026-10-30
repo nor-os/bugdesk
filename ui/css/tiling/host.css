@@ -105,35 +105,14 @@ body.twm-body > .twm-host {
     color: var(--text-bright) !important;
 }
 
-/* Hamburger button — left of the EcoAgent brand. Collapses File/Edit/
- * Help into a single popup so the top bar reads as one row of icons
- * instead of three text dropdowns competing with the page shortcuts. */
-.twm-hamburger-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 35px;
-    height: 35px;
-    padding: 0;
-    background: transparent;
-    border: none;
-    border-radius: 0;
-    color: var(--text-secondary);
-    cursor: pointer;
+/* The top bar's left: the menu (FlexDesk's hamburger, #bugdesk-menu-bar),
+ * then the brand; EcoSim's and EcoAgent's are the same. */
+.global-top-bar .bar-left {
+    gap: 6px;
+    padding-left: 6px;
 }
-.twm-hamburger-btn:hover {
-    background: var(--state-hover);
-    color: var(--text-primary);
-}
-.twm-hamburger-btn .material-symbols-outlined {
-    font-size: 20px;
-}
-
-/* Hide the original File/Edit/Help dropdowns — they live inside the
- * hamburger menu now. Their `.menu-entry` buttons stay in the DOM so
- * the hamburger can trigger them via .click(). */
-.global-top-bar .menu-item.twm-hidden-menu-item {
-    display: none !important;
+.global-top-bar .bar-left .ecoagent-brand {
+    padding: 0 4px 0 0;
 }
 
 /* The agent + flow tabs each shipped their own "Pop out" button into a

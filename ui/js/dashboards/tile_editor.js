@@ -24,14 +24,18 @@ const isRows = (kind) => kind === 'list' || kind === 'people';
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const typeName = (src, value) => `bd_t_${src.id}_${String(value).replace(/[^A-Za-z0-9_-]/g, '_')}`;
 
+/** A schema field's name. FlexDesk 0.17 names it `key` (and its hint
+ *  `description`); 0.16 said `name` and `help`. */
+const fieldKey = (f) => f.key ?? f.name;
+
 /** FlexDesk config schema → openForm fields. */
 function displayFields(schema) {
     return (schema?.fields || []).map((f) => ({
-        name: f.name,
-        label: f.label || f.name,
+        name: fieldKey(f),
+        label: f.label || fieldKey(f),
         type: ['text', 'number', 'select', 'checkbox'].includes(f.type) ? f.type : 'text',
         options: f.options,
-        hint: f.help,
+        hint: f.description ?? f.help,
     }));
 }
 
@@ -287,7 +291,7 @@ export async function openTileSettings({ kind, config, schema, sources, preferre
     const data = absent ? keptData(binding)
         : sources.length ? dataFields(sources, binding, kind, preferred) : { fields: [], defaults: {} };
     const display = displayFields(schema);
-    const shown = new Map((schema?.fields || []).map((f) => [f.name, f.visibleWhen]));
+    const shown = new Map((schema?.fields || []).map((f) => [fieldKey(f), f.visibleWhen]));
     const fresh = !binding;
     const result = await openForm({
         title: 'Tile settings',

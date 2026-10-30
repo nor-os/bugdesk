@@ -4274,5 +4274,55 @@ console.log('\nGit warnings: no repository, no remote (STORY-0049)');
     });
 }
 
+/* ── The top bar, the same as EcoSim's and EcoAgent's ──────────────────
+ *
+ * At the left FlexDesk's menu bar as a hamburger, then the brand; at the right
+ * the panel toggles (each showing its own side), then the palette button.
+ */
+
+console.log('\nThe top bar');
+
+{
+    const { bootBugDesk } = await import(join(UI, 'bootstrap', 'boot.js'));
+    const { installAppMenu } = await import(join(UI, 'tiling', 'install.js'));
+    const { MenuBar } = await import('@flexdesk/widgets');
+    bootBugDesk();
+    const bar = document.querySelector('.global-top-bar');
+    const bar0 = installAppMenu();
+    const el = document.getElementById('bugdesk-menu-bar');
+    const rows = (menu) => [...menu.querySelectorAll(':scope > .twm-menubar__cell > .twm-menubar__item .twm-menubar__label')]
+        .map((n) => n.textContent);
+
+    await t('the left reads the menu, then the brand; the right ends with the toggles and the palette button', async () => {
+        assert.deepEqual([...bar.querySelector('.bar-left').children].map((n) => n.id || n.className),
+            ['bugdesk-menu-bar', 'ecoagent-brand']);
+        assert.deepEqual([...bar.querySelector('.bar-right').children].map((n) => n.id || n.className),
+            ['panel-toggles', 'bugdesk-palette-button']);
+        assert.equal(bar.querySelector('.app-menu'), null, 'the old Help dropdown markup is gone');
+    });
+
+    await t('each panel toggle shows the glyph of its own side', async () => {
+        const glyph = (id) => document.querySelector(`#${id} .material-symbols-outlined`).textContent;
+        assert.deepEqual(['toggle-left-panel', 'toggle-bottom-panel', 'toggle-right-panel'].map(glyph),
+            ['dock_to_right', 'dock_to_bottom', 'dock_to_left']);
+    });
+
+    await t('the menu is FlexDesk\'s hamburger: BugDesk (Settings, Team, your name) and Help fly out of it', async () => {
+        assert.ok(bar0 instanceof MenuBar);
+        assert.equal(bar0.style, 'hamburger');
+        const buttons = el.querySelectorAll('.twm-menubar__title');
+        assert.equal(buttons.length, 1);
+        buttons[0].click();
+        const list = el.querySelector('.twm-menubar__menu');
+        assert.deepEqual(rows(list), ['BugDesk', 'Help']);
+        bar0.open('app');
+        assert.deepEqual(rows(el.querySelectorAll('.twm-menubar__menu')[1]), ['Settings', 'Team…', 'Change your name…']);
+        bar0.open('help');
+        assert.deepEqual(rows(el.querySelectorAll('.twm-menubar__menu')[1]),
+            ['Help Topics', 'Keyboard shortcuts', 'About BugDesk']);
+        bar0.close();
+    });
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
