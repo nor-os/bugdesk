@@ -45,6 +45,6 @@ The upgrade from 0.16.1 broke six dashboard tests, all one cause: FlexDesk 0.17.
 
 Checked on Node 22 (jsdom 29 needs ≥20): check-graph, eslint (0 errors), test-ui 225, tracker 35, dashboards 60, dom 221 (3 new: the bar's order, the toggle glyphs, the hamburger's menus), dashboards-dom 58, dashboards-tracker 14, example 8, tracker-off 17, embed 16.
 
-Also run for real (`run.sh` on scratch stores, headless Chromium over CDP): the hamburger opens, BugDesk › Settings / Team… / Change your name… fly out, no console errors. Seen there: a toast draws over an open menu. That is FlexDesk's (its menu bar's menus sit under the toast layer), filed there as BUG-0054.
+Also run for real (`run.sh` on scratch stores, headless Chromium over CDP): the hamburger opens, BugDesk › Settings / Team… / Change your name… fly out, no console errors. Seen there: a toast draws over an open menu. That is FlexDesk's (its menu bar's menus sit under the toast layer), filed there as BUG-0056.
 
 The brand is left as it was (icon and wordmark in the product's own face), the one difference from EcoSim and EcoAgent; the last criterion asks whether to drop it.
