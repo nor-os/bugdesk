@@ -90,6 +90,18 @@
     --accent-hover:     #1177bb;
     --accent-bright:    #007acc;  /* --layout-accent value */
 
+    /* Every other accent colour is DERIVED from the three above, so a
+       consumer that sets them (on :root) rethemes the whole accent (BUG-0044).
+       The light accents mix --accent-bright toward white: a slider thumb, a
+       sortable list's drop line and add button, a focused filter input. */
+    --accent-light:     color-mix(in srgb, var(--accent-bright) 70%, white);  /* ≈ #4da2db, was #569cd6 */
+    --accent-lighter:   color-mix(in srgb, var(--accent-bright) 55%, white);  /* ≈ #73b6e3, was #6eb3e9 */
+    /* BUG-0045: the other accent shades. A primary button's hover, the window
+       bar's hovered item; a pressed accent control; the lightest accent text. */
+    --accent-bright-hover: color-mix(in srgb, var(--accent-bright) 90%, white);  /* ≈ #1987d1, was #1486cf / #1683c4 */
+    --accent-pressed:      color-mix(in srgb, var(--accent-hover) 90%, black);   /* ≈ #0f6ba8, was #1a6aa5 / #0f6fa8 */
+    --accent-lightest:     color-mix(in srgb, var(--accent-bright) 36%, white);  /* ≈ #a3cfed, was #9ecfff / #9fd0f0 */
+
     /* ── Semantic colors ───────────────────────────────────────── */
     --color-success:        #3fb950;
     --color-warning:        #ff9800;
@@ -100,13 +112,23 @@
     /* ── Surface state overlays ────────────────────────────────── */
     --state-hover:    rgba(255, 255, 255, 0.05);
     --state-active:   rgba(255, 255, 255, 0.08);
-    --state-selected: rgba(0, 122, 204, 0.15);
+    --state-selected: color-mix(in srgb, var(--accent-bright) 15%, transparent);  /* rgba(0, 122, 204, 0.15) */
+    /* A DataTable row or cell that has just arrived flashes from this to transparent. */
+    --twm-dt-new-bg:  color-mix(in srgb, var(--accent-bright) 22%, transparent);  /* rgba(0, 122, 204, 0.22) */
+
+    /* ── Overlay scrollbars (installOverlayScrollbar) ─────────── */
+    --scrollbar-size:         6px;
+    --scrollbar-radius:       3px;
+    --scrollbar-track:        rgba(255, 255, 255, 0.08);
+    --scrollbar-thumb:        rgba(255, 255, 255, 0.28);
+    --scrollbar-thumb-hover:  rgba(255, 255, 255, 0.38);
+    --scrollbar-thumb-active: rgba(255, 255, 255, 0.48);
 
     /* ── Shadows / elevation ──────────────────────────────────── */
     --shadow-sm:   0 1px 3px rgba(0, 0, 0, 0.3);
     --shadow-md:   0 4px 12px rgba(0, 0, 0, 0.4);
     --shadow-lg:   0 8px 24px rgba(0, 0, 0, 0.5);
-    --shadow-glow: 0 0 2px rgba(0, 122, 204, 0.3);
+    --shadow-glow: 0 0 2px color-mix(in srgb, var(--accent-bright) 30%, transparent);  /* rgba(0, 122, 204, 0.3) */
 
     /* ── Z-index layers ───────────────────────────────────────── */
     --z-base:     0;
@@ -115,10 +137,16 @@
     --z-popover:  200;
     --z-modal:    1000;
     --z-toast:    10000;
+    /* A context menu is what the pointer just asked for: over everything,
+       toasts and managed windows included (a right-click on a toast). */
+    --z-context-menu: 10100;
     /* What opens FROM a managed window and must draw over it: managed windows
        stack from 6000 to 6999 (managed_window.js), so a popover at
        --z-popover would open behind the window that opened it. */
     --z-over-windows: 7100;
+    /* An overlay scrollbar inside a scroll container: over the container's
+       content and its dropdowns, under managed windows (6000+). */
+    --z-scrollbar: 500;
 
     /* ── Transitions ──────────────────────────────────────────── */
     --transition-fast:   120ms ease;

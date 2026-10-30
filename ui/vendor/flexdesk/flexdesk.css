@@ -164,6 +164,10 @@
     font-size: var(--font-size-sm);
     line-height: 1.5;
 }
+/* Shown: the service adds `visible` once the tooltip is positioned, and removes it to fade out */
+.twm-latex-tooltip.visible {
+    opacity: 1;
+}
 /* Tooltip header (first line) styling */
 .twm-latex-tooltip strong {
     display: block;
@@ -279,6 +283,28 @@
     flex-direction: column;
     gap: var(--space-lg);
 }
+/* A toast card. The root takes no pointer events (it overlays the page), so the
+ * card takes them back: without this its buttons cannot be clicked (BUG-0033). */
+.twm-notification {
+    pointer-events: auto;
+    background: #1f1f20;
+    border: 1px solid #2f2f31;
+    border-left: 4px solid #4fc1ff;
+    border-radius: var(--radius-lg);
+    padding: var(--space-lg) 14px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+    animation: twm-notification-in 160ms ease-out;
+    min-width: 280px;
+    cursor: pointer;
+}
+.twm-notification--success { border-left-color: var(--color-success, #3fb950); }
+.twm-notification--warn    { border-left-color: var(--color-warning, #ff9800); }
+.twm-notification--error,
+.twm-notification--fatal   { border-left-color: var(--color-danger, #c74e4e); }
+@keyframes twm-notification-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+}
 
 /* NotificationCenter `overflow: 'collapse'`: the toasts past maxVisible, as one. */
 .twm-notification--summary {
@@ -360,6 +386,46 @@
     background: var(--accent);
     border-color: var(--accent);
 }
+/* NotificationCenter progress toasts: a bar, a status line, a collapse toggle. */
+.twm-notification__collapse {
+    width: 22px;
+    height: 22px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, 0.06);
+    color: #999;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    flex-shrink: 0;
+    transition: background var(--transition-fast), color var(--transition-fast), transform var(--transition-fast);
+}
+.twm-notification__collapse:hover {
+    background: rgba(255, 255, 255, 0.14);
+    color: var(--text-bright);
+}
+.twm-notification--collapsed .twm-notification__collapse {
+    transform: rotate(-90deg);
+}
+.twm-notification__progress {
+    margin-top: var(--space-sm);
+}
+.twm-notification__status {
+    margin-top: var(--space-xs);
+    font-size: var(--font-size-xs);
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.twm-notification--collapsed .twm-notification__body,
+.twm-notification--collapsed .twm-notification__status,
+.twm-notification--collapsed .twm-notification__description,
+.twm-notification--collapsed .twm-notification__actions {
+    display: none;
+}
 /* Notification history (bottom bar bell + popover) */
 .twm-notification-history__trigger {
     display: flex;
@@ -411,7 +477,7 @@
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
     display: flex;
     flex-direction: column;
-    animation: notification-in 160ms ease-out;
+    animation: twm-notification-in 160ms ease-out;
 }
 .twm-notification-history__header {
     display: flex;
@@ -461,6 +527,10 @@
     padding: var(--space-md) 10px;
     font-size: var(--font-size-sm);
 }
+.twm-notification-history__item--success { border-left-color: var(--color-success, #3fb950); }
+.twm-notification-history__item--warn    { border-left-color: var(--color-warning, #ff9800); }
+.twm-notification-history__item--error,
+.twm-notification-history__item--fatal   { border-left-color: var(--color-danger, #c74e4e); }
 .twm-notification-history__item-header {
     display: flex;
     align-items: center;
@@ -480,6 +550,17 @@
 .twm-notification-history__item-body {
     color: #bcbcbc;
     line-height: 1.4;
+}
+/* The text of a toast and of a history entry can be selected and copied (STORY-0131);
+ * the body's `user-select: none` (reset.css) would otherwise hold it. */
+.twm-notification__title,
+.twm-notification__body,
+.twm-notification__description,
+.twm-notification__status,
+.twm-notification-history__item-title,
+.twm-notification-history__item-body {
+    user-select: text;
+    cursor: text;
 }
 .twm-notification-history__empty {
     text-align: center;
@@ -634,9 +715,14 @@ body.twm-dt-col-resizing {
     width: auto;
     min-width: 80px;
 }
-/* Alternating row backgrounds */
+/* Alternating row backgrounds. The stripe is the row's `--twm-dt-row-bg`, set
+   at no specificity so a consumer's row class can replace it; a crosstab
+   (STORY-0091) also lays it under its pinned cells. */
+:where(.twm-preview-table tbody tr:nth-child(even)) {
+    --twm-dt-row-bg: rgba(255, 255, 255, 0.02);
+}
 .twm-preview-table tbody tr:nth-child(even) {
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--twm-dt-row-bg);
 }
 /* Hover state (disabled in wizard via modifier) */
 .twm-preview-table:not(.twm-preview-table--readonly) tr:hover td {
@@ -659,7 +745,7 @@ body.twm-dt-col-resizing {
    second keeps the readonly tables, which hover never claimed, working. */
 .twm-preview-table:not(.twm-preview-table--readonly) tbody tr.selected td,
 .twm-preview-table tbody tr.selected td {
-    background: var(--state-selected, rgba(0, 122, 204, 0.15));
+    background: var(--state-selected);
 }
 /* ── 0.5.0 DataTable options. Each rule below matches only a class or an
  * attribute a 0.5.0 option sets, so a table that asks for none of them is
@@ -710,7 +796,7 @@ body.twm-dt-col-resizing {
 /* `activeRow` — the row that is OPEN. A left edge, not a background: hover
  * and selection keep theirs. */
 .twm-preview-table tbody tr.twm-dt-row--active > td:first-child {
-    box-shadow: inset 2px 0 0 0 var(--accent-bright, #007acc);
+    box-shadow: inset 2px 0 0 0 var(--accent-bright);
 }
 /* STORY-0016 `selectToggle` / `selectMode` — the select column. Narrow, never
  * the time column (it is the first child, so the time rules reach it: (0,3,2)
@@ -778,7 +864,297 @@ body.twm-dt-col-resizing {
 }
 .twm-preview-table.twm-dt--select th.twm-dt-select-cell .twm-dt-select-toggle:focus-visible {
     opacity: 1;
-    outline: 1px solid var(--accent-bright, #007acc);
+    outline: 1px solid var(--accent-bright);
+}
+/* STORY-0003 `selectionMode: 'cells'` — the range is a tint on its cells, the
+ * cursor a ring inside its cell (inset, so it moves no column by a pixel). A
+ * cell being edited gives its padding to the editor; a commit still out is
+ * dimmed, and a refused one carries a red ring and its message as the title. */
+.twm-preview-table.twm-dt--cells tbody td.twm-dt-cell--selected {
+    background: var(--state-selected);
+}
+.twm-preview-table.twm-dt--cells tbody td.twm-dt-cell--cursor {
+    box-shadow: inset 0 0 0 2px var(--accent-bright);
+}
+.twm-preview-table.twm-dt--cells:focus {
+    outline: none;
+}
+.twm-preview-table.twm-dt--cells tbody td.twm-dt-cell--editing {
+    padding: 0;
+}
+.twm-preview-table.twm-dt--cells tbody td.twm-dt-cell--editing .twm-dt-editor {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 2px 6px;
+    border: 0;
+    outline: 2px solid var(--accent-bright);
+    outline-offset: -2px;
+    background: var(--surface-well, #1e1e1e);
+    color: inherit;
+    font: inherit;
+}
+/* STORY-0087 the built-in editors: a checkbox keeps its own size, a text
+ * area grows with what it holds, and the choice box shows no empty helper
+ * line under it. */
+.twm-preview-table.twm-dt--cells tbody td.twm-dt-cell--editing .twm-dt-editor--bool {
+    width: auto;
+    margin: 4px 6px;
+    outline-offset: 1px;
+}
+.twm-preview-table.twm-dt--cells tbody td.twm-dt-cell--editing textarea.twm-dt-editor {
+    resize: vertical;
+    min-height: 3.5em;
+}
+.twm-preview-table.twm-dt--cells tbody td.twm-dt-cell--editing .twm-dt-editor--choice .twm-autocomplete-field__helper:empty {
+    display: none;
+}
+.twm-preview-table.twm-dt--cells tbody td.twm-dt-cell--pending {
+    opacity: 0.6;
+    font-style: italic;
+}
+/* STORY-0088 `staged`: a value typed and not yet committed. */
+.twm-preview-table.twm-dt--cells tbody td.twm-dt-cell--staged {
+    background: color-mix(in srgb, var(--accent-bright) 16%, transparent);
+}
+/* STORY-0089 `fillHandle`: a square on the range's corner cell, the cells a
+ * drag covers dashed, and a cell the fill skipped (not editable) hatched. */
+.twm-preview-table.twm-dt--cells tbody td.twm-dt-cell--fill-corner {
+    position: relative;
+}
+.twm-preview-table.twm-dt--cells .twm-dt-fill-handle {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 7px;
+    height: 7px;
+    box-sizing: border-box;
+    background: var(--accent-bright);
+    border: 1px solid var(--surface-well, #1e1e1e);
+    cursor: crosshair;
+    z-index: 1;
+    touch-action: none;
+}
+.twm-preview-table.twm-dt--cells tbody td.twm-dt-cell--fill-preview {
+    outline: 1px dashed var(--accent-bright);
+    outline-offset: -1px;
+}
+.twm-preview-table.twm-dt--cells tbody td.twm-dt-cell--fill-skipped {
+    background-image: repeating-linear-gradient(45deg,
+        color-mix(in srgb, var(--color-danger, #f14c4c) 22%, transparent) 0 4px, transparent 4px 8px);
+}
+/* STORY-0090. A cell a paste skipped (not editable) carries the same mark. */
+.twm-preview-table.twm-dt--cells tbody td.twm-dt-cell--paste-skipped {
+    background-image: repeating-linear-gradient(45deg,
+        color-mix(in srgb, var(--color-danger, #f14c4c) 22%, transparent) 0 4px, transparent 4px 8px);
+}
+/* While cells are staged, sort, filters and pages are held: the held control
+ * says why on itself (`data-refusal`). */
+.twm-data-table-component.twm-dt--frozen th.sortable[data-refusal] {
+    cursor: not-allowed !important;
+}
+.twm-data-table-component.twm-dt--frozen [data-refusal]:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+.twm-preview-table.twm-dt--cells tbody td.twm-dt-cell--error {
+    box-shadow: inset 0 0 0 1px var(--color-danger, #f14c4c);
+}
+.twm-preview-table.twm-dt--cells tbody td.twm-dt-cell--error.twm-dt-cell--cursor {
+    box-shadow: inset 0 0 0 2px var(--color-danger, #f14c4c);
+}
+/* STORY-0086 `reorderable` — the header being dragged is dimmed, and the one
+ * it would land on carries a bar on the side it lands (inset: no column moves
+ * by a pixel while the pointer passes). */
+.twm-preview-table th.twm-dt-col--movable {
+    cursor: grab;
+}
+.twm-preview-table th.twm-dt-col--dragging {
+    opacity: 0.5;
+}
+.twm-preview-table th.twm-dt-col--drop {
+    box-shadow: inset 2px 0 0 0 var(--accent-bright);
+}
+.twm-preview-table th.twm-dt-col--drop.twm-dt-col--drop-after {
+    box-shadow: inset -2px 0 0 0 var(--accent-bright);
+}
+/* STORY-0066 `columnGroups` — the group row is a table of its own above the
+ * header table (`twm-dt-groups`), its `<col>`s copied from the header's widths;
+ * no first-column floor or cap of the header's applies to it. A crosstab's
+ * spanned header cells (STORY-0091) are the same group cells. A placeholder
+ * column (an empty group's) is drawn muted. The header action buttons are
+ * small icon buttons that keep to the cell. */
+.twm-preview-table.twm-dt-groups th.twm-dt-group,
+.twm-preview-table.twm-dt-crosstab th.twm-dt-group {
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    text-align: center;
+    border-bottom: 1px solid var(--border-subtle, #333);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.twm-preview-table.twm-dt-groups th.twm-dt-group + th.twm-dt-group,
+.twm-preview-table.twm-dt-crosstab th.twm-dt-group + th.twm-dt-group {
+    border-left: 1px solid var(--border-subtle, #333);
+}
+.twm-preview-table.twm-dt-groups th.twm-dt-group--empty .twm-dt-group__label {
+    opacity: 0.7;
+}
+.twm-preview-table .twm-dt-group__actions,
+.twm-preview-table .twm-dt-col-actions {
+    display: inline-flex;
+    gap: 2px;
+    margin-left: 4px;
+    vertical-align: middle;
+}
+.twm-preview-table .twm-dt-group__add,
+.twm-preview-table .twm-dt-group__action,
+.twm-preview-table .twm-dt-col-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 2px;
+    border: 0;
+    border-radius: 3px;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    opacity: 0.6;
+    font: inherit;
+}
+.twm-preview-table .twm-dt-group__add .material-symbols-outlined,
+.twm-preview-table .twm-dt-group__action .material-symbols-outlined,
+.twm-preview-table .twm-dt-col-action .material-symbols-outlined {
+    font-size: 16px;
+}
+.twm-preview-table .twm-dt-group__add:hover,
+.twm-preview-table .twm-dt-group__action:hover,
+.twm-preview-table .twm-dt-col-action:hover {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.08);
+}
+.twm-preview-table .twm-dt-group__add:focus-visible,
+.twm-preview-table .twm-dt-group__action:focus-visible,
+.twm-preview-table .twm-dt-col-action:focus-visible {
+    opacity: 1;
+    outline: 1px solid var(--accent-bright);
+}
+.twm-preview-table th.twm-dt-col--placeholder,
+.twm-preview-table td.twm-dt-cell--placeholder {
+    background: rgba(255, 255, 255, 0.015);
+}
+.twm-preview-table th .twm-dt-col-rename {
+    width: 100%;
+    box-sizing: border-box;
+    font: inherit;
+}
+/* STORY-0091 `crosstab` — one table in one scroller (`twm-dt-crosstab`).
+ * Every header cell sticks to the top at the `top` crosstab.js measured for its
+ * row; the pinned cells (select, row number and label columns) stick to the
+ * left at the `left` it measured, and the corner — header cells over them — to
+ * both, above everything else. Every crosstab row paints its `--twm-dt-row-bg`,
+ * so a row coloured through it is one colour from the label cells to the last
+ * column.
+ *
+ * A pinned body cell needs an OPAQUE background or the cells scrolling under it
+ * show through, and every state FlexDesk paints on a `td` is translucent. So
+ * the pinned cell's background is one `!important` stack nothing can replace —
+ * not a stronger state rule, not an animation (an important declaration
+ * outranks both) — and the states reach it as LAYERS instead:
+ *   --twm-dt-pin-mark   a mark over everything (the fill's skipped hatch)
+ *   --twm-dt-pin-new    the new-row flash (a registered colour, so it animates)
+ *   --twm-dt-pin-state  the cell's state tint: hover, row and cell selection,
+ *                       staged, placeholder, diff
+ *   --twm-dt-row-bg     the row's background (the stripe or a consumer's colour)
+ *   --surface-0         the opaque surface under all of them.
+ * Each state rule below is the unpinned rule it mirrors, with
+ * `.twm-dt-crosstab` on the table and `.twm-dt-pin` on the cell — the same two
+ * classes on every one, in the same order, so the state a pinned cell shows is
+ * the one its unpinned neighbours show. */
+@property --twm-dt-pin-new {
+    syntax: '<color>';
+    inherits: false;
+    initial-value: transparent;
+}
+.twm-preview-table.twm-dt-crosstab tbody tr {
+    background: var(--twm-dt-row-bg, transparent);
+}
+.twm-preview-table.twm-dt-crosstab thead th {
+    position: sticky;
+    z-index: 3;
+}
+.twm-preview-table.twm-dt-crosstab thead th.twm-dt-pin {
+    z-index: 4;
+}
+.twm-preview-table.twm-dt-crosstab tbody td.twm-dt-pin {
+    position: sticky;
+    z-index: 1;
+    background:
+        var(--twm-dt-pin-mark, none),
+        linear-gradient(var(--twm-dt-pin-new, transparent), var(--twm-dt-pin-new, transparent)),
+        var(--twm-dt-pin-state, none),
+        linear-gradient(var(--twm-dt-row-bg, transparent), var(--twm-dt-row-bg, transparent)) var(--surface-0, #1e1e1e) !important;
+}
+.twm-preview-table.twm-dt-crosstab .twm-dt-pin--last {
+    box-shadow: inset -1px 0 0 var(--border-strong, #3c3c3c);
+}
+.twm-preview-table.twm-dt-crosstab:not(.twm-preview-table--readonly) tr:hover td.twm-dt-pin {
+    --twm-dt-pin-state: linear-gradient(rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.04));
+}
+.twm-preview-table.twm-dt-crosstab:not(.twm-preview-table--readonly) tbody tr.selected td.twm-dt-pin,
+.twm-preview-table.twm-dt-crosstab tbody tr.selected td.twm-dt-pin {
+    --twm-dt-pin-state: linear-gradient(var(--state-selected), var(--state-selected));
+}
+.twm-preview-table.twm-dt-crosstab.twm-dt--clickable tbody tr:not(.twm-dt-spacer):not(.data-table__empty-row):not(.selected):hover td.twm-dt-pin {
+    --twm-dt-pin-state: linear-gradient(var(--state-hover, rgba(255, 255, 255, 0.05)), var(--state-hover, rgba(255, 255, 255, 0.05)));
+}
+.twm-preview-table.twm-dt-crosstab.twm-dt--cells tbody td.twm-dt-pin.twm-dt-cell--selected {
+    --twm-dt-pin-state: linear-gradient(var(--state-selected), var(--state-selected));
+}
+.twm-preview-table.twm-dt-crosstab.twm-dt--cells tbody td.twm-dt-pin.twm-dt-cell--staged {
+    --twm-dt-pin-state: linear-gradient(color-mix(in srgb, var(--accent-bright) 16%, transparent), color-mix(in srgb, var(--accent-bright) 16%, transparent));
+}
+.twm-preview-table.twm-dt-crosstab.twm-dt--cells tbody td.twm-dt-pin.twm-dt-cell--fill-skipped {
+    --twm-dt-pin-mark: repeating-linear-gradient(45deg,
+        color-mix(in srgb, var(--color-danger, #f14c4c) 22%, transparent) 0 4px, transparent 4px 8px);
+}
+.twm-preview-table.twm-dt-crosstab.twm-dt--cells tbody td.twm-dt-pin.twm-dt-cell--paste-skipped {
+    --twm-dt-pin-mark: repeating-linear-gradient(45deg,
+        color-mix(in srgb, var(--color-danger, #f14c4c) 22%, transparent) 0 4px, transparent 4px 8px);
+}
+.twm-preview-table.twm-dt-crosstab td.twm-dt-pin.twm-dt-cell--placeholder {
+    --twm-dt-pin-state: linear-gradient(rgba(255, 255, 255, 0.015), rgba(255, 255, 255, 0.015));
+}
+.twm-data-table-component .twm-preview-table.twm-dt-crosstab tbody tr.twm-dt-diff--added:not(.selected) > td.twm-dt-pin {
+    --twm-dt-pin-state: linear-gradient(color-mix(in srgb, var(--color-success, #3fb950) 16%, transparent), color-mix(in srgb, var(--color-success, #3fb950) 16%, transparent));
+}
+.twm-data-table-component .twm-preview-table.twm-dt-crosstab tbody tr.twm-dt-diff--removed:not(.selected) > td.twm-dt-pin {
+    --twm-dt-pin-state: linear-gradient(color-mix(in srgb, var(--color-danger, #c74e4e) 18%, transparent), color-mix(in srgb, var(--color-danger, #c74e4e) 18%, transparent));
+}
+.twm-data-table-component .twm-preview-table.twm-dt-crosstab tbody tr.twm-dt-diff:not(.selected) > td.twm-dt-pin.twm-dt-diff__cell--changed {
+    --twm-dt-pin-state: linear-gradient(color-mix(in srgb, var(--color-warning, #ff9800) 22%, transparent), color-mix(in srgb, var(--color-warning, #ff9800) 22%, transparent));
+}
+.twm-data-table-component .twm-preview-table.twm-dt-crosstab tbody tr.twm-dt-diff--gap > td.twm-dt-pin.twm-dt-diff__gap {
+    --twm-dt-pin-state: repeating-linear-gradient(135deg,
+        transparent 0 6px,
+        color-mix(in srgb, var(--text-muted, #888) 14%, transparent) 6px 7px);
+}
+.twm-preview-table.twm-dt-crosstab tr:hover td.twm-dt-pin {
+    --twm-dt-pin-state: linear-gradient(rgba(255,255,255,0.04), rgba(255,255,255,0.04));
+}
+@keyframes twm-dt-pin-new {
+    from { --twm-dt-pin-new: var(--twm-dt-new-bg); }
+    to { --twm-dt-pin-new: transparent; }
+}
+.twm-preview-table.twm-dt-crosstab tbody tr.twm-dt-row--new > td.twm-dt-pin {
+    animation: twm-dt-pin-new 1.6s ease-out;
+}
+.twm-preview-table.twm-dt-crosstab th.twm-dt-crosstab__none {
+    font-style: italic;
+    opacity: 0.7;
 }
 /* In the mode a click ticks: a pointer on every row, and the keyboard's row
  * (the arrows move it, Space ticks it) drawn as an outline. */
@@ -786,7 +1162,7 @@ body.twm-dt-col-resizing {
     cursor: pointer;
 }
 .twm-preview-table.twm-dt--selecting tbody tr.twm-dt-row--cursor > td {
-    box-shadow: inset 0 1px 0 0 var(--accent-bright, #007acc), inset 0 -1px 0 0 var(--accent-bright, #007acc);
+    box-shadow: inset 0 1px 0 0 var(--accent-bright), inset 0 -1px 0 0 var(--accent-bright);
 }
 /* `rowIcon` — drawn from `data-twm-icon` so the icon's NAME is not cell
  * text (not in a copy, not in the clipped-cell tooltip). The span carries the
@@ -933,7 +1309,7 @@ body.twm-dt-col-resizing {
 }
 .twm-preview-table td .twm-dt-detail-toggle:focus-visible {
     opacity: 1;
-    outline: 1px solid var(--accent-bright, #007acc);
+    outline: 1px solid var(--accent-bright);
 }
 /* The detail's row: one cell across every column. It is often the body's
  * FIRST cell of its row, so the time column's rules reach it (see the note
@@ -966,7 +1342,7 @@ body.twm-dt-col-resizing {
 }
 /* `follow` / `refresh()` — a row the last answer did not have, for a moment. */
 @keyframes twm-dt-row-new {
-    from { background: var(--twm-dt-new-bg, rgba(0, 122, 204, 0.22)); }
+    from { background: var(--twm-dt-new-bg); }
     to { background: transparent; }
 }
 .twm-preview-table tbody tr.twm-dt-row--new > td {
@@ -1010,11 +1386,11 @@ body.twm-dt-col-resizing {
     background: rgba(255, 255, 255, 0.06);
 }
 .twm-dt-filter-chip:focus-visible {
-    outline: 1px solid var(--accent-bright, #007acc);
+    outline: 1px solid var(--accent-bright);
 }
 .twm-dt-filter-chip.twm-dt-filter-chip--on {
-    border-color: var(--accent-bright, #007acc);
-    background: rgba(0, 122, 204, 0.18);
+    border-color: var(--accent-bright);
+    background: color-mix(in srgb, var(--accent-bright) 18%, transparent);
     color: #ddd;
 }
 .twm-dt-filter-chip.twm-dt-filter-chip--empty {
@@ -1084,14 +1460,14 @@ body.twm-dt-col-resizing {
     width: 16px;
     height: 16px;
     border-radius: 50%;
-    background: #569cd6;
+    background: var(--accent-light);
     margin-top: -5px;
     cursor: grab;
     border: 2px solid var(--surface-0);
 }
 .twm-slider-field__input::-webkit-slider-thumb:active {
     cursor: grabbing;
-    background: #6eb3e9;
+    background: var(--accent-lighter);
 }
 .twm-slider-field__input::-moz-range-track {
     height: 6px;
@@ -1103,10 +1479,86 @@ body.twm-dt-col-resizing {
     width: 16px;
     height: 16px;
     border-radius: 50%;
-    background: #569cd6;
+    background: var(--accent-light);
     cursor: grab;
     border: 2px solid var(--surface-0);
 }
+/* ══ SLIDER FIELD COMPANIONS ══ number box, readout, reset, enable toggle (STORY-0045) */
+.twm-slider-field__row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    min-width: 0;
+}
+.twm-slider-field__row > .twm-slider-field__input {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.twm-slider-field__toggle {
+    flex: 0 0 auto;
+    margin: 0;
+    cursor: pointer;
+}
+.twm-slider-field__readout {
+    flex: 0 0 auto;
+    min-width: 3em;
+    text-align: right;
+    font-size: var(--font-size-sm);
+    font-variant-numeric: tabular-nums;
+    color: var(--text-dim);
+}
+.twm-slider-field__number {
+    flex: 0 0 auto;
+    width: 6em;
+    padding: var(--space-xxs) var(--space-xs);
+    font: inherit;
+    font-size: var(--font-size-sm);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    color: var(--text-body);
+    background: var(--surface-well);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
+}
+.twm-slider-field__number:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+.twm-slider-field__reset {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    width: 22px;
+    height: 22px;
+    color: var(--text-dim);
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    visibility: hidden;
+}
+.twm-slider-field__reset .material-symbols-outlined {
+    font-size: 16px;
+}
+.twm-slider-field__reset:hover {
+    color: var(--text-bright);
+    background: var(--state-hover);
+}
+.twm-slider-field--modified .twm-slider-field__reset {
+    visibility: visible;
+}
+.twm-slider-field--modified .twm-slider-field__number,
+.twm-slider-field--modified .twm-slider-field__readout {
+    color: var(--accent-bright);
+}
+.twm-slider-field--off .twm-slider-field__input,
+.twm-slider-field--off .twm-slider-field__number,
+.twm-slider-field--off .twm-slider-field__readout {
+    opacity: 0.45;
+}
+/* ══ end SLIDER FIELD COMPANIONS ══ */
 /* ===== Sortable List Component ===== */
 .twm-sortable-list {
     display: flex;
@@ -1150,7 +1602,7 @@ body.twm-dt-col-resizing {
 .twm-sortable-list__drop {
     height: 2px;
     margin: 1px 0;
-    background: #569cd6;
+    background: var(--accent-light);
     pointer-events: none;
 }
 .twm-sortable-list__content {
@@ -1197,12 +1649,12 @@ body.twm-dt-col-resizing {
     margin-top: var(--space-md);
 }
 .twm-sortable-list__add:hover {
-    border-color: #569cd6;
-    color: #569cd6;
-    background: rgba(86, 156, 214, 0.12);
+    border-color: var(--accent-light);
+    color: var(--accent-light);
+    background: color-mix(in srgb, var(--accent-light) 12%, transparent);
 }
 .twm-sortable-list__add:active {
-    background: rgba(86, 156, 214, 0.2);
+    background: color-mix(in srgb, var(--accent-light) 20%, transparent);
 }
 .twm-sortable-list__empty {
     padding: var(--space-xl);
@@ -1227,7 +1679,7 @@ body.twm-dt-col-resizing {
 }
 .twm-sortable-list__input:focus {
     outline: none;
-    border-color: #569cd6;
+    border-color: var(--accent-light);
 }
 /* Global Top Bar (fixed at top) */
 .twm-global-top-bar {
@@ -1253,6 +1705,28 @@ body.twm-dt-col-resizing {
 /* Prevent flex wrapping and enable shrink on sections */
 .twm-global-top-bar, .twm-global-top-bar .twm-bar-left, .twm-global-top-bar .twm-bar-center, .twm-global-top-bar .twm-bar-right {
     min-width: 0; /* allow flex children to shrink */
+}
+/* Global menu row (STORY-0119, 0.17.13): a shell's `chrome.menuBar` in a
+ * full-width strip of its own, directly under .twm-global-top-bar in
+ * body.twm-body's column (host.css), so the host below shrinks by its height.
+ * It is a sibling of the top bar, not inside it: a window-drag region bound
+ * to the top bar does not include it. No z-index, so it is no stacking
+ * context: the top bar's dropdowns draw over it, and the .twm-menubar inside
+ * keeps its own styles, its menus (position: fixed, --z-over-windows) drawing
+ * over the page. It reads as a band of its own (STORY-0122, 0.17.14): darker
+ * than the top bar, with a border above and below. Its height is the bar's
+ * plus the padding and the two borders. */
+.twm-global-menu-bar {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    box-sizing: border-box;
+    padding: var(--space-xxs) var(--space-xs);
+    background-color: var(--surface-0);
+    color: var(--text-body);
+    border-top: 1px solid var(--border-strong);
+    border-bottom: 1px solid var(--border-strong);
+    overflow: visible; /* the bar's menus extend below */
 }
 .twm-bar-center {
     white-space: nowrap;
@@ -1701,19 +2175,19 @@ body.twm-dt-col-resizing {
     padding: var(--space-xxs) 8px;
     font-size: var(--font-size-xs);
     color: #c7f1ff;
-    background: rgba(0, 122, 204, 0.18);
-    border: 1px solid rgba(0, 122, 204, 0.35);
+    background: color-mix(in srgb, var(--accent-bright) 18%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-bright) 35%, transparent);
     border-radius: var(--radius-pill);
     white-space: nowrap;
     text-transform: none;
     cursor: default;
-    box-shadow: inset 0 0 0 1px rgba(0, 122, 204, 0.15);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-bright) 15%, transparent);
 }
 .twm-autocomplete-field__namespace--toggle {
     cursor: pointer;
-    background: linear-gradient(90deg, rgba(0, 122, 204, 0.24) 0%, rgba(0, 122, 204, 0.12) 100%);
+    background: linear-gradient(90deg, color-mix(in srgb, var(--accent-bright) 24%, transparent) 0%, color-mix(in srgb, var(--accent-bright) 12%, transparent) 100%);
     transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
-    border: 1px solid rgba(0, 122, 204, 0.5);
+    border: 1px solid color-mix(in srgb, var(--accent-bright) 50%, transparent);
     color: #e7f5ff;
     outline: none;
 }
@@ -1756,8 +2230,8 @@ body.twm-dt-col-resizing {
    is the keyboard's, and it is deliberately the stronger of the two so that
    moving the pointer across the list does not hide where the cursor is. */
 .twm-autocomplete-field__item.active {
-    background-color: var(--state-selected, rgba(0, 122, 204, 0.15));
-    box-shadow: inset 2px 0 0 var(--accent-bright, #007acc);
+    background-color: var(--state-selected);
+    box-shadow: inset 2px 0 0 var(--accent-bright);
 }
 .twm-autocomplete-field__item {
     display: flex;
@@ -1851,7 +2325,7 @@ body.twm-dt-col-resizing {
     border: 1px solid var(--surface-3);
     border-radius: var(--radius-md);
     box-shadow: 0 6px 24px rgba(0,0,0,0.45);
-    z-index: 5000; /* Higher than nodes and selection rectangle */
+    z-index: var(--z-context-menu);
     display: none;
     pointer-events: auto;
     min-width: 180px;
@@ -2147,7 +2621,7 @@ body.twm-window-maximized .twm-resize-handle {
     box-sizing: border-box;
 }
 .twm-data-table__filter-input:focus {
-    border-color: #569cd6;
+    border-color: var(--accent-light);
     background: #252525;
 }
 .twm-data-table__filter-input::placeholder {
@@ -2208,7 +2682,7 @@ body.twm-window-maximized .twm-resize-handle {
 }
 .twm-data-table__filter-dropdown-select:focus,
 .twm-data-table__filter-dropdown-input:focus {
-    border-color: #569cd6;
+    border-color: var(--accent-light);
 }
 .twm-data-table__filter-dropdown-select {
     appearance: auto;
@@ -2501,6 +2975,28 @@ body.twm-window-maximized .twm-resize-handle {
     color: var(--text-dim);
     margin-left: var(--space-xs);
 }
+/* Row actions (createTreeItem's `actions`, STORY-0121): one line at the row's
+ * end, after label, subtitle and badge, shown on hover, on focus within and on
+ * the selected item. Hidden by opacity, not display, so the buttons stay in
+ * the tab order (Tab reaches them and :focus-within shows them) and the label
+ * keeps its width on hover. The slot is no taller than the label line, so a
+ * row is as high with actions as without. */
+.twm-tree-item__actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xxs);
+    flex-shrink: 0;
+    height: 0;
+    overflow: visible;
+    opacity: 0;
+    pointer-events: none;
+}
+.twm-tree-item:hover > .twm-tree-item__actions,
+.twm-tree-item:focus-within > .twm-tree-item__actions,
+.twm-tree-item.selected > .twm-tree-item__actions {
+    opacity: 1;
+    pointer-events: auto;
+}
 /* ═══════════════════════════════════════════════════════════════════════════
    Plot Popout Window
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -2558,11 +3054,11 @@ body.twm-window-maximized .twm-resize-handle {
     color: var(--text-bright);
 }
 .twm-plot-window-toolbar .twm-btn-icon.twm-is-active {
-    color: #4A90D9;
-    background: rgba(74, 144, 217, 0.15);
+    color: color-mix(in srgb, var(--accent-bright) 80%, white);
+    background: color-mix(in srgb, color-mix(in srgb, var(--accent-bright) 80%, white) 15%, transparent);
 }
 .twm-plot-window-toolbar .twm-btn-icon.twm-is-active:hover {
-    background: rgba(74, 144, 217, 0.25);
+    background: color-mix(in srgb, color-mix(in srgb, var(--accent-bright) 80%, white) 25%, transparent);
 }
 .twm-plot-window-content {
     flex: 1;
@@ -2633,7 +3129,7 @@ body.twm-window-maximized .twm-resize-handle {
     background: rgba(255, 255, 255, 0.02);
 }
 .twm-plot-window-container .twm-plot-tab-content .twm-preview-table tbody tr:hover {
-    background: rgba(74, 144, 217, 0.1);
+    background: color-mix(in srgb, color-mix(in srgb, var(--accent-bright) 80%, white) 10%, transparent);
 }
 .twm-plot-window-container .twm-plot-tab-content .twm-preview-table td {
     color: #aaa;
@@ -2706,7 +3202,7 @@ body.twm-window-maximized .twm-resize-handle {
     background: rgba(255, 255, 255, 0.05);
 }
 .twm-plot-series-toggle-panel__item input[type="checkbox"] {
-    accent-color: #268bd2;
+    accent-color: color-mix(in srgb, var(--accent-bright) 87%, white);
     flex-shrink: 0;
 }
 .twm-plot-series-toggle-panel__line-indicator {
@@ -2815,7 +3311,7 @@ body.twm-window-maximized .twm-resize-handle {
     outline: none;
 }
 .twm-data-series-plot-config select:focus {
-    border-color: #268bd2;
+    border-color: color-mix(in srgb, var(--accent-bright) 87%, white);
 }
 .twm-data-series-plot-config__columns {
     max-height: 200px;
@@ -2857,7 +3353,7 @@ body.twm-window-maximized .twm-resize-handle {
     border-radius: 1px;
 }
 .twm-data-series-plot-config input[type="checkbox"] {
-    accent-color: #268bd2;
+    accent-color: color-mix(in srgb, var(--accent-bright) 87%, white);
     flex-shrink: 0;
 }
 /* Computing Status Window */
@@ -2874,9 +3370,21 @@ body.twm-window-maximized .twm-resize-handle {
     width: 32px;
     height: 32px;
     border: 3px solid #333;
-    border-top-color: #4a90d9;
+    border-top-color: color-mix(in srgb, var(--accent-bright) 80%, white);
     border-radius: 50%;
     animation: computing-spin 0.8s linear infinite;
+}
+/* The keyframes the rule above names. A spinner rule shipped with the animation
+   name and without the `@keyframes` block, which CSS does not report: an
+   undefined name is simply no animation, so the ring was drawn and never
+   turned, and nothing threw, logged or failed a build. `@keyframes` names are
+   global, so this one is not scoped (see `spin`): an embedder that defines
+   its own `computing-spin` wins or loses on source order, and either way the
+   ring turns. A full turn at the rule's own duration, linear and infinite, so
+   the loop has no seam: the arc is back where it started. */
+@keyframes computing-spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
 }
 .twm-computing-status__message {
     font-size: var(--font-size-md);
@@ -2923,6 +3431,11 @@ body.twm-window-maximized .twm-resize-handle {
     flex-shrink: 0;
     animation: etl-spin 0.8s linear infinite;
 }
+/* The keyframes the rule above names; see `computing-spin`. */
+@keyframes etl-spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
 .twm-run-progress__message {
     font-size: var(--font-size-md);
     color: var(--text-primary, #ccc);
@@ -2953,6 +3466,231 @@ body.twm-window-maximized .twm-resize-handle {
 .twm-run-progress__stop-btn:disabled {
     opacity: 0.5;
     cursor: default;
+}
+
+/* ─── Progress: ProgressBar, ProgressList, StepProgress ──────────────
+   `src/ui/components/progress.js`. Every width is the fill's inline
+   `style.width`, changed in place; the states are modifier classes. */
+
+.twm-progress {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    min-width: 0;
+}
+.twm-progress__head {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-sm);
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+}
+.twm-progress__label {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-primary);
+}
+.twm-progress__readout,
+.twm-progress__elapsed {
+    flex: 0 0 auto;
+    font-variant-numeric: tabular-nums;
+}
+.twm-progress__elapsed {
+    color: var(--text-muted);
+}
+.twm-progress__cancel {
+    flex: 0 0 auto;
+    background: transparent;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: var(--font-size-xs);
+    padding: 0 var(--space-sm);
+    cursor: pointer;
+}
+.twm-progress__cancel:hover:not(:disabled) {
+    border-color: var(--color-danger);
+    color: var(--color-danger);
+}
+.twm-progress__cancel:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+.twm-progress__track,
+.twm-progress-list__track {
+    position: relative;
+    height: 6px;
+    overflow: hidden;
+    background: var(--surface-3);
+    border-radius: var(--radius-pill);
+}
+.twm-progress__fill,
+.twm-progress-list__fill {
+    height: 100%;
+    width: 0;
+    background: var(--accent);
+    border-radius: inherit;
+    transition: width var(--transition-normal);
+}
+.twm-progress--indeterminate .twm-progress__fill {
+    position: absolute;
+    left: 0;
+    width: 30%;
+    animation: twm-progress-sweep 1.2s ease-in-out infinite;
+}
+.twm-progress--done .twm-progress__fill {
+    background: var(--color-success);
+}
+.twm-progress--error .twm-progress__fill {
+    background: var(--color-danger);
+}
+.twm-progress--cancelled .twm-progress__fill {
+    background: var(--text-dim);
+}
+@keyframes twm-progress-sweep {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(340%); }
+}
+
+.twm-progress-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    min-width: 0;
+}
+.twm-progress-list__rows {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+.twm-progress-list__row {
+    display: grid;
+    grid-template-columns: auto minmax(6em, 1fr) minmax(4em, 2fr) auto;
+    align-items: center;
+    gap: var(--space-sm);
+    font-size: var(--font-size-sm);
+    color: var(--text-primary);
+}
+.twm-progress-list__name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.twm-progress-list__count {
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+.twm-progress-list__state {
+    width: 8px;
+    height: 8px;
+    border-radius: var(--radius-circle);
+    background: var(--text-dim);
+}
+.twm-progress-list__row--running .twm-progress-list__state {
+    background: var(--accent);
+}
+.twm-progress-list--pulse .twm-progress-list__row--running .twm-progress-list__state {
+    animation: twm-progress-pulse 1.2s ease-in-out infinite;
+}
+.twm-progress-list__row--done .twm-progress-list__state,
+.twm-progress-list__row--done .twm-progress-list__fill {
+    background: var(--color-success);
+}
+.twm-progress-list__row--failed .twm-progress-list__state,
+.twm-progress-list__row--failed .twm-progress-list__fill {
+    background: var(--color-danger);
+}
+.twm-progress-list__row--pending {
+    color: var(--text-muted);
+}
+.twm-progress-list__empty,
+.twm-progress-list__stats {
+    font-size: var(--font-size-xs);
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+@keyframes twm-progress-pulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.35; }
+}
+
+.twm-steps {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-xs) var(--space-lg);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: var(--font-size-sm);
+}
+.twm-steps__step {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    color: var(--text-muted);
+}
+.twm-steps__marker {
+    width: 8px;
+    height: 8px;
+    border-radius: var(--radius-circle);
+    border: 1px solid currentColor;
+}
+.twm-steps__step--done {
+    color: var(--text-secondary);
+}
+.twm-steps__step--done .twm-steps__marker {
+    background: var(--color-success);
+    border-color: var(--color-success);
+}
+.twm-steps__step--active {
+    color: var(--text-primary);
+    font-weight: var(--font-weight-semibold);
+}
+.twm-steps__step--active .twm-steps__marker {
+    background: var(--accent);
+    border-color: var(--accent);
+}
+.twm-steps__step--error {
+    color: var(--color-danger);
+}
+.twm-steps__step--error .twm-steps__marker {
+    background: var(--color-danger);
+    border-color: var(--color-danger);
+}
+.twm-steps__pass {
+    font-weight: var(--font-weight-regular);
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+@media (prefers-reduced-motion: reduce) {
+    .twm-progress__fill,
+    .twm-progress-list__fill { transition: none; }
+    .twm-progress--indeterminate .twm-progress__fill,
+    .twm-progress-list--pulse .twm-progress-list__row--running .twm-progress-list__state { animation: none; }
+}
+
+/* The bar and phases inside showRunProgressDialog / showComputingWindow,
+   and the message's final state. */
+.twm-job-progress__steps,
+.twm-job-progress__bar {
+    align-self: stretch;
+    margin: var(--space-xs) 0;
+}
+.twm-run-progress__message.is-ok,
+.twm-computing-status__message.is-ok {
+    color: var(--color-success);
+}
+.twm-run-progress__message.is-err,
+.twm-computing-status__message.is-err {
+    color: var(--color-danger);
+}
+.twm-run-progress__message.is-cancelled,
+.twm-computing-status__message.is-cancelled {
+    color: var(--text-muted);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -3082,14 +3820,14 @@ body.twm-window-maximized .twm-resize-handle {
 /* Add Widget is the toolbar's one primary verb, so it is the one that carries
    the accent. */
 .add-widget-btn {
-    background: rgba(0, 122, 204, 0.15);
-    border-color: rgba(0, 122, 204, 0.3);
+    background: color-mix(in srgb, var(--accent-bright) 15%, transparent);
+    border-color: color-mix(in srgb, var(--accent-bright) 30%, transparent);
     color: var(--text-bright);
 }
 
 .add-widget-btn:hover {
-    background: rgba(0, 122, 204, 0.25);
-    border-color: rgba(0, 122, 204, 0.5);
+    background: color-mix(in srgb, var(--accent-bright) 25%, transparent);
+    border-color: color-mix(in srgb, var(--accent-bright) 50%, transparent);
 }
 
 /* The other two are secondary — Export is an aside and Reset Layout throws the
@@ -3138,24 +3876,30 @@ body.twm-window-maximized .twm-resize-handle {
 .tile.resizing {
     z-index: var(--z-dropdown);
     border-color: var(--accent-bright);
-    box-shadow: 0 0 0 2px rgba(0, 122, 204, 0.3);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-bright) 30%, transparent);
 }
 
 /* Selected — set by `_onConfigClick()` while the config dialog is open, and
-   cleared from every sibling by the same handler. #78b9ff is a literal
-   because there is no light-accent token: `--accent-bright` is #007acc, which
-   is a border colour on this background and not a text one. */
-.tile.tile--selected {
-    border-color: #78b9ff;
-    box-shadow: 0 0 0 2px rgba(120, 185, 255, 0.3), var(--shadow-md);
+   cleared from every sibling by the same handler. `--configuring` is the same
+   look set by the embedder through `setConfiguring()` (0.17.16), one per open
+   config window, and no handler clears it. It reads `--accent-lighter`
+   (BUG-0045): `--accent-bright` is a border colour on this background and not
+   a text one. It was #78b9ff, which no mix of `--accent-bright` with white
+   gives exactly; `--accent-lighter` (about #73b6e3) is the nearest. */
+.tile.tile--selected,
+.tile.tile--configuring {
+    border-color: var(--accent-lighter);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-lighter) 30%, transparent), var(--shadow-md);
 }
 
-.tile.tile--selected .tile-header {
-    background: rgba(120, 185, 255, 0.1);
+.tile.tile--selected .tile-header,
+.tile.tile--configuring .tile-header {
+    background: color-mix(in srgb, var(--accent-lighter) 10%, transparent);
 }
 
-.tile.tile--selected .tile-title {
-    color: #78b9ff;
+.tile.tile--selected .tile-title,
+.tile.tile--configuring .tile-title {
+    color: var(--accent-lighter);
 }
 
 /* Read-only. `_buildChrome()`'s read-only branch emits no drag handle, no
@@ -3258,7 +4002,7 @@ body.twm-window-maximized .twm-resize-handle {
 .tile-menu-btn:hover,
 .tile-expand-btn:hover {
     background: var(--state-hover);
-    color: #78b9ff;
+    color: var(--accent-lighter);
 }
 
 .tile-remove-btn:hover {
@@ -3293,11 +4037,14 @@ body.twm-window-maximized .twm-resize-handle {
     position: relative;
 }
 
+/* While open the menu is moved to document.body and placed `position: fixed`
+   by `ActionDropdown.position` (inline styles), so a narrow tile cannot clip
+   it; --z-over-windows keeps it over a managed window holding the grid. */
 .tile-menu-dropdown {
     position: absolute;
     top: 100%;
     right: 0;
-    z-index: var(--z-dropdown);
+    z-index: var(--z-over-windows);
     min-width: 180px;
     padding: var(--space-xs) 0;
     background: var(--surface-2);
@@ -3343,7 +4090,7 @@ body.twm-window-maximized .twm-resize-handle {
 }
 
 .tile-menu-item:hover .material-symbols-outlined {
-    color: #78b9ff;
+    color: var(--accent-lighter);
 }
 
 /* ── the content area ────────────────────────────────────────────────── */
@@ -3412,8 +4159,8 @@ body.twm-window-maximized .twm-resize-handle {
 /* The drop preview, positioned by `_updateGhost()` in grid coordinates. */
 .tile-ghost {
     position: absolute;
-    background: rgba(0, 122, 204, 0.15);
-    border: 2px dashed rgba(0, 122, 204, 0.5);
+    background: color-mix(in srgb, var(--accent-bright) 15%, transparent);
+    border: 2px dashed color-mix(in srgb, var(--accent-bright) 50%, transparent);
     border-radius: var(--radius-sm);
     pointer-events: none;
     z-index: 50;
@@ -3489,10 +4236,12 @@ body.twm-window-maximized .twm-resize-handle {
     font-size: 32px;
 }
 
-/* ── the chart and KPI tiles (0.13.0, src/tiles/chart_tiles.js) ──────── */
-/* The figure flexes into what `.tile-content`'s column leaves; the note takes
-   its own line BELOW it, so the height chain above is untouched. */
-.fd-chart-tile {
+/* ── the figure, chart and KPI tiles (0.13.0, src/tiles/chart_tiles.js;
+      0.17.0, src/tiles/figure_tile.js) ─────────────────────────────── */
+/* A figure tile's plot (a chart tile's too: it is one) flexes into what
+   `.tile-content`'s column leaves; a chart's note takes its own line BELOW it,
+   so the height chain above is untouched. */
+.fd-figure-tile {
     display: flex;
     flex-direction: column;
     flex: 1 1 auto;
@@ -3504,7 +4253,7 @@ body.twm-window-maximized .twm-resize-handle {
 /* Plotly puts `.js-plotly-plot` on the figure itself, and the rule above makes
    that `height: 100% !important` — which, beside a note, pushes the note out of
    the tile. Here the flex column sizes the figure instead. */
-.tile-content .fd-chart-tile.js-plotly-plot {
+.tile-content .fd-figure-tile.js-plotly-plot {
     height: auto !important;
 }
 
@@ -3718,6 +4467,60 @@ body.twm-window-maximized .twm-resize-handle {
 .fd-scope-picker__btn--on:hover { background: var(--accent); color: #fff; }
 .fd-scope-picker__btn:focus-visible { outline: 1px solid var(--accent-bright); outline-offset: -2px; }
 
+/* ── the tile config form (0.17.0, tile_config_form.js) ──────────────────
+   One row per schema field: the label, the control, the description, the
+   inline error. A hidden row (visibleWhen) is `hidden`, never rebuilt. */
+.fd-tile-config {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    padding: var(--space-sm);
+    font-size: var(--font-size-sm);
+}
+.fd-tile-config__row {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+.fd-tile-config__row[hidden] { display: none; }
+.fd-tile-config__row--checkbox {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-xs);
+}
+.fd-tile-config__row--checkbox .fd-tile-config__help,
+.fd-tile-config__row--checkbox .fd-tile-config__error { flex-basis: 100%; }
+.fd-tile-config__label { color: var(--text-secondary); font-size: var(--font-size-xs); }
+.fd-tile-config__input,
+.fd-tile-config__select {
+    width: 100%;
+    box-sizing: border-box;
+    padding: var(--ea-input-pad, 4px 6px);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    background: var(--ea-input-bg, transparent);
+    color: var(--text-bright);
+    font: inherit;
+}
+.fd-tile-config__input:focus,
+.fd-tile-config__select:focus { outline: none; border-color: var(--accent-bright); }
+.fd-tile-config__input:disabled,
+.fd-tile-config__select:disabled,
+.fd-tile-config__checkbox:disabled,
+.fd-tile-config__color:disabled,
+.fd-tile-config__range:disabled { opacity: 0.6; cursor: default; }
+.fd-tile-config__row--invalid .fd-tile-config__input,
+.fd-tile-config__row--invalid .fd-tile-config__select { border-color: var(--color-danger); }
+.fd-tile-config__range-wrap { display: flex; align-items: center; gap: var(--space-sm); }
+.fd-tile-config__range { flex: 1 1 auto; }
+.fd-tile-config__range-value { min-width: 3ch; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.fd-tile-config__color { width: 48px; height: 24px; padding: 0; border: 1px solid var(--border-subtle); background: transparent; }
+.fd-tile-config__help { color: var(--text-muted); font-size: var(--font-size-xs); line-height: 1.4; }
+.fd-tile-config__error { color: var(--color-danger); font-size: var(--font-size-xs); line-height: 1.4; }
+.fd-tile-config__error[hidden] { display: none; }
+
 /* ===================================================================
    REUSABLE ACTION DROPDOWN COMPONENT
    Used by Add Scenario, Add Widget, and other action dropdowns
@@ -3782,6 +4585,14 @@ body.twm-window-maximized .twm-resize-handle {
     box-sizing: border-box;
     transition: background var(--transition-normal), border-color var(--transition-normal);
 }
+/* A `{ separator: true }` entry: a rule between two groups of options. It is
+   not a button, so it takes no focus and the arrow keys pass over it. */
+.twm-action-dropdown-separator {
+    height: 1px;
+    /* the option above already leaves var(--space-xs) below itself */
+    margin: 0 0 var(--space-xs);
+    background: var(--border-subtle);
+}
 .twm-action-dropdown-option:last-child {
     margin-bottom: 0;
 }
@@ -3793,12 +4604,12 @@ body.twm-window-maximized .twm-resize-handle {
 }
 .twm-action-dropdown-option .twm-option-icon {
     font-size: 20px;
-    color: #78b9ff;
+    color: var(--accent-lighter);
     flex-shrink: 0;
 }
 .twm-action-dropdown-option:hover .twm-option-icon,
 .twm-action-dropdown-option:focus .twm-option-icon {
-    color: #9ecfff;
+    color: var(--accent-lightest);
 }
 .twm-action-dropdown-option .twm-option-label {
     font-weight: 500;
@@ -3813,6 +4624,215 @@ body.twm-window-maximized .twm-resize-handle {
     overflow: hidden;
     text-overflow: ellipsis;
 }
+
+/* ══ CATEGORY PICKER (STORY-0126) ══════════════════════════════════════
+   `CategoryPicker` (category_picker.js): a search field over three columns —
+   categories, the active category's items, the highlighted item's detail.
+   Placed by `ActionDropdown.position` (inline top/left/max-height), so it is
+   `position: fixed` on --z-over-windows: over the managed window it opened
+   from. It shrinks to the inline max-height and its columns scroll inside.
+   A category's colour arrives as `--twm-category-picker-color` on its rows. */
+.twm-category-picker {
+    position: fixed;
+    z-index: var(--z-over-windows);
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    width: 640px;
+    max-width: calc(100vw - 2 * var(--space-md));
+    height: 440px;
+    background: var(--surface-1);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: var(--font-size-md);
+    overflow: hidden;
+}
+.twm-category-picker[hidden] {
+    display: none;
+}
+.twm-category-picker__search {
+    flex: none;
+    padding: var(--space-md);
+    border-bottom: 1px solid var(--border-default);
+}
+.twm-category-picker__input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--surface-0);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: var(--font-size-md);
+}
+.twm-category-picker__input:focus {
+    outline: none;
+    border-color: var(--accent-bright);
+}
+.twm-category-picker__body {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+}
+.twm-category-picker__column {
+    flex: none;
+    box-sizing: border-box;
+    padding: var(--space-sm) 0;
+    border-right: 1px solid var(--border-default);
+    overflow-y: auto;
+}
+.twm-category-picker__categories {
+    width: 170px;
+}
+.twm-category-picker__items {
+    width: 220px;
+}
+.twm-category-picker__category,
+.twm-category-picker__item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    width: 100%;
+    box-sizing: border-box;
+    padding: var(--space-sm) var(--space-lg);
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: var(--font-size-md);
+    text-align: left;
+    cursor: pointer;
+}
+.twm-category-picker__category:hover,
+.twm-category-picker__item:hover {
+    background: var(--state-hover);
+}
+.twm-category-picker__category--active,
+.twm-category-picker__item--highlighted,
+.twm-category-picker__category--active:hover,
+.twm-category-picker__item--highlighted:hover {
+    background: var(--state-selected);
+}
+/* The column the arrow keys move in marks its row with an accent edge. */
+.twm-category-picker__column--current .twm-category-picker__category--active,
+.twm-category-picker__column--current .twm-category-picker__item--highlighted {
+    box-shadow: inset 2px 0 0 var(--accent-bright);
+}
+.twm-category-picker__category--empty {
+    color: var(--text-dim);
+}
+.twm-category-picker__dot {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-radius: var(--radius-circle);
+    /* background-color, not the shorthand: the colour is the caller's, and a
+       url() in the shorthand would be fetched */
+    background-color: var(--twm-category-picker-color, var(--text-muted));
+}
+.twm-category-picker__category-label,
+.twm-category-picker__item-label {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+.twm-category-picker__count {
+    flex: none;
+    color: var(--text-muted);
+    font-size: var(--font-size-xs);
+    font-variant-numeric: tabular-nums;
+}
+.twm-category-picker__badge,
+.twm-category-picker__item .twm-category-picker__icon {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    box-sizing: border-box;
+    color: var(--twm-category-picker-color, var(--text-muted));
+}
+.twm-category-picker__badge {
+    border: 1px solid var(--twm-category-picker-color, var(--text-muted));
+    border-radius: var(--radius-sm);
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+    overflow: hidden;
+    white-space: nowrap;
+}
+.twm-category-picker__item .twm-category-picker__icon {
+    font-size: 18px;
+}
+/* One category's hits while a query is set: role="group", named by its header. */
+.twm-category-picker__hits {
+    display: flex;
+    flex-direction: column;
+}
+.twm-category-picker__group {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-md) var(--space-lg) var(--space-xs);
+    color: var(--text-muted);
+    font-size: var(--font-size-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+.twm-category-picker__empty,
+.twm-category-picker__detail-empty {
+    padding: var(--space-md) var(--space-lg);
+    color: var(--text-muted);
+}
+.twm-category-picker__detail {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    padding: var(--space-xl);
+    overflow-y: auto;
+}
+.twm-category-picker__title {
+    color: var(--text-bright);
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-semibold);
+}
+.twm-category-picker__description {
+    color: var(--text-secondary);
+    line-height: var(--line-height-normal);
+}
+.twm-category-picker__preview-label {
+    margin-top: var(--space-sm);
+    color: var(--text-muted);
+    font-size: var(--font-size-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+.twm-category-picker__preview {
+    margin: 0;
+    padding: var(--space-md);
+    background: var(--surface-0);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
+    color: var(--text-body);
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-sm);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+.twm-category-picker__add {
+    margin-top: auto;
+    align-self: flex-end;
+}
+/* ══ end CATEGORY PICKER ══ */
 
 /* ── from code.css ───────────────────────── */
 /* Code language tabs */
@@ -3957,7 +4977,7 @@ body.twm-window-maximized .twm-resize-handle {
     position: absolute;
     z-index: 5999;
     pointer-events: none;
-    background: rgba(23, 119, 179, 0.18);
+    background: color-mix(in srgb, var(--accent-hover) 18%, transparent);
     border: 1px solid var(--accent-bright);
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
     transition: left 0.09s ease, top 0.09s ease, width 0.09s ease, height 0.09s ease;
@@ -4029,6 +5049,12 @@ body.twm-window-maximized .twm-resize-handle {
 }
 .twm-managed-window:focus-within {
     border-color: #505050;
+}
+/* BUG-0053. The frame is focusable (tabindex -1) so a press on it keeps focus
+   in the window; the focus-within border above already shows that, so the
+   frame draws no outline of its own. */
+.twm-managed-window:focus {
+    outline: none;
 }
 /* Minimize animation class — targets taskbar item via CSS custom properties */
 .twm-managed-window--minimizing {
@@ -4251,12 +5277,11 @@ button.twm-managed-window__btn svg rect {
     transition: background-color 0.1s, color 0.1s;
 }
 .twm-bar-windows__item:hover {
-    /* Solarized blue */
-    background: #268bd2;
+    background: var(--accent-bright-hover);
     color: var(--text-bright);
 }
 .twm-bar-windows__item:active {
-    background: #1a6aa5;
+    background: var(--accent-pressed);
 }
 /* Compounded for the Material Symbols tie — see `.twm-leaf__icon`. */
 .twm-bar-windows__item-icon,
@@ -4574,7 +5599,36 @@ button.twm-about-dialog__btn--close:focus {
 }
 /* ─── Badges ──────────────────────────────────────────────────────────── */
 
-/* .detail-header__badge* — moved to components/controls.css (Phase 2). */
+/* A badge beside the title (`createDetailHeader({badges})`, BUG-0015): a
+ * neutral pill from tokens. A caller's own `className` sits on the same
+ * element, after this rule's single class, to recolour it. */
+.twm-detail-header__badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: 2px var(--space-md);
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--border-subtle);
+    background: var(--surface-2);
+    color: var(--text-muted);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-tight);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+/* Compounded for the Material Symbols tie — see `.twm-leaf__icon`. */
+.twm-detail-header__badge-icon,
+.twm-detail-header__badge-icon.material-symbols-outlined {
+    font-size: 14px;
+    line-height: 1;
+}
+
+/* ─── Buttons ─────────────────────────────────────────────────────────── */
+
+/* An action is a `.twm-btn` (BUG-0015): the shared button look, with
+ * 'primary' wearing `.twm-btn--primary` and 'danger' `.twm-btn--danger`;
+ * 'secondary' is the plain button. Its icon is a `.twm-btn__glyph`. */
 
 /* ─── Subtitle ────────────────────────────────────────────────────────── */
 
@@ -4829,12 +5883,12 @@ button.twm-about-dialog__btn--close:focus {
 /* ─── Autocomplete field — notebook variant ──────────────── */
 
 .twm-autocomplete-field--notebook .twm-autocomplete-field__input-wrapper {
-    border: 1px solid #569cd6;
+    border: 1px solid var(--accent-light);
     font-size: var(--font-size-sm);
 }
 .twm-autocomplete-field--notebook .twm-autocomplete-field__input-wrapper:focus-within {
-    border-color: #79b8f8;
-    box-shadow: 0 0 3px rgba(86, 156, 214, 0.3);
+    border-color: var(--accent-lighter);
+    box-shadow: 0 0 3px color-mix(in srgb, var(--accent-light) 30%, transparent);
 }
 .twm-autocomplete-field--notebook .twm-autocomplete-field__input {
     font-family: 'Courier New', Courier, monospace;
@@ -4862,6 +5916,11 @@ button.twm-about-dialog__btn--close:focus {
     margin-left: auto;
     line-height: 1;
 }
+/* The badge's variants: createTreeItem's badge.variant ('muted' when unset) */
+.twm-tree-item__badge--muted { background: color-mix(in srgb, var(--text-dim) 15%, transparent); color: var(--text-dim); }
+.twm-tree-item__badge--pass  { background: color-mix(in srgb, var(--color-success) 15%, transparent); color: var(--color-success); }
+.twm-tree-item__badge--fail  { background: color-mix(in srgb, var(--color-danger) 15%, transparent); color: var(--color-danger); }
+.twm-tree-item__badge--error { background: color-mix(in srgb, var(--color-danger) 15%, transparent); color: var(--color-danger); }
 /* Status dot variant (smaller, no text) */
 .twm-tree-item__status-dot {
     width: 7px;
@@ -4869,7 +5928,12 @@ button.twm-about-dialog__btn--close:focus {
     border-radius: 50%;
     flex-shrink: 0;
     margin-left: auto;
+    background: var(--text-dim);
 }
+.twm-tree-item__status-dot--muted { background: var(--text-dim); }
+.twm-tree-item__status-dot--pass  { background: var(--color-success); }
+.twm-tree-item__status-dot--fail  { background: var(--color-danger); }
+.twm-tree-item__status-dot--error { background: var(--color-danger); }
 
 /* ── from slide_out_panel.css ───────────────────────── */
 /* ─── SlideOutPanel ─────────────────────────────────────────────────────────
@@ -4909,16 +5973,29 @@ button.twm-about-dialog__btn--close:focus {
     border-left: 1px solid #333;
     box-shadow: -4px 0 12px rgba(0, 0, 0, 0.35);
 
-    min-width: 400px;
+    /* Never wider than the host (BUG-0035). `#trackGeometry` sets
+     * `--twm-slide-out-host-w` to the host's width while open; the 400px
+     * floor gives way to it too, since `min-width` beats `max-width`. */
+    min-width: min(400px, var(--twm-slide-out-host-w, 400px));
+    max-width: var(--twm-slide-out-host-w, none);
 
-    transform: translateX(100%);
-    transition: transform 200ms ease-out, visibility 0s linear 200ms;
+    /* Never drawn outside its final box (BUG-0051). While open the panel
+     * is `position: fixed` at its host's right edge, where the host's
+     * `overflow: hidden` no longer clips it, and its slide from
+     * translateX(100%) was drawn across whatever lies right of the host (a
+     * dock panel). It does not move any more: a clip alone carries the
+     * motion, revealing it from its right edge leftwards, so no frame can
+     * paint outside its box (a transform and a clip animated together can
+     * drift apart, the transform often running on the compositor). The left
+     * inset of -16px keeps the box shadow. */
+    clip-path: inset(0 0 0 100%);
+    transition: clip-path 200ms ease-out, visibility 0s linear 200ms;
     visibility: hidden;
 }
 .twm-slide-out-panel--open {
-    transform: translateX(0);
+    clip-path: inset(0 0 0 -16px);
     visibility: visible;
-    transition: transform 200ms ease-out, visibility 0s linear 0s;
+    transition: clip-path 200ms ease-out, visibility 0s linear 0s;
 }
 /* Header bar */
 .twm-slide-out-panel__header {
@@ -4942,6 +6019,19 @@ button.twm-about-dialog__btn--close:focus {
 .twm-slide-out-panel__close {
     flex-shrink: 0;
     margin-left: auto;
+}
+/* Both icons at 18px (BUG-0035). Two classes each, for the Material Symbols
+ * tie — see `.twm-leaf__icon`: a single-class rule loses to Google's
+ * `.material-symbols-outlined { font-size: 24px }`, which loads later. */
+.twm-slide-out-panel__icon.material-symbols-outlined {
+    flex-shrink: 0;
+    font-size: 18px;
+    line-height: 1;
+    color: var(--text-secondary);
+}
+.twm-slide-out-panel__close .material-symbols-outlined {
+    font-size: 18px;
+    line-height: 1;
 }
 /* Scrollable body */
 .twm-slide-out-panel__body {
@@ -5124,8 +6214,8 @@ button.twm-about-dialog__btn--close:focus {
     color: var(--text-bright);
 }
 .twm-btn--primary:hover:not(:disabled) {
-    background: #1486cf;
-    border-color: #1486cf;
+    background: var(--accent-bright-hover);
+    border-color: var(--accent-bright-hover);
 }
 /* Context menu separator (matches Ecosim's .twm-context-menu look). */
 .twm-context-menu__separator {
@@ -5467,6 +6557,104 @@ button.twm-about-dialog__btn--close:focus {
 .twm-managed-window--modal .twm-picker__btn .material-symbols-outlined {
     font-size: 15px;
 }
+/* Colour field: swatch (native picker) + hex box + optional preset strip.
+ * The hex box takes the field-well styling of the text inputs above. */
+.twm-color-field {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+}
+.twm-color-field__swatch {
+    flex: 0 0 auto;
+    width: 28px;
+    height: 22px;
+    padding: 0;
+    border: 1px solid #3a3a3a;
+    border-radius: 0;
+    background: transparent;
+    cursor: pointer;
+}
+.twm-color-field__hex {
+    flex: 1 1 90px;
+    min-width: 0;
+    font-family: 'Consolas', 'Monaco', monospace;
+}
+.twm-color-field--invalid .twm-color-field__hex {
+    border-color: #b03a3a;
+}
+.twm-color-field__presets {
+    flex: 1 0 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+}
+.twm-color-field__preset {
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 2px;
+    cursor: pointer;
+}
+.twm-color-field__preset:hover,
+.twm-color-field__preset:focus-visible {
+    outline: 1px solid var(--ea-accent);
+    outline-offset: 1px;
+}
+/* Colour list: a SortableList whose rows are a colour field + move buttons. */
+.twm-color-list {
+    min-width: 0;
+}
+.twm-color-list__row {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+}
+.twm-color-list__row > .twm-color-field {
+    flex: 1 1 auto;
+}
+.twm-color-list__move {
+    display: flex;
+    align-items: center;
+    padding: 2px;
+    background: transparent;
+    border: none;
+    color: #8c8c8c;
+    cursor: pointer;
+}
+.twm-color-list__move:hover:not(:disabled) {
+    color: var(--ea-accent);
+}
+.twm-color-list__move:disabled {
+    opacity: 0.3;
+    cursor: default;
+}
+.twm-color-list__move .material-symbols-outlined {
+    font-size: 15px;
+}
+/* An option that cannot be chosen, and why — drawn by choice_controls.js
+ * for openForm's select, checklist and radio (and the flow kit's widgets). */
+.twm-choice--disabled { cursor: default; opacity: 0.7; }
+.twm-choice__reason {
+    font-size: var(--font-size-xs);
+    font-style: italic;
+    color: var(--ea-text-dim);
+}
+.twm-flow-togglechip > .twm-choice__reason { margin-left: 4px; }
+/* A group's heading over its chips or radio rows (a select's is its optgroup). */
+.twm-choice__group {
+    flex-basis: 100%;
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--ea-text-dim);
+}
+.twm-choice__group:not(:first-child) { margin-top: 4px; }
+.twm-flow-togglechip > .twm-choice__reason::before { content: '— '; }
 /* A row (or named section) hidden by openForm's `setVisible`. `[hidden]`
  * carries only the UA sheet's `display: none`, which the grid and flex rules
  * on `.twm-modal__row` / `.twm-modal__section` beat — so a hidden row stayed
@@ -5474,6 +6662,60 @@ button.twm-about-dialog__btn--close:focus {
 .twm-modal__row[hidden],
 .twm-modal__section[hidden] {
     display: none !important;
+}
+/* A `{ row: [...] }` entry of openForm: its fields side by side, each one an
+ * ordinary `.twm-modal__row` with its own label, hint and error. The fields
+ * after the first size their label to its text; the first keeps the form's
+ * label column, so it lines up with the rows above and below, 10px from
+ * each, as any two rows are. A form narrower than 360px stacks them — the
+ * form is the query container, and only a form that has a row is made one,
+ * so no other form's layout moves. */
+.twm-managed-window--modal .twm-modal__form:has(.twm-modal__field-group) {
+    container: twm-form / inline-size;
+}
+.twm-modal__field-group {
+    display: flex;
+    align-items: flex-start;
+    column-gap: 10px;
+}
+/* Each field's basis is its label alone (the first field's: the form's 130px
+ * label column): the controls lend the row no intrinsic width
+ * (`contain: inline-size`), so the free space is shared equally and every
+ * input of a row is equally wide (BUG-0050). Until 0.17.14 each field was an
+ * equal share of the row (`flex: 1 1 0`), so the first input, whose share
+ * also held the 130px column, was the narrowest by far. */
+.twm-modal__field-group > .twm-modal__row {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.twm-modal__field-group > .twm-modal__row > :not(:first-child) {
+    contain: inline-size;
+    min-width: 0;
+}
+.twm-managed-window--modal .twm-modal__fields > .twm-modal__field-group {
+    margin-left: 14px;
+    margin-right: 14px;
+}
+.twm-managed-window--modal .twm-modal__fields > .twm-modal__field-group:first-child {
+    margin-top: 14px;
+}
+/* A field after a leading row is still its label's first-of-type, so the
+ * leading-row margin above would land on it a second time: it keeps the
+ * normal 10px under the row (the row's own bottom margin) instead. */
+.twm-managed-window--modal .twm-modal__fields > .twm-modal__field-group ~ .twm-modal__row:first-of-type {
+    margin-top: 0;
+}
+.twm-managed-window--modal .twm-modal__field-group > .twm-modal__row + .twm-modal__row {
+    grid-template-columns: auto 1fr;
+}
+@container twm-form (max-width: 359px) {
+    .twm-modal__field-group {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .twm-managed-window--modal .twm-modal__field-group > .twm-modal__row + .twm-modal__row {
+        grid-template-columns: 130px 1fr;
+    }
 }
 /* Action strip — true footer band, flush against the modal edges,
  * darker chrome bg, top border + 1px highlight above. Right-aligned
@@ -5505,8 +6747,8 @@ button.twm-about-dialog__btn--close:focus {
     font-weight: 600;
 }
 .twm-managed-window--modal .twm-modal__actions .twm-btn--primary:hover:not(:disabled) {
-    background: #1683c4;
-    border-color: #1683c4;
+    background: var(--accent-bright-hover);
+    border-color: var(--accent-bright-hover);
 }
 .twm-managed-window--modal .twm-modal__actions .twm-btn--danger {
     background: #8b2a2a;
@@ -5525,6 +6767,12 @@ button.twm-about-dialog__btn--close:focus {
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
+}
+/* openConfirm's message is text (BUG-0014): `\n` breaks the line, and a long
+ * unbroken name wraps instead of widening the dialog. */
+.twm-managed-window--modal .twm-modal__body--text {
+    white-space: pre-line;
+    overflow-wrap: anywhere;
 }
 /* Form-level error banner — left accent stripe, dim red panel. */
 .twm-managed-window--modal .twm-modal__error {
@@ -5766,7 +7014,7 @@ button.twm-about-dialog__btn--close:focus {
     font-size: 10px;
 }
 .twm-landing__pane--focused .twm-landing__pane-head {
-    background: rgba(17, 119, 179, 0.10);
+    background: color-mix(in srgb, var(--accent-hover) 10%, transparent);
 }
 .twm-landing__pane--focused .twm-landing__pane-title {
     color: var(--ea-accent);
@@ -5799,7 +7047,7 @@ button.twm-about-dialog__btn--close:focus {
 }
 .twm-entity-header__field select:focus {
     outline: none;
-    border-color: var(--ea-accent, #5aa3e8);
+    border-color: var(--ea-accent);
 }
 .twm-entity-header__field select option { background: var(--ea-input-bg, #1e1e1e); color: var(--ea-text, #ddd); }
 .twm-landing__table table {
@@ -5818,7 +7066,7 @@ button.twm-about-dialog__btn--close:focus {
    so the same arrow-key affordance reads identically across modes. */
 .twm-row-cursor {
     box-shadow: inset 2px 0 0 var(--ea-accent);
-    background: rgba(17, 119, 179, 0.12) !important;
+    background: color-mix(in srgb, var(--accent-hover) 12%, transparent) !important;
 }
 /* Quick-action strip — horizontal bar below the tables. Same chrome
    tone as `.twm-entity-header` so the page reads as a single stack:
@@ -5858,7 +7106,7 @@ button.twm-about-dialog__btn--close:focus {
 }
 .twm-action-btn:hover {
     border-color: var(--ea-accent);
-    background: rgba(17, 119, 179, 0.08);
+    background: color-mix(in srgb, var(--accent-hover) 8%, transparent);
 }
 .twm-action-btn:disabled,
 .twm-action-btn[aria-disabled="true"] {
@@ -6043,7 +7291,7 @@ body.twm-dragging * { user-select: none; }
 }
 .twm-leaf--focused {
     border-color: var(--accent-bright);
-    box-shadow: 0 0 0 1px rgba(0, 122, 204, 0.25) inset;
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-bright) 25%, transparent) inset;
 }
 .twm-leaf__chrome {
     display: flex;
@@ -6156,7 +7404,7 @@ body.twm-dragging * { user-select: none; }
      * size (24) draws strokes too heavy to read as a small control. */
     font-variation-settings: 'opsz' 20, 'wght' 400;
 }
-.twm-leaf__btn:hover:not(:disabled) { background: var(--state-hover); color: var(--text-primary); }
+.twm-leaf__btn:hover:not(:disabled):not(.twm-leaf__btn--disabled) { background: var(--state-hover); color: var(--text-primary); }
 /* C20. A verb that applies to this kind of pane but not right now — greyed and
  * explained by its tooltip, rather than removed. `:disabled` alone would still
  * take the hover highlight above, which reads as clickable. */
@@ -6164,6 +7412,34 @@ body.twm-dragging * { user-select: none; }
 .twm-leaf__btn:disabled {
     opacity: 0.35;
     cursor: default;
+}
+
+/* C42. A content action that is a toggle, and on: `aria-pressed="true"`. The
+ * selected tint the rest of the shell uses, so "on" reads the same everywhere. */
+.twm-leaf__btn--pressed {
+    background: var(--state-selected);
+    color: var(--text-primary);
+}
+
+/* C42. A content action with a text label: the 18px square is for a glyph, so
+ * a labelled button grows to its text. */
+.twm-leaf__btn--labelled {
+    width: auto;
+    gap: 2px;
+    padding: 0 4px;
+}
+.twm-leaf__btn-label {
+    font-size: 11px;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+/* C42. `{separator: true}` between groups of content actions. */
+.twm-leaf__sep {
+    align-self: stretch;
+    width: 1px;
+    margin: 3px 2px;
+    background: var(--border-subtle);
 }
 .twm-leaf__body {
     flex: 1 1 auto;
@@ -6225,15 +7501,15 @@ body.twm-dragging * { user-select: none; }
  * border, because a border changes the box and every tile in the row would
  * reflow by a pixel as the pointer crossed between them. */
 .twm-leaf--drop-target {
-    outline: 2px solid var(--accent-bright, #1683c4);
+    outline: 2px solid var(--accent-bright);
     outline-offset: -2px;
 }
 
 /* A STRIP ARMED TO RECEIVE — the drop that adds the tab at the end of this
  * tile's list rather than into a zone of its body. */
 .twm-leaf__tabbar--drop-target {
-    background: color-mix(in srgb, var(--accent-bright, #1683c4) 18%, transparent);
-    box-shadow: inset 0 0 0 1px var(--accent-bright, #1683c4);
+    background: color-mix(in srgb, var(--accent-bright) 18%, transparent);
+    box-shadow: inset 0 0 0 1px var(--accent-bright);
 }
 
 /* THE TAB BEING CARRIED. `DragReorder` has put `.dragging` on the TOP strip's
@@ -6314,7 +7590,7 @@ body.twm-dragging * { user-select: none; }
     position: absolute;
     inset: 0;
     pointer-events: none;
-    border-top: 1px solid var(--accent-bright, #1683c4);
+    border-top: 1px solid var(--accent-bright);
     clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
 }
 /* Lower-casing removed here too — a tab label is the same embedder-supplied
@@ -6527,7 +7803,7 @@ body.twm-dragging * { user-select: none; }
     inset: 0 0 auto 0;
     height: 2px;
     pointer-events: none;
-    background: var(--accent-bright, #1683c4);
+    background: var(--accent-bright);
 }
 /* A PREVIEW tab — opened by a single click and replaced by the next one.
  * Italic is the convention every editor uses for "this one is not staying". */
@@ -6579,7 +7855,7 @@ body.twm-dragging * { user-select: none; }
     flex: 0 0 auto;
     font-size: 9px;
     line-height: 1;
-    color: var(--accent-bright, #1683c4);
+    color: var(--accent-bright);
 }
 .notebook-tabs .twm-tab-close {
     flex: 0 0 auto;
@@ -6617,7 +7893,7 @@ body.twm-dragging * { user-select: none; }
     flex: 0 0 auto;
     align-self: stretch;
     width: 2px;
-    background: var(--accent-bright, #1683c4);
+    background: var(--accent-bright);
     pointer-events: none;
 }
 
@@ -6639,8 +7915,8 @@ body.twm-dragging * { user-select: none; }
  * mean "let go here and this list takes it" should look like one thing. */
 .notebook-tabs--drop-target,
 .notebook-editor-container--drop-target {
-    background: color-mix(in srgb, var(--accent-bright, #1683c4) 18%, transparent);
-    box-shadow: inset 0 0 0 1px var(--accent-bright, #1683c4);
+    background: color-mix(in srgb, var(--accent-bright) 18%, transparent);
+    box-shadow: inset 0 0 0 1px var(--accent-bright);
 }
 /* ── The tab bar's own context menu ──────────────────────────────────
  * Reached only by a consumer that lets the component open it — the tile
@@ -6667,6 +7943,23 @@ body.twm-dragging * { user-select: none; }
     transition: opacity 90ms ease-out;
 }
 .nb-context-menu.visible { opacity: 1; }
+
+/* ── Context menus stay inside the window (0.17.9, BUG-0040) ─────────
+ * `showContextMenu`, the DataTable's right-click menu and NotebookTabBar's tab
+ * menu are placed by src/ui/utils/menu_viewport.js, which sets an inline
+ * max-height of the window's height less a margin top and bottom. Here: the
+ * same cap for a menu placed before that runs, border-box so the cap includes
+ * padding and border, and scrolling inside when the items are longer — they
+ * had no max-height and no overflow, so a 100-item menu ran off the window and
+ * its far items could not be reached. */
+.twm-context-menu,
+.nb-context-menu {
+    box-sizing: border-box;
+    max-height: calc(100vh - 2 * var(--space-md));
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
 .nb-context-menu__item {
     display: flex;
     align-items: center;
@@ -6709,6 +8002,199 @@ body.twm-dragging * { user-select: none; }
     margin: var(--space-xxs) 0;
     background: var(--border-subtle);
 }
+
+/* ══ EDITOR · PANES, SPLIT AND SEARCH (BUG-0025) ═════════════════════
+ *
+ * The same family as the tab bar above: `SplitPaneContainer`, `EditorPane`
+ * and `NotebookSearchBar` set these classes and no FlexDesk stylesheet had a
+ * rule for any of them, so with only FlexDesk CSS a split stacked its panes,
+ * the divider was a zero-width div nobody could grab, and the search bar was
+ * a row of bare inputs and icon names.
+ *
+ *   `.split-pane-container*`, `.split-pane`, `.split-pane-divider*`
+ *                                     `editor/split_pane_container.js`
+ *   `.editor-pane*`, `.notebook-editor-container`
+ *                                     `editor/editor_pane.js`
+ *   `.nb-search-bar*`                 `editor/notebook_search.js`
+ *
+ * Layout first: the container is a row, each pane a column, and the divider
+ * a fixed-width strip that never shrinks. The pane's flex is also written
+ * inline by `SplitPaneContainer` (the ratio); the rule is the fallback. */
+.split-pane-container {
+    display: flex;
+    flex-direction: row;
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+}
+.split-pane {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+}
+/* 4px drawn, 10px grabbed: the `::before` widens the hit target 3px each side
+ * without moving either pane. */
+.split-pane-divider {
+    position: relative;
+    z-index: 1;
+    flex: 0 0 4px;
+    width: 4px;
+    background: var(--border-strong);
+    cursor: col-resize;
+    transition: background 0.15s;
+}
+.split-pane-divider::before {
+    content: '';
+    position: absolute;
+    inset: 0 -3px;
+}
+.split-pane-divider:hover,
+.split-pane-divider--active {
+    background: var(--accent-bright);
+}
+/* A pane is its tab bar over its body. The tab bar's own rule says
+ * `height: 100%` (it fills a tile's strip); here it is a fixed 26px row, the
+ * strip's height, and the body takes the rest. */
+.editor-pane {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+}
+.editor-pane > .tabs.notebook-tabs {
+    flex: 0 0 auto;
+    height: 26px;
+}
+/* Which of two panes has focus — only drawn when there ARE two. An inset
+ * shadow rather than a border, so focusing a pane does not move its body.
+ * This and the tab-bar row above need `.editor-pane` to survive
+ * `setPanes()`, which is why `SplitPaneContainer` ADDS `.split-pane` to a
+ * pane instead of replacing its classes with it. */
+.split-pane-container--split .editor-pane--focused > .tabs.notebook-tabs {
+    box-shadow: inset 0 -1px 0 var(--accent-bright);
+}
+/* The body is the positioning anchor; the editor container fills it
+ * absolutely, so its height is the body's whatever its content is and the
+ * scrollbar is its own. */
+.editor-pane__body {
+    position: relative;
+    flex: 1 1 0;
+    min-height: 0;
+    overflow: hidden;
+}
+.notebook-editor-container {
+    position: absolute;
+    inset: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    background: var(--surface-0);
+    outline: none;
+}
+/* The search bar: mounted at the top of the editor container and sticky
+ * there, hidden until `open()` adds `--open`. */
+.nb-search-bar {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    display: none;
+    flex-direction: column;
+    gap: var(--space-xs);
+    padding: var(--space-sm) var(--space-md);
+    background: var(--surface-1);
+    border-bottom: 1px solid var(--border-strong);
+    box-shadow: var(--shadow-md);
+    color: var(--text-primary);
+    font-size: var(--font-size-sm);
+}
+.nb-search-bar--open { display: flex; }
+.nb-search-bar__find-row,
+.nb-search-bar__replace-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+/* Lines the replace input up under the find input: the toggle's width. */
+.nb-search-bar__spacer {
+    flex: 0 0 26px;
+    width: 26px;
+}
+.nb-search-bar__input-wrap {
+    flex: 1 1 auto;
+    min-width: 160px;
+    max-width: 320px;
+}
+.nb-search-bar__input {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 3px var(--space-sm);
+    background: var(--surface-3);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font: inherit;
+    outline: none;
+}
+.nb-search-bar__input:focus { border-color: var(--accent-bright); }
+.nb-search-bar__match-info {
+    min-width: 64px;
+    color: var(--text-muted);
+    font-size: var(--font-size-xs);
+    text-align: center;
+    white-space: nowrap;
+    user-select: none;
+}
+.nb-search-bar__match-info--no-results { color: var(--color-danger, #c74e4e); }
+.nb-search-bar__btn {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+}
+.nb-search-bar__btn:hover { background: var(--state-hover); }
+.nb-search-bar__btn:active { background: var(--state-active); }
+/* The case / word / regex toggles reserve the border `--active` colours. */
+.nb-search-bar__btn--toggle { border: 1px solid transparent; }
+.nb-search-bar__btn--active,
+.nb-search-bar__btn--active:hover {
+    background: var(--state-selected);
+    border-color: var(--accent-bright);
+    color: var(--text-bright);
+}
+/* Two classes, for the Material Symbols tie — see `.twm-leaf__icon`. */
+.nb-search-bar__btn .material-symbols-outlined {
+    font-size: 18px;
+    line-height: 1;
+}
+.nb-search-bar__icon-word {
+    font-size: var(--font-size-md);
+    font-weight: 700;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+.nb-search-bar__separator {
+    flex: 0 0 1px;
+    width: 1px;
+    height: 18px;
+    margin: 0 2px;
+    background: var(--border-strong);
+}
+/* ══ end EDITOR · PANES, SPLIT AND SEARCH ══ */
 /* ── Tile tab menu (hamburger pop-out) ────────────────────────────
  * Anchored above the hamburger button. Lists every entity that the
  * tile's home page would show, grouped by source, with search +
@@ -6827,7 +8313,7 @@ body.twm-dragging * { user-select: none; }
 .twm-tile-tabmenu__item--cursor {
     /* Keyboard cursor reads slightly heavier than hover so a
      * mouse-cursor-on-a-different-row state is still legible. */
-    outline: 1px solid var(--accent-bright, #1683c4);
+    outline: 1px solid var(--accent-bright);
     outline-offset: -1px;
 }
 .twm-tile-tabmenu__item-hint {
@@ -6916,13 +8402,13 @@ body.twm-dragging * { user-select: none; }
     color: var(--text-bright);
 }
 .twm-tile-tabswitch__item--cursor {
-    outline: 1px solid var(--accent-bright, #1683c4);
+    outline: 1px solid var(--accent-bright);
     outline-offset: -1px;
 }
 .twm-tile-tabswitch__item--on { color: var(--text-bright); }
 /* Compounded for the Material Symbols tie — see `.twm-leaf__icon`. */
 .twm-tile-tabswitch__check,
-.twm-tile-tabswitch__check.material-symbols-outlined { font-size: 14px; color: var(--accent-bright, #1683c4); }
+.twm-tile-tabswitch__check.material-symbols-outlined { font-size: 14px; color: var(--accent-bright); }
 .twm-tile-tabswitch__label {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -6974,8 +8460,8 @@ body.twm-dragging * { user-select: none; }
     align-items: center;
     gap: var(--space-xs);
     padding: 2px 4px 2px 8px;
-    background: var(--state-selected, rgba(17, 119, 179, 0.18));
-    border: 1px solid var(--accent-bright, #1683c4);
+    background: var(--state-selected);
+    border: 1px solid var(--accent-bright);
     border-radius: 2px;
     color: var(--text-bright, #fff);
     font-size: var(--font-size-xs);
@@ -7047,6 +8533,14 @@ body.twm-dragging * { user-select: none; }
     background: var(--state-selected);
     border-color: var(--accent-bright);
     color: var(--text-bright);
+}
+.twm-chip[aria-disabled="true"] {
+    color: var(--text-dim);
+    cursor: not-allowed;
+}
+.twm-chip[aria-disabled="true"]:hover {
+    background: var(--surface-2);
+    color: var(--text-dim);
 }
 .twm-cmdpal__list {
     max-height: 40vh;
@@ -7196,6 +8690,11 @@ body.twm-dragging * { user-select: none; }
 }
 .twm-cmdpal__acts { display: none; gap: 10px; }
 .twm-cmdpal__item--active .twm-cmdpal__acts { display: flex; }
+/* A copy verb a single kind refuses: drawn, greyed, with the reason as its title. */
+.twm-cmdpal__act--disabled { opacity: 0.45; }
+/* 0.17.2. A row whose `enabled()` says no: listed, reachable by the arrows,
+ * greyed, with its `disabledReason` as the title; picking it does nothing. */
+.twm-cmdpal__item--disabled { opacity: 0.45; cursor: default; }
 .twm-cmdpal__item--active .twm-cmdpal__kind,
 .twm-cmdpal__item--active .twm-cmdpal__shortcut { display: none; }
 .twm-cmdpal__item--more { color: var(--text-muted); font-size: var(--font-size-sm); }
@@ -7340,8 +8839,9 @@ body.twm-dragging * { user-select: none; }
  * the WM host fills the remaining space.
  */
 
-/* Body is a flex column: top bar, WM host (fill), bottom bar. We
- * override the legacy `position: fixed` on both bars so they become
+/* Body is a flex column: top bar, menu row (when there is one), WM host
+ * (fill), bottom bar. We override the legacy `position: fixed` on both
+ * bars so they become
  * deterministic flex items and the host's height is exactly the
  * leftover space — no math, no overlap, no off-by-N pixels. Their
  * `z-index` stays put for dropdown stacking. */
@@ -7357,6 +8857,12 @@ body.twm-body > .twm-global-top-bar,
 body.twm-body > .twm-global-bottom-bar {
     position: relative !important;
     inset: auto !important;
+    flex: 0 0 auto;
+}
+/* The menu row (STORY-0119) sits between the top bar and the host, in
+ * normal flow: a fixed-size strip, so the host's leftover space is less by
+ * exactly its height. */
+body.twm-body > .twm-global-menu-bar {
     flex: 0 0 auto;
 }
 body.twm-body > .twm-host {
@@ -7621,7 +9127,7 @@ tr:hover .twm-row-action { opacity: 1; }
 }
 .twm-data-table-component--compact .twm-pagination-controls .twm-pagination-btn:hover:not(:disabled) {
     color: var(--ea-text, #ddd) !important;
-    border-color: var(--ea-accent, #1177b3) !important;
+    border-color: var(--ea-accent) !important;
 }
 /* Text labels inside the pager — the "Rows X–Y of Z" and "Page X of
  * Y" spans don't have classes (just inline style), so target every
@@ -7650,9 +9156,19 @@ tr:hover .twm-row-action { opacity: 1; }
     width: 28px;
     height: 28px;
     border: 2px solid rgba(255, 255, 255, 0.18);
-    border-top-color: var(--ea-accent, #1177b3);
+    border-top-color: var(--ea-accent);
     border-radius: 50%;
     animation: data-table__spin 0.7s linear infinite;
+}
+/* The keyframes the rule above names. Without them the name is no animation
+   (CSS reports nothing for it), so the ring was drawn and stood still. A full
+   turn at the rule's own 0.7s linear infinite. `@keyframes` names are global
+   and cannot be scoped (see `spin`); a definition of the same name in an
+   embedder's sheet wins or loses on source order, and either way the ring
+   turns. */
+@keyframes data-table__spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
 }
 .twm-data-table-component--compact .twm-pagination-controls > span {
     color: var(--ea-text-dim, #aaa) !important;
@@ -7788,6 +9304,12 @@ tr:hover .twm-row-action { opacity: 1; }
     padding: 2px 8px;
     line-height: 22px;
 }
+/* A path of one segment is not drawn (STORY-0124): the tile's title already
+ * names it, so the strip and its slot take no room until a second level. */
+.twm-page-shell__breadcrumb .twm-tile-breadcrumb[hidden],
+.twm-page-shell__breadcrumb:has(> .twm-tile-breadcrumb[hidden]) {
+    display: none;
+}
 .twm-page-shell__content {
     flex: 1 1 auto;
     min-height: 0;
@@ -7827,9 +9349,14 @@ tr:hover .twm-row-action { opacity: 1; }
     width: 18px;
     height: 18px;
     border: 2px solid var(--ea-border, #333);
-    border-top-color: var(--accent, #4a90e2);
+    border-top-color: var(--accent);
     border-radius: 50%;
     animation: twm-tile-loading-spin 0.7s linear infinite;
+}
+/* The keyframes the rule above names; see `data-table__spin`. */
+@keyframes twm-tile-loading-spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
 }
 /* Merged home page — detail header row, then the project-setup body
  * fills the rest of the tile. */
@@ -8006,6 +9533,114 @@ tr:hover .twm-row-action { opacity: 1; }
  * status line sits at the foot. Only a pane holding the Alerts pane: other
  * panes keep their padding and their own height. */
 .twm-bp-pane:has(> .twm-alerts) { height: 100%; padding: 0; box-sizing: border-box; }
+/* The public tab strip (`createTabs`, STORY-0048). It SCROLLS, never wraps or
+ * shrinks its tabs, and hides the scrollbar; the wheel and the reveal of the
+ * tab in front are `strip_scroll.js`'s. `--compact` is the dense variant. The
+ * bottom panel draws the same component under its own `.twm-bp` block. */
+.twm-tabs {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    background: var(--surface-0);
+    color: var(--text-body);
+}
+.twm-tabs__tabs {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: stretch;
+    height: 30px;
+    min-width: 0;
+    background: var(--surface-1);
+    border-bottom: 1px solid var(--border-subtle);
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    white-space: nowrap;
+    user-select: none;
+}
+.twm-tabs__tabs::-webkit-scrollbar { width: 0; height: 0; display: none; }
+.twm-tabs__tab {
+    position: relative;
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    max-width: 220px;
+    padding: 0 var(--space-sm);
+    background: transparent;
+    color: var(--text-muted);
+    border: none;
+    border-right: 1px solid var(--border-subtle);
+    font: inherit;
+    font-size: var(--font-size-xs);
+    line-height: 1;
+    cursor: pointer;
+}
+.twm-tabs__tab:hover { background: var(--surface-2); color: var(--text-primary); }
+.twm-tabs__tab:focus-visible { outline: 1px solid var(--accent-bright); outline-offset: -1px; }
+.twm-tabs__tab--on { background: var(--surface-0); color: var(--text-bright); }
+.twm-tabs__tab--on::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 2px;
+    pointer-events: none;
+    background: var(--accent-bright);
+}
+.twm-tabs__label { overflow: hidden; text-overflow: ellipsis; }
+/* Two classes: Google's `.material-symbols-outlined { font-size: 24px }` loads
+ * after this sheet and would win a one-class tie. */
+.twm-tabs__icon,
+.twm-tabs__icon.material-symbols-outlined { flex: 0 0 auto; font-size: 14px; line-height: 1; }
+.twm-tabs__badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    box-sizing: border-box;
+    border-radius: 8px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 10.5px;
+    line-height: 16px;
+}
+.twm-tabs__badge--info    { background: color-mix(in srgb, var(--color-info) 35%, var(--surface-0)); }
+.twm-tabs__badge--warning { background: color-mix(in srgb, var(--color-warning) 35%, var(--surface-0)); }
+.twm-tabs__badge--alert   { background: color-mix(in srgb, var(--color-danger) 45%, var(--surface-0)); }
+.twm-tabs__indicator {
+    flex: 0 0 auto;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text-muted);
+}
+.twm-tabs__indicator--info    { background: var(--color-info); }
+.twm-tabs__indicator--warning { background: var(--color-warning); }
+.twm-tabs__indicator--alert   { background: var(--color-danger); }
+.twm-tabs__dirty { font-size: 10px; color: var(--text-primary); }
+.twm-tabs__close {
+    padding: 0 2px;
+    border-radius: var(--radius-sm);
+    opacity: 0.6;
+    font-size: 13px;
+}
+.twm-tabs__close:hover { opacity: 1; background: var(--surface-2); }
+/* A dirty, closable tab shows the dot until hovered, then the close mark.
+   A dirty tab with no close mark keeps its dot. */
+.twm-tabs__tab--dirty:not(:hover) .twm-tabs__close { display: none; }
+.twm-tabs__tab--dirty.twm-tabs__tab--closable:hover .twm-tabs__dirty { display: none; }
+.twm-tabs__badge[hidden],
+.twm-tabs__indicator[hidden] { display: none; }
+.twm-tabs__body { flex: 1 1 auto; min-height: 0; overflow: auto; }
+.twm-tabs-pane { height: 100%; box-sizing: border-box; }
+.twm-tabs-pane[hidden] { display: none; }
+.twm-tabs--compact .twm-tabs__tabs { height: 22px; }
+.twm-tabs--compact .twm-tabs__tab { padding: 0 var(--space-xs); gap: 3px; }
+.twm-tabs--compact .twm-tabs__icon,
+.twm-tabs--compact .twm-tabs__icon.material-symbols-outlined { font-size: 12px; }
 .twm-alerts .material-symbols-outlined { font-size: 15px; }
 .twm-alerts__spacer { flex: 1 1 auto; }
 .twm-alerts__rules { flex: 0 0 280px; display: flex; flex-direction: column; min-width: 0; border-right: 1px solid var(--border-subtle); }
@@ -8317,6 +9952,74 @@ button.twm-alerts__ref:hover { text-decoration: underline; }
 }
 
 
+/* ══ OVERLAY SCROLLBARS (0.17.7) ═════════════════════════════════════
+ *
+ * `installOverlayScrollbar(container, { orientation })`
+ * (src/ui/utils/overlay_scrollbar.js) appends a `.overlay-scrollbar-v` or
+ * `.overlay-scrollbar-h` holding a `.track` and a `.thumb`, and sets their
+ * top/left/height/width from the container's scroll position. The bar is
+ * absolute, so it takes no layout space: a static bar is content, its height
+ * feeds the container's scrollHeight, and the container grows without limit
+ * (BUG-0039). The script sets `data-scrollable` on the container and drives
+ * the bar's opacity and pointer events itself (shown on hover or focus while
+ * the container overflows, kept while the thumb is dragged); these rules are
+ * the hidden starting state, the geometry and the colours. The bar takes no
+ * pointer events, so content under it stays clickable; the thumb takes them
+ * back to be dragged. */
+.overlay-scrollbar-v,
+.overlay-scrollbar-h {
+    position: absolute;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity var(--transition-fast);
+    z-index: var(--z-scrollbar);
+}
+.overlay-scrollbar-v {
+    top: 0;
+    right: 0;
+    width: var(--scrollbar-size);
+}
+.overlay-scrollbar-h {
+    left: 0;
+    bottom: 0;
+    height: var(--scrollbar-size);
+}
+.overlay-scrollbar-v .track,
+.overlay-scrollbar-h .track {
+    position: absolute;
+    inset: 0;
+    background: var(--scrollbar-track);
+    border-radius: var(--scrollbar-radius);
+}
+.overlay-scrollbar-v .thumb,
+.overlay-scrollbar-h .thumb {
+    position: absolute;
+    background: var(--scrollbar-thumb);
+    border-radius: var(--scrollbar-radius);
+    pointer-events: auto;
+    cursor: pointer;
+    transition: background 80ms ease;
+}
+.overlay-scrollbar-v .thumb {
+    right: 0;
+    width: 100%;
+    min-height: 30px;
+}
+.overlay-scrollbar-h .thumb {
+    bottom: 0;
+    height: 100%;
+    min-width: 30px;
+}
+.overlay-scrollbar-v .thumb:hover,
+.overlay-scrollbar-h .thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+}
+.overlay-scrollbar-v .thumb:active,
+.overlay-scrollbar-h .thumb:active {
+    background: var(--scrollbar-thumb-active);
+}
+
+
 /* ══ RECORD LIST & FACT SHEET (0.7.0) ══════════════════════════════════
  * `createRecordList` (src/ui/components/record_list.js) and
  * `createFactTable` (src/ui/components/fact_table.js). Neither has a height
@@ -8418,12 +10121,12 @@ button.twm-alerts__ref:hover { text-decoration: underline; }
 .twm-record--state-error { box-shadow: inset 2px 0 0 0 var(--color-danger, #c74e4e); }
 /* `activeKey` — the record that is OPEN: the accent on the left edge, as
  * DataTable's `twm-dt-row--active`. It wins over a state's edge. */
-.twm-record.twm-record--active { box-shadow: inset 2px 0 0 0 var(--accent-bright, #007acc); }
+.twm-record.twm-record--active { box-shadow: inset 2px 0 0 0 var(--accent-bright); }
 .twm-record-list--clickable .twm-record { cursor: pointer; }
 .twm-record-list--clickable .twm-record:hover { background: var(--state-hover, rgba(255, 255, 255, 0.05)); }
 .twm-record:focus { outline: none; }
 .twm-record:focus-visible {
-    outline: 1px solid var(--accent-bright, #007acc);
+    outline: 1px solid var(--accent-bright);
     outline-offset: -1px;
 }
 .twm-record-list__empty {
@@ -8498,6 +10201,1613 @@ button.twm-alerts__ref:hover { text-decoration: underline; }
     white-space: normal;
 }
 /* ══ end RECORD LIST & FACT SHEET ══ */
+
+/* ══ HELP MODAL ══════════════════════════════════════════════════════
+ *
+ * `HelpModal` (src/help/help_modal.js): a centred dialog on a dimmed overlay,
+ * a sidebar of categories, a search box and the content pane, which shows the
+ * index, a topic, search results or an error. Its classes are `help-`, not
+ * `twm-`, prefixed — they are older than this sheet, and an embedder styles
+ * them by those names. `.help-article` holds the provider's rendered HTML, so
+ * it styles plain elements. Every class the modal sets has a rule here, and
+ * every class a rule here names is one it sets (tests/help_modal_css.test.mjs). */
+.help-modal-overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+    z-index: var(--z-over-windows);
+}
+.help-modal {
+    display: flex;
+    flex-direction: column;
+    width: 90%;
+    max-width: 1000px;
+    height: 80vh;
+    max-height: 700px;
+    background: var(--surface-0);
+    color: var(--text-body);
+    border: 1px solid var(--surface-3);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+    user-select: text;
+}
+.help-modal__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-lg) var(--space-xl);
+    background: var(--surface-1);
+    border-bottom: 1px solid var(--surface-3);
+}
+.help-modal__title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+}
+.help-modal__title .material-symbols-outlined {
+    font-size: 20px;
+    color: var(--accent-bright);
+}
+.help-modal__close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-xs);
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    cursor: pointer;
+}
+.help-modal__close:hover {
+    background: var(--state-active);
+    color: var(--text-primary);
+}
+.help-modal__search {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-md) var(--space-xl);
+    background: var(--surface-1);
+    border-bottom: 1px solid var(--surface-3);
+}
+.help-modal__search .material-symbols-outlined {
+    font-size: 18px;
+    color: var(--text-dim);
+}
+.help-search-input {
+    flex: 1;
+    padding: var(--space-sm) 10px;
+    background: var(--surface-0);
+    border: 1px solid var(--surface-3);
+    border-radius: var(--radius-sm);
+    color: var(--text-body);
+    font-size: var(--font-size-md);
+    outline: none;
+}
+.help-search-input:focus { border-color: var(--accent-bright); }
+.help-search-input::placeholder { color: var(--text-dim); }
+.help-modal__body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+.help-modal__sidebar {
+    flex: 0 0 220px;
+    padding: var(--space-md) 0;
+    background: var(--surface-1);
+    border-right: 1px solid var(--surface-3);
+    overflow-y: auto;
+}
+.help-sidebar__categories {
+    display: flex;
+    flex-direction: column;
+}
+.help-category { margin-bottom: var(--space-xs); }
+.help-category__header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-md) var(--space-lg);
+    color: var(--text-muted);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    user-select: none;
+}
+.help-category__header:hover { color: var(--text-secondary); }
+.help-category__header .material-symbols-outlined { font-size: 16px; }
+.help-category__topics {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.help-category.collapsed .help-category__topics { display: none; }
+.help-topic-item {
+    padding: var(--space-sm) var(--space-lg) var(--space-sm) 36px;
+    border-left: 2px solid transparent;
+    color: var(--text-secondary);
+    font-size: var(--font-size-md);
+    cursor: pointer;
+}
+.help-topic-item:hover {
+    background: var(--state-hover);
+    color: var(--text-primary);
+}
+.help-topic-item.active {
+    background: var(--state-selected);
+    border-left-color: var(--accent-bright);
+    color: var(--text-bright);
+}
+.help-modal__content {
+    flex: 1;
+    min-width: 0;
+    padding: 20px var(--space-2xl);
+    background: var(--surface-0);
+    overflow-y: auto;
+}
+.help-content__loading,
+.help-content__error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-lg);
+    height: 200px;
+    color: var(--text-muted);
+    font-size: var(--font-size-lg);
+}
+.help-content__error { color: var(--color-danger-hover); }
+.help-content__error .material-symbols-outlined {
+    font-size: 48px;
+    opacity: 0.5;
+}
+.help-content__article { max-width: 860px; }
+.help-content__breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    margin-bottom: var(--space-xl);
+    padding-bottom: var(--space-lg);
+    border-bottom: 1px solid var(--surface-3);
+}
+.help-breadcrumb__home {
+    display: flex;
+    align-items: center;
+    color: var(--text-muted);
+    text-decoration: none;
+}
+.help-breadcrumb__home:hover { color: var(--accent-bright); }
+.help-breadcrumb__home .material-symbols-outlined { font-size: 18px; }
+.help-breadcrumb__separator { color: var(--text-dim); }
+.help-breadcrumb__title {
+    color: var(--text-secondary);
+    font-size: var(--font-size-md);
+}
+/* A topic's table of contents (a `createDocumentOutline`), between the
+ * breadcrumb and the article; drawn only for two headings or more. */
+.help-content__toc {
+    margin-bottom: var(--space-xl);
+    padding: var(--space-md) 0;
+    border-left: 2px solid var(--surface-3);
+    font-size: var(--font-size-md);
+}
+.help-content__toc[hidden] { display: none; }
+.help-index h1 {
+    margin: 0 0 var(--space-md);
+    color: var(--text-primary);
+    font-size: 24px;
+}
+.help-index > p {
+    margin-bottom: var(--space-2xl);
+    color: var(--text-muted);
+}
+.help-index__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: var(--space-xl);
+}
+.help-index__category {
+    padding: var(--space-lg);
+    background: var(--surface-1);
+    border: 1px solid var(--surface-3);
+    border-radius: var(--radius-md);
+}
+.help-index__category:hover { border-color: var(--accent-bright); }
+.help-index__category-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    margin-bottom: var(--space-md);
+    color: var(--accent-bright);
+    font-weight: var(--font-weight-semibold);
+}
+.help-index__category-header .material-symbols-outlined { font-size: 18px; }
+.help-index__topics {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.help-index__topic,
+.help-index__more {
+    padding: var(--space-xs) 0;
+    color: var(--text-secondary);
+    font-size: var(--font-size-md);
+}
+.help-index__topic { cursor: pointer; }
+.help-index__topic:hover { color: var(--text-primary); }
+.help-index__more {
+    color: var(--text-dim);
+    font-size: var(--font-size-sm);
+    font-style: italic;
+}
+.help-search-results h2 {
+    margin: 0 0 var(--space-md);
+    color: var(--text-primary);
+    font-size: var(--font-size-2xl);
+}
+.help-search-count {
+    margin-bottom: var(--space-xl);
+    color: var(--text-muted);
+    font-size: var(--font-size-md);
+}
+.help-search-empty {
+    color: var(--text-muted);
+    font-style: italic;
+}
+.help-search-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.help-search-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-lg);
+    margin-bottom: var(--space-md);
+    padding: 10px var(--space-lg);
+    background: var(--surface-1);
+    border: 1px solid var(--surface-3);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+}
+.help-search-item:hover { border-color: var(--accent-bright); }
+.help-search-item__title {
+    color: var(--text-primary);
+    font-size: var(--font-size-lg);
+}
+.help-search-item__category {
+    color: var(--text-dim);
+    font-size: var(--font-size-sm);
+}
+.help-article {
+    color: var(--text-body);
+    font-size: var(--font-size-lg);
+    line-height: 1.6;
+}
+.help-article h1,
+.help-article h2,
+.help-article h3 { color: var(--text-primary); }
+.help-article h1 {
+    margin: 0 0 var(--space-xl);
+    padding-bottom: var(--space-md);
+    border-bottom: 1px solid var(--surface-3);
+    font-size: 24px;
+}
+.help-article h2 { margin: var(--space-2xl) 0 var(--space-lg); font-size: 20px; }
+.help-article h3 { margin: 20px 0 var(--space-md); font-size: var(--font-size-xl); }
+.help-article h4,
+.help-article h5,
+.help-article h6 {
+    margin: var(--space-xl) 0 var(--space-md);
+    color: var(--text-secondary);
+}
+.help-article p { margin: 0 0 var(--space-lg); }
+.help-article a { color: var(--accent-bright); text-decoration: none; }
+.help-article a:hover { text-decoration: underline; }
+.help-article strong { color: var(--text-primary); font-weight: var(--font-weight-semibold); }
+.help-article em { font-style: italic; }
+.help-article code {
+    padding: 2px 6px;
+    background: var(--surface-2);
+    border-radius: 3px;
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-md);
+}
+.help-article pre {
+    margin: 0 0 var(--space-xl);
+    padding: var(--space-lg) var(--space-xl);
+    background: var(--surface-well);
+    border: 1px solid var(--surface-3);
+    border-radius: var(--radius-sm);
+    overflow-x: auto;
+}
+.help-article pre code { padding: 0; background: transparent; }
+.help-article blockquote {
+    margin: 0 0 var(--space-lg);
+    padding: var(--space-md) var(--space-xl);
+    background: var(--state-selected);
+    border-left: 3px solid var(--accent-bright);
+    color: var(--text-secondary);
+}
+.help-article hr {
+    margin: var(--space-2xl) 0;
+    border: none;
+    border-top: 1px solid var(--surface-3);
+}
+.help-article img {
+    max-width: 100%;
+    margin: var(--space-lg) 0;
+    border-radius: var(--radius-sm);
+}
+.help-article table {
+    width: 100%;
+    margin: var(--space-xl) 0;
+    border-collapse: collapse;
+    font-size: var(--font-size-md);
+}
+.help-article th,
+.help-article td {
+    padding: var(--space-md) var(--space-lg);
+    border: 1px solid var(--surface-3);
+    text-align: left;
+}
+.help-article th {
+    background: var(--surface-2);
+    color: var(--text-primary);
+    font-weight: var(--font-weight-semibold);
+}
+.help-article tr:nth-child(even) { background: rgba(255, 255, 255, 0.02); }
+.help-article ul,
+.help-article ol {
+    margin: var(--space-md) 0 var(--space-xl);
+    padding-left: var(--space-2xl);
+}
+.help-article li { margin-bottom: var(--space-xs); line-height: 1.5; }
+.help-article li p { margin: 0; }
+.help-article li > ul,
+.help-article li > ol { margin: var(--space-xs) 0; }
+@media (max-width: 600px) {
+    .help-modal { width: 95%; height: 90vh; }
+    .help-modal__sidebar { display: none; }
+    .help-modal__content { padding: var(--space-xl); }
+}
+/* ══ end HELP MODAL ══ */
+
+/* ══ MENU BAR ════════════════════════════════════════════════════════
+ *
+ * `MenuBar` (src/ui/components/menu_bar.js, STORY-0030): a row of titles,
+ * each opening a menu that may fly out submenus. Not `.twm-menu-bar`, which
+ * is the older strip of 25px icon buttons and keeps its meaning. A menu is
+ * `position: fixed` (the JS places it), so a bar inside a clipped chrome strip
+ * still drops its menus over the page. Same surface, border and shadow as
+ * `.twm-context-menu`: two menus that look different read as two systems.
+ * tests/menu_bar_css.test.mjs holds every class the bar sets to a rule here,
+ * both ways, and base.css to the same text. */
+.twm-menubar {
+    display: flex;
+    align-items: stretch;
+    gap: 1px;
+    min-height: 24px;
+    font-size: var(--font-size-md);
+    color: var(--text-body);
+    user-select: none;
+}
+.twm-menubar__entry {
+    position: relative;
+    display: flex;
+}
+.twm-menubar__title {
+    appearance: none;
+    background: none;
+    border: 0;
+    border-radius: var(--radius-sm);
+    color: inherit;
+    font: inherit;
+    padding: var(--space-xxs) var(--space-md);
+    cursor: default;
+}
+.twm-menubar__title:hover,
+.twm-menubar__title:focus-visible,
+.twm-menubar__title[aria-expanded="true"] {
+    background: var(--state-active);
+    color: var(--text-bright);
+    outline: none;
+}
+.twm-menubar__menu {
+    position: fixed;
+    z-index: var(--z-over-windows);
+    display: flex;
+    flex-direction: column;
+    min-width: 200px;
+    max-height: calc(100vh - 8px);
+    overflow-y: auto;
+    padding: var(--space-xs) 0;
+    background: var(--surface-0);
+    color: var(--text-body);
+    border: 1px solid var(--surface-3);
+    border-radius: var(--radius-md);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+}
+.twm-menubar__cell {
+    display: flex;
+}
+.twm-menubar__item {
+    appearance: none;
+    background: none;
+    border: 0;
+    width: 100%;
+    text-align: left;
+    color: inherit;
+    font: inherit;
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-xs) var(--space-lg) var(--space-xs) var(--space-xs);
+    cursor: default;
+    white-space: nowrap;
+}
+.twm-menubar__item:focus,
+.twm-menubar__item:hover:not(.twm-menubar__item--disabled),
+.twm-menubar__item[aria-expanded="true"] {
+    background: var(--state-selected);
+    outline: none;
+}
+.twm-menubar__item--submenu {
+    padding-right: var(--space-md);
+}
+.twm-menubar__item--disabled {
+    opacity: 0.4;
+    color: var(--text-muted);
+}
+.twm-menubar__check {
+    flex: 0 0 16px;
+    text-align: center;
+}
+.twm-menubar__item--check[aria-checked="true"] .twm-menubar__check::before { content: "\2713"; }
+.twm-menubar__item--radio[aria-checked="true"] .twm-menubar__check::before { content: "\2022"; }
+.twm-menubar__label {
+    flex: 1 1 auto;
+}
+.twm-menubar__shortcut {
+    margin-left: var(--space-2xl);
+    color: var(--text-muted);
+    font-size: var(--font-size-sm);
+}
+.twm-menubar__arrow::before {
+    content: "\25B8";
+    color: var(--text-muted);
+}
+.twm-menubar__separator {
+    height: 1px;
+    margin: var(--space-xs) var(--space-md);
+    background: var(--surface-3);
+}
+/* The hamburger (STORY-0133, `style: 'hamburger'`): one icon button in place
+ * of the titles, the size of the top bar's other icon buttons
+ * (.twm-panel-toggle-btn: a 22px box, an --font-size-xl glyph). Its menu
+ * lists the menus, each flying out its items. */
+.twm-menubar--hamburger {
+    align-items: center;
+}
+.twm-menubar__title--icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    color: var(--text-secondary);
+}
+.twm-menubar__title--icon .material-symbols-outlined {
+    font-size: var(--font-size-xl);
+    line-height: 1;
+}
+/* ══ end MENU BAR ══ */
+
+/* ══ TOGGLE ══════════════════════════════════════════════════════════
+ * ToggleField: a track and a knob drawn over a real checkbox with
+ * role="switch". The input sits on top of the track, transparent, so the
+ * pointer and the keyboard reach a native control. Tokens only: swap
+ * tokens.css and the switch follows.
+ */
+.twm-toggle {
+    --twm-toggle-w: 34px;
+    --twm-toggle-h: 18px;
+    --twm-toggle-pad: 2px;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-sm);
+    color: var(--text-body);
+    font-size: var(--font-size-sm);
+    line-height: var(--line-height-tight);
+    cursor: pointer;
+    user-select: none;
+    vertical-align: middle;
+}
+.twm-toggle--compact {
+    --twm-toggle-w: 26px;
+    --twm-toggle-h: 14px;
+    gap: var(--space-xs);
+    font-size: var(--font-size-xs);
+}
+.twm-toggle__control {
+    position: relative;
+    display: inline-flex;
+    flex: none;
+    width: var(--twm-toggle-w);
+    height: var(--twm-toggle-h);
+}
+.twm-toggle__input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: inherit;
+    z-index: 1;
+}
+.twm-toggle__track {
+    position: relative;
+    display: block;
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-pill);
+    background: var(--surface-3);
+    transition: background-color var(--transition-fast), border-color var(--transition-fast);
+}
+.twm-toggle__knob {
+    position: absolute;
+    top: var(--twm-toggle-pad);
+    left: var(--twm-toggle-pad);
+    width: calc(var(--twm-toggle-h) - 2 * var(--twm-toggle-pad) - 2px);
+    height: calc(var(--twm-toggle-h) - 2 * var(--twm-toggle-pad) - 2px);
+    border-radius: var(--radius-circle);
+    background: var(--text-muted);
+    box-shadow: var(--shadow-sm);
+    transition: transform var(--transition-fast), background-color var(--transition-fast);
+}
+.twm-toggle__input:checked + .twm-toggle__track {
+    background: var(--accent);
+    border-color: var(--accent);
+}
+.twm-toggle__input:checked + .twm-toggle__track .twm-toggle__knob {
+    transform: translateX(calc(var(--twm-toggle-w) - var(--twm-toggle-h)));
+    background: var(--text-bright);
+}
+.twm-toggle:hover .twm-toggle__input:not(:disabled) + .twm-toggle__track {
+    border-color: var(--accent-hover);
+}
+.twm-toggle__input:focus-visible + .twm-toggle__track {
+    outline: 2px solid var(--accent-bright);
+    outline-offset: 2px;
+}
+.twm-toggle__state {
+    min-width: 2.5em;
+    color: var(--text-muted);
+}
+.twm-toggle__label {
+    color: var(--text-body);
+}
+.twm-toggle--disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+.twm-modal__toggle {
+    display: flex;
+    align-items: center;
+    min-height: var(--ea-row-h);
+}
+/* ══ end TOGGLE ══ */
+
+/* ══ SETTINGS VIEW (STORY-0050) ══════════════════════════════════════
+ * SettingsView: a sidebar of categories with a filter box, beside the
+ * chosen category's settings in groups. Tokens only.
+ */
+.twm-settings {
+    display: flex;
+    height: 100%;
+    min-height: 0;
+    background: var(--surface-1);
+    color: var(--text-body);
+    font-size: var(--font-size-sm);
+}
+.twm-settings__sidebar {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 220px;
+    min-width: 0;
+    gap: var(--space-sm);
+    padding: var(--space-md);
+    border-right: 1px solid var(--border-subtle);
+    background: var(--surface-0);
+}
+.twm-settings__sidebar-title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    color: var(--text-bright);
+    font-weight: var(--font-weight-semibold);
+}
+.twm-settings__search {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: 0 var(--space-sm);
+    min-height: var(--ea-row-h);
+    background: var(--ea-input-bg);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+}
+.twm-settings__search:focus-within { border-color: var(--accent-bright); }
+.twm-settings__search-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text-body);
+    font: inherit;
+}
+.twm-settings__nav {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    gap: var(--space-xxs);
+}
+.twm-settings__cat {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    min-height: var(--ea-row-h);
+    padding: 0 var(--space-sm);
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.twm-settings__cat:hover { background: var(--state-hover); }
+.twm-settings__cat:focus-visible { outline: 1px solid var(--accent-bright); }
+.twm-settings__cat--active {
+    background: var(--state-selected);
+    color: var(--text-bright);
+}
+.twm-settings__cat .material-symbols-outlined,
+.twm-settings__reset-all .material-symbols-outlined,
+.twm-settings__reset-category .material-symbols-outlined {
+    font-size: var(--font-size-lg);
+}
+.twm-settings__cat-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.twm-settings__content {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-y: auto;
+    padding: var(--space-lg) var(--space-xl);
+}
+.twm-settings__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-lg);
+    margin-bottom: var(--space-lg);
+}
+.twm-settings__header-info {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.twm-settings__title {
+    margin: 0;
+    color: var(--text-bright);
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-semibold);
+}
+.twm-settings__description {
+    margin: var(--space-xs) 0 0;
+    color: var(--text-muted);
+}
+.twm-settings__group { margin-bottom: var(--space-xl); }
+.twm-settings__group-title {
+    margin: 0 0 var(--space-sm);
+    padding-bottom: var(--space-xs);
+    border-bottom: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.twm-settings__row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-sm) var(--space-sm);
+    border-left: 2px solid transparent;
+    border-radius: var(--radius-sm);
+}
+.twm-settings__row:hover { background: var(--state-hover); }
+.twm-settings__row--modified { border-left-color: var(--accent-bright); }
+.twm-settings__info {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.twm-settings__label-line {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+.twm-settings__label { color: var(--text-primary); }
+.twm-settings__marker {
+    padding: 0 var(--space-xs);
+    border-radius: var(--radius-pill);
+    background: var(--surface-3);
+    color: var(--accent-bright);
+    font-size: var(--font-size-xs);
+}
+.twm-settings__marker[hidden],
+.twm-settings__reset[hidden] { display: none; }
+.twm-settings__row .twm-settings__description {
+    margin-top: var(--space-xxs);
+    font-size: var(--font-size-xs);
+}
+.twm-settings__path {
+    display: block;
+    margin-top: var(--space-xxs);
+    color: var(--text-dim);
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-xs);
+}
+.twm-settings__control {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    max-width: 50%;
+}
+.twm-settings__select,
+.twm-settings__number,
+.twm-settings__text {
+    min-height: var(--ea-row-h);
+    padding: 0 var(--space-sm);
+    background: var(--ea-input-bg);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    color: var(--text-body);
+    font: inherit;
+}
+.twm-settings__select:focus,
+.twm-settings__number:focus,
+.twm-settings__text:focus {
+    outline: none;
+    border-color: var(--accent-bright);
+}
+.twm-settings__number { width: 110px; }
+.twm-settings__text { width: 240px; }
+.twm-settings__readonly {
+    color: var(--text-muted);
+    font-family: var(--font-family-mono);
+}
+.twm-settings__reset {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--ea-row-h);
+    height: var(--ea-row-h);
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    cursor: pointer;
+}
+.twm-settings__reset:hover { background: var(--state-hover); color: var(--text-bright); }
+.twm-settings__reset .material-symbols-outlined { font-size: var(--font-size-lg); }
+.twm-settings__empty {
+    padding: var(--space-xl) 0;
+    color: var(--text-muted);
+}
+/* SettingsCategories (0.17.2): the sidebar's filter, categories and
+ * Reset all, mounted outside the view; the host sets its width and padding. */
+.twm-settings-categories {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    height: 100%;
+    gap: var(--space-sm);
+    color: var(--text-body);
+    font-size: var(--font-size-sm);
+}
+/* ══ end SETTINGS VIEW ══ */
+
+/* ══ DOCUMENT OUTLINE (0.17.0) ═══════════════════════════════════════
+ * `createDocumentOutline` (src/ui/components/document_outline.js). No height
+ * of its own: the host that holds it scrolls, if anything does. */
+.twm-doc-outline { display: block; min-width: 0; }
+.twm-doc-outline__items {
+    list-style: none;
+    margin: 0;
+    padding: 2px 0;
+}
+.twm-doc-outline__item { margin: 0; padding: 0; min-width: 0; }
+/* One step of indentation per level below the first, set inline per item as
+ * `--twm-doc-outline-depth` (0 for depth 1). */
+.twm-doc-outline__link {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+    padding: 3px 8px 3px calc(8px + var(--twm-doc-outline-depth, 0) * var(--twm-doc-outline-indent, 12px));
+    border: none;
+    border-left: 2px solid transparent;
+    background: transparent;
+    color: var(--text-secondary, #cccccc);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.twm-doc-outline__link:hover { background: var(--state-hover, rgba(255, 255, 255, 0.05)); color: var(--text-primary, #e0e0e0); }
+.twm-doc-outline__link:focus-visible { outline: 1px solid var(--accent-bright); outline-offset: -1px; }
+.twm-doc-outline__item--level-1 > .twm-doc-outline__link { color: var(--text-primary, #e0e0e0); }
+.twm-doc-outline__number {
+    flex: 0 0 auto;
+    color: var(--text-muted, #888888);
+    font-variant-numeric: tabular-nums;
+}
+.twm-doc-outline__label {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.twm-doc-outline__item.twm-doc-outline__item--active > .twm-doc-outline__link {
+    border-left-color: var(--accent-bright);
+    background: color-mix(in srgb, var(--accent-bright) 15%, transparent);
+    color: var(--text-primary, #e0e0e0);
+}
+/* Listed, but nothing in the document answers to it. */
+.twm-doc-outline__item--unresolved > .twm-doc-outline__link { opacity: 0.6; }
+.twm-doc-outline__empty {
+    margin: 0;
+    padding: 8px;
+    color: var(--text-muted, #888888);
+    font-style: italic;
+}
+/* ══ end DOCUMENT OUTLINE ══ */
+
+/* ══ TAG INPUT (0.17.0) ═══════════════════════════════════════════════
+ * `createTagInput` (src/ui/components/tag_input.js): removable chips and a
+ * text box on one wrapping line. No height of its own. */
+.twm-tag-input {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-xs, 4px);
+    min-width: 0;
+    padding: 3px var(--space-xs, 4px);
+    background: var(--surface-3, #3c3c3c);
+    border: 1px solid var(--border-strong, #383838);
+    border-radius: var(--radius-sm, 4px);
+    cursor: text;
+}
+.twm-tag-input:focus-within { border-color: var(--accent-bright); }
+.twm-tag-input--readonly {
+    background: transparent;
+    border-color: transparent;
+    padding-left: 0;
+    padding-right: 0;
+    cursor: default;
+}
+.twm-tag-input__chips {
+    display: contents;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.twm-tag-input__chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    max-width: 100%;
+    min-width: 0;
+    padding: 1px var(--space-xs, 4px) 1px var(--space-sm, 6px);
+    background: var(--surface-2, #2d2d2d);
+    border: 1px solid var(--border-strong, #383838);
+    border-radius: var(--radius-pill, 999px);
+    color: var(--text-primary, #e0e0e0);
+    font-size: var(--font-size-sm, 12px);
+    line-height: 18px;
+}
+.twm-tag-input--readonly .twm-tag-input__chip { padding-right: var(--space-sm, 6px); }
+.twm-tag-input__text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.twm-tag-input__remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    border: none;
+    border-radius: var(--radius-circle, 50%);
+    background: transparent;
+    color: var(--text-muted, #888);
+    font: inherit;
+    line-height: 1;
+    cursor: pointer;
+}
+.twm-tag-input__remove:hover,
+.twm-tag-input__remove:focus-visible {
+    background: var(--state-active, rgba(255, 255, 255, 0.08));
+    color: var(--text-bright, #fff);
+}
+.twm-tag-input__input {
+    flex: 1 1 6em;
+    min-width: 4em;
+    padding: 1px 2px;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: var(--text-primary, #e0e0e0);
+    font: inherit;
+    font-size: var(--font-size-sm, 12px);
+}
+/* ══ end TAG INPUT ══ */
+
+/* ══ SERIES TRANSFORMS ═══════════════════════════════════════════════
+ *
+ * `renderSeriesTransformControls` (src/charts/series_transforms.js): per
+ * injected transform, a group with a toggle per output and a number field (or,
+ * for a choice parameter, a select) per parameter, in a subplot's config. */
+.twm-series-transforms {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+.twm-series-transforms__group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    margin: 0;
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+}
+.twm-series-transforms__label {
+    padding: 0 var(--space-xs);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-muted);
+}
+.twm-series-transforms__row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    font-size: var(--font-size-sm);
+    color: var(--text-primary);
+}
+.twm-series-transforms__param {
+    width: 96px;
+    margin-left: auto;
+    padding: var(--space-xxs) var(--space-xs);
+    background: var(--surface-3);
+    color: var(--text-primary);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+}
+.twm-series-transforms__param:disabled {
+    opacity: 0.5;
+}
+/* A choice parameter's select (0.17.8): as wide as its option labels. */
+.twm-series-transforms__select {
+    width: auto;
+    min-width: 96px;
+    max-width: 60%;
+    cursor: pointer;
+}
+/* ══ end SERIES TRANSFORMS ══ */
+
+/* ══ PLOT GRID ════════════════════════════════════════════════════════
+ *
+ * `renderPlotGrid` (src/charts/plot_grid.js): a CSS grid of one Plotly figure
+ * per subplot. The template columns/rows and each cell's grid-area are inline,
+ * from PLOT_LAYOUTS. */
+.twm-plot-grid {
+    display: grid;
+    gap: 4px;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+}
+.twm-plot-grid__cell {
+    position: relative; /* Anchor for Plotly's positioning */
+    min-width: 0;
+    min-height: 0;
+}
+.twm-plot-grid__cell > .twm-plot-no-data {
+    padding: var(--space-lg);
+    font-size: var(--font-size-xs);
+}
+/* ══ end PLOT GRID ══ */
+
+/* ══ PLOT CONFIG EDITOR ═══════════════════════════════════════════════
+ *
+ * `renderPlotConfigEditor` (src/charts/plot_config_editor.js): a layout
+ * picker, a tab per subplot slot and the fields of the subplot in front. */
+.twm-plot-config {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    min-width: 0;
+    font-size: var(--font-size-sm);
+    color: var(--text-primary);
+}
+.twm-plot-config__section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+.twm-plot-config__heading {
+    margin: 0;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-muted);
+}
+.twm-plot-config__layouts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+}
+.twm-plot-config__layout {
+    min-width: 0;
+}
+.twm-plot-config__layout--on {
+    border-color: var(--accent);
+    color: var(--text-bright);
+}
+.twm-plot-config__tabs[hidden] {
+    display: none;
+}
+.twm-plot-config__body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+.twm-plot-config__field {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    min-width: 0;
+}
+.twm-plot-config__label {
+    flex: 0 0 96px;
+    color: var(--text-muted);
+}
+.twm-plot-config__input {
+    box-sizing: border-box;
+    min-width: 0;
+    flex: 1 1 auto;
+    padding: var(--space-xxs) var(--space-xs);
+    font: inherit;
+    background: var(--surface-3);
+    color: var(--text-primary);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+}
+.twm-plot-config__input--number {
+    flex: 0 1 80px;
+    width: 80px;
+}
+.twm-plot-config__input:disabled {
+    opacity: 0.5;
+}
+.twm-plot-config__picker {
+    flex: 1 1 140px;
+    min-width: 0;
+}
+/* A picker has no helper text: its empty helper takes no room (it held a
+ * 28px gap under every picker, and the series header line off its centre). */
+.twm-plot-config__picker > .twm-autocomplete-field__helper:empty {
+    display: none;
+}
+.twm-plot-config__axes,
+.twm-plot-config__list,
+.twm-plot-config__series-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+.twm-plot-config__axis {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    margin: 0;
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    min-width: 0;
+}
+.twm-plot-config__axis--disabled {
+    opacity: 0.5;
+}
+.twm-plot-config__axis-title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: 0 var(--space-xs);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-muted);
+}
+.twm-plot-config__axis-fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: var(--space-xs) var(--space-md);
+}
+/* A series is one block (BUG-0052): a header line (picker, legend label,
+ * remove) over its fields, one per line on the editor's 96px label column —
+ * colour, width, dash, stack group, the embedder's `extraSeriesFields` (their
+ * box is `display: contents`, so its rows are rows of the column) and the
+ * overlay. Until 0.17.15 all of it was one wrapped line. */
+.twm-plot-config__series {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    padding: var(--space-sm) 0;
+    border-top: 1px solid var(--border-subtle);
+    min-width: 0;
+}
+.twm-plot-config__series-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-xs);
+    min-width: 0;
+}
+.twm-plot-config__series-head > .twm-plot-config__picker {
+    flex: 2 1 140px;
+}
+.twm-plot-config__series-head > .twm-plot-config__input {
+    flex: 1 1 100px;
+}
+.twm-plot-config__series-fields {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xxs);
+    min-width: 0;
+}
+.twm-plot-config__series-extra {
+    display: contents;
+}
+.twm-plot-config__row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-xs);
+}
+.twm-plot-config__row > .twm-plot-config__input:not(.twm-plot-config__input--number):not(.twm-plot-config__input--select) {
+    flex: 1 1 100px;
+}
+.twm-plot-config__row > .twm-plot-config__input--select {
+    flex: 0 1 auto;
+}
+/* On a field line a colour is the swatch and a hex box sized to `#rrggbb`. */
+.twm-plot-config__field > .twm-color-field {
+    flex: 0 1 auto;
+    flex-wrap: nowrap;
+}
+.twm-plot-config__field > .twm-color-field > .twm-color-field__hex {
+    flex: 0 1 auto;
+    width: 10ch;
+}
+/* A colour's hex box is a well like the editor's other inputs. */
+.twm-plot-config .twm-color-field__hex {
+    box-sizing: border-box;
+    padding: var(--space-xxs) var(--space-xs);
+    background: var(--surface-3);
+    color: var(--text-primary);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+}
+/* ... and still shows a hex that is not a colour (the well's border above
+ * would otherwise hide ColorField's invalid border). */
+.twm-plot-config .twm-color-field--invalid .twm-color-field__hex {
+    border-color: var(--color-danger);
+}
+/* A field line's select keeps to its options, as the number boxes do. */
+.twm-plot-config__series-fields .twm-plot-config__field > .twm-plot-config__input--select {
+    flex: 0 1 auto;
+    max-width: 100%;
+}
+/* An embedder's control drawn by a field spec's `render(slot)`. */
+.twm-plot-config__slot {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+/* A field's hint, under its control: past the label column. Only a field
+ * with a hint wraps, so a number box never drops under its label. */
+.twm-plot-config__field--hinted {
+    flex-wrap: wrap;
+}
+.twm-plot-config__hint {
+    box-sizing: border-box;
+    flex: 1 0 100%;
+    padding-left: calc(96px + var(--space-sm));
+    font-size: var(--font-size-xs);
+    color: var(--text-muted);
+}
+/* The overlay's own fields, under its source: set in by a rule, their label
+ * column shortened by as much, so their controls stay on the series' column. */
+.twm-plot-config__overlay,
+.twm-plot-config__overlay-fields {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xxs);
+    min-width: 0;
+}
+.twm-plot-config__overlay-fields:not(:empty) {
+    margin-left: var(--space-sm);
+    padding-left: calc(var(--space-sm) - 1px);
+    border-left: 1px solid var(--border-subtle);
+}
+.twm-plot-config__overlay-fields > .twm-plot-config__field > .twm-plot-config__label {
+    flex-basis: calc(96px - 2 * var(--space-sm));
+}
+.twm-plot-config__overlay-source {
+    color: var(--text-muted);
+}
+.twm-plot-config__overlay-source--error {
+    color: var(--color-danger);
+}
+.twm-plot-config__empty {
+    color: var(--text-muted);
+    font-style: italic;
+}
+.twm-plot-config__add {
+    align-self: flex-start;
+}
+.twm-plot-config__remove {
+    flex: 0 0 auto;
+    margin-left: auto;
+}
+.twm-plot-config__remove > .material-symbols-outlined {
+    font-size: 16px;
+}
+/* ══ end PLOT CONFIG EDITOR ══ */
+
+/* ══ WIZARD (STORY-0047) ══════════════════════════════════════════════════
+ * A step indicator, a body slot and a footer. Steps are drawn done / current /
+ * upcoming / error and joined by a connector that fills once the step after it
+ * has been reached. Only a done (or errored) step before the current one is an
+ * enabled button; the rest are disabled and look inert. */
+.twm-wizard {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    color: var(--text-body);
+    font-size: var(--font-size-sm);
+}
+.twm-wizard__steps {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    margin: 0;
+    padding: var(--space-md) var(--space-lg);
+    list-style: none;
+    border-bottom: 1px solid var(--border-subtle);
+}
+.twm-wizard__step {
+    flex: 0 0 auto;
+    min-width: 0;
+}
+.twm-wizard__step-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-xxs) var(--space-xs);
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-muted);
+    font: inherit;
+    cursor: pointer;
+}
+.twm-wizard__step-btn:hover:not(:disabled) {
+    background: var(--state-hover);
+}
+.twm-wizard__step-btn:focus-visible {
+    outline: 1px solid var(--accent);
+    outline-offset: 1px;
+}
+.twm-wizard__step-btn:disabled {
+    cursor: default;
+}
+.twm-wizard__step-marker {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 20px;
+    height: 20px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-circle);
+    font-size: var(--font-size-xs);
+    line-height: 1;
+}
+.twm-wizard__step-marker.material-symbols-outlined {
+    font-size: 14px;
+}
+.twm-wizard__step-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.twm-wizard__step--done .twm-wizard__step-btn {
+    color: var(--text-body);
+}
+.twm-wizard__step--done .twm-wizard__step-marker {
+    border-color: var(--color-success);
+    color: var(--color-success);
+}
+.twm-wizard__step--current .twm-wizard__step-btn {
+    color: var(--text-bright);
+    font-weight: var(--font-weight-semibold);
+}
+.twm-wizard__step--current .twm-wizard__step-marker {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--text-bright);
+}
+.twm-wizard__step--upcoming .twm-wizard__step-btn {
+    color: var(--text-dim);
+}
+.twm-wizard__step--error .twm-wizard__step-btn {
+    color: var(--color-danger);
+}
+.twm-wizard__step--error .twm-wizard__step-marker {
+    border-color: var(--color-danger);
+    color: var(--color-danger);
+}
+.twm-wizard__step--active .twm-wizard__step-label {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+.twm-wizard__connector {
+    flex: 1 1 16px;
+    min-width: 16px;
+    height: 1px;
+    background: var(--border-default);
+}
+.twm-wizard__connector--done {
+    background: var(--color-success);
+}
+.twm-wizard__body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    padding: var(--space-lg);
+}
+.twm-wizard__footer {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-sm) var(--space-lg);
+    border-top: 1px solid var(--border-subtle);
+}
+.twm-wizard__message {
+    flex: 1 1 auto;
+    min-width: 0;
+    color: var(--text-muted);
+}
+.twm-wizard__message--hint {
+    color: var(--color-warning);
+}
+.twm-wizard__message--error {
+    color: var(--color-danger);
+}
+.twm-wizard__actions {
+    display: flex;
+    flex: 0 0 auto;
+    gap: var(--space-xs);
+}
+.twm-wizard--busy {
+    cursor: progress;
+}
+.twm-wizard--busy .twm-wizard__body {
+    opacity: 0.6;
+    pointer-events: none;
+}
+/* ══ end WIZARD ══ */
+
+/* ══ SECTION STACK ═══════════════════════════════════════════════════════
+ * `createSectionStack` (ui/components/section_stack.js, STORY-0036): titled
+ * sections in a column, built on the tree's `.twm-collapsible-*` primitive.
+ *
+ * THE STACK IS A COLUMN AS TALL AS ITS CONTAINER. A section is as tall as its
+ * content, except the FILL section, which takes what the others leave
+ * (`flex: 1 1 0`) — and only while it is open, so a closed one is a header.
+ * Its body is the one that scrolls: `min-height: 0` on the box and the body is
+ * what lets a flex child shrink below its content, without which a long
+ * conversation grows the section, and the panel, past the window. If the
+ * fixed sections alone outgrow the stack, the stack itself scrolls; the open
+ * fill box then stops at its header's height (`min-height: 26px`, the header
+ * rule's `height`) so its header never lands on the next section's, and only
+ * its body shrinks away.
+ *
+ * `[hidden]` needs its own rule: the box is `display: flex`, and an author
+ * `display` beats the UA's `[hidden] { display: none }`. */
+.twm-section-stack {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+.twm-section-stack > .twm-section-stack__section {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 auto;
+    min-height: 0;
+}
+.twm-section-stack > .twm-section-stack__section[hidden] {
+    display: none;
+}
+.twm-section-stack > .twm-section-stack__section--fill.twm-section-stack__section--expanded {
+    flex: 1 1 0;
+    min-height: 26px;
+}
+.twm-section-stack__section--fill > .twm-collapsible-content.visible {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow-y: auto;
+}
+.twm-section-stack__header {
+    gap: var(--space-xxs);
+    height: 26px;
+    padding: 0 var(--space-xs) 0 0;
+    box-sizing: border-box;
+    flex-shrink: 0;
+    color: var(--text-secondary);
+}
+.twm-section-stack__header:hover {
+    background: var(--state-hover);
+}
+/* A real button, so Enter and Space toggle without re-implementing them; the
+ * first declarations are the reset that keeps the UA's own button off it. */
+.twm-section-stack__toggle {
+    appearance: none;
+    background: none;
+    border: 0;
+    color: inherit;
+    font: inherit;
+    text-transform: inherit;
+    text-align: left;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 100%;
+    padding: 0 0 0 var(--space-xs);
+}
+.twm-section-stack__toggle:focus-visible,
+.twm-section-stack__action:focus-visible {
+    outline: 2px solid var(--accent-bright);
+    outline-offset: -2px;
+}
+/* The arrow points down while open (`.twm-collapsible-arrow`) and right while
+ * closed — the class `paint()` sets on it. A fixed, clipped box: without the
+ * icon font the glyph is the word `expand_more`, and that word turned on its
+ * side stood taller than the header and made the whole stack scroll. */
+.twm-section-stack .twm-collapsible-arrow {
+    flex-shrink: 0;
+    width: 12px;
+    height: 12px;
+    line-height: 12px;
+    overflow: hidden;
+}
+.twm-section-stack .twm-collapsible-arrow.collapsed {
+    transform: rotate(-90deg);
+}
+.twm-section-stack__icon.material-symbols-outlined {
+    font-size: var(--font-size-md);
+    line-height: 1;
+}
+.twm-section-stack__title {
+    flex: 1 1 auto;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.twm-section-stack__actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xxs);
+    flex-shrink: 0;
+}
+.twm-section-stack__action {
+    appearance: none;
+    background: none;
+    border: 0;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border-radius: var(--radius-sm);
+}
+.twm-section-stack__action:hover {
+    color: var(--text-primary);
+    background: var(--state-active);
+}
+.twm-section-stack__action .material-symbols-outlined {
+    font-size: var(--font-size-md);
+    line-height: 1;
+}
+/* ══ end SECTION STACK ══ */
+
+/* ── The conversation view (conversation_view.js, STORY-0057) ─────────────
+ * A transcript of role-tagged messages above a growing composer. The view
+ * fills its host; the transcript scrolls, the composer stays at the foot. */
+.twm-chat { display: flex; flex-direction: column; height: 100%; min-height: 0; font-size: var(--font-size-sm); color: var(--text-body); }
+.twm-chat .material-symbols-outlined { font-size: 18px; line-height: 1; }
+.twm-chat__viewport { position: relative; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.twm-chat__log { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: var(--space-md); display: flex; flex-direction: column; gap: var(--space-sm); }
+.twm-chat__msg { max-width: 85%; padding: var(--space-sm) var(--space-md); border-radius: var(--radius-md); background: var(--surface-1); line-height: var(--line-height-relaxed); overflow-wrap: anywhere; }
+.twm-chat__msg--user { align-self: flex-end; background: var(--state-selected); }
+.twm-chat__msg--assistant { align-self: flex-start; }
+.twm-chat__msg--system { align-self: center; background: none; color: var(--text-muted); font-size: var(--font-size-xs); }
+.twm-chat__msg--streaming .twm-chat__body::after { content: '\258D'; margin-left: 1px; color: var(--text-muted); }
+.twm-chat__body--plain { white-space: pre-wrap; }
+.twm-chat__extra:empty { display: none; }
+.twm-chat__extra { margin-top: var(--space-sm); }
+.twm-chat__jump { position: absolute; left: 50%; bottom: var(--space-md); transform: translateX(-50%); display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 12px; border: 1px solid var(--border-default); border-radius: var(--radius-pill); background: var(--surface-2); color: var(--text-body); font: inherit; font-size: var(--font-size-xs); box-shadow: var(--shadow-md); cursor: pointer; }
+.twm-chat__jump:hover { background: var(--state-hover); }
+.twm-chat__jump[hidden] { display: none; }
+.twm-chat__composer { flex: 0 0 auto; display: flex; align-items: flex-end; gap: var(--space-sm); padding: var(--space-sm) var(--space-md); border-top: 1px solid var(--border-subtle); }
+.twm-chat__input { flex: 1 1 auto; min-height: 30px; box-sizing: border-box; padding: 6px 8px; border: 1px solid var(--surface-3); border-radius: var(--radius-sm); background: var(--surface-1); color: var(--text-body); font: inherit; line-height: var(--line-height-normal); resize: none; overflow-y: hidden; }
+.twm-chat__input:focus { outline: none; border-color: var(--accent-bright); }
+.twm-chat__send { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 0; border-radius: var(--radius-sm); background: var(--accent); color: var(--text-bright); cursor: pointer; }
+.twm-chat__send:hover { background: var(--accent-hover); }
+.twm-chat__send--cancel { background: var(--color-danger); }
+.twm-chat__send--cancel:hover { background: var(--color-danger-hover); }
+.twm-chat--busy .twm-chat__input { border-color: var(--border-default); }
 
 /* ══ FLOW · KIT ═══════════════════════════════════════════════════════ */
 /* The shared flow-editor kit (36 §3, §3.12): the settings panel and its
@@ -8724,10 +12034,6 @@ button.twm-alerts__ref:hover { text-decoration: underline; }
     padding-top: 5px;
     font-size: var(--font-size-xs);
     color: var(--twm-flow-muted);
-}
-.twm-flow-field__kept {
-    font-family: var(--font-family-mono);
-    color: var(--text-secondary);
 }
 .twm-flow-field__refusal {
     margin: 0;
@@ -8959,6 +12265,30 @@ button.twm-alerts__ref:hover { text-decoration: underline; }
 .twm-flow-togglechip:focus-visible {
     outline: 2px solid var(--twm-flow-focus);
     outline-offset: 1px;
+}
+
+/* ── a column typed by name, while the columns are not known ─────────── */
+.twm-flow-field__typed {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+.twm-flow-typedchips:focus-within {
+    border-color: var(--twm-flow-focus);
+}
+.twm-flow-input.twm-flow-typedchips__input {
+    flex: 1 1 8em;
+    width: auto;
+    min-width: 6em;
+    height: 18px;
+    padding: 0 2px;
+    border: 0;
+    background: transparent;
+    font-size: var(--font-size-xs);
+}
+.twm-flow-input.twm-flow-typedchips__input:focus {
+    outline: none;
+    box-shadow: none;
 }
 
 /* ── choice-cards ───────────────────────────────────────────────────── */
@@ -9393,7 +12723,7 @@ button.twm-alerts__ref:hover { text-decoration: underline; }
     position: absolute;
     pointer-events: none;
     border: 1px solid var(--accent-bright);
-    background: rgba(0, 122, 204, 0.12);
+    background: color-mix(in srgb, var(--accent-bright) 12%, transparent);
 }
 .twm-canvas__marquee[hidden] { display: none; }
 
@@ -9469,6 +12799,21 @@ button.twm-alerts__ref:hover { text-decoration: underline; }
     color: var(--twm-flow-blue-fg);
     border-bottom: 1px solid var(--twm-flow-blue-line);
 }
+/* A host policy's offer: its sentence, Accept and Not now, on one line. */
+.twm-flow-graph__offer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 8px;
+    padding: 4px 10px;
+    font-size: var(--font-size-xs);
+    background: var(--twm-flow-blue-bg);
+    color: var(--twm-flow-blue-fg);
+    border-bottom: 1px solid var(--twm-flow-blue-line);
+}
+.twm-flow-graph__offer-text { margin: 0; flex: 1 1 200px; min-width: 0; line-height: 1.4; }
+.twm-flow-graph__offer-accept,
+.twm-flow-graph__offer-dismiss { flex: 0 0 auto; }
 
 /* Three columns; the CANVAS is the one that flexes — `flex: 1 1 0px` AND
  * `min-width: 0`, or an open settings panel squeezes the palette instead. */
@@ -9540,6 +12885,8 @@ button.twm-alerts__ref:hover { text-decoration: underline; }
 }
 .twm-flow-graph__canvas { position: relative; flex: 1 1 0px; min-width: 0; min-height: 0; }
 .twm-flow-graph__canvas--drop { outline: 2px dashed var(--twm-flow-focus); outline-offset: -2px; }
+/* Where a dragged line was let go: what the step picker is anchored to. */
+.twm-flow-graph__drop-anchor { position: absolute; width: 1px; height: 1px; pointer-events: none; }
 .twm-flow-graph__aside {
     flex: 0 0 300px;
     min-width: 0;
@@ -9671,6 +13018,168 @@ button.twm-alerts__ref:hover { text-decoration: underline; }
 .twm-flow-graph__node-run[data-state="skipped"],
 .twm-flow-graph__node-run[data-state="cancelled"],
 .twm-flow-graph__node-run[data-state="not-reached"] { font-style: italic; }
+/* A TYPE'S OWN BODY, below its ports (a catalogue type's `render`). It adds
+ * height under the rows and moves nothing above them, so the lines' arithmetic
+ * stands. A type with `size.h` is exactly that tall: its body takes what is
+ * left and clips (the node itself never does: its port dots stand out of it).
+ * An `accent` is a stripe over the header, drawn on top of the box so it takes
+ * no height. */
+.twm-flow-graph__node-body { box-sizing: border-box; padding: 4px 8px 6px; min-width: 0; }
+.twm-flow-graph__node--sized { display: flex; flex-direction: column; }
+.twm-flow-graph__node--sized > .twm-flow-graph__node-head,
+.twm-flow-graph__node--sized > .twm-flow-graph__node-row { flex: none; }
+.twm-flow-graph__node--sized > .twm-flow-graph__node-body { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+/* EDITED ON THE NODE (`renameInPlace`, a type's `inline`). The title's box
+ * takes the title's place in the header, as tall as the name was; the inline
+ * settings sit under the ports, above a type's own body, and add height there
+ * only, so the lines' arithmetic stands. */
+.twm-flow-graph__node-title-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    box-sizing: border-box;
+    height: 22px;
+    padding: 0 4px;
+    background: var(--surface-1);
+    border: 1px solid var(--twm-flow-focus);
+    border-radius: 2px;
+    color: var(--text-body);
+    font: inherit;
+    cursor: text;
+    user-select: text;
+}
+.twm-flow-graph__node-title-input[aria-invalid="true"] { border-color: var(--twm-flow-error); }
+.twm-flow-graph__node-inline { box-sizing: border-box; display: grid; gap: 4px; padding: 4px 8px 6px; min-width: 0; cursor: default; }
+.twm-flow-graph__node--sized > .twm-flow-graph__node-inline { flex: none; }
+.twm-flow-graph__node[data-accent]::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    border-radius: 3px 3px 0 0;
+    pointer-events: none;
+}
+.twm-flow-graph__node[data-accent="violet"]::before { background: var(--twm-flow-violet-fg); }
+.twm-flow-graph__node[data-accent="teal"]::before { background: var(--twm-flow-teal-fg); }
+.twm-flow-graph__node[data-accent="amber"]::before { background: var(--twm-flow-amber-fg); }
+.twm-flow-graph__node[data-accent="grey"]::before { background: var(--twm-flow-grey-fg); }
+.twm-flow-graph__node[data-accent="blue"]::before { background: var(--twm-flow-blue-fg); }
+.twm-flow-graph__node[data-accent="indigo"]::before { background: var(--twm-flow-indigo-fg); }
+
+/* ── a group and a note (`groups`, `notes`) ─────────────────────────── */
+/* A GROUP IS A FRAME BEHIND ITS NODES (first in the node layer). Its body
+ * takes no pointer, so a press inside it between the nodes is the canvas's
+ * (a marquee, a pan); its title bar is the handle that drags the members. */
+.twm-flow-graph__group {
+    position: absolute;
+    box-sizing: border-box;
+    border: 1px dashed var(--border-strong);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.03);
+    pointer-events: none;
+}
+.twm-flow-graph__group-head {
+    box-sizing: border-box;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    border-radius: 6px 6px 0 0;
+    background: var(--twm-flow-grey-bg);
+    color: var(--twm-flow-grey-fg);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    cursor: move;
+    pointer-events: auto;
+    user-select: none;
+}
+.twm-flow-graph__group-label { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.twm-flow-graph__group-label--untitled { font-style: italic; font-weight: 400; }
+.twm-flow-graph__group-input { flex: 1 1 auto; min-width: 0; font: inherit; }
+.twm-flow-graph__group[data-tone="violet"] { border-color: var(--twm-flow-violet-fg); }
+.twm-flow-graph__group[data-tone="teal"] { border-color: var(--twm-flow-teal-fg); }
+.twm-flow-graph__group[data-tone="amber"] { border-color: var(--twm-flow-amber-fg); }
+.twm-flow-graph__group[data-tone="grey"] { border-color: var(--twm-flow-grey-fg); }
+.twm-flow-graph__group[data-tone="blue"] { border-color: var(--twm-flow-blue-fg); }
+.twm-flow-graph__group[data-tone="indigo"] { border-color: var(--twm-flow-indigo-fg); }
+.twm-flow-graph__group[data-tone="violet"] > .twm-flow-graph__group-head { background: var(--twm-flow-violet-bg); color: var(--twm-flow-violet-fg); }
+.twm-flow-graph__group[data-tone="teal"] > .twm-flow-graph__group-head { background: var(--twm-flow-teal-bg); color: var(--twm-flow-teal-fg); }
+.twm-flow-graph__group[data-tone="amber"] > .twm-flow-graph__group-head { background: var(--twm-flow-amber-bg); color: var(--twm-flow-amber-fg); }
+.twm-flow-graph__group[data-tone="blue"] > .twm-flow-graph__group-head { background: var(--twm-flow-blue-bg); color: var(--twm-flow-blue-fg); }
+.twm-flow-graph__group[data-tone="indigo"] > .twm-flow-graph__group-head { background: var(--twm-flow-indigo-bg); color: var(--twm-flow-indigo-fg); }
+/* A NOTE is free text on the canvas, its height its text's unless it has a size. */
+.twm-flow-graph__note {
+    position: absolute;
+    box-sizing: border-box;
+    padding: 8px 10px;
+    background: var(--twm-flow-amber-bg);
+    border: 1px solid var(--border-strong);
+    border-radius: 4px;
+    color: var(--text-body);
+    font-size: var(--font-size-xs);
+    cursor: move;
+    overflow: hidden;
+    outline: none;
+}
+.twm-flow-graph__note:focus-visible { box-shadow: 0 0 0 2px var(--twm-flow-focus); }
+.twm-flow-graph__note--picked { border-color: var(--twm-flow-focus); box-shadow: 0 0 0 1px var(--twm-flow-focus); }
+.twm-flow-graph__note-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.twm-flow-graph__note-text--empty { color: var(--text-muted); font-style: italic; }
+.twm-flow-graph__note-input {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 4em;
+    resize: vertical;
+    font: inherit;
+    cursor: text;
+}
+/* LIVE VALUES (`setNodeValues`): a value on the header, before the step's id
+ * tag, and one beside a port. Neither element exists until there is a value. */
+.twm-flow-graph__node-badge {
+    flex: none;
+    max-width: 40%;
+    padding: 1px 5px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-body);
+    background: rgba(127, 127, 127, 0.18);
+    border-radius: 2px;
+}
+.twm-flow-graph__node-badge[data-tone="violet"] { background: var(--twm-flow-violet-bg); color: var(--twm-flow-violet-fg); }
+.twm-flow-graph__node-badge[data-tone="teal"] { background: var(--twm-flow-teal-bg); color: var(--twm-flow-teal-fg); }
+.twm-flow-graph__node-badge[data-tone="amber"] { background: var(--twm-flow-amber-bg); color: var(--twm-flow-amber-fg); }
+.twm-flow-graph__node-badge[data-tone="grey"] { background: var(--twm-flow-grey-bg); color: var(--twm-flow-grey-fg); }
+.twm-flow-graph__node-badge[data-tone="blue"] { background: var(--twm-flow-blue-bg); color: var(--twm-flow-blue-fg); }
+.twm-flow-graph__node-badge[data-tone="indigo"] { background: var(--twm-flow-indigo-bg); color: var(--twm-flow-indigo-fg); }
+.twm-flow-graph__port-value { color: var(--twm-flow-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* FOLDED TO ITS HEADER (`collapsible`): everything under the header is hidden,
+ * and the lines meet the header's middle. */
+.twm-flow-graph__node-fold {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    background: none;
+    border: 0;
+    border-radius: 3px;
+    color: var(--twm-flow-muted);
+    cursor: pointer;
+}
+.twm-flow-graph__node-fold .material-symbols-outlined { font-size: 16px; }
+.twm-flow-graph__node-fold:hover:not(:disabled) { color: var(--text-body); background: rgba(127, 127, 127, 0.18); }
+.twm-flow-graph__node-fold:focus-visible { outline: 1px solid var(--twm-flow-focus); }
+.twm-flow-graph__node-fold:disabled { cursor: default; opacity: 0.5; }
+.twm-flow-graph__node--collapsed > :not(.twm-flow-graph__node-head) { display: none; }
+.twm-flow-graph__node--collapsed > .twm-flow-graph__node-head { border-bottom: 0; border-radius: 3px; }
 
 /* ── a port ─────────────────────────────────────────────────────────── */
 .twm-flow-graph__port {
@@ -9707,21 +13216,58 @@ button.twm-alerts__ref:hover { text-decoration: underline; }
 .twm-flow-graph__port--data .twm-flow-graph__port-dot { border-color: #8a8f98; border-radius: 2px; }
 .twm-flow-graph--connecting .twm-flow-graph__port--in:not(:disabled) .twm-flow-graph__port-dot {
     background: var(--twm-flow-focus);
-    box-shadow: 0 0 0 3px rgba(0, 122, 204, 0.35);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-bright) 35%, transparent);
 }
 .twm-flow-graph__port--taken .twm-flow-graph__port-dot { border-color: var(--twm-flow-ok); background: var(--twm-flow-ok); }
 .twm-flow-graph__port--taken .twm-flow-graph__port-count { color: var(--twm-flow-ok); }
 .twm-flow-graph__port--untaken { opacity: 0.5; }
+/* Under `connections` only the inputs the line may end on are lit. */
+.twm-flow-graph--linking.twm-flow-graph--connecting .twm-flow-graph__port--in:not(.twm-flow-graph__port--can-drop) .twm-flow-graph__port-dot {
+    background: transparent;
+    box-shadow: none;
+}
+.twm-flow-graph__port--can-drop .twm-flow-graph__port-dot {
+    background: var(--twm-flow-focus);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-bright) 35%, transparent);
+}
 
 /* ── a line ─────────────────────────────────────────────────────────── */
-.twm-flow-graph__edge { fill: none; stroke: #8fb4d8; stroke-width: 1.6; }
-.twm-flow-graph__edge--picked { stroke: var(--twm-flow-focus); stroke-width: 2.4; }
+/* A consumer's `edgeStyle` sets a line's tone and width as the two custom
+ * properties below (unset, the line is drawn as it always was); a picked or
+ * highlighted line still wins over them. */
+.twm-flow-graph__edge { fill: none; stroke: var(--twm-canvas-edge-stroke, #8fb4d8); stroke-width: var(--twm-canvas-edge-width, 1.6); }
+.twm-flow-graph__edge--picked { stroke: var(--twm-flow-focus); stroke-width: calc(var(--twm-canvas-edge-width, 1.6) + 0.8); }
 /* A loop's body handing back to the loop: DASHED, and routed under both steps
  * by the kernel's `returnEdge`, so it reads as "round again", not as one more
  * step forward. */
 .twm-flow-graph__edge--back { stroke-dasharray: 6 4; }
 .twm-flow-graph__edge--taken { stroke: var(--twm-flow-ok); }
 .twm-flow-graph__edge--untaken { opacity: 0.35; }
+/* The line a drag is drawing: dashed, and never what the release lands on. */
+.twm-flow-graph__edge--draft { stroke: var(--twm-flow-focus); stroke-dasharray: 4 3; pointer-events: none; }
+/* `edgeStyle`'s dash, and the lines of a hovered step or line (`hoverHighlight`). */
+.twm-flow-graph__edge--dashed { stroke-dasharray: 6 4; }
+.twm-flow-graph__edge--highlighted { stroke: var(--twm-flow-focus); stroke-width: calc(var(--twm-canvas-edge-width, 1.6) + 0.8); }
+/* `edgeStyle`'s marker at the input end: an arrowhead, or the kernel's crow's
+ * foot in the line's own tone. */
+.twm-flow-graph__edge-arrow { fill: var(--twm-canvas-edge-stroke, #8fb4d8); stroke: none; }
+.twm-flow-graph__edge-foot line, .twm-flow-graph__edge-foot circle { stroke: var(--twm-canvas-edge-stroke, #8fb4d8); }
+/* `edgeStyle`'s label, centred on the line's midpoint. Its layer sits in the
+ * node layer and is stacked ABOVE every node, so a step never hides it. */
+.twm-flow-graph__edge-labels { position: absolute; left: 0; top: 0; z-index: 1; }
+.twm-flow-graph__edge-label {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    padding: 1px 6px;
+    border: 1px solid var(--twm-canvas-edge-stroke, #8fb4d8);
+    border-radius: 8px;
+    background: var(--surface-2);
+    color: var(--text-body);
+    font-size: var(--font-size-xs);
+    line-height: 1.4;
+    white-space: nowrap;
+    cursor: pointer;
+}
 /* The 14px target a 1.6px line cannot be. It opts back into the pointer the
  * edge layer turns off. */
 .twm-flow-graph__edge-hit { fill: none; stroke: transparent; stroke-width: 14; pointer-events: stroke; cursor: pointer; }
@@ -9748,6 +13294,26 @@ button.twm-alerts__ref:hover { text-decoration: underline; }
 }
 .twm-flow-graph__ghost .material-symbols-outlined { font-size: 16px; }
 .twm-flow-graph__ghost-label { white-space: nowrap; }
+/* ── the minimap (`minimap: true`) ──────────────────────────────────── */
+/* Over the canvas's lower right corner, a sibling of the kernel's surface, so a
+ * press on it starts no pan and no marquee. The steps are drawn as boxes and
+ * the view as a frame; a click centres the view there. */
+.twm-flow-graph__minimap {
+    position: absolute;
+    right: 12px;
+    bottom: 12px;
+    z-index: 1;
+    line-height: 0;
+    background: var(--surface-1);
+    border: 1px solid var(--border-default);
+    border-radius: 4px;
+    box-shadow: var(--shadow-md);
+    cursor: pointer;
+    opacity: 0.92;
+}
+.twm-flow-graph__minimap-map { display: block; }
+.twm-flow-graph__minimap-node { fill: var(--border-strong); }
+.twm-flow-graph__minimap-view { fill: none; stroke: var(--twm-flow-focus); stroke-width: 1.5px; }
 /* ══ end FLOW · CANVAS ══ */
 
 
@@ -10479,9 +14045,9 @@ button.twm-alerts__ref:hover { text-decoration: underline; }
     display: none !important;
 }
 .twm-flow-lanes {
-    --twm-lanes-wire: #5b9bd5;
+    --twm-lanes-wire: var(--accent-light);
     --twm-lanes-surface: #1b1b1c;
-    --twm-lanes-ring: #1683c4;
+    --twm-lanes-ring: var(--accent-bright-hover);
     display: flex;
     flex-direction: column;
     box-sizing: border-box;
@@ -10604,7 +14170,7 @@ button.twm-alerts__ref:hover { text-decoration: underline; }
     border-left: 1px solid var(--surface-3);
 }
 .twm-flow-lanes__show-btn[aria-pressed="true"] {
-    background: #0f6fa8;
+    background: var(--accent-pressed);
     color: var(--text-bright);
 }
 .twm-flow-lanes__show-btn:focus-visible,
@@ -10847,7 +14413,7 @@ button.twm-alerts__ref:hover { text-decoration: underline; }
 .twm-flow-lanes__node--selected .twm-flow-lanes__card,
 .twm-flow-lanes__card:focus-visible {
     filter: drop-shadow(0 0 1px var(--twm-lanes-ring)) drop-shadow(0 0 1px var(--twm-lanes-ring))
-            drop-shadow(0 0 5px rgba(22, 131, 196, 0.8));
+            drop-shadow(0 0 5px color-mix(in srgb, var(--twm-lanes-ring) 80%, transparent));
 }
 .twm-flow-lanes__card:hover .twm-flow-lanes__body {
     filter: brightness(1.12);
@@ -11170,7 +14736,7 @@ button.twm-alerts__ref:hover { text-decoration: underline; }
 }
 .twm-flow-lanes__cell--new,
 .twm-flow-lanes__cell--changed {
-    background: rgba(22, 131, 196, 0.07);
+    background: color-mix(in srgb, var(--twm-lanes-ring) 7%, transparent);
 }
 .twm-flow-lanes__error {
     flex: 0 0 auto;
@@ -11204,7 +14770,7 @@ button.twm-alerts__ref:hover { text-decoration: underline; }
 }
 .twm-flow-lanes__column--new,
 .twm-flow-lanes__column--changed {
-    background: rgba(22, 131, 196, 0.14);
+    background: color-mix(in srgb, var(--twm-lanes-ring) 14%, transparent);
 }
 .twm-flow-lanes__column-name {
     font-family: var(--font-family-mono);
@@ -11217,7 +14783,7 @@ button.twm-alerts__ref:hover { text-decoration: underline; }
 }
 .twm-flow-lanes__column--new .twm-flow-lanes__column-type,
 .twm-flow-lanes__column--changed .twm-flow-lanes__column-type {
-    color: #9fd0f0;
+    color: var(--accent-lightest);
 }
 .twm-flow-lanes__column-origin {
     margin-left: auto;
@@ -11330,5 +14896,34 @@ button.twm-alerts__ref:hover { text-decoration: underline; }
 .twm-flow-lanes__menu-item .material-symbols-outlined {
     font-size: 16px;
     line-height: 1;
+}
+.twm-flow-lanes__menu-item.twm-flow-lanes__menu-item--refused {
+    height: auto;
+    min-height: 28px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+.twm-flow-lanes__menu-words {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+.twm-flow-lanes__menu-label {
+    white-space: nowrap;
+}
+.twm-flow-lanes__menu-reason {
+    max-width: 280px;
+    font-size: var(--font-size-xs);
+    white-space: normal;
+}
+.twm-flow-lanes__menu-sep {
+    height: 1px;
+    margin: 4px 6px;
+    background: var(--border-subtle);
+}
+.twm-flow-lanes__notice {
+    margin-left: 8px;
+    color: var(--twm-flow-warning);
+    font-size: var(--font-size-xs);
 }
 /* ══ end FLOW · LANES ══ */

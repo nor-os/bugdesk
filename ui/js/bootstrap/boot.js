@@ -14,7 +14,7 @@
  * file is, and nothing else.
  *
  * The bars keep their existing class names and element ids (`.global-top-bar`,
- * `.bar-center`, `#toggle-left-panel`, `#sim-status`, the Help menu entries…)
+ * `.bar-center`, `#toggle-left-panel`, `#sim-status`…)
  * because the tiling shell and every page's status line address them by those
  * names. What is gone from them is what nothing ever wrote to: the project chip,
  * a hidden file input for opening workspace JSON, and a debug indicator.
@@ -24,7 +24,7 @@ import { EventBus, LoggingService } from '@flexdesk/core';
 // Imported for its side effect as well: TooltipService initialises itself when
 // the module is evaluated, so there is no init() to call — calling one anyway
 // would bind every tooltip listener twice.
-import { HelpModal, showAboutDialog } from '@flexdesk/widgets';
+import { showAboutDialog } from '@flexdesk/widgets';
 import { registerSettings, registerSettingsEventBus, BUGDESK_SETTINGS_SLICE } from '../core/settings.js';
 import { installHelp } from '../help/help_service.js';
 import { appName, appIcon, appSlug } from '../core/app_identity.js';
@@ -60,13 +60,11 @@ export function bootBugDesk({ enableConsoleLogging = false } = {}) {
 }
 
 /**
- * The top bar: brand and Help on the left, page shortcuts in the centre, the
- * panel toggles on the right.
- *
- * The Help dropdown is built even though it is never shown as a dropdown: the
- * tiling shell folds its entries into the hamburger menu and hides the menu bar,
- * and it finds the entries by reading this markup and clicking them by id. So
- * the entries carry their own handlers here, and the hamburger stays generic.
+ * The top bar, the same as EcoSim's and EcoAgent's: at the left the menu
+ * (FlexDesk's menu bar drawn as a hamburger, which the tiling shell paints
+ * into #bugdesk-menu-bar) and the brand; page shortcuts in the centre; at the
+ * right BugDesk's actions, the panel toggles, the palette button, and on a
+ * frameless window FlexDesk's window controls at the edge.
  */
 function buildTopBar() {
     const name = appName();
@@ -74,39 +72,34 @@ function buildTopBar() {
     bar.className = 'global-top-bar';
     bar.innerHTML = `
         <div class="bar-left">
-            <nav class="app-menu" aria-label="Application menu">
-                <span class="ecoagent-brand"><img class="ecoagent-brand__icon" src="${appIcon()}" alt="" /><span class="ecoagent-brand__name ecoagent-brand__name--${appSlug()}">${name}</span></span>
-                <div class="menu-item" tabindex="0">
-                    <span>Help</span>
-                    <div class="menu-dropdown">
-                        <button class="menu-entry" id="menu-help-topics">Help Topics</button>
-                        <hr class="menu-sep" />
-                        <button class="menu-entry" id="menu-help-about">About ${name}</button>
-                    </div>
-                </div>
-            </nav>
+            <div id="bugdesk-menu-bar"></div>
+            <span class="ecoagent-brand"><img class="ecoagent-brand__icon" src="${appIcon()}" alt="" /><span class="ecoagent-brand__name ecoagent-brand__name--${appSlug()}">${name}</span></span>
         </div>
         <div class="bar-center"></div>
         <div class="bar-right">
             <div class="panel-toggles">
                 <button class="panel-toggle-btn has-tooltip" id="toggle-left-panel" data-tooltip="Toggle Left Panel · per desktop" data-tooltip-placement="bottom" aria-label="Toggle Left Panel">
-                    <span class="material-symbols-outlined">dock_to_left</span>
+                    <span class="material-symbols-outlined">dock_to_right</span>
                 </button>
                 <button class="panel-toggle-btn has-tooltip" id="toggle-bottom-panel" data-tooltip="Toggle Bottom Panel · per desktop" data-tooltip-placement="bottom" aria-label="Toggle Bottom Panel">
                     <span class="material-symbols-outlined">dock_to_bottom</span>
                 </button>
                 <button class="panel-toggle-btn has-tooltip" id="toggle-right-panel" data-tooltip="Toggle Right Panel · per desktop" data-tooltip-placement="bottom" aria-label="Toggle Right Panel">
-                    <span class="material-symbols-outlined">dock_to_right</span>
+                    <span class="material-symbols-outlined">dock_to_left</span>
                 </button>
             </div>
+            <span id="bugdesk-palette-button"></span>
         </div>`;
-    bar.querySelector('#menu-help-topics').addEventListener('click', () => HelpModal.open());
-    bar.querySelector('#menu-help-about').addEventListener('click', () => showAboutDialog(aboutProduct()));
     document.body.appendChild(bar);
     // No F1 binding, and no "F1" hint on Help Topics. The entry used to advertise
     // one, but FlexDesk's keymap owns F1..F12 as "jump to the Nth page", so F1 has
     // always taken you to the first page rather than to help. A second listener
     // here would make one key do both.
+}
+
+/** Help › About: the About dialog. */
+export function showAbout() {
+    showAboutDialog(aboutProduct());
 }
 
 /**

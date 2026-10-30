@@ -357,7 +357,7 @@ The list maintains itself: setting your name adds you, **assigning to a name
 that is not on it adds that person**, and the `/bugs` and `/backlog` skills add
 the people they find in the git history. Edit it directly — add, rename, change
 an agent name, remove — from **Settings › Team**, the hamburger menu's
-**Collaborators…**, or the change-your-name
+**BugDesk › Team…**, or the change-your-name
 dialog. Override the path with `BUGDESK_PROJECT`. `GET /api/project` reports the
 resolved `path`, which is the quickest way to see which file the running UI has
 in force; an agent works it out from the same three rules, in the same order.
