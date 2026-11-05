@@ -3925,12 +3925,15 @@ console.log('\nBottom panel: Changes and Alerts');
         assert.deepEqual(gone.map((c) => [c.name, c.from, c.to]), [['B', '2', '—']]);
     });
 
-    await t('the text diff is the body only, numbered as in the file, without git headers', () => {
-        const lines = rd.textChanges(before, after);
-        const added = lines.filter((l) => l.sign === '+');
-        assert.deepEqual(added.map((l) => [l.n, l.text]), [['12', 'Added.']], 'line 12 of the new file');
+    await t('the text diff is the body only, numbered as in the file, without git headers', async () => {
+        const { computeLineDiff } = await import('@flexdesk/git');
+        const data = rd.recordDiffData({ before, after, diff: 'raw' });
+        const lines = computeLineDiff(data.before, data.after, { beforeStart: data.beforeStart, afterStart: data.afterStart });
+        const added = lines.filter((l) => l.kind === 'add');
+        assert.deepEqual(added.map((l) => [l.newLine, l.text]), [[12, 'Added.']], 'line 12 of the new file');
         assert.ok(!lines.some((l) => /^(diff --git|index |---|\+\+\+)/.test(l.text)), 'git headers leaked into Text');
-        assert.deepEqual(rd.textChanges('---\na: 1\n---\nsame\n', '---\na: 2\n---\nsame\n'), [], 'a field edit shows up as a text change');
+        const same = rd.recordDiffData({ before: '---\na: 1\n---\nsame\n', after: '---\na: 2\n---\nsame\n', diff: '' });
+        assert.deepEqual(computeLineDiff(same.before, same.after), [], 'a field edit shows up as a text change');
         assert.equal(rd.changeSummary(before, after, 'modified'), '2 fields, +1 line');
         assert.equal(rd.changeSummary('', after, 'new'), 'new');
     });
@@ -3959,13 +3962,13 @@ console.log('\nBottom panel: Changes and Alerts');
         document.body.appendChild(host);
         let count = null;
         const pane = mountChangesPane(host, { onCount: (n) => { count = n; } });
-        for (let i = 0; i < 20 && !host.querySelector('.bd-fields'); i++) await new Promise((r) => setTimeout(r, 10));
+        for (let i = 0; i < 20 && !host.querySelector('.twm-diff__fields'); i++) await new Promise((r) => setTimeout(r, 10));
         try {
             assert.equal(count, 2);
             assert.deepEqual([...host.querySelectorAll('.bd-changes__group')].map((g) => g.textContent.replace(/\d+$/, '')), ['BUGS', 'BACKLOG']);
             assert.match(host.querySelector('.bd-changes__file').textContent, /BUG-0003\s+Export to CSV\s+2 fields, \+1 line/);
             assert.match(host.querySelector('.bd-changes__others').textContent, /\.bugdesk\/project\.json \(settings\)/);
-            assert.match(host.querySelector('.bd-fields').textContent, /Severity\s*high.*critical/s, 'the first file did not open on Fields');
+            assert.match(host.querySelector('.twm-diff__fields').textContent, /Severity\s*high.*critical/s, 'the first file did not open on Fields');
             assert.ok(host.querySelector('[data-act="push"]').disabled, 'Push offered with no remote branch');
             // Untick the bug: the button says so, and only the story is committed.
             const box = host.querySelector('[data-check="0:bugs/BUG-0003.md"]');
@@ -3978,8 +3981,8 @@ console.log('\nBottom panel: Changes and Alerts');
             assert.deepEqual(posted[0].files, ['backlog/STORY-0002.md']);
             // Text view of the story: the added line, numbered.
             host.querySelector('[data-file="0:backlog/STORY-0002.md"]').click();
-            for (let i = 0; i < 20 && !host.querySelector('.bd-diff__line--add'); i++) await new Promise((r) => setTimeout(r, 10));
-            assert.match(host.querySelector('.bd-diff__line--add').textContent, /^5\+new$/);
+            for (let i = 0; i < 20 && !host.querySelector('.twm-diff__line--add'); i++) await new Promise((r) => setTimeout(r, 10));
+            assert.match(host.querySelector('.twm-diff__line--add').textContent, /^5\+new$/);
         } finally {
             pane.destroy();
             host.remove();

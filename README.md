@@ -1376,7 +1376,7 @@ the kinds are BugDesk's own words.
 
 - **FlexDesk 0.18.0**, under the import map names BugDesk uses
   (`@flexdesk/core`, `/wm`, `/widgets`, `/host`, `/tiles`, `/charts`, `/canvas`,
-  `/flow`). The copy's bare imports resolve through the host's map, so the
+  `/flow`, `/git`). The copy's bare imports resolve through the host's map, so the
   copy shares the host's FlexDesk — one `WindowManager`, one settings store, one
   tooltip service. Use the version `ui/vendor/flexdesk/VERSION` names.
 - **An event bus** (`EventBus` from `@flexdesk/core`), the one the host's WM is

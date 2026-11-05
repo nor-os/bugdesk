@@ -5,15 +5,16 @@
  * A record file is front matter (one `key: value` per field) and a markdown
  * body. `git diff` shows an edit to either as a pair of YAML lines inside a
  * hunk with four lines of headers above it; the Changes pane shows the two
- * halves separately instead:
+ * halves separately instead, in FlexDesk's diff viewer:
  *
  *   FIELDS  each front-matter key whose value differs: Severity high → critical
- *   TEXT    the body, line by line, numbered as in the file, without git's
- *           `diff --git` / `index` / `---` / `+++` lines
+ *   TEXT    the body, line by line, numbered as in the file
  *
  * Both are worked out from the committed and the current text of the file
  * (GET /api/git/diff returns both), so nothing here depends on git's output.
  */
+
+import { computeLineDiff, diffStats } from '@flexdesk/git';
 
 /**
  * Split a record into its front matter (ordered `[key, value]` pairs, a value
@@ -65,54 +66,19 @@ export function fieldChanges(before, after) {
     return out;
 }
 
-/** Past this many lines a side, the line diff is not attempted (the pane offers Raw git). */
-export const TEXT_DIFF_LIMIT = 1500;
-
 /**
- * The body's changes as display lines with `context` unchanged lines around
- * each change. `n` is the line number in the CURRENT file ('' for a removed
- * line); a gap between hunks is one `{ gap: true }` line.
- * @returns {Array<{n:string, sign:''|'+'|'-', text:string, gap?:boolean}>|null}
- *   [] when the body did not change, null when it is too long to diff here.
+ * What the diff viewer draws for one record: the two bodies, numbered as in the
+ * file, and the changed fields.
+ * @param {{before: string, after: string, diff: string}} t  the file's two versions and git's diff
  */
-export function textChanges(before, after, context = 3) {
+export function recordDiffData({ before, after, diff }) {
     const A = splitRecord(before);
     const B = splitRecord(after);
-    const a = A.body;
-    const b = B.body;
-    if (a.length > TEXT_DIFF_LIMIT || b.length > TEXT_DIFF_LIMIT) return null;
-    // Longest common subsequence, then walked forwards into an edit script.
-    const n = a.length;
-    const m = b.length;
-    const lcs = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
-    for (let i = n - 1; i >= 0; i--) {
-        for (let j = m - 1; j >= 0; j--) {
-            lcs[i][j] = a[i] === b[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
-        }
-    }
-    const ops = [];
-    let i = 0;
-    let j = 0;
-    while (i < n || j < m) {
-        if (i < n && j < m && a[i] === b[j]) { ops.push({ sign: '', text: b[j], nb: j }); i++; j++; }
-        else if (j < m && (i >= n || lcs[i][j + 1] >= lcs[i + 1][j])) { ops.push({ sign: '+', text: b[j], nb: j }); j++; }
-        else { ops.push({ sign: '-', text: a[i], nb: -1 }); i++; }
-    }
-    if (!ops.some((o) => o.sign)) return [];
-    const keep = new Array(ops.length).fill(false);
-    ops.forEach((o, k) => {
-        if (!o.sign) return;
-        for (let d = Math.max(0, k - context); d <= Math.min(ops.length - 1, k + context); d++) keep[d] = true;
-    });
-    const out = [];
-    let last = -1;
-    ops.forEach((o, k) => {
-        if (!keep[k]) return;
-        if (last >= 0 && k > last + 1) out.push({ gap: true, n: '', sign: '', text: '' });
-        out.push({ n: o.nb >= 0 ? String(B.bodyStart + o.nb) : '', sign: o.sign, text: o.text });
-        last = k;
-    });
-    return out;
+    return {
+        before: A.body.join('\n'), after: B.body.join('\n'),
+        beforeStart: A.bodyStart, afterStart: B.bodyStart,
+        diff, fields: fieldChanges(before, after),
+    };
 }
 
 /** A one-glance summary for the file list: "1 field", "+2 lines", "2 fields, −1 line". */
@@ -122,13 +88,12 @@ export function changeSummary(before, after, status) {
     const parts = [];
     const f = fieldChanges(before, after).length;
     if (f) parts.push(`${f} field${f === 1 ? '' : 's'}`);
-    const t = textChanges(before, after, 0);
-    if (t === null) parts.push('text');
-    else if (t.length) {
-        const add = t.filter((l) => l.sign === '+').length;
-        const del = t.filter((l) => l.sign === '-').length;
-        if (add) parts.push(`+${add} line${add === 1 ? '' : 's'}`);
-        if (del) parts.push(`−${del} line${del === 1 ? '' : 's'}`);
+    const lines = computeLineDiff(splitRecord(before).body.join('\n'), splitRecord(after).body.join('\n'), { context: 0 });
+    if (lines === null) parts.push('text');
+    else {
+        const { added, removed } = diffStats(lines);
+        if (added) parts.push(`+${added} line${added === 1 ? '' : 's'}`);
+        if (removed) parts.push(`−${removed} line${removed === 1 ? '' : 's'}`);
     }
     return parts.join(', ') || 'no change';
 }

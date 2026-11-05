@@ -16,10 +16,11 @@
  * "+2 lines"). Each has a checkbox: Commit commits the ticked files only, and
  * says so ("Commit 2 of 3").
  *
- * THE DIFF, three ways (record_diff.js): FIELDS — front-matter values, "Severity
- * high → critical"; TEXT — the body, numbered as in the file, without git's
- * header lines; RAW GIT — what `git diff` says, for when the other two are not
- * enough. A file opens on Fields when a field changed, else on Text. From its
+ * THE DIFF, three ways, in FlexDesk's diff viewer (record_diff.js): FIELDS —
+ * front-matter values, "Severity high → critical"; TEXT — the body, numbered as in
+ * the file, without git's header lines; RAW GIT — what `git diff` says, for when
+ * the other two are not enough. A file opens on Fields when a field changed, else
+ * on Text. From its
  * header the record opens, and Discard… throws its changes away after asking
  * (GitService.Discard: an edit is undone, a new file goes to the trash).
  *
@@ -40,9 +41,10 @@
  * branch" line.
  */
 
+import { createDiffViewer } from '@flexdesk/git';
 import { esc } from './data.js';
 import * as instance from './instance.js';
-import { changeSummary, fieldChanges, textChanges } from './record_diff.js';
+import { changeSummary, recordDiffData } from './record_diff.js';
 import { initRepo, promptRemote } from './git_warnings.js';
 
 const { CONFIG, apiUrl, busEvent, ev } = instance;
@@ -78,7 +80,16 @@ export function mountChangesPane(host, { eventBus = null, sources = null, onCoun
     }));
     const main = srcs[0];
     let selected = null;            // `${sourceIndex}:${path}`
-    let view = null;                // 'fields' | 'text' | 'raw' — null: chosen per file
+    // One viewer for the life of the pane, put back after each innerHTML render:
+    // it holds which view was chosen, and redrawing the list must not lose that.
+    const viewer = createDiffViewer(document.createElement('div'), {
+        labels: {
+            raw: 'Raw git',
+            noChanges: 'The text below the fields did not change.',
+            noFields: 'No field changes: see Text.',
+        },
+    });
+    let viewerFile = null;          // the texts the viewer was last given
     const off = new Set();          // keys left out of the next commit
     let message = '';
     let error = '';
@@ -176,31 +187,11 @@ export function mountChangesPane(host, { eventBus = null, sources = null, onCoun
         return `<div class="bd-changes__others">${icon('info')}<span>Also changed, not a record: ${shown}${others.length > 3 ? ` and ${others.length - 3} more` : ''}</span></div>`;
     };
 
-    const viewHtml = (f, t) => {
-        if (view === 'raw') {
-            return `<div class="bd-diff bd-diff--raw">${esc(t.diff) || '<span class="td-dim">No differences.</span>'}</div>`;
-        }
-        if (view === 'fields') {
-            const fields = fieldChanges(t.before, t.after);
-            if (!fields.length) return `<div class="td-dim bd-changes__hint">No field changes.${f.status === 'modified' ? ' The text changed: see Text.' : ''}</div>`;
-            return `<div class="bd-fields">${fields.map((c) => `
-                <span class="bd-fields__name">${esc(c.name)}</span>
-                <span class="bd-fields__vals"><span class="bd-fields__from">${esc(c.from)}</span>${icon('arrow_forward')}<span class="bd-fields__to">${esc(c.to)}</span></span>`).join('')}</div>`;
-        }
-        const lines = textChanges(t.before, t.after);
-        if (lines === null) return '<div class="td-dim bd-changes__hint">Too long to compare here: see Raw git.</div>';
-        if (!lines.length) return '<div class="td-dim bd-changes__hint">The text below the fields did not change.</div>';
-        return `<div class="bd-diff">${lines.map((l) => (l.gap
-            ? '<div class="bd-diff__line bd-diff__line--gap"><span class="bd-diff__n">⋯</span></div>'
-            : `<div class="bd-diff__line${l.sign === '+' ? ' bd-diff__line--add' : l.sign === '-' ? ' bd-diff__line--del' : ''}"><span class="bd-diff__n">${l.n}</span><span class="bd-diff__sign">${l.sign}</span><span class="bd-diff__text">${esc(l.text)}</span></div>`)).join('')}</div>`;
-    };
-
     const detailHtml = () => {
         const hit = fileOf(selected);
         if (!hit) return '<div class="bd-changes__diff"><div class="td-dim bd-changes__hint">Pick a file to see what changed.</div></div>';
         const { s, f } = hit;
         const t = s.texts.get(f.path);
-        const seg = (k, label) => `<button type="button" data-view="${k}" aria-pressed="${view === k}" class="bd-changes__seg${view === k ? ' bd-changes__seg--on' : ''}">${label}</button>`;
         const canOpen = !!s.alerts?.openRef && f.status !== 'deleted';
         return `
             <div class="bd-changes__dhead">
@@ -208,10 +199,9 @@ export function mountChangesPane(host, { eventBus = null, sources = null, onCoun
                 <span class="bd-changes__dtitle">${esc(f.title || '')}</span>
                 ${canOpen ? `<a href="#" class="bd-changes__open" data-open="${esc(selected)}">Open</a>` : ''}
                 <span class="td-spacer"></span>
-                <div class="bd-changes__segs" role="group" aria-label="Diff view">${seg('fields', 'Fields')}${seg('text', 'Text')}${seg('raw', 'Raw git')}</div>
                 <button type="button" class="ea-btn bd-changes__discard" data-discard="${esc(selected)}" ${busy ? 'disabled' : ''}>Discard…</button>
             </div>
-            <div class="bd-changes__diff" data-slot="diff">${t ? viewHtml(f, t) : '<span class="td-dim bd-changes__hint">Loading…</span>'}</div>`;
+            <div class="bd-changes__diff" data-slot="diff">${t ? '' : '<span class="td-dim bd-changes__hint">Loading…</span>'}</div>`;
     };
 
     const barHtml = () => {
@@ -265,6 +255,18 @@ export function mountChangesPane(host, { eventBus = null, sources = null, onCoun
                 <pre>${esc(push.message)}</pre></div>` : ''}`;
     };
 
+    /** The viewer goes in the slot once the selected file's texts are here. */
+    const placeViewer = () => {
+        const hit = fileOf(selected);
+        const t = hit?.s.texts.get(hit.f.path);
+        if (!t) return;
+        if (t !== viewerFile) {
+            viewerFile = t;
+            viewer.update(recordDiffData(t));
+        }
+        host.querySelector('[data-slot="diff"]')?.appendChild(viewer.el);
+    };
+
     const render = () => {
         if (srcs.some((s) => !s.state)) { host.innerHTML = '<div class="td-dim bd-changes__empty">Loading…</div>'; return; }
         if (srcs.every((s) => !s.state.enabled)) {
@@ -294,6 +296,7 @@ export function mountChangesPane(host, { eventBus = null, sources = null, onCoun
             </div>`;
         const list = host.querySelector('.bd-changes__list');
         if (list) list.scrollTop = scroll;
+        placeViewer();
         if (typing) {
             const input = host.querySelector('[data-slot="message"]');
             input?.focus();
@@ -305,14 +308,13 @@ export function mountChangesPane(host, { eventBus = null, sources = null, onCoun
 
     const choose = async (key) => {
         selected = key;
-        view = null;
+        viewer.setView(null);
         render();
         const hit = fileOf(key);
         if (!hit) return;
         try {
-            const t = await loadTexts(hit.s, hit.f);
+            await loadTexts(hit.s, hit.f);
             if (selected !== key) return;
-            view = fieldChanges(t.before, t.after).length ? 'fields' : 'text';
         } catch (err) {
             error = `Could not read the diff: ${err.message}`;
         }
@@ -331,17 +333,12 @@ export function mountChangesPane(host, { eventBus = null, sources = null, onCoun
         const files = allFiles();
         onCount?.(files.length);
         for (const k of [...off]) if (!files.some((x) => x.key === k)) off.delete(k);
-        if (selected && !fileOf(selected)) { selected = null; view = null; }
+        if (selected && !fileOf(selected)) { selected = null; viewer.setView(null); }
         if (!selected && files.length) selected = files[0].key;
         render();
         // The summaries need each file's two versions; one small request a file.
         await Promise.all(files.slice(0, SUMMARY_LIMIT).map((x) => loadTexts(x.s, x.f).catch(() => null)));
         if (gen !== generation) return;
-        const cur = fileOf(selected);
-        if (cur && view === null) {
-            const t = cur.s.texts.get(cur.f.path);
-            if (t) view = fieldChanges(t.before, t.after).length ? 'fields' : 'text';
-        }
         render();
     };
 
@@ -381,8 +378,6 @@ export function mountChangesPane(host, { eventBus = null, sources = null, onCoun
     host.addEventListener('click', async (e) => {
         const pick = e.target.closest('[data-file]');
         if (pick) { choose(pick.dataset.file); return; }
-        const seg = e.target.closest('[data-view]');
-        if (seg) { view = seg.dataset.view; render(); return; }
         const open = e.target.closest('[data-open]');
         if (open) {
             e.preventDefault();
@@ -452,6 +447,7 @@ export function mountChangesPane(host, { eventBus = null, sources = null, onCoun
         destroy() {
             clearInterval(timer);
             clearTimeout(soon);
+            viewer.destroy();
             for (const s of subs) { try { s?.dispose?.(); s?.(); } catch { /* gone */ } }
         },
     };
