@@ -21,6 +21,7 @@
  */
 
 import { createCommandPalette } from './command_palette.js';
+import { installProjectPicker } from './project_switcher.js';
 import { installHistoryBack } from './history_nav.js';
 import { taxonomy, activeTopNavKind, migrateLayout, HOME_KIND, LANDING_SECTION, MERGED_TRACKER } from './kind_taxonomy.js';
 import { appName, trackerOffReason } from '../core/app_identity.js';
@@ -280,7 +281,6 @@ export async function installTilingShell({ eventBus, logger } = {}) {
     // selector is passed because FlexDesk's default names its own top bar's
     // classes, and without it F1..F8 would silently match no button.
     installKeymap({ wm, palette, navSelector: '.global-top-bar .bar-center.twm-top-nav .twm-top-nav__btn' });
-    _installProjectSwitcherKey(eventBus);
     // The browser's Back gesture walks up exactly like Backspace does,
     // instead of abandoning the app and its tile layout.
     installHistoryBack({ wm });
@@ -526,77 +526,18 @@ function _syncPageShortcuts(wm) {
  *  belongs to no project, and a field still naming one would suggest the
  *  tickets on screen were that project's. */
 function _syncProjectChip(topNavKind) {
-    const field = document.getElementById('twm-project-picker');
-    if (!field) return;
-    const na = MERGED_TRACKER && topNavKind === 'tracker';
-    if (field.classList.contains('td-project-bar--na') === na) return;
-    const name = String((window.__BUGDESK_CONFIG__ || {}).store?.name || '');
-    field.classList.toggle('td-project-bar--na', na);
-    field.querySelector('[data-role="name"]').textContent = na ? 'n/a' : name;
-    field.dataset.tooltip = na
-        ? 'The tracker is global — it belongs to no project. Click or Ctrl+P to switch project.'
-        : 'Project — click or Ctrl+P to switch, add or remove projects';
+    _projectPicker?.showAbsent(MERGED_TRACKER && topNavKind === 'tracker');
 }
 
-/**
- * The project field: which project this window is on, CENTRED in the top bar
- * and drawn as a search box — which is what it is: click it (or Ctrl+P) and
- * the switcher opens in the same place, its input over this field, and you
- * type. Project pages only.
- *
- * Its width is whatever the bar can spare: the room between the top-nav chips
- * and the buttons on the right, measured, so it narrows before it overlaps
- * either, drops the key hint when tight, and steps aside when there is no room
- * at all — Ctrl+P still reaches the switcher then.
- */
+/** The project field and switcher (project_switcher.js). Project pages only:
+ *  standalone TicketDesk has no project to switch, and there Ctrl+P does what
+ *  the browser does. */
+let _projectPicker = null;
 function _installProjectBar(eventBus) {
-    const cfg = window.__BUGDESK_CONFIG__ || {};
     const bar = document.querySelector('.global-top-bar');
-    if (cfg.store?.kind !== 'project' || !bar || document.getElementById('twm-project-picker')) return;
-
-    const field = document.createElement('button');
-    field.id = 'twm-project-picker';
-    field.type = 'button';
-    field.className = 'td-project-bar has-tooltip';
-    field.dataset.tooltipPlacement = 'bottom';
-    field.dataset.tooltip = 'Project — click or Ctrl+P to switch, add or remove projects';
-    field.setAttribute('aria-haspopup', 'listbox');
-    field.setAttribute('aria-expanded', 'false');
-    field.innerHTML = `
-        <span class="material-symbols-outlined td-project-bar__icon">folder</span>
-        <span class="td-project-bar__name" data-role="name">${_escHtml(cfg.store.name || '')}</span>
-        <kbd class="td-project-bar__key">Ctrl+P</kbd>`;
-    field.addEventListener('click', async () => {
-        const { toggleProjectSwitcher } = await import('./project_switcher.js');
-        toggleProjectSwitcher({ eventBus: eventBus ?? window.__bugdesk?.eventBus });
-    });
-    bar.appendChild(field);
-
-    const place = () => {
-        const b = bar.getBoundingClientRect();
-        const mid = b.left + b.width / 2;
-        // Everything the field must not cover: the brand and the chips on the
-        // left, the buttons on the right.
-        const lefts = [...bar.querySelectorAll('.bar-left > *, .twm-top-nav__btn')]
-            .map((el) => el.getBoundingClientRect()).filter((r) => r.width > 0);
-        const rights = [...bar.querySelectorAll('.bar-right > *')]
-            .map((el) => el.getBoundingClientRect()).filter((r) => r.width > 0);
-        const leftEdge = Math.max(b.left, ...lefts.map((r) => r.right));
-        const rightEdge = Math.min(b.right, ...rights.map((r) => r.left));
-        const room = 2 * Math.min(mid - leftEdge, rightEdge - mid) - 24;
-        const width = Math.min(440, room);
-        field.style.display = width < 120 ? 'none' : '';
-        field.style.width = `${Math.max(120, width)}px`;
-        field.classList.toggle('td-project-bar--tight', width < 230);
-    };
-    place();
-    document.fonts?.ready?.then(place).catch(() => {});
-    try { new ResizeObserver(place).observe(bar); } catch { window.addEventListener('resize', place); }
+    if ((window.__BUGDESK_CONFIG__ || {}).store?.kind !== 'project' || !bar || _projectPicker) return;
+    _projectPicker = installProjectPicker(bar, { eventBus: eventBus ?? window.__bugdesk?.eventBus });
 }
-
-const _escHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-}[c]));
 
 /** Stand-ins for the tracker's page kinds on a page where the tracker is off. */
 function _trackerOffContent() {
@@ -1000,25 +941,6 @@ function _installUserChip(wm, eventBus) {
     // — the dialog, or the Settings row's write-through.
     eventBus?.on?.('bugdesk:identity-changed', paint);
     host.insertBefore(btn, host.firstChild);
-}
-
-/**
- * Ctrl/⌘+P opens the project switcher — the keyboard way to the project field
- * in the top bar. BugDesk's own listener, because FlexDesk's keymap has no slot for
- * an app binding. It takes the key from the browser's Print, which is no loss
- * in an app whose pages are tiles. Only on a project page: standalone TicketDesk
- * has no project to switch, and there the key does what the browser does.
- */
-function _installProjectSwitcherKey(eventBus) {
-    if ((window.__BUGDESK_CONFIG__ || {}).store?.kind !== 'project') return;
-    window.addEventListener('keydown', (e) => {
-        if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== 'p') return;
-        e.preventDefault();
-        e.stopPropagation();
-        import('./project_switcher.js')
-            .then((m) => m.toggleProjectSwitcher({ eventBus }))
-            .catch((err) => console.error('[bugdesk] project switcher failed', err));
-    }, true);
 }
 
 function _installDesktopBar(wm) {
