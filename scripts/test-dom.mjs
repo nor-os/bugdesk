@@ -4320,5 +4320,138 @@ console.log('\nThe top bar');
     });
 }
 
+/* ── FlexDesk's picker and filter dialog, with what is BugDesk's in them ───── */
+
+console.log('\nThe project picker');
+{
+    const realFetchLocal = globalThis.fetch;
+    const { installProjectPicker } = await import(pathToFileURL(join(UI, 'tiling', 'project_switcher.js')).href);
+    const file = 'C:\\repos\\projects.toml';
+    const projects = [
+        { name: 'alpha', bugs: 'C:\\a\\bugs', backlog: 'C:\\a\\backlog', hasBugs: true, hasBacklog: true, base: '/p/alpha/' },
+        { name: 'beta', backlog: 'C:\\b\\backlog', hasBugs: false, hasBacklog: true, base: '/p/beta/' },
+        { name: 'cli', bugs: 'C:\\c\\bugs', hasBugs: true, hasBacklog: false, base: '/p/cli/', transient: true },
+    ];
+    let listError = null;
+    fakeApi({ 'GET /api/projects': () => ({ ok: true, file, error: listError, projects }) });
+    const realConfig = window.__BUGDESK_CONFIG__;
+    window.__BUGDESK_CONFIG__ = { ...realConfig, store: { kind: 'project', name: 'ALPHA' } };
+    const bar = document.createElement('div');
+    document.body.appendChild(bar);
+    const picker = installProjectPicker(bar, {});
+    const field = bar.querySelector('.twm-wspicker-field');
+    const rows = () => [...document.querySelectorAll('.twm-wspicker [role="option"]')].map((r) => r.textContent);
+    const open = async () => { field.click(); await tick(); await tick(); await tick(); };
+
+    await t('the field names the project, and says n/a for what belongs to none', () => {
+        assert.match(field.textContent, /ALPHA/);
+        picker.showAbsent(true);
+        assert.match(field.textContent, /n\/a/);
+        picker.showAbsent(false);
+        assert.match(field.textContent, /ALPHA/);
+    });
+
+    await t('the list says which is current whatever its case, what each has, and offers Add last', async () => {
+        await open();
+        const list = rows();
+        assert.equal(list.length, 4);
+        assert.match(list[0], /alpha.*current/s, 'the current project is matched without regard to case');
+        assert.match(list[1], /beta.*backlog only/s);
+        assert.match(list[2], /cli.*bugs only/s);
+        assert.match(list[3], /Add project…/);
+        assert.match(document.querySelector('.twm-wspicker').textContent, /projects\.toml: C:\\repos\\projects\.toml/);
+        field.click();
+        await tick();
+    });
+
+    await t('a broken projects.toml is said in the footer, as an error', async () => {
+        listError = 'line 3: nonsense';
+        await open();
+        const status = document.querySelector('.twm-wspicker').textContent;
+        assert.match(status, /line 3: nonsense — showing the last version that read cleanly/);
+        listError = null;
+        field.click();
+        await tick();
+    });
+
+    bar.remove();
+    window.__BUGDESK_CONFIG__ = realConfig;
+    put('fetch', realFetchLocal);
+}
+
+console.log('\nThe filter editor');
+{
+    const { openFilterEditor } = await import(pathToFileURL(join(UI, 'ticketdesk', 'filter_editor.js')).href);
+    const { createFilterModel, FILTER_ICONS } = await import(pathToFileURL(join(UI, 'ticketdesk', 'filter_engine.js')).href);
+    const { getFilter } = await import(pathToFileURL(join(UI, 'ticketdesk', 'filter_store.js')).href);
+    const model = createFilterModel({
+        noun: 'bug',
+        fields: [
+            { key: 'severity', label: 'Severity', type: 'enum', options: ['high', 'low'], get: (r) => r.severity },
+            { key: 'title', label: 'Title', type: 'text', get: (r) => r.title },
+            { key: 'cf.env', label: 'Env', type: 'text', custom: true, get: (r) => r.env },
+        ],
+    });
+    const items = [
+        { id: 'BUG-1', summary: 'one', severity: 'high', title: 'one' },
+        { id: 'BUG-2', summary: 'two', severity: 'low', title: 'two' },
+    ];
+    const seed = { kind: 'group', op: 'AND', children: [{ kind: 'clause', field: 'severity', op: 'is', value: 'high' }] };
+    const button = (word) => [...document.querySelectorAll('button')].find((b) => b.textContent.trim().toLowerCase() === word);
+    const settle = async () => { for (let i = 0; i < 6; i++) await new Promise((r) => setTimeout(r, 30)); };
+    const typeName = (text) => {
+        const name = document.querySelector('.twm-filter-dialog__name input');
+        name.value = text;
+        name.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    };
+
+    await t('a field of the catalogue lands in its type group, a custom one in its own', () => {
+        assert.deepEqual(model.fields.map((f) => f.group), ['Choice', 'Text', 'Custom fields']);
+    });
+
+    await t('a field gone from the schema is said by name, without its prefix', () => {
+        assert.match(model.describeFilter({ kind: 'clause', field: 'cf.gone', op: 'is', value: 'x' }), /unknown field “gone”/);
+    });
+
+    await t('a filter saved by the old editor reads the same', () => {
+        // The old editor stored `value: null` for an operator with no value.
+        const expr = { kind: 'group', op: 'OR', negate: true, children: [
+            { kind: 'clause', field: 'title', op: 'is_empty', value: null },
+            { kind: 'clause', field: 'severity', op: 'one_of', value: ['low'] },
+        ] };
+        assert.deepEqual(model.validateFilter(expr), { ok: true, errors: [] });
+        assert.deepEqual(items.filter(model.matcherFor(expr)).map((r) => r.id), ['BUG-1']);
+    });
+
+    await t('the preview says what matches; Save needs a name, stores it and tells the caller', async () => {
+        let saved = null;
+        const closed = openFilterEditor({ model, scope: 'bugs', seedExpr: seed, items, onSaved: (f) => { saved = f; } });
+        await settle();
+        assert.match(document.querySelector('.bd-fprev__count').textContent, /1\s+of 2 bugs match/);
+        assert.equal(document.querySelectorAll('.bd-fprev__hit').length, 1);
+        assert.match(document.querySelector('.twm-filter-dialog__sentence').textContent, /Severity is high/);
+        assert.ok(button('save').disabled, 'Save offered with no name');
+        assert.equal(button('delete'), undefined, 'Delete offered for a filter never saved');
+        typeName('High ones');
+        await settle();
+        button('save').click();
+        await closed;
+        assert.equal(saved.label, 'High ones');
+        assert.equal(saved.icon, FILTER_ICONS[0]);
+        assert.deepEqual(getFilter(saved.id).expr, seed);
+        assert.equal(document.querySelector('.twm-filter-dialog'), null);
+    });
+
+    await t('an alert condition comes back to the caller and is not stored', async () => {
+        let picked = null;
+        const closed = openFilterEditor({ model, scope: 'bugs', filter: { label: 'Alert', expr: seed }, items,
+            onPick: (p) => { picked = p; } });
+        await settle();
+        button('save').click();
+        await closed;
+        assert.deepEqual(picked, { label: 'Alert', expr: seed });
+    });
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
