@@ -20,9 +20,9 @@
 
 import assert from 'node:assert/strict';
 import { register } from 'node:module';
-import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { installFlexdeskAliases } from './flexdesk-aliases.mjs';
 import { JSDOM } from 'jsdom';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -58,15 +58,7 @@ export async function load(url, ctx, next) {
 }
 `));
 
-// The import map, as alias packages (see test-dom.mjs).
-for (const name of ['canvas', 'core', 'flow', 'host', 'wm', 'widgets', 'tiles', 'charts']) {
-    const dir = join(ROOT, 'node_modules', '@flexdesk', name);
-    if (existsSync(join(dir, 'index.js'))) continue;
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, 'package.json'), JSON.stringify(
-        { name: `@flexdesk/${name}`, version: '0.0.0-local-alias', type: 'module', main: 'index.js' }, null, 2));
-    writeFileSync(join(dir, 'index.js'), `export * from '../../../ui/vendor/flexdesk/${name}.js';\n`);
-}
+installFlexdeskAliases();
 
 // The HOST's page: another path, and no BugDesk config on it.
 const dom = new JSDOM('<!doctype html><html><body></body></html>', { pretendToBeVisual: true, url: 'http://host/app/' });

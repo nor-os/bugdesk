@@ -10,7 +10,7 @@ app alike. See `ui/index.html`'s `<link>`/`<script>` tags and its import map.
 
 | Library | Version | Licence | Copyright | Licence text |
 |---|---|---|---|---|
-| [FlexDesk](https://github.com/nor-os/FlexDesk) (`ui/vendor/flexdesk/`) | 0.14.1 | MIT | nor-os | `ui/vendor/flexdesk/LICENSE` |
+| [FlexDesk](https://github.com/nor-os/FlexDesk) (`ui/vendor/flexdesk/`) | 0.18.0 | MIT | nor-os | `ui/vendor/flexdesk/LICENSE` |
 | [Plotly.js](https://github.com/plotly/plotly.js) (`ui/vendor/plotly/`, loaded only when a dashboard opens) | 2.35.2 | MIT | Plotly, Inc. | `ui/vendor/plotly/LICENSE` |
 | [Material Symbols (Outlined)](https://github.com/google/material-design-icons) (`ui/vendor/material-symbols/`) | — | Apache-2.0 | Google LLC | upstream `LICENSE` |
 | [Marck Script](https://fonts.google.com/specimen/Marck+Script) (Latin subset, `ui/vendor/marck-script/`), the BugDesk wordmark | v22 | OFL-1.1 | Denis Masharov & Marck Fogel | `ui/vendor/marck-script/OFL.txt` |

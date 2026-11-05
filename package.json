@@ -15,7 +15,7 @@
   },
   "devDependencies": {
     "eslint": "^9.39.5",
-    "flexdesk": "^0.17.18",
+    "flexdesk": "^0.18.0",
     "globals": "^17.12.0",
     "jsdom": "^29.1.1"
   }

@@ -76,7 +76,7 @@
     /* ── Text ───────────────────────────────────────────────────── */
     --text-primary:   #e0e0e0;  /* primary body text */
     --text-secondary: #cccccc;  /* lighter secondary (e.g. tree-view rows) */
-    --text-body:      #d4d4d4;  /* base.css body default — between primary & secondary */
+    --text-body:      #d4d4d4;  /* the body default — between primary & secondary */
     --text-muted:     #888888;  /* de-facto canonical muted gray (268+ literal uses) */
     --text-dim:       #666666;
     --text-bright:    #ffffff;
@@ -109,12 +109,34 @@
     --color-danger-hover:   #d85858;
     --color-info:           #2196f3;
 
+    /* ── Diff viewer and commit graph (@flexdesk/git) ──────────── */
+    --twm-diff-add-bg: rgb(137 209 133 / 9%);
+    --twm-diff-add-fg: #89d185;
+    --twm-diff-del-bg: rgb(244 135 113 / 9%);
+    --twm-diff-del-fg: #f48771;
+    --twm-git-lane-0:  var(--accent-bright);
+    --twm-git-lane-1:  #73c991;
+    --twm-git-lane-2:  #e2b93d;
+    --twm-git-lane-3:  #cc6633;
+    --twm-git-lane-4:  #c586c0;
+    --twm-git-lane-5:  #f14c4c;
+    --twm-git-lane-6:  #4ec9b0;
+    --twm-git-lane-7:  #569cd6;
+
     /* ── Surface state overlays ────────────────────────────────── */
     --state-hover:    rgba(255, 255, 255, 0.05);
     --state-active:   rgba(255, 255, 255, 0.08);
     --state-selected: color-mix(in srgb, var(--accent-bright) 15%, transparent);  /* rgba(0, 122, 204, 0.15) */
     /* A DataTable row or cell that has just arrived flashes from this to transparent. */
     --twm-dt-new-bg:  color-mix(in srgb, var(--accent-bright) 22%, transparent);  /* rgba(0, 122, 204, 0.22) */
+
+    /* ── The page rail (chrome.rail: .twm-fl-bar, .twm-fl-item) ─── */
+    --twm-rail-width:       50px;
+    --twm-rail-item-height: 44px;
+    --twm-rail-icon-size:   22px;
+    --twm-rail-bg:      #333333;
+    --twm-rail-icon:    #9e9e9e;              /* an item at rest */
+    --twm-rail-icon-on: var(--text-bright);   /* hovered, and the active item with its bar */
 
     /* ── Overlay scrollbars (installOverlayScrollbar) ─────────── */
     --scrollbar-size:         6px;

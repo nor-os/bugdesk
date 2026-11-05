@@ -12,23 +12,15 @@
  */
 
 import assert from 'node:assert/strict';
-import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { JSDOM } from 'jsdom';
+import { installFlexdeskAliases } from './flexdesk-aliases.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const UI = join(ROOT, 'ui', 'js');
 
-// The import map, as alias packages (see test-dom.mjs).
-for (const name of ['canvas', 'core', 'flow', 'host', 'wm', 'widgets', 'tiles', 'charts']) {
-    const dir = join(ROOT, 'node_modules', '@flexdesk', name);
-    if (existsSync(join(dir, 'index.js'))) continue;
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, 'package.json'), JSON.stringify(
-        { name: `@flexdesk/${name}`, version: '0.0.0-local-alias', type: 'module', main: 'index.js' }, null, 2));
-    writeFileSync(join(dir, 'index.js'), `export * from '../../../ui/vendor/flexdesk/${name}.js';\n`);
-}
+installFlexdeskAliases();
 
 const dom = new JSDOM('<!doctype html><html><body></body></html>', { pretendToBeVisual: true, url: 'http://127.0.0.1/p/demo/' });
 const put = (key, value) => Object.defineProperty(globalThis, key, { value, writable: true, configurable: true });

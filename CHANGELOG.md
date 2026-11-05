@@ -14,7 +14,7 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   keyboard. The command-palette button moved to the right of the panel
   toggles, and the left and right panel toggles now show their own side.
 
-- **FlexDesk 0.17.18** (from 0.16.1), vendored with `npm run sync:flexdesk`.
+- **FlexDesk 0.18.0** (from 0.16.1), vendored with `npm run sync:flexdesk`.
   A dashboard tile's settings dialog reads FlexDesk 0.17's config schema
   (`key`, `description`); without that it showed no display settings at all.
 

@@ -12,16 +12,15 @@ import {
   tile_registry_exports
 } from "./chunk-FOOS3T5L.js";
 import {
-  ActionDropdown,
   SlideOutPanel
-} from "./chunk-MIW7D6WC.js";
+} from "./chunk-UKP22RUG.js";
 import {
+  ActionDropdown
+} from "./chunk-PAI2ZUWV.js";
+import {
+  openModal,
   showContextMenu
-} from "./chunk-7JI7HHSY.js";
-import {
-  modalHost,
-  openModal
-} from "./chunk-XJNADRGR.js";
+} from "./chunk-RKVYIXDC.js";
 import {
   buildHistogramTrace,
   buildLegendLayout,
@@ -36,13 +35,19 @@ import {
   purge,
   resize,
   strideDownsampleShared
-} from "./chunk-7OL6F2AM.js";
-import "./chunk-2Z2ENHR3.js";
+} from "./chunk-P74F6I6P.js";
+import "./chunk-U5GKJUOC.js";
+import "./chunk-VLOAI3HS.js";
 import {
+  fireEvent,
   isHexColor
-} from "./chunk-PGZ4EHSE.js";
+} from "./chunk-ZL3VKINP.js";
+import {
+  modalHost
+} from "./chunk-Q7BALEPX.js";
 import "./chunk-HNU6MM2B.js";
-import "./chunk-WUFLGETN.js";
+import "./chunk-WVFGV5FT.js";
+import "./chunk-QXAOTGCC.js";
 import {
   __toCommonJS
 } from "./chunk-JYWURG5T.js";
@@ -811,7 +816,7 @@ var TileBase = class {
       config: this.config,
       schema: this.getConfigSchema()
     });
-    this.element?.dispatchEvent(new CustomEvent("tile:config-request", {
+    if (this.element) fireEvent(this.element, "tile:config-request", {
       bubbles: true,
       detail: {
         tileId: this.id,
@@ -819,7 +824,7 @@ var TileBase = class {
         config: this.config,
         schema: this.getConfigSchema()
       }
-    }));
+    });
   }
   /**
    * Handle remove button click.
@@ -828,13 +833,13 @@ var TileBase = class {
    */
   _onRemoveClick(event) {
     const removeBtn = this.element?.querySelector(".tile-remove-btn");
-    this.element?.dispatchEvent(new CustomEvent("tile:remove-request", {
+    if (this.element) fireEvent(this.element, "tile:remove-request", {
       bubbles: true,
       detail: {
         tileId: this.id,
         anchorElement: removeBtn
       }
-    }));
+    });
   }
   /**
    * Set the title displayed in the header.

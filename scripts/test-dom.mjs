@@ -14,26 +14,15 @@
  */
 
 import assert from 'node:assert/strict';
-import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { JSDOM } from 'jsdom';
+import { installFlexdeskAliases } from './flexdesk-aliases.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const UI = join(ROOT, 'ui', 'js');
 
-// Node has no import map; write the equivalent as alias packages. Same files
-// ui/index.html maps `@flexdesk/*` to.
-for (const name of ['canvas', 'core', 'flow', 'host', 'wm', 'widgets']) {
-    const dir = join(ROOT, 'node_modules', '@flexdesk', name);
-    if (existsSync(join(dir, 'index.js'))) continue;
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, 'package.json'), JSON.stringify(
-        { name: `@flexdesk/${name}`, version: '0.0.0-local-alias', type: 'module', main: 'index.js' }, null, 2));
-    writeFileSync(join(dir, 'index.js'),
-        // Relative, so the alias works for Linux and Windows node alike.
-        `export * from '../../../ui/vendor/flexdesk/${name}.js';\n`);
-}
+installFlexdeskAliases();
 
 // A real URL, not the default "about:blank": jsdom refuses localStorage on an
 // opaque origin, and the settings store reads it at import time.

@@ -14,9 +14,10 @@
  */
 
 import assert from 'node:assert/strict';
-import { mkdirSync, readdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { installFlexdeskAliases } from './flexdesk-aliases.mjs';
 
 import {
     BARE_KEY_RECORD, BARE_KEY_VALUES,
@@ -28,16 +29,7 @@ const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const UI = pathToFileURL(join(ROOT, 'ui', 'js', 'ticketdesk')).href + '/';
 const TILING = pathToFileURL(join(ROOT, 'ui', 'js', 'tiling')).href + '/';
 
-for (const name of ['core', 'wm', 'widgets']) {
-    const dir = join(ROOT, 'node_modules', '@flexdesk', name);
-    if (existsSync(join(dir, 'index.js'))) continue;
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, 'package.json'),
-        JSON.stringify({ name: `@flexdesk/${name}`, version: '0.0.0-local-alias', type: 'module', main: 'index.js' }, null, 2));
-    writeFileSync(join(dir, 'index.js'),
-        // Relative, so the alias works for Linux and Windows node alike.
-        `export * from '../../../ui/vendor/flexdesk/${name}.js';\n`);
-}
+installFlexdeskAliases();
 
 // The modules touch `localStorage` and `window` at import time.
 const _store = new Map();

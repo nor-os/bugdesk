@@ -5,23 +5,25 @@ import {
 import {
   TAB_LEVELS,
   createTabs
-} from "./chunk-REJ5HLIM.js";
+} from "./chunk-HYJYYEPK.js";
 import {
+  openForm,
   showContextMenu
-} from "./chunk-7JI7HHSY.js";
+} from "./chunk-RKVYIXDC.js";
 import {
-  openForm
-} from "./chunk-XJNADRGR.js";
-import {
-  ManagedWindow,
   isRowActivation
-} from "./chunk-PGZ4EHSE.js";
+} from "./chunk-VLOAI3HS.js";
+import {
+  ManagedWindow
+} from "./chunk-ZL3VKINP.js";
+import "./chunk-Q7BALEPX.js";
 import "./chunk-HNU6MM2B.js";
 import {
   NotebookTabBar
-} from "./chunk-7U4IB65H.js";
+} from "./chunk-LLBJ2SJH.js";
 import "./chunk-N7HC3ADV.js";
-import "./chunk-WUFLGETN.js";
+import "./chunk-WVFGV5FT.js";
+import "./chunk-QXAOTGCC.js";
 import "./chunk-JYWURG5T.js";
 
 // src/tiling/bottom_panel_tabs.js
@@ -166,7 +168,7 @@ function keyboardShortcutsTopic(shortcuts = KEYMAP_SHORTCUTS) {
     html: `<table class="help-shortcuts"><thead><tr><th>Keys</th><th>Action</th></tr></thead><tbody>${rows}</tbody></table>`
   };
 }
-var DEFAULT_NAV_SELECTOR = ".twm-global-top-bar .twm-bar-center.twm-top-nav .twm-top-nav__btn";
+var DEFAULT_NAV_SELECTOR = ".twm-global-top-bar .twm-bar-center.twm-top-nav .twm-top-nav__btn, .twm-fl-bar .twm-fl-item[data-kind]";
 var DIRS = ["left", "right", "up", "down"];
 var _where = (d) => d === "up" || d === "down" ? d : `on the ${d}`;
 var ACTIONS = {
@@ -242,10 +244,10 @@ function _action(name) {
   if (m[1] === "nav") {
     return {
       label: `Jump to top-nav page ${n + 1}`,
-      // The selector is a CONFIG option, not a constant. An embedder that
-      // moves its sections out of the top bar — into an icon rail, say —
-      // would otherwise find F1..F8 silently doing nothing. Passing
-      // `navSelector` is how such an embedder keeps the keys.
+      // The default finds the top bar's buttons and the page rail's. An
+      // embedder that draws its page buttons in markup of its own would
+      // otherwise find F1..F8 silently doing nothing. Passing `navSelector`
+      // is how such an embedder keeps the keys.
       run: ({ navSelector }) => {
         const btns = document.querySelectorAll(navSelector || DEFAULT_NAV_SELECTOR);
         if (n >= btns.length) return false;
@@ -2393,11 +2395,11 @@ var DesktopManager = class _DesktopManager {
    * nothing, and an app can put almost anything in a title.
    *
    * And strict is not hostile to an old blob. A key the loader has always given
-   * a default may be absent: a desktop's `id`, `label` and `panels`, the keys
-   * later releases added (`panelShares`, `group`, `fixed`), and a leaf's `tabs`
-   * and `pageTabs`. What `serialize()` has always written and the loader cannot
-   * do without (`desktops`, a desktop's `tree`, a split's `dir`, `children` and
-   * `sizes`) may not.
+   * a default may be absent: a desktop's `id`, `label`, `tree` and `panels`, the
+   * keys later releases added (`panelShares`, `group`, `fixed`), and a leaf's
+   * `tabs` and `pageTabs`. What `serialize()` has always written and the loader
+   * cannot do without (`desktops`, a split's `dir`, `children` and `sizes`) may
+   * not.
    */
   static deserialize(blob, { seed, panelDefaults = null } = {}) {
     const m = new _DesktopManager({ seed, panelDefaults });
@@ -2412,7 +2414,7 @@ var DesktopManager = class _DesktopManager {
       const at = `desktops[${i}]`;
       _expect2(_isRecord2(raw), at, "a desktop, an object", raw);
       _expect2(
-        raw.tree === null || _isRecord2(raw.tree) && _isRecord2(raw.tree.root),
+        raw.tree == null || _isRecord2(raw.tree) && _isRecord2(raw.tree.root),
         `${at}.tree`,
         "{ root }, or null for an empty desktop",
         raw.tree
@@ -2626,6 +2628,14 @@ function createTaxonomy({ kinds, root } = {}) {
         `createTaxonomy: '${kind}' is both a top-nav kind and owned by one`
       );
     }
+    if (def.railPin !== void 0) {
+      if (def.railPin !== "bottom") {
+        throw new TypeError(`createTaxonomy: '${kind}'.railPin must be 'bottom'`);
+      }
+      if (!def.isTopNav) {
+        throw new Error(`createTaxonomy: '${kind}' has a railPin but is not a top-nav kind`);
+      }
+    }
     if (def.panels !== void 0) {
       if (!def.panels || typeof def.panels !== "object" || Array.isArray(def.panels)) {
         throw new TypeError(`createTaxonomy: '${kind}'.panels must be an object`);
@@ -2729,7 +2739,8 @@ function createTaxonomy({ kinds, root } = {}) {
     kind,
     label: m.shortLabel || m.label,
     longLabel: m.label,
-    icon: m.icon
+    icon: m.icon,
+    railPin: m.railPin ?? null
   }));
   const isSingle = (kind) => {
     const s = _kinds[kind]?.single;
@@ -4945,7 +4956,7 @@ var TileRenderer = class {
   /** The rectangle a release would fill.
    *
    *  IT IS THE WINDOW DROP'S OWN PREVIEW ELEMENT — same two classes, same
-   *  stylesheet rules (`css/base.css`, `.twm-snap-preview`) — so a tab drop
+   *  stylesheet rules (`css/flexdesk.css`, `.twm-snap-preview`) — so a tab drop
    *  and a window drop cannot come to disagree about what a drop looks like.
    *  `--viewport` is what makes `position: fixed` apply, and that is required
    *  rather than cosmetic: the rectangle came from `getBoundingClientRect` on
@@ -9683,9 +9694,9 @@ async function createShell({
   desktopBar = {},
   menuBar: menuBarCfg = null,
   chrome = {},
-  // An embedder that moved its sections out of the top bar — into an icon
-  // rail, say — passes the selector its own buttons match, and F1..F8 keep
-  // working. Omitted, the default top-bar selector applies.
+  // An embedder that draws its page buttons in markup of its own passes the
+  // selector they match, and F1..F8 keep working. Omitted, the default finds
+  // `chrome.topNav`'s buttons and `chrome.rail`'s.
   navSelector = null,
   keymap = null
 } = {}) {
@@ -9694,6 +9705,9 @@ async function createShell({
   }
   if (!taxonomy) throw new Error("createShell: a taxonomy is required");
   if (!entities) throw new Error("createShell: an entity catalog is required");
+  if (chrome.topNav && chrome.rail) {
+    throw new TypeError("createShell: `chrome.topNav` and `chrome.rail` both paint the pages; give one");
+  }
   if (chrome.menuBar && !menuBarCfg?.menus) {
     throw new TypeError("createShell: `chrome.menuBar` needs `menuBar: { menus }`");
   }
@@ -9717,6 +9731,7 @@ async function createShell({
   const registry = createContentRegistry(content);
   let wm = null;
   let topNavEl = null;
+  let rail = null;
   let desktopsEl = null;
   let toggles = null;
   const syncChrome = () => {
@@ -9724,6 +9739,7 @@ async function createShell({
     syncPanelToggles(toggles, wm);
     syncDesktopBar(desktopsEl, wm);
     syncTopNav(topNavEl, wm);
+    rail?.sync();
   };
   wm = new WindowManager({
     rootEl: root,
@@ -9776,7 +9792,9 @@ async function createShell({
   });
   const disposeKeymap = installKeymap({ wm, palette, navSelector, bindings, logger });
   const paletteBtn = mountPaletteButton(chrome.paletteButton, palette);
-  topNavEl = mountTopNav(chrome.topNav, taxonomy, wm);
+  const topNav = mountTopNav(chrome.topNav, taxonomy, wm);
+  topNavEl = topNav?.el ?? null;
+  rail = chrome.rail ? mountPageRail(chrome.rail, { wm }) : null;
   desktopsEl = mountDesktopBar(chrome.desktops, wm, desktopBar || {});
   const zoom = mountZoomControl(chrome.zoom, { root, host });
   if (zoom) await zoom.ready;
@@ -9795,6 +9813,7 @@ async function createShell({
     chrome: Object.freeze({
       paletteButtonEl: paletteBtn,
       topNavEl,
+      railEl: rail?.el ?? null,
       desktopsEl,
       panelToggles: toggles,
       // `get`/`set` so an embedder can drive the zoom from its own settings
@@ -9835,6 +9854,14 @@ async function createShell({
       } catch {
       }
       try {
+        rail?.dispose();
+      } catch {
+      }
+      try {
+        topNav?.dispose();
+      } catch {
+      }
+      try {
         menuBar?.dispose();
       } catch {
       }
@@ -9858,21 +9885,81 @@ function mountTopNav(hostEl, taxonomy, wm) {
         `;
     hostEl.appendChild(btn);
   }
-  hostEl.addEventListener("click", (e) => {
+  const onClick = (e) => {
     const btn = e.target.closest("[data-kind]");
     if (!btn) return;
     wm.openInPrimary(btn.dataset.kind);
-  });
-  return hostEl;
+  };
+  hostEl.addEventListener("click", onClick);
+  return {
+    el: hostEl,
+    dispose: () => {
+      hostEl.removeEventListener("click", onClick);
+      hostEl.replaceChildren();
+    }
+  };
 }
-function syncTopNav(hostEl, wm) {
-  if (!hostEl) return;
+function activePageKind(wm) {
   const tree = wm.desktops.active().tree;
   const primaryId = tree.primaryLeafId();
   const primaryKind = primaryId ? tree.get(primaryId)?.content?.kind : null;
-  const topNavKind = wm.taxonomy.topNavFor(primaryKind) || primaryKind;
+  return wm.taxonomy.topNavFor(primaryKind) || primaryKind;
+}
+function syncTopNav(hostEl, wm) {
+  if (!hostEl) return;
+  const topNavKind = activePageKind(wm);
   hostEl.querySelectorAll("[data-kind]").forEach((b) => {
     b.classList.toggle("twm-top-nav__btn--on", b.dataset.kind === topNavKind);
+  });
+}
+function mountPageRail(hostEl, { wm, activeKind = activePageKind, decorate = null } = {}) {
+  if (!hostEl || typeof hostEl.appendChild !== "function") {
+    throw new TypeError("mountPageRail: `hostEl` must be an element");
+  }
+  if (!wm) throw new TypeError("mountPageRail: `wm` is required");
+  hostEl.classList.add("twm-fl-bar");
+  if (!hostEl.hasAttribute("aria-label")) hostEl.setAttribute("aria-label", "Pages");
+  const entries = wm.taxonomy.topNavEntries();
+  const buttons = [
+    ...entries.filter((k) => k.railPin !== "bottom"),
+    ...entries.filter((k) => k.railPin === "bottom")
+  ].map((k) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "twm-fl-item twm-has-tooltip";
+    btn.classList.toggle("twm-fl-item--bottom", k.railPin === "bottom");
+    btn.dataset.kind = k.kind;
+    btn.dataset.tooltip = k.longLabel;
+    btn.setAttribute("aria-label", k.longLabel);
+    const glyph = document.createElement("span");
+    glyph.className = "material-symbols-outlined";
+    glyph.setAttribute("aria-hidden", "true");
+    glyph.textContent = k.icon;
+    btn.appendChild(glyph);
+    decorate?.(btn, k);
+    return btn;
+  });
+  hostEl.replaceChildren(...buttons);
+  const onClick = (e) => {
+    const btn = e.target.closest("[data-kind]");
+    if (btn) wm.openInPrimary(btn.dataset.kind);
+  };
+  hostEl.addEventListener("click", onClick);
+  return Object.freeze({
+    el: hostEl,
+    sync: () => {
+      const active = activeKind(wm);
+      for (const btn of buttons) {
+        const on = btn.dataset.kind === active;
+        btn.classList.toggle("twm-fl-item--on", on);
+        if (on) btn.setAttribute("aria-current", "page");
+        else btn.removeAttribute("aria-current");
+      }
+    },
+    dispose: () => {
+      hostEl.removeEventListener("click", onClick);
+      hostEl.replaceChildren();
+    }
   });
 }
 function mountPaletteButton(hostEl, palette) {
@@ -10220,6 +10307,7 @@ export {
   mountLandingActions,
   mountLandingShell,
   mountNavPanel,
+  mountPageRail,
   mountTileBreadcrumb,
   mountZoomControl,
   openTileTabMenu,

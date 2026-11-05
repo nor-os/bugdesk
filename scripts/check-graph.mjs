@@ -25,6 +25,7 @@ const IMPORT_MAP = {
     '@flexdesk/charts': `${UI}/vendor/flexdesk/charts.js`,
     '@flexdesk/core': `${UI}/vendor/flexdesk/core.js`,
     '@flexdesk/flow': `${UI}/vendor/flexdesk/flow.js`,
+    '@flexdesk/git': `${UI}/vendor/flexdesk/git.js`,
     '@flexdesk/host': `${UI}/vendor/flexdesk/host.js`,
     '@flexdesk/tiles': `${UI}/vendor/flexdesk/tiles.js`,
     '@flexdesk/wm': `${UI}/vendor/flexdesk/wm.js`,
