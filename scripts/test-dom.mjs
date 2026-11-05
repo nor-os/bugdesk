@@ -265,6 +265,10 @@ console.log('\nChoice control');
 
 const { attachSelect } = await import(pathToFileURL(join(UI, 'ticketdesk', 'select_field.js')).href);
 
+// A list row by its words: FlexDesk's rows carry their value in no attribute.
+const selectRow = (label) => [...document.querySelectorAll('.bd-select-panel [role="option"]')]
+    .find((el) => el.querySelector('.twm-option-list__label').textContent === label);
+
 const mountSelect = (opts) => {
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -287,11 +291,11 @@ await t('picking an option updates the carrier and fires change', async () => {
     let changes = 0;
     // Delegated on the container, exactly as the masks listen.
     host.addEventListener('change', (e) => { if (e.target.matches('[data-f]')) changes++; });
-    host.querySelector('.bd-sel__button').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    host.querySelector('.twm-select').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
     await tick();
-    const panel = document.querySelector('.bd-sel__panel');
+    const panel = document.querySelector('.bd-select-panel');
     assert.ok(panel, 'the popup did not open');
-    panel.querySelector('[data-value="c"]').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    selectRow('c').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
     await tick();
     assert.equal(handle.value(), 'c');
     assert.equal(host.querySelector('[data-f="thing"]').value, 'c');
@@ -301,26 +305,26 @@ await t('picking an option updates the carrier and fires change', async () => {
 
 await t('the popup closes after a pick', async () => {
     const { host, cleanup } = mountSelect({ options: ['a', 'b'], value: 'a' });
-    host.querySelector('.bd-sel__button').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    host.querySelector('.twm-select').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
     await tick();
-    document.querySelector('.bd-sel__panel [data-value="b"]')
+    selectRow('b')
         .dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
     await tick();
-    assert.equal(document.querySelector('.bd-sel__panel'), null, 'the popup stayed open');
+    assert.equal(document.querySelector('.bd-select-panel'), null, 'the popup stayed open');
     cleanup();
 });
 
 await t('allowNew offers the typed value, and picking it commits', async () => {
     const { host, handle, cleanup } = mountSelect({ options: ['foundation'], value: '', allowNew: true });
-    host.querySelector('.bd-sel__button').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    host.querySelector('.twm-select').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
     await tick();
-    const panel = document.querySelector('.bd-sel__panel');
-    const search = panel.querySelector('.bd-sel__search');
+    const panel = document.querySelector('.bd-select-panel');
+    const search = panel.querySelector('input');
     assert.ok(search, 'allowNew did not render a search box');
     search.value = 'hardening';
     search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
     await tick();
-    const create = panel.querySelector('[data-new]');
+    const create = selectRow('Use “hardening”');
     assert.ok(create, 'no "use this new value" row appeared');
     create.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
     await tick();
@@ -330,10 +334,10 @@ await t('allowNew offers the typed value, and picking it commits', async () => {
 
 await t('WITHOUT allowNew a typed value cannot be committed', async () => {
     const { host, cleanup } = mountSelect({ options: ['a', 'b'], value: 'a' });
-    host.querySelector('.bd-sel__button').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    host.querySelector('.twm-select').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
     await tick();
-    const panel = document.querySelector('.bd-sel__panel');
-    assert.equal(panel.querySelector('[data-new]'), null,
+    const panel = document.querySelector('.bd-select-panel');
+    assert.equal(panel.querySelectorAll('[role="option"]').length, 2,
         'a value could be invented in a closed vocabulary');
     cleanup();
 });
@@ -341,15 +345,15 @@ await t('WITHOUT allowNew a typed value cannot be committed', async () => {
 await t('the search box filters', async () => {
     const many = ['alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta', 'eta', 'theta'];
     const { host, cleanup } = mountSelect({ options: many, value: 'alpha' });
-    host.querySelector('.bd-sel__button').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    host.querySelector('.twm-select').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
     await tick();
-    const panel = document.querySelector('.bd-sel__panel');
-    const search = panel.querySelector('.bd-sel__search');
+    const panel = document.querySelector('.bd-select-panel');
+    const search = panel.querySelector('input');
     assert.ok(search, 'a long list rendered no search box');
     search.value = 'et';
     search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
     await tick();
-    const shown = [...panel.querySelectorAll('[data-value]')].map((el) => el.dataset.value);
+    const shown = [...panel.querySelectorAll('.twm-option-list__label')].map((el) => el.textContent);
     // Matches anywhere, not just the prefix — a datalist's prefix-only matching
     // is precisely what this control replaced.
     assert.deepEqual(shown, ['beta', 'zeta', 'eta', 'theta']);
@@ -1818,17 +1822,17 @@ await t('Auto-save is yours: chosen in your profile, and the project default cle
     document.body.appendChild(el);
     const cleanup = mountAutosaveSetting(el);
     assert.match(el.querySelector('.settings-page__setting-desc').textContent, /Yours alone/);
-    const pick = async (value) => {
-        el.querySelector('.bd-sel__button').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    const pick = async (at) => {
+        el.querySelector('.twm-select').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
         await tick();
-        document.querySelector(`.bd-sel__panel [data-value="${value}"]`)
+        document.querySelectorAll('.bd-select-panel [role="option"]')[at]
             .dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
         await tick(); await tick();
     };
-    await pick('debounce');
+    await pick(2);
     assert.deepEqual(posts.at(-1), { path: '/api/user/settings', body: { autosave: 'debounce', autosaveSeconds: 2 } });
     assert.deepEqual(autosaveMode(), { mode: 'debounce', seconds: 2 }, 'a record opened now does not auto-save');
-    await pick('project');
+    await pick(0);
     assert.deepEqual(posts.at(-1).body, { autosave: null, autosaveSeconds: null });
     assert.equal(autosaveMode().mode, 'off');
     cleanup();

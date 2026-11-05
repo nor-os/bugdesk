@@ -358,7 +358,6 @@ export async function mountWorkflowPage(el, { eventBus = null, actions = null } 
         handles.push(attachSelect($('detail').querySelector('[data-k="action-flow"]'), {
             value: a.flow || '',
             allowNew: true,
-            placeholder: 'Find a flow, or name a new one',
             emptyLabel: 'No flow',
             newLabel: (typed) => `New flow “${typed}”`,
             optionsFor: () => [

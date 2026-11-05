@@ -654,7 +654,7 @@
    it takes the browser's own (~13.3px Arial), which is why this sat visibly
    larger than the Assignee control beside it. It carries .ea-tin too, but that
    is scoped to .td-page / .td-modal / .td-nav / .td-rpanel; restated here so the
-   control is right wherever it is mounted, and matched to .bd-sel__button below
+   control is right wherever it is mounted, and matched to .bd-select below
    so the two rows of the same form are the same size. */
 .ea-picker__display {
     flex: 1;
@@ -666,85 +666,16 @@
 .ea-picker__btn { flex: 0 0 auto; }
 .ea-picker__btn .material-symbols-outlined { font-size: 15px; }
 
-/* ── Custom choice control (select_field.js) ─────────────────────────
-   Replaces `<select>`, which the browser draws — so it ignores the app's
-   tokens, cannot carry an icon per option, and cannot be typed into. */
+/* ── Form selects (select_field.js, on FlexDesk's createSelect) ───────
+   The size of the form inputs beside them; the list stands above the app's own
+   dialogs (.td-modal-backdrop, 11000), which FlexDesk's tiers do not know of. */
 
-.bd-sel { display: block; }
-.bd-sel__button {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    width: 100%;
+.bd-select {
     min-height: 22px;
     padding: 2px 6px;
-    font: inherit;
     font-size: var(--ea-font-body, 11px);
-    text-align: left;
-    color: var(--text-primary, #e0e0e0);
-    background: var(--surface-3, #3c3c3c);
-    border: 1px solid var(--ea-border, #333);
-    border-radius: 2px;
-    cursor: pointer;
 }
-.bd-sel__button:hover { border-color: var(--border-strong, #383838); background: var(--surface-3, #3c3c3c); }
-.bd-sel__button:focus-visible { outline: 1px solid var(--accent-bright, #007acc); outline-offset: -1px; }
-.bd-sel__label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bd-sel__label--muted { color: var(--text-dim, #666); }
-.bd-sel__icon { font-size: 14px; width: 14px; flex: 0 0 14px; color: var(--text-muted, #888); }
-.bd-sel__caret { font-size: 15px; color: var(--text-muted, #888); flex: 0 0 auto; }
-
-.bd-sel__panel {
-    position: fixed;
-    z-index: 11500;         /* above every window and the filter editor overlay */
-    max-height: 320px;
-    display: flex;
-    flex-direction: column;
-    background: var(--surface-1, #252526);
-    border: 1px solid var(--border-strong, #383838);
-    border-radius: var(--radius-md, 6px);
-    box-shadow: 0 12px 32px rgb(0 0 0 / 50%);
-    overflow: hidden;
-}
-.bd-sel__searchrow {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 8px;
-    border-bottom: 1px solid var(--border-subtle, #2a2a2a);
-}
-.bd-sel__searchrow .material-symbols-outlined { font-size: 15px; color: var(--text-muted, #888); }
-.bd-sel__search {
-    flex: 1;
-    font: inherit;
-    font-size: var(--font-size-sm, 12px);
-    color: var(--text-primary, #e0e0e0);
-    background: transparent;
-    border: none;
-    outline: none;
-}
-.bd-sel__list {
-    flex: 1 1 auto;
-    min-height: 0;
-    margin: 0;
-    padding: 3px 0;
-    list-style: none;
-    overflow-y: auto;
-}
-.bd-sel__opt {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 3px 9px;
-    font-size: var(--font-size-sm, 12px);
-    cursor: pointer;
-}
-.bd-sel__opt--on { background: var(--surface-2, #2d2d2d); }
-.bd-sel__opt--current .bd-sel__optlabel { font-weight: var(--font-weight-semibold, 600); }
-.bd-sel__optlabel { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bd-sel__hint { font-size: 10px; color: var(--text-dim, #666); }
-.bd-sel__opt--new { border-top: 1px solid var(--border-subtle, #2a2a2a); color: var(--color-success, #3fb950); }
-.bd-sel__empty { padding: 8px 9px; color: var(--text-dim, #666); font-style: italic; font-size: var(--font-size-sm, 12px); }
+.bd-select-panel { z-index: 11500; }
 
 /* ── External-change banner (live.js) ────────────────────────────────
    Shown only when the record on screen changed on disk AND the page holds
@@ -879,12 +810,44 @@ tr[draggable="true"]:active,
 .bd-picker__filters--more { gap: 12px; flex-wrap: wrap; }
 .bd-picker__facet { display: inline-flex; align-items: center; gap: 6px; min-width: 150px; }
 .bd-picker__facet > label { color: var(--text-secondary, #9a9a9a); font-size: var(--font-size-xs, 11px); }
-.bd-picker__facet .bd-sel { flex: 1; min-width: 110px; }
+.bd-picker__facet .twm-select-field { flex: 1; min-width: 110px; }
 
-/* The link target's in-place search (attachRecordTypeahead): the dropdown
-   panel's look, with a finished record dimmed rather than hidden. */
-.bd-typeahead .bd-sel__optlabel b { margin-right: 6px; }
-.bd-typeahead .bd-typeahead__closed { opacity: 0.55; }
+/* The link target's in-place search (attachRecordTypeahead), with a finished
+   record dimmed rather than hidden. */
+.bd-typeahead {
+    position: fixed;
+    z-index: 11500;
+    max-height: 320px;
+    display: flex;
+    flex-direction: column;
+    background: var(--surface-1, #252526);
+    border: 1px solid var(--border-strong, #383838);
+    border-radius: var(--radius-md, 6px);
+    box-shadow: 0 12px 32px rgb(0 0 0 / 50%);
+    overflow: hidden;
+}
+.bd-typeahead__list {
+    flex: 1 1 auto;
+    min-height: 0;
+    margin: 0;
+    padding: 3px 0;
+    list-style: none;
+    overflow-y: auto;
+}
+.bd-typeahead__opt {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 9px;
+    font-size: var(--font-size-sm, 12px);
+    cursor: pointer;
+}
+.bd-typeahead__opt--on { background: var(--surface-2, #2d2d2d); }
+.bd-typeahead__icon { font-size: 14px; width: 14px; flex: 0 0 14px; color: var(--text-muted, #888); }
+.bd-typeahead__label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bd-typeahead__label b { margin-right: 6px; }
+.bd-typeahead__hint { font-size: 10px; color: var(--text-dim, #666); }
+.bd-typeahead__closed { opacity: 0.55; }
 
 /* ── Record types (schema_editor.js) ─────────────────────────────────
    Types down the left, the chosen type's fields, hidden built-ins and
@@ -1050,7 +1013,7 @@ tr[draggable="true"]:active,
 .bd-flowedit__name input { flex: 0 1 360px; }
 /* A row's flow: the picker, and the button that opens the chosen flow (STORY-0028). */
 .bd-workflow__flowcell { display: flex; align-items: center; gap: 4px; min-width: 0; }
-.bd-workflow__flowcell .bd-sel { flex: 1 1 auto; min-width: 0; }
+.bd-workflow__flowcell .twm-select-field { flex: 1 1 auto; min-width: 0; }
 .bd-workflow__flowedit { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; border: 0; background: none; color: var(--text-secondary, #9a9a9a); cursor: pointer; }
 .bd-workflow__flowedit:hover:not(:disabled) { color: var(--text-primary, #ddd); }
 .bd-workflow__flowedit:disabled { opacity: .35; cursor: default; }

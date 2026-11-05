@@ -364,7 +364,7 @@ export function openRecordPicker({
 
         const onKey = (e) => {
             // A facet dropdown that is open answers its own keys (select_field.js).
-            if (document.querySelector('.bd-sel__panel')) return;
+            if (facetSelects.some((s) => s.isOpen())) return;
             if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(null); }
             else if (e.key === 'ArrowDown') { e.preventDefault(); cursor++; render(); }
             else if (e.key === 'ArrowUp') { e.preventDefault(); cursor--; render(); }
@@ -529,8 +529,8 @@ export function attachRecordTypeahead(input, { stores, selfStore, exclude = null
         if (!results.length) { close(); return; }
         if (!panel) {
             panel = document.createElement('div');
-            panel.className = 'bd-sel__panel bd-typeahead';
-            panel.innerHTML = '<ul class="bd-sel__list" role="listbox"></ul>';
+            panel.className = 'bd-typeahead';
+            panel.innerHTML = '<ul class="bd-typeahead__list" role="listbox"></ul>';
             document.body.appendChild(panel);
             window.addEventListener('scroll', onScroll, true);
             // mousedown, not click: a click lands after the input's blur closed us.
@@ -544,11 +544,11 @@ export function attachRecordTypeahead(input, { stores, selfStore, exclude = null
         const r = input.getBoundingClientRect();
         Object.assign(panel.style, { left: `${r.left}px`, top: `${r.bottom + 2}px`, minWidth: `${Math.max(r.width, 320)}px` });
         panel.querySelector('ul').innerHTML = results.map((row, n) => `
-            <li class="bd-sel__opt${n === cursor ? ' bd-sel__opt--on' : ''}${row.closed ? ' bd-typeahead__closed' : ''}"
+            <li class="bd-typeahead__opt${n === cursor ? ' bd-typeahead__opt--on' : ''}${row.closed ? ' bd-typeahead__closed' : ''}"
                 role="option" aria-selected="${n === cursor}" data-pick="${n}">
-                <span class="material-symbols-outlined bd-sel__icon">${esc(row.icon)}</span>
-                <span class="bd-sel__optlabel"><b class="td-mono">${esc(row.label)}</b> ${esc(row.title)}</span>
-                <span class="bd-sel__hint">${esc(row.status)}</span>
+                <span class="material-symbols-outlined bd-typeahead__icon">${esc(row.icon)}</span>
+                <span class="bd-typeahead__label"><b class="td-mono">${esc(row.label)}</b> ${esc(row.title)}</span>
+                <span class="bd-typeahead__hint">${esc(row.status)}</span>
             </li>`).join('');
     };
 
