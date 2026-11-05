@@ -3938,6 +3938,18 @@ console.log('\nBottom panel: Changes and Alerts');
         assert.equal(rd.changeSummary('', after, 'new'), 'new');
     });
 
+    await t('a change to the body\'s final newline is a change', async () => {
+        const { computeLineDiff } = await import('@flexdesk/git');
+        const rec = (body) => `---\na: 1\n---\n${body}`;
+        assert.equal(rd.changeSummary(rec('x'), rec('x\n'), 'modified'), '+1 line');
+        assert.equal(rd.changeSummary(rec('x\n'), rec('x'), 'modified'), '−1 line');
+        assert.equal(rd.changeSummary(rec('x\n'), rec('x\n'), 'modified'), 'no change');
+        assert.equal(rd.changeSummary('---\na: 1\n---', '---\na: 1\n---\n', 'modified'), '+1 line');
+        const data = rd.recordDiffData({ before: rec('x'), after: rec('x\n'), diff: '' });
+        const lines = computeLineDiff(data.before, data.after, { beforeStart: data.beforeStart, afterStart: data.afterStart });
+        assert.deepEqual(lines.filter((l) => l.kind === 'add').map((l) => [l.newLine, l.text]), [[5, '']]);
+    });
+
     await t('the Changes pane groups by store, commits only the ticked files, and opens on Fields', async () => {
         const posted = [];
         const files = [

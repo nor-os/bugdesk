@@ -66,6 +66,11 @@ export function fieldChanges(before, after) {
     return out;
 }
 
+/** A body as the text to compare. Every line keeps its line end, so the empty last
+ *  line a final newline leaves in the body is a line like any other, and adding or
+ *  removing that newline is a change. */
+const bodyText = (body) => body.map((line) => `${line}\n`).join('');
+
 /**
  * What the diff viewer draws for one record: the two bodies, numbered as in the
  * file, and the changed fields.
@@ -75,7 +80,7 @@ export function recordDiffData({ before, after, diff }) {
     const A = splitRecord(before);
     const B = splitRecord(after);
     return {
-        before: A.body.join('\n'), after: B.body.join('\n'),
+        before: bodyText(A.body), after: bodyText(B.body),
         beforeStart: A.bodyStart, afterStart: B.bodyStart,
         diff, fields: fieldChanges(before, after),
     };
@@ -88,7 +93,7 @@ export function changeSummary(before, after, status) {
     const parts = [];
     const f = fieldChanges(before, after).length;
     if (f) parts.push(`${f} field${f === 1 ? '' : 's'}`);
-    const lines = computeLineDiff(splitRecord(before).body.join('\n'), splitRecord(after).body.join('\n'), { context: 0 });
+    const lines = computeLineDiff(bodyText(splitRecord(before).body), bodyText(splitRecord(after).body), { context: 0 });
     if (lines === null) parts.push('text');
     else {
         const { added, removed } = diffStats(lines);
