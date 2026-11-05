@@ -16,8 +16,7 @@
 import {
     RESOLUTIONS, customFilterFields, isFinished, isSnoozed, markHiddenFilterFields, snoozeConfigured, storeStatuses,
 } from './schema.js';
-import { emptyFilter } from '@flexdesk/widgets';
-import { createFilterModel } from './filter_engine.js';
+import { createFilterModel, FILTER_ICONS, emptyExpr } from './filter_engine.js';
 import {
     deleteFilter as storeDelete, duplicateFilter as storeDuplicate,
     getFilter as storeGet, listFilters as storeList,
@@ -25,7 +24,7 @@ import {
 } from './filter_store.js';
 import { ASSIGNEES, HUMAN_AUTHOR, AGENT_AUTHOR } from './data.js';
 
-export { loadFilters, onFiltersChanged };
+export { FILTER_ICONS, emptyExpr, loadFilters, onFiltersChanged };
 
 export const SCOPE = 'bugs';
 
@@ -146,7 +145,7 @@ export const BUILTIN_FILTERS = [
             ...(snoozeConfigured('bugs') ? [{ kind: 'clause', field: 'snoozed', op: 'is', value: 'no' }] : []),
         ] },
     },
-    { key: 'all', label: 'All Bugs', icon: 'inbox', builtin: true, expr: emptyFilter() },
+    { key: 'all', label: 'All Bugs', icon: 'inbox', builtin: true, expr: emptyExpr() },
     {
         key: 'open', label: 'Open', icon: 'fiber_new', builtin: true,
         expr: { kind: 'group', op: 'AND', children: [{ kind: 'clause', field: 'status', op: 'is', value: 'open' }] },

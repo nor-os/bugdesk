@@ -30,8 +30,7 @@
  * worse than one offering none. `options` is a getter for exactly that reason.
  */
 
-import { emptyFilter } from '@flexdesk/widgets';
-import { createFilterModel } from './filter_engine.js';
+import { createFilterModel, emptyExpr } from './filter_engine.js';
 import { RESOLUTIONS, customFilterFields, isSnoozed, markHiddenFilterFields, snoozeConfigured } from './schema.js';
 import {
     deleteFilter as storeDelete, duplicateFilter as storeDuplicate,
@@ -240,7 +239,7 @@ const TRACKER_FILTERS = [
         expr: and(ACTIVE, ...AWAKE),
     },
     SNOOZED_VIEW,
-    { key: 'all', label: 'Everything', icon: 'list_alt', builtin: true, expr: emptyFilter() },
+    { key: 'all', label: 'Everything', icon: 'list_alt', builtin: true, expr: emptyExpr() },
     {
         key: 'done', label: 'Closed', icon: 'check_circle', builtin: true,
         expr: and(FINISHED),
@@ -253,7 +252,7 @@ const BACKLOG_FILTERS = [
         expr: and(ACTIVE, ...AWAKE),
     },
     SNOOZED_VIEW,
-    { key: 'all', label: 'Everything', icon: 'list', builtin: true, expr: emptyFilter() },
+    { key: 'all', label: 'Everything', icon: 'list', builtin: true, expr: emptyExpr() },
     {
         key: 'unrefined', label: 'Needs refinement', icon: 'pending_actions', builtin: true,
         // Tasks never pass through `refined` (see LADDERS in ./backlog_data.js),
