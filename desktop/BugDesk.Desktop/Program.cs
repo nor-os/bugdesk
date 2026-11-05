@@ -1,21 +1,12 @@
 // BugDesk.Desktop — BugDesk in a native window.
 //
-// The server (server/Program.cs, BugDeskServer.Run) runs IN THIS PROCESS on a
-// free loopback port, and a Photino.NET window shows its page — the layout
-// SixShare.Desktop uses (../SixShare/SixShare.Desktop/Program.cs). One process
-// per user and set of projects: a second launch brings the first window forward
-// and exits (SingleInstance). Closing the window stops the server cleanly, so a
-// record cache's pending write reaches the disk before the process ends.
-//
-// What is this app's own lives in the user's app-data folder (AppData.cs): its
-// projects.toml, the server's state and WebView2's profile. Nothing is written
-// beside the executable, which may be in a folder the user cannot write to.
-//
-// What the page can ask of the window goes over Photino's web messages as JSON
-// (NativeBridge.cs); see docs/desktop.md.
+// The window, the frame, one instance per set of projects and the clean stop are
+// DeskKit.Desktop's (desktop/packages, docs/desktop.md). What is left here is
+// BugDesk's identity, its files in the app's folder (AppData.cs) and asking for
+// the first project.
 
-using System.Runtime.InteropServices;
 using System.Text;
+using DeskKit.Desktop;
 using Microsoft.AspNetCore.Builder;
 using Photino.NET;
 
@@ -24,117 +15,31 @@ static class Desktop
     [STAThread]
     static int Main(string[] args)
     {
-        // Photino draws with WebKitGTK on Linux. Without it, the first window
-        // dies in a native-library load deep inside Photino; say what to install.
-        if (OperatingSystem.IsLinux() && !NativeLibrary.TryLoad("libwebkit2gtk-4.1.so.0", out _))
+        var options = new DesktopOptions("BugDesk", "BUGDESK", "BugDesk.Desktop")
         {
-            Console.Error.WriteLine("BugDesk needs WebKitGTK 4.1, which is not installed.\n"
-                + "  Debian, Ubuntu: sudo apt install libwebkit2gtk-4.1-0\n"
-                + "  Fedora:         sudo dnf install webkit2gtk4.1");
-            return 1;
-        }
-        // Under a Wayland session Photino hangs creating the window (seen in
-        // WSLg with WebKitGTK 2.52, with or without WebKit's DMA-BUF and
-        // compositing switches); through XWayland it works. Left alone when the
-        // user has chosen a backend. GTK reads the C environment, which .NET's
-        // SetEnvironmentVariable does not change on Unix, so this is libc's setenv.
-        if (OperatingSystem.IsLinux() && string.IsNullOrEmpty(Environment.GetEnvironmentVariable("GDK_BACKEND")))
-            setenv("GDK_BACKEND", "x11", 1);
-        var data = AppData.Prepare();
-        using var instance = SingleInstance.Acquire(data.ProjectsFile);
-        if (instance is null)
-        {
-            // Another window already serves these projects: bring it forward.
-            if (SingleInstance.Activate(data.ProjectsFile)) return 0;
-            // It holds the lock but did not answer — still starting, or hung.
-            // Starting a second server on the same stores is exactly what the
-            // lock is for, so say so rather than doing it.
-            Console.Error.WriteLine("BugDesk is already running for these projects, and did not answer.");
-            return 1;
-        }
-        if (OperatingSystem.IsWindows()) WindowsShell.SetAppUserModelId();
-
-        var port = FreePort();
-        var url = $"http://127.0.0.1:{port}/";
-        Environment.SetEnvironmentVariable("ASPNETCORE_URLS", url.TrimEnd('/'));
-
+            WindowsIcon = "ui/assets/icons/bugdesk.ico",
+            PngIcon = "ui/assets/icons/bugdesk-256.png",
+            // BugDesk keeps the page's state on its server, per user, as it does
+            // in a browser tab (ui/js/tiling/install.js).
+            NativeState = false,
+        };
+        var data = AppData.Prepare(options);
         WebApplication? server = null;
-        Exception? serverFault = null;
-        var serverThread = new Thread(() =>
+        return DesktopApp.Run(options, new DesktopRun
         {
-            try { BugDeskServer.Run(args, app => server = app); }
-            catch (Exception ex) { serverFault = ex; }
-        }) { IsBackground = true, Name = "BugDesk server" };
-        serverThread.Start();
-        if (!WaitForServer(url, TimeSpan.FromSeconds(20), () => serverFault is not null || !serverThread.IsAlive))
-        {
-            Fail($"The BugDesk server did not start.\n\n{serverFault?.Message ?? "It did not answer within 20 seconds."}", data);
-            return 1;
-        }
-
-        var window = new PhotinoWindow()
-            .SetTitle("BugDesk")
-            .SetResizable(true)
-            .SetTemporaryFilesPath(data.WebViewDir)
-            .SetDevToolsEnabled(Environment.GetEnvironmentVariable("BUGDESK_DESKTOP_DEVTOOLS") == "1");
-        var icon = FindIcon();
-        if (icon is not null) window.SetIconFile(icon);
-        // No SetChromeless: Photino's frameless window is a bare popup (no
-        // snapping, no shadow, and it reports itself fullscreen). CustomFrame
-        // keeps the native frame and stops drawing it instead.
-        // Where it was last time (WindowPlacement): set before the window
-        // exists, so it opens there rather than jumping; checked against the
-        // monitors once it does.
-        var placementFile = Path.Combine(data.Root, "window.json");
-        var placement = WindowPlacement.Load(placementFile);
-        // Photino takes the OS's default size and place unless told not to.
-        window.SetUseOsDefaultSize(false).SetUseOsDefaultLocation(false);
-        if (placement is null) window.SetSize(1400, 900).Center();
-        else placement.Apply(window);
-        // A test run (or a launch from a script) can start it out of the way.
-        if (Environment.GetEnvironmentVariable("BUGDESK_DESKTOP_MINIMIZED") == "1") window.SetMinimized(true);
-
-        NativeBridge.Attach(window);
-        var windowOpen = true;
-        window.RegisterWindowCreatedHandler((_, _) =>
-        {
-            if (OperatingSystem.IsWindows() && icon is not null) WindowsShell.SetWindowIcon(window.WindowHandle, icon);
-            if (OperatingSystem.IsWindows() && Frame.Custom) CustomFrame.Install(window.WindowHandle);
-            // The minimum only once the window exists: set before, Photino
-            // opens the window AT the minimum, wherever the OS puts it, and
-            // ignores the size and place it was given.
-            window.SetMinSize(900, 600);
-            placement?.KeepOnScreen(window);
-            WindowPlacement.Track(window, placementFile);
-            instance.Listen(() => window.Invoke(() => BringForward(window)));
-            if (data.FirstRun) new Thread(() => ChooseFirstProject(window, url)) { IsBackground = true }.Start();
-            // The server can stop without the window: SIGTERM on Linux (a
-            // logout, `kill`) stops the ASP.NET host, not Photino. A window
-            // without its server is a dead page, so it closes too.
-            new Thread(() =>
+            InstanceKey = data.ProjectsFile,
+            RunServer = _ => BugDeskServer.Run(args, app => server = app),
+            // StopAsync ends the live-update streams and runs the server's
+            // ApplicationStopped handlers, which flush the record caches. The
+            // server's own shutdown timeout is 5 s; ServerStopLimit waits 6.
+            StopServer = () => server?.StopAsync() ?? Task.CompletedTask,
+            StartPage = data.FirstRun ? FirstRunPage : null,
+            WindowCreated = w =>
             {
-                serverThread.Join();
-                if (Volatile.Read(ref windowOpen)) window.Invoke(window.Close);
-            }) { IsBackground = true, Name = "BugDesk server watch" }.Start();
+                if (data.FirstRun) new Thread(() => ChooseFirstProject(w.Window, w.Url)) { IsBackground = true }.Start();
+            },
         });
-
-        if (data.FirstRun) window.LoadRawString(FirstRunPage);
-        else window.Load(url);
-        window.WaitForClose();
-        Volatile.Write(ref windowOpen, false);
-
-        // The clean stop: StopAsync ends the live-update streams and runs the
-        // server's ApplicationStopped handlers, which flush the record caches;
-        // then Run returns and the thread ends. The server's own shutdown timeout
-        // is 5 s, so this waits a little longer than that and no more.
-        try { server?.StopAsync().Wait(TimeSpan.FromSeconds(6)); }
-        catch (Exception ex) { Console.Error.WriteLine($"BugDesk server stop: {ex.Message}"); }
-        serverThread.Join(TimeSpan.FromSeconds(2));
-        return 0;
     }
-
-    [DllImport("libc", CharSet = CharSet.Ansi)]
-    static extern int setenv(string name, string value, int overwrite);
 
     /// <summary>
     /// The very first launch has no projects. Ask for the folder of one — the
@@ -185,69 +90,4 @@ static class Desktop
         <body style="font:15px system-ui,sans-serif;display:grid;place-items:center;height:100vh;margin:0;color:#334">
         <p>Choose the folder of the project BugDesk should open.</p>
         """;
-
-    static void BringForward(PhotinoWindow window)
-    {
-        if (window.Minimized) window.SetMinimized(false);
-        if (OperatingSystem.IsWindows()) WindowsShell.Foreground(window.WindowHandle);
-        else { window.SetTopMost(true); window.SetTopMost(false); }
-    }
-
-    static void Fail(string message, AppData data)
-    {
-        Console.Error.WriteLine(message);
-        try { File.AppendAllText(Path.Combine(data.Root, "desktop.log"), $"{DateTime.Now:O} {message}\n"); }
-        catch (IOException) { /* nowhere left to say it */ }
-        if (OperatingSystem.IsWindows()) WindowsShell.MessageBox("BugDesk", message);
-    }
-
-    static int FreePort()
-    {
-        var l = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
-        l.Start();
-        var port = ((System.Net.IPEndPoint)l.LocalEndpoint).Port;
-        l.Stop();
-        return port;
-    }
-
-    static bool WaitForServer(string url, TimeSpan limit, Func<bool> gaveUp)
-    {
-        using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(2) };
-        var until = DateTime.UtcNow + limit;
-        while (DateTime.UtcNow < until && !gaveUp())
-        {
-            // Any answer at all means it is listening — "no projects yet" is a 404.
-            try { http.GetAsync(url + "api/projects").GetAwaiter().GetResult(); return true; }
-            catch (Exception) { /* not up yet */ }
-            Thread.Sleep(100);
-        }
-        return false;
-    }
-
-    static string? FindIcon()
-    {
-        // Windows wants the .ico, Linux a PNG. Beside the executable once
-        // packaged (ui/ ships there); up the tree in a checkout.
-        var names = OperatingSystem.IsWindows()
-            ? new[] { "ui/assets/icons/bugdesk.ico" }
-            : new[] { "ui/assets/icons/bugdesk-256.png" };
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        for (var hops = 0; dir is not null && hops < 8; hops++, dir = dir.Parent)
-            foreach (var name in names)
-                if (Path.Combine(dir.FullName, name) is var p && File.Exists(p)) return p;
-        return null;
-    }
-}
-
-/// <summary>
-/// Who draws the window's title bar and borders. On Windows the page does
-/// (CustomFrame, and FlexDesk's WindowChromeController in the page);
-/// BUGDESK_DESKTOP_FRAME=native keeps the standard Windows frame. Linux and
-/// macOS always keep the native one. The page learns which from host.describe.
-/// </summary>
-static class Frame
-{
-    public static readonly bool Custom = OperatingSystem.IsWindows()
-        && !string.Equals(Environment.GetEnvironmentVariable("BUGDESK_DESKTOP_FRAME")?.Trim(), "native", StringComparison.OrdinalIgnoreCase);
-    public static string Name => Custom ? "custom" : "native";
 }

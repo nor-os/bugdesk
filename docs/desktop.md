@@ -5,6 +5,11 @@ WebView2 on Windows, WebKitGTK on Linux) instead of a browser tab. It is the sam
 BugDesk: the server runs inside the app's own process, on a free loopback port,
 and the window shows its page. How it came about is in `desktop-spike.md`.
 
+The window itself (the bridge, the frame, one instance, its place, the clean stop)
+is the [DeskKit.Desktop](#where-the-window-code-lives) package. What is in
+`desktop/BugDesk.Desktop` is BugDesk's: its identity, its files in the app's folder
+and asking for the first project.
+
 ## Running it from a checkout
 
 On Windows, `.\run.ps1` does this for you: it builds the app as below and starts
@@ -50,7 +55,9 @@ page to CDP on Windows, the way the app is tested.
   stores. A run against another `projects.toml` is a separate instance.
 - **A clean stop.** Closing the window calls `StopAsync` on the server, which
   ends the live-update streams and flushes the record caches before the
-  process exits (within the server's 5 s shutdown timeout).
+  process exits (within the server's 5 s shutdown timeout). A server that throws
+  closes the window, says why in `desktop.log` and a message box, and the exit
+  code is 1.
 - **Windows shell.** The process sets the AppUserModelID `BugDesk.Desktop`, so
   the window, its taskbar button and a pinned shortcut group as one app, and
   the window's small and large icons are set from `ui/assets/icons/bugdesk.ico`.
@@ -140,8 +147,7 @@ with Pillow; re-render them the same way if the SVGs change.
 The page talks to the window over Photino's web messages as JSON:
 `{id, cap, op, args}` in, `{id, ok, value | error}` out. FlexDesk's
 `createPhotinoHost` (`@flexdesk/host`, FlexDesk 0.14.0) is the page's side, and
-its `photino_host.md` is the contract `desktop/BugDesk.Desktop/NativeBridge.cs`
-answers:
+its `photino_host.md` is the contract DeskKit.Desktop's `NativeBridge` answers:
 
 - `window`: minimize, close, isMaximized, setMaximized, isFullscreen,
   toggleFullscreen, getBounds, setBounds, and on Windows `startDrag` and
@@ -157,15 +163,17 @@ answers:
   browser or mail client. Only http, https and mailto are opened; anything else
   is refused and the page falls back to `window.open`. FlexDesk's
   `routeExternalLinks` (0.16.0) routes the clicks; `install.js` turns it on.
-- `state` is not offered. `ui/js/tiling/install.js` keeps the server's adapter
-  for it, so layouts and table state stay per user on the server, as in a tab.
+- `dialogs.openFile`: the native Open dialog. Nothing in the page asks for it yet.
+- `state` is turned off (`NativeState = false`). `ui/js/tiling/install.js` keeps
+  the server's adapter for it, so layouts and table state stay per user on the
+  server, as in a tab.
 
 `install.js` picks the Photino host only when `isPhotinoWindow()` is true; in a
 browser tab nothing changes.
 
 **The frame** (STORY-0042, FlexDesk 0.15.0). On Windows the app keeps the
 normal window styles, so Windows still snaps it, moves it with Win+arrows, and
-draws its shadow and rounded corners. `CustomFrame.cs` subclasses the window and
+draws its shadow and rounded corners. DeskKit.Desktop's `CustomFrame` subclasses the window and
 answers `WM_NCCALCSIZE` with the whole window as client area, so no frame is
 drawn. While maximised, the client area is clamped to the monitor's work area so
 the taskbar stays visible. Photino's own `SetChromeless` was tried and dropped:
@@ -181,9 +189,25 @@ edge), and Windows runs its own move or size loop. In a browser tab, and with
 Windows 11's snap-layout menu doesn't open on hovering the maximise button
 (Windows never sees the hover); Win+Z opens it.
 
-**The window's place** (`WindowPlacement.cs`) is kept in `window.json` in the
+**The window's place** (DeskKit.Desktop's `WindowPlacement`) is kept in `window.json` in the
 app's folder: the normal bounds, followed as the window moves, and whether it was
 maximised. A window whose title bar would be on no monitor's work area opens
 centred. Photino needs `UseOsDefaultSize`/`UseOsDefaultLocation` switched off
 before it uses a size or place, and a minimum set before the window exists makes
-it open at that minimum. So the minimum is set once the window is created.
+it open at that minimum. So the minimum is set once the window is created. Leaving
+fullscreen puts the window back, and a window closed fullscreen remembers where it
+went in from.
+
+## Where the window code lives
+
+`DeskKit.Desktop` is a package from `nor-os/DeskKit-dotnet`, which is private, so
+BugDesk carries the package file: `desktop/packages/` is a NuGet feed committed
+here, and `nuget.config` in the repository's root takes `DeskKit.Desktop` from it
+and everything else from nuget.org. Nobody building BugDesk needs access to that
+repository. To upgrade, pack the new release from a checkout of its tag into that
+folder, replacing the old file, and raise the version in
+`desktop/BugDesk.Desktop/BugDesk.Desktop.csproj`:
+
+```
+dotnet pack DeskKit-dotnet/src/DeskKit.Desktop -c Release -o desktop/packages
+```

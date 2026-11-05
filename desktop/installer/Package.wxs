@@ -37,7 +37,7 @@
     </ComponentGroup>
 
     <Component Id="StartMenuShortcut" Directory="ProgramMenuFolder" Guid="b931e79a-117b-4e6f-a1af-5a94893c19aa">
-      <!-- The same AppUserModelID the app sets on itself (WindowsShell.cs), so
+      <!-- The same AppUserModelID the app gives DeskKit (DesktopOptions in Program.cs), so
            the shortcut, the window and a pinned button are one app. -->
       <Shortcut Id="BugDeskShortcut" Name="BugDesk" Description="Bugs and backlog, in markdown"
                 Target="[INSTALLFOLDER]BugDesk.exe" WorkingDirectory="INSTALLFOLDER" Icon="BugDeskIcon">

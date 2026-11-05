@@ -7,6 +7,23 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **The desktop app runs on DeskKit.Desktop**, a package committed in
+  `desktop/packages/` (see `docs/desktop.md`). Leaving fullscreen now puts the
+  window back; it used to stay at the screen's size, and `window.json` kept that.
+  In fullscreen, `setBounds` is ignored, `setMaximized` applies on the way out, and
+  `isMaximized` reports the state the window comes back to. A server that throws
+  while the app is running closes the window, says why in `desktop.log` and a
+  message box, and the exit code is 1; the window used to vanish with exit code 0.
+
+- **More of the page is FlexDesk's** (0.18.0): the project field and switcher
+  (`createWorkspacePicker`), form selects (`createSelect`), the filter dialog and
+  its expression model (`openFilterDialog`, `createFilterModel`) and the Changes
+  pane's diff (`createDiffViewer`). What you see of them follows FlexDesk: the
+  filter dialog is a modal window, so a click beside it no longer cancels it;
+  the Text view numbers both sides of a change; a select's list follows a scroll
+  rather than closing on one; the project switcher moves with a resized window
+  rather than closing. Stored filters and their expressions are unchanged.
+
 - **The top bar matches EcoSim's and EcoAgent's** (STORY-0062). The menu is
   FlexDesk's menu bar drawn as a hamburger at the far left, before the brand:
   **BugDesk** (Settings, Team…, Change your name…) and **Help** (Help Topics,

@@ -1,20 +1,20 @@
-// Where the desktop app keeps what is its own: %AppData%\BugDesk on Windows,
-// ~/.config/BugDesk on Linux. The server reads the same environment variables
+// What the desktop app keeps in its folder (DeskKit's AppHome: %AppData%\BugDesk
+// on Windows, ~/.config/BugDesk on Linux, BUGDESK_DESKTOP_HOME for a test run that
+// must not touch the real one). The server reads the same environment variables
 // it always has (BUGDESK_PROJECTS, BUGDESK_STATE), pointed here before it
 // starts — unless they are set already, which is how a test run or a second,
-// separate set of projects gets its own. BUGDESK_DESKTOP_HOME moves the whole
-// folder, for a test run that must not touch the real one.
+// separate set of projects gets its own.
 
-sealed record AppData(string Root, string ProjectsFile, string StateDir, string WebViewDir, bool FirstRun)
+using DeskKit.Desktop;
+
+sealed record AppData(string ProjectsFile, bool FirstRun)
 {
-    public static AppData Prepare()
+    public static AppData Prepare(DesktopOptions options)
     {
-        var root = Path.GetFullPath(Env("BUGDESK_DESKTOP_HOME") ?? Path.Combine(Environment.GetFolderPath(
-            Environment.SpecialFolder.ApplicationData, Environment.SpecialFolderOption.Create), "BugDesk"));
-        Directory.CreateDirectory(root);
+        var root = AppHome.Resolve(options).Root;
 
-        var projects = Path.GetFullPath(Env("BUGDESK_PROJECTS") ?? Path.Combine(root, "projects.toml"));
-        var state = Path.GetFullPath(Env("BUGDESK_STATE") ?? Path.Combine(root, "state"));
+        var projects = Path.GetFullPath(options.Env("PROJECTS") ?? Path.Combine(root, "projects.toml"));
+        var state = Path.GetFullPath(options.Env("STATE") ?? Path.Combine(root, "state"));
         Environment.SetEnvironmentVariable("BUGDESK_PROJECTS", projects);
         Environment.SetEnvironmentVariable("BUGDESK_STATE", state);
         Directory.CreateDirectory(state);
@@ -26,7 +26,7 @@ sealed record AppData(string Root, string ProjectsFile, string StateDir, string 
         // and asks for the first one itself (Desktop.ChooseFirstProject). A store
         // named explicitly (BUGDESK_BUGS / BUGDESK_BACKLOG) is left to the server.
         var firstRun = false;
-        if (!File.Exists(projects) && Env("BUGDESK_BUGS") is null && Env("BUGDESK_BACKLOG") is null)
+        if (!File.Exists(projects) && options.Env("BUGS") is null && options.Env("BACKLOG") is null)
         {
             Directory.CreateDirectory(Path.GetDirectoryName(projects)!);
             File.WriteAllText(projects, """
@@ -39,12 +39,9 @@ sealed record AppData(string Root, string ProjectsFile, string StateDir, string 
         }
         // An empty file left by a first run that was cancelled asks again.
         else if (File.Exists(projects) && !File.ReadAllText(projects).Contains("[projects.", StringComparison.Ordinal)
-                 && Env("BUGDESK_BUGS") is null && Env("BUGDESK_BACKLOG") is null)
+                 && options.Env("BUGS") is null && options.Env("BACKLOG") is null)
             firstRun = true;
 
-        return new AppData(root, projects, state, Path.Combine(root, "WebView2"), firstRun);
+        return new AppData(projects, firstRun);
     }
-
-    static string? Env(string name) =>
-        Environment.GetEnvironmentVariable(name) is { } v && !string.IsNullOrWhiteSpace(v) ? v.Trim() : null;
 }

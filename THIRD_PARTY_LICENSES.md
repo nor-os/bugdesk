@@ -39,6 +39,7 @@ ASP.NET Core, and:
 
 | Component | Version | Licence | Copyright |
 |---|---|---|---|
+| DeskKit.Desktop (`desktop/packages/`) | 0.1.0 | MIT | nor-os |
 | [Photino.NET](https://github.com/tryphotino/photino.NET) (`Photino.NET.dll`) | 4.0.16 | Apache-2.0 | Tryphotino |
 | [Photino.Native](https://github.com/tryphotino/photino.Native) (`Photino.Native.dll` / `Photino.Native.so`) | 4.0.22 | Apache-2.0 | Tryphotino |
 | ↳ [WebView2 loader](https://www.nuget.org/packages/Microsoft.Web.WebView2) (`WebView2Loader.dll`, Windows only, bundled with Photino.Native) | — | BSD-style (the WebView2 SDK's `LICENSE.txt`) | Microsoft Corporation |
