@@ -119,7 +119,7 @@ export async function openFilterEditor({
             danger: true,
             confirm: {
                 title: 'Delete this filter?',
-                message: `"${esc(label)}" will be removed from the filter rail. This cannot be undone.`,
+                message: `"${label}" will be removed from the filter rail. This cannot be undone.`,
                 confirmLabel: 'Delete',
                 danger: true,
             },

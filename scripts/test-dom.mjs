@@ -4383,7 +4383,7 @@ console.log('\nThe filter editor');
 {
     const { openFilterEditor } = await import(pathToFileURL(join(UI, 'ticketdesk', 'filter_editor.js')).href);
     const { createFilterModel, FILTER_ICONS } = await import(pathToFileURL(join(UI, 'ticketdesk', 'filter_engine.js')).href);
-    const { getFilter } = await import(pathToFileURL(join(UI, 'ticketdesk', 'filter_store.js')).href);
+    const { getFilter, saveFilter } = await import(pathToFileURL(join(UI, 'ticketdesk', 'filter_store.js')).href);
     const model = createFilterModel({
         noun: 'bug',
         fields: [
@@ -4440,6 +4440,19 @@ console.log('\nThe filter editor');
         assert.equal(saved.icon, FILTER_ICONS[0]);
         assert.deepEqual(getFilter(saved.id).expr, seed);
         assert.equal(document.querySelector('.twm-filter-dialog'), null);
+    });
+
+    await t('the Delete question names the filter as it is written', async () => {
+        const stored = await saveFilter({ scope: 'bugs', label: "Norman's bugs & crashes", icon: FILTER_ICONS[0], expr: seed, builtin: false }, 'bugs');
+        const closed = openFilterEditor({ model, scope: 'bugs', filter: stored, items });
+        await settle();
+        button('delete').click();
+        await settle();
+        assert.match(document.querySelector('.twm-modal__body--text').textContent, /^"Norman's bugs & crashes" will be removed/);
+        document.querySelector('[data-action="cancel"]').click();
+        await settle();
+        button('cancel').click();
+        await closed;
     });
 
     await t('an alert condition comes back to the caller and is not stored', async () => {
