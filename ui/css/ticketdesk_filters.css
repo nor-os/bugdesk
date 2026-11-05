@@ -18,6 +18,12 @@
 /* ════════════════════════════════════════════════════════════════════
    1. Live preview pane
    ──────────────────────────────────────────────────────────────────── */
+/* main_new.css's global button:hover would paint these the primary blue. */
+.twm-filter-builder__seg-btn:not(.twm-filter-builder__seg-btn--on):hover,
+.twm-filter-builder__not:not(.twm-filter-builder__not--on):hover { background-color: var(--surface-2, #2d2d2d); }
+.twm-filter-builder__seg-btn--on:hover { background-color: var(--accent, #1177b3); }
+.twm-filter-builder__not--on:hover { background-color: var(--color-danger, #c74e4e); }
+
 .bd-fprev__count {
     padding: 5px 2px 4px;
     font-size: 10px;
