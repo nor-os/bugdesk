@@ -47,6 +47,7 @@ const t = (name, fn) => {
 };
 
 const { createFilterModel } = await import(UI + 'filter_engine.js');
+const { emptyFilter } = await import('@flexdesk/widgets');
 const data = await import(UI + 'backlog_data.js');
 const {
     activeTopNavKind, taxonomy: taxonomyDefault, DASHBOARD_KIND, DASHBOARD_SECTIONS, dashboardSectionOf,
@@ -79,7 +80,7 @@ const and = (...c) => ({ kind: 'group', op: 'AND', children: c });
 const or = (...c) => ({ kind: 'group', op: 'OR', children: c });
 const sel = (expr) => rows.filter(model.matcherFor(expr)).map((r) => r.id);
 
-t('empty group matches everything', () => assert.deepEqual(sel(model.emptyExpr()), [1, 2, 3]));
+t('empty group matches everything', () => assert.deepEqual(sel(emptyFilter()), [1, 2, 3]));
 t('enum is', () => assert.deepEqual(sel(and(clause('type', 'is', 'story'))), [2]));
 t('enum none_of', () => assert.deepEqual(sel(and(clause('status', 'none_of', ['done', 'draft']))), [1]));
 t('number gt', () => assert.deepEqual(sel(and(clause('pts', 'gt', 4))), [1, 2]));
