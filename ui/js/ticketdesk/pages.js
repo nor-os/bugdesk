@@ -725,9 +725,8 @@ async function confirmDeleteBug(bug) {
     if (!bug?.bugId) return false;
     const ok = await openConfirm({
         title: `Delete bug #${bug.bugId}`,
-        message: `<p>Delete <b>#${esc(bug.bugId)} — ${esc(bug.summary || '')}</b>?</p>
-            <p class="td-dim">The file is moved to the store's trash folder, not erased.
-            To record that it was dealt with, Close it instead.</p>`,
+        message: `Delete #${bug.bugId} — ${bug.summary || ''}?\n\n`
+            + "The file is moved to the store's trash folder, not erased. To record that it was dealt with, Close it instead.",
         confirmLabel: 'Delete', danger: true, icon: 'delete',
     });
     if (!ok) return false;

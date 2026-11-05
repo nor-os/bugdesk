@@ -25,10 +25,6 @@
 
 import { createWorkspacePicker, openConfirm, openForm } from '@flexdesk/widgets';
 
-const _esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-}[c]));
-
 const currentName = () => (window.__BUGDESK_CONFIG__ || {}).store?.name || '';
 
 /** Projects compare without regard to case, as the server's names do. */
@@ -66,7 +62,7 @@ export function installProjectPicker(bar, { eventBus } = {}) {
     const removeProject = async (p) => {
         const ok = await openConfirm({
             title: 'Remove project',
-            message: `Remove <b>${_esc(p.name)}</b> from projects.toml?<br><br>`
+            message: `Remove ${p.name} from projects.toml?\n\n`
                 + 'Only the entry goes. Its bugs and backlog stay on disk, and adding it back brings everything back.',
             confirmLabel: 'Remove',
             danger: true,

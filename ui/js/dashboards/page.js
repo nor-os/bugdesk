@@ -89,8 +89,6 @@ export function loadDashboardLibs() {
     return _libs;
 }
 
-const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-
 function el(tag, cls, text) {
     const e = document.createElement(tag);
     if (cls) e.className = cls;
@@ -464,7 +462,7 @@ function mountDashboards(host, props, ctx, eventBus, kind = 'dashboards', home =
     async function removeTile(tileId) {
         if (!grid || !tileId) return;
         const ok = await openConfirm({
-            title: 'Remove tile', message: '<p>Remove this tile from the dashboard?</p>',
+            title: 'Remove tile', message: 'Remove this tile from the dashboard?',
             confirmLabel: 'Remove', danger: true, icon: 'delete',
         });
         if (ok && grid) {
@@ -562,7 +560,7 @@ function mountDashboards(host, props, ctx, eventBus, kind = 'dashboards', home =
         const file = homeFile(home);
         const ok = await openConfirm({
             title: 'Reset to default',
-            message: `<p>Put the <b>${esc(entryName())}</b> home back to the built-in default?</p><p>Its changes are removed from ${esc(file)}, for everyone who uses it.</p>`,
+            message: `Put the ${entryName()} home back to the built-in default?\n\nIts changes are removed from ${file}, for everyone who uses it.`,
             confirmLabel: 'Reset', danger: true, icon: 'restart_alt',
         });
         if (!ok || disposed) return;
@@ -615,8 +613,8 @@ function mountDashboards(host, props, ctx, eventBus, kind = 'dashboards', home =
 
     async function remove(entry, scope) {
         const message = scope === 'shared'
-            ? `<p>Delete <b>${esc(entry.name || entry.id)}</b> for everyone on this project?</p><p>The change is in project.json until you commit it.</p>`
-            : `<p>Delete your personal dashboard <b>${esc(entry.name || entry.id)}</b>?</p>`;
+            ? `Delete ${entry.name || entry.id} for everyone on this project?\n\nThe change is in project.json until you commit it.`
+            : `Delete your personal dashboard ${entry.name || entry.id}?`;
         const ok = await openConfirm({
             title: 'Delete dashboard', message, confirmLabel: 'Delete', danger: true, icon: 'delete',
         });

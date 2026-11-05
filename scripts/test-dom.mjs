@@ -4376,6 +4376,26 @@ console.log('\nThe project picker');
         await tick();
     });
 
+    await t('the remove question says the name as written, with no markup', async () => {
+        let body = null;
+        const seen = new dom.window.MutationObserver(() => {
+            const el = document.querySelector('.twm-modal__body--text');
+            if (!el || body !== null) return;
+            body = el.textContent;
+            document.querySelector('.twm-modal [data-action="cancel"]').click();
+        });
+        seen.observe(document.body, { childList: true, subtree: true });
+        await open();
+        const named = document.querySelectorAll('.twm-wspicker [role="option"]')[1];
+        named.querySelector('button')?.click();
+        for (let i = 0; i < 6 && body === null; i++) await tick();
+        seen.disconnect();
+        assert.match(body, /^Remove beta from projects\.toml\?\n\nOnly the entry goes\./);
+        assert.ok(!/[<&]/.test(body), body);
+        field.click();
+        await tick();
+    });
+
     await t('a broken projects.toml is said in the footer, as an error', async () => {
         listError = 'line 3: nonsense';
         await open();

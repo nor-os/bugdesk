@@ -363,10 +363,10 @@ export function mountChangesPane(host, { eventBus = null, sources = null, onCoun
         const { s, f } = hit;
         const { openConfirm } = await import('@flexdesk/widgets');
         const what = f.status === 'new'
-            ? `<p><b>${esc(f.ref)}</b> is new and was never committed.</p><p class="td-dim">Discarding moves the file to the trash folder beside the store.</p>`
+            ? `${f.ref} is new and was never committed.\n\nDiscarding moves the file to the trash folder beside the store.`
             : f.status === 'deleted'
-                ? `<p>Bring back <b>${esc(f.ref)} — ${esc(f.title || '')}</b> as it was last committed?</p>`
-                : `<p>Discard your changes to <b>${esc(f.ref)} — ${esc(f.title || '')}</b>?</p><p class="td-dim">It goes back to how it was last committed. This cannot be undone.</p>`;
+                ? `Bring back ${f.ref} — ${f.title || ''} as it was last committed?`
+                : `Discard your changes to ${f.ref} — ${f.title || ''}?\n\nIt goes back to how it was last committed. This cannot be undone.`;
         const ok = await openConfirm({
             title: f.status === 'deleted' ? `Restore ${f.ref}` : `Discard changes to ${f.ref}`,
             message: what, confirmLabel: f.status === 'deleted' ? 'Restore' : 'Discard', danger: f.status !== 'deleted', icon: 'undo',

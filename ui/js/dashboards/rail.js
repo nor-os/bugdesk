@@ -180,8 +180,8 @@ export function mountDashboardsRail(host, ctx, { section = DASHBOARD_SECTIONS[0]
         const entry = entryAt(scope, key);
         if (!entry?.id) return;
         const message = scope === 'shared'
-            ? `<p>Delete <b>${esc(entry.name || entry.id)}</b> for everyone on this project?</p><p>The change is in project.json until you commit it.</p>`
-            : `<p>Delete your personal dashboard <b>${esc(entry.name || entry.id)}</b>?</p>`;
+            ? `Delete ${entry.name || entry.id} for everyone on this project?\n\nThe change is in project.json until you commit it.`
+            : `Delete your personal dashboard ${entry.name || entry.id}?`;
         const ok = await openConfirm({ title: 'Delete dashboard', message, confirmLabel: 'Delete', danger: true, icon: 'delete' });
         if (!ok) return;
         try { await trackWrite(STORE[scope].remove(entry.id)); }

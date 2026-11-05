@@ -585,6 +585,9 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Questions before removing a project, deleting a bug or a dashboard, removing a
+  tile, resetting a home and discarding a change showed their markup as text
+  (`Remove <b>beta</b>…`). They are plain sentences now.
 - **`?` opened two help modals**: BugDesk's own copy of the modal, and
   FlexDesk's, which `@flexdesk/widgets` installs with its own `?` listener and
   which was empty. BugDesk now gives its topics to FlexDesk's modal
