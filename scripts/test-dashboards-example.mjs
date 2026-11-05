@@ -13,7 +13,7 @@
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync, existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { JSDOM } from 'jsdom';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -107,13 +107,13 @@ put('fetch', async (url, init = {}) => {
     return { ok: !!j.ok, status: j.ok ? 200 : 400, json: async () => j };
 });
 
-const bugData = await import(join(UI, 'ticketdesk', 'data.js'));
-const backlogData = await import(join(UI, 'ticketdesk', 'backlog_data.js'));
+const bugData = await import(pathToFileURL(join(UI, 'ticketdesk', 'data.js')).href);
+const backlogData = await import(pathToFileURL(join(UI, 'ticketdesk', 'backlog_data.js')).href);
 await bugData.loadData();
 await backlogData.loadBacklog();
-const model = await import(join(UI, 'dashboards', 'model.js'));
-const { createDashboardsContent } = await import(join(UI, 'dashboards', 'page.js'));
-const { taxonomy } = await import(join(UI, 'tiling', 'kind_taxonomy.js'));
+const model = await import(pathToFileURL(join(UI, 'dashboards', 'model.js')).href);
+const { createDashboardsContent } = await import(pathToFileURL(join(UI, 'dashboards', 'page.js')).href);
+const { taxonomy } = await import(pathToFileURL(join(UI, 'tiling', 'kind_taxonomy.js')).href);
 const factory = createDashboardsContent({ eventBus: null }).dashboards;
 const ctx = { leafId: 'L1', taxonomy, wm: { updateActiveTabProps: () => {} } };
 
@@ -167,7 +167,7 @@ await t('they are seeded into the shared project config, not a personal file', a
     const { page } = await open('example-bugs');
     const nav = document.createElement('div');
     document.body.appendChild(nav);
-    const { mountDashboardsRail } = await import(join(UI, 'dashboards', 'rail.js'));
+    const { mountDashboardsRail } = await import(pathToFileURL(join(UI, 'dashboards', 'rail.js')).href);
     // Each in its own section's rail (STORY-0046).
     const listed = async (section) => {
         const rail = mountDashboardsRail(nav, ctx, { section });

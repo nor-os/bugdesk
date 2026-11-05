@@ -16,7 +16,7 @@
 import assert from 'node:assert/strict';
 import { mkdirSync, readdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import {
     BARE_KEY_RECORD, BARE_KEY_VALUES,
@@ -25,8 +25,8 @@ import {
 } from './record-fixtures.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
-const UI = join(ROOT, 'ui', 'js', 'ticketdesk') + '/';
-const TILING = join(ROOT, 'ui', 'js', 'tiling') + '/';
+const UI = pathToFileURL(join(ROOT, 'ui', 'js', 'ticketdesk')).href + '/';
+const TILING = pathToFileURL(join(ROOT, 'ui', 'js', 'tiling')).href + '/';
 
 for (const name of ['core', 'wm', 'widgets']) {
     const dir = join(ROOT, 'node_modules', '@flexdesk', name);

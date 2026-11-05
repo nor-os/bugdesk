@@ -12,7 +12,7 @@
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { JSDOM } from 'jsdom';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -137,9 +137,9 @@ async function answerConfirm() {
 
 /* ── the page ────────────────────────────────────────────────────── */
 
-const { createDashboardsContent, SAVE_DELAY_MS } = await import(join(UI, 'dashboards', 'page.js'));
-const { mountDashboardsRail } = await import(join(UI, 'dashboards', 'rail.js'));
-const { taxonomy, DASHBOARD_KIND } = await import(join(UI, 'tiling', 'kind_taxonomy.js'));
+const { createDashboardsContent, SAVE_DELAY_MS } = await import(pathToFileURL(join(UI, 'dashboards', 'page.js')).href);
+const { mountDashboardsRail } = await import(pathToFileURL(join(UI, 'dashboards', 'rail.js')).href);
+const { taxonomy, DASHBOARD_KIND } = await import(pathToFileURL(join(UI, 'tiling', 'kind_taxonomy.js')).href);
 const content = createDashboardsContent({ eventBus: null });
 const props = [];
 const ctx = { leafId: 'L1', taxonomy, wm: { updateActiveTabProps: (leaf, patch) => props.push({ leaf, patch }) } };
@@ -673,9 +673,9 @@ await t('the pane header reads the open dashboard\'s name', async () => {
 
 console.log('\nDashboard tiles over records (STORY-0036)');
 
-const schema = await import(join(UI, 'ticketdesk', 'schema.js'));
-const bugData = await import(join(UI, 'ticketdesk', 'data.js'));
-const backlogData = await import(join(UI, 'ticketdesk', 'backlog_data.js'));
+const schema = await import(pathToFileURL(join(UI, 'ticketdesk', 'schema.js')).href);
+const bugData = await import(pathToFileURL(join(UI, 'ticketdesk', 'data.js')).href);
+const backlogData = await import(pathToFileURL(join(UI, 'ticketdesk', 'backlog_data.js')).href);
 
 const WITH_RISK = { types: { backlog: {
     story: { fields: [{ name: 'risk', label: 'Risk', type: 'number' }, { name: 'team', label: 'Team', type: 'text' }] },
@@ -796,7 +796,7 @@ await t('a bar tile counts per value, is saved with its binding, and a click ope
     assert.equal(last.kind, 'backlog');
     assert.equal(last.p.label, 'Stories by assignee: bob');
     assert.equal(last.p.flat, true);
-    const { matcherFor } = await import(join(UI, 'ticketdesk', 'backlog_filters.js'));
+    const { matcherFor } = await import(pathToFileURL(join(UI, 'ticketdesk', 'backlog_filters.js')).href);
     assert.deepEqual(backlogData.ITEMS.filter(matcherFor(last.p.expr)).map((i) => i.id), [2], 'the list would not show the clicked records');
 });
 
@@ -1036,11 +1036,11 @@ await t('a home override in project.json is never listed in a rail', async () =>
 
 console.log('\nBugs and Backlog homes (STORY-0048)');
 
-const { createHomeContent } = await import(join(UI, 'dashboards', 'page.js'));
-const homes = await import(join(UI, 'dashboards', 'homes.js'));
-const resolveMod = await import(join(UI, 'dashboards', 'resolve.js'));
-const sourcesMod = await import(join(UI, 'dashboards', 'sources.js'));
-const { HOME_KIND } = await import(join(UI, 'tiling', 'kind_taxonomy.js'));
+const { createHomeContent } = await import(pathToFileURL(join(UI, 'dashboards', 'page.js')).href);
+const homes = await import(pathToFileURL(join(UI, 'dashboards', 'homes.js')).href);
+const resolveMod = await import(pathToFileURL(join(UI, 'dashboards', 'resolve.js')).href);
+const sourcesMod = await import(pathToFileURL(join(UI, 'dashboards', 'sources.js')).href);
+const { HOME_KIND } = await import(pathToFileURL(join(UI, 'tiling', 'kind_taxonomy.js')).href);
 
 server.records['/bugs'] = { bugs: [
     { id: 7, type: 'bug', title: 'Crash', status: 'open', severity: 'crash', pri: 1, assignee: 'ann', created: '2026-09-01', updated: '2026-09-01T10:00Z' },

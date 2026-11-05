@@ -9,10 +9,10 @@
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
-const model = await import(join(ROOT, 'ui', 'js', 'dashboards', 'model.js'));
+const model = await import(pathToFileURL(join(ROOT, 'ui', 'js', 'dashboards', 'model.js')).href);
 
 let pass = 0, fail = 0;
 const t = (name, fn) => {
@@ -232,9 +232,9 @@ console.log('\ndashboards: records into series (STORY-0036)');
 
 /* ── STORY-0036: records → series ─────────────────────────────────── */
 
-const series = await import(join(ROOT, 'ui', 'js', 'dashboards', 'series.js'));
-const resolve = await import(join(ROOT, 'ui', 'js', 'dashboards', 'resolve.js'));
-const { createFilterModel } = await import(join(ROOT, 'ui', 'js', 'ticketdesk', 'filter_engine.js'));
+const series = await import(pathToFileURL(join(ROOT, 'ui', 'js', 'dashboards', 'series.js')).href);
+const resolve = await import(pathToFileURL(join(ROOT, 'ui', 'js', 'dashboards', 'resolve.js')).href);
+const { createFilterModel } = await import(pathToFileURL(join(ROOT, 'ui', 'js', 'ticketdesk', 'filter_engine.js')).href);
 
 const pending = [];
 const ta = (name, fn) => pending.push([name, fn]);
@@ -716,7 +716,7 @@ ta('a bugs burndown is the open-bug count of a filter over a date range', async 
 
 console.log('\ndashboards: tracker records (STORY-0038)');
 
-const sources = await import(join(ROOT, 'ui', 'js', 'dashboards', 'sources.js'));
+const sources = await import(pathToFileURL(join(ROOT, 'ui', 'js', 'dashboards', 'sources.js')).href);
 
 /** Tracker-shaped records: a project over an epic over tasks, with the dueState the store derived on load. */
 const TRK = [

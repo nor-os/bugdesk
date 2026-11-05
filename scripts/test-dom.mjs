@@ -16,7 +16,7 @@
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { JSDOM } from 'jsdom';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -98,7 +98,7 @@ const tick = () => new Promise((r) => setTimeout(r, 0));
 
 console.log('\nSettings, sorted by who a change affects');
 
-const settings = await import(join(UI, 'core', 'settings.js'));
+const settings = await import(pathToFileURL(join(UI, 'core', 'settings.js')).href);
 settings.registerSettings(settings.BUGDESK_SETTINGS_SLICE);
 
 // A STALE browser-local name, seeded before anything imports ticketdesk/data.js
@@ -109,7 +109,7 @@ settings.registerSettings(settings.BUGDESK_SETTINGS_SLICE);
 settings.setSetting('bugdesk.humanName', 'stale-bob');
 settings.setSetting('bugdesk.agentName', 'stale-bob_agent');
 
-const { SettingsPage } = await import(join(UI, 'ui', 'pages', 'settings_page.js'));
+const { SettingsPage } = await import(pathToFileURL(join(UI, 'ui', 'pages', 'settings_page.js')).href);
 
 /** Mount the page, wait for it, and hand it back with its host. */
 const mountSettings = async (opts = {}) => {
@@ -274,7 +274,7 @@ await t('Settings › Workflow is drawn on the page, and let go of when the page
 
 console.log('\nChoice control');
 
-const { attachSelect } = await import(join(UI, 'ticketdesk', 'select_field.js'));
+const { attachSelect } = await import(pathToFileURL(join(UI, 'ticketdesk', 'select_field.js')).href);
 
 const mountSelect = (opts) => {
     const host = document.createElement('div');
@@ -379,7 +379,7 @@ await t('the search box filters', async () => {
 
 console.log('\nRow visibility');
 
-const { setRowVisible } = await import(join(UI, 'ticketdesk', 'select_field.js'));
+const { setRowVisible } = await import(pathToFileURL(join(UI, 'ticketdesk', 'select_field.js')).href);
 
 await t('hiding sets BOTH the attribute and an inline display', () => {
     const el = document.createElement('div');
@@ -405,7 +405,7 @@ await t('a missing element is survivable', () => setRowVisible(null, false));
 
 console.log('\nHierarchy rules');
 
-const picker = await import(join(UI, 'ticketdesk', 'item_picker.js'));
+const picker = await import(pathToFileURL(join(UI, 'ticketdesk', 'item_picker.js')).href);
 
 // Conventional level FIRST in every list — the picker preselects the whole
 // list, but the New item form and "Add child" take [0] as the default type.
@@ -527,8 +527,8 @@ await t('every setting that IS read is offered', () => {
 
 console.log('\nIdentity');
 
-const identity = await import(join(UI, 'ticketdesk', 'first_run.js'));
-const ticketData = await import(join(UI, 'ticketdesk', 'data.js'));
+const identity = await import(pathToFileURL(join(UI, 'ticketdesk', 'first_run.js')).href);
+const ticketData = await import(pathToFileURL(join(UI, 'ticketdesk', 'data.js')).href);
 
 await t('the profile on disk outranks a stale browser-local name', () => {
     // The bug: this asserted 'stale-bob', through every reload, for ever.
@@ -669,7 +669,7 @@ await t('the children list declares a column for every cell a row renders', () =
 
 console.log('\nTracker home: the list and people tiles');
 
-const backlogData = await import(join(UI, 'ticketdesk', 'backlog_data.js'));
+const backlogData = await import(pathToFileURL(join(UI, 'ticketdesk', 'backlog_data.js')).href);
 
 // Dates relative to the real today — dueState reads the reader's own clock, so
 // a fixture with literal dates would start failing on a particular morning.
@@ -723,7 +723,7 @@ await t('the delete flow sees the same subtree the bridge deletes', async () => 
     // The client computes descendants to WORD the confirmation ("PROJ-0001 has
     // 4 items under it"); the bridge computes them again to act. The two have
     // to agree, or the dialog understates what is about to go.
-    const { descendantsOf } = await import(join(UI, 'ticketdesk', 'delete_item.js'));
+    const { descendantsOf } = await import(pathToFileURL(join(UI, 'ticketdesk', 'delete_item.js')).href);
     assert.deepEqual(descendantsOf(1).map((i) => i.id).sort(), [2, 3, 4, 5]);
     assert.deepEqual(descendantsOf(2).map((i) => i.id), [3]);
     assert.deepEqual(descendantsOf(3), [], 'a leaf claims descendants');
@@ -761,7 +761,7 @@ await t('the item already chosen is never hidden, whatever its status', async ()
     await done;
 });
 
-const { createBacklogContent } = await import(join(UI, 'ticketdesk', 'backlog_pages.js'));
+const { createBacklogContent } = await import(pathToFileURL(join(UI, 'ticketdesk', 'backlog_pages.js')).href);
 
 /* THE TRACKER HOME IS A DASHBOARD NOW (STORY-0047): FlexDesk's list and people
  * tiles, resolved by dashboards/resolve.js over a source (sources.js) and
@@ -772,9 +772,9 @@ const { createBacklogContent } = await import(join(UI, 'ticketdesk', 'backlog_pa
  * itself is mounted in test-dashboards-tracker.mjs. */
 const tilesLib = await import('@flexdesk/tiles');
 tilesLib.registerListTiles();
-const dashSources = await import(join(UI, 'dashboards', 'sources.js'));
-const dashResolve = await import(join(UI, 'dashboards', 'resolve.js'));
-const { wireRowTile } = await import(join(UI, 'dashboards', 'row_actions.js'));
+const dashSources = await import(pathToFileURL(join(UI, 'dashboards', 'sources.js')).href);
+const dashResolve = await import(pathToFileURL(join(UI, 'dashboards', 'resolve.js')).href);
+const { wireRowTile } = await import(pathToFileURL(join(UI, 'dashboards', 'row_actions.js')).href);
 const dueIs = (...states) => ({ kind: 'group', op: 'AND', children: [{ kind: 'clause', field: 'dueState', op: 'one_of', value: states }] });
 const BOARD = {
     overdue: { type: 'list', binding: { source: 'backlog', sort: 'due', filter: { expr: dueIs('overdue') } } },
@@ -997,7 +997,7 @@ put('fetch', realFetch);
 
 console.log('\nDrag and Ctrl-click');
 
-const dnd = await import(join(UI, 'ticketdesk', 'record_dnd.js'));
+const dnd = await import(pathToFileURL(join(UI, 'ticketdesk', 'record_dnd.js')).href);
 
 const makeTransfer = () => {
     const store = new Map();
@@ -1084,7 +1084,7 @@ await t('the keys that open a row, for lists that are not a table', () => {
 {
     // BugDesk's lists on FlexDesk's DataTable since STORY-0008 — the adapter
     // that keeps these behaviours (bd_table.js).
-    const { createTable } = await import(join(UI, 'ticketdesk', 'bd_table.js'));
+    const { createTable } = await import(pathToFileURL(join(UI, 'ticketdesk', 'bd_table.js')).href);
     const rows = [['#1', 'b'], ['#2', 'c'], ['#3', 'a']];
     const saved = new Map();
     const stateStore = { ready: async () => {}, get: (key) => saved.get(key), set: (key, v) => saved.set(key, v) };
@@ -1554,7 +1554,7 @@ await t('the placeholder for an empty description is never loaded as text', asyn
 
 console.log('\nTeam overview');
 
-const { createTicketDeskContent } = await import(join(UI, 'ticketdesk', 'pages.js'));
+const { createTicketDeskContent } = await import(pathToFileURL(join(UI, 'ticketdesk', 'pages.js')).href);
 
 /* WHO GETS A ROW. The roster in bugdesk.json is the spine — everyone
  * assignable is listed, so this panel and the assignee picker cannot disagree
@@ -1562,7 +1562,7 @@ const { createTicketDeskContent } = await import(join(UI, 'ticketdesk', 'pages.j
  * work. A name that reached the store once and has nothing open is a fossil of
  * an old assignment; it used to sit in this list forever with nothing pointing
  * at it and no way to remove it. */
-const { teamNames } = await import(join(UI, 'ticketdesk', 'data.js'));
+const { teamNames } = await import(pathToFileURL(join(UI, 'ticketdesk', 'data.js')).href);
 
 await t('the roster is listed in full, busy or not', () => {
     // Nobody is carrying anything at all here: the four roster names are still
@@ -1655,7 +1655,7 @@ await t('it opens as a real managed window, not a hand-rolled overlay', async ()
         json: async () => ({ ok: true, path: '.bugdesk/project.json',
                              config: { collaborators: [{ name: 'bob', agent: 'bob_agent' }] } }),
     }));
-    const { openCollaborators } = await import(join(UI, 'ticketdesk', 'collaborators.js'));
+    const { openCollaborators } = await import(pathToFileURL(join(UI, 'ticketdesk', 'collaborators.js')).href);
     const done = openCollaborators({ eventBus: null });
     await tick(); await tick(); await tick();
 
@@ -1715,7 +1715,7 @@ const fakeApi = (routes) => {
 
 await t('Record types: a prefix is set beside its type, and Save sends only the numbering that changed', async () => {
     const realFetchLocal = globalThis.fetch;
-    const { CONFIG } = await import(join(UI, 'ticketdesk', 'instance.js'));
+    const { CONFIG } = await import(pathToFileURL(join(UI, 'ticketdesk', 'instance.js')).href);
     CONFIG.numbering = { bugs: { prefix: 'BUG', pad: 4, start: 1, step: 1 },
         backlog: { prefix: { project: 'PROJ', epic: 'EPIC', story: 'STORY', task: 'TASK' }, pad: 4, start: 1, step: 1 } };
     let refuse = true;
@@ -1723,7 +1723,7 @@ await t('Record types: a prefix is set beside its type, and Save sends only the 
         'POST /api/project/numbering': (b) => (refuse ? { ok: false, error: 'prefix "EPIC" is used by two types' }
             : { ok: true, numbering: b.numbering }),
     });
-    const { mountRecordTypes } = await import(join(UI, 'ticketdesk', 'schema_editor.js'));
+    const { mountRecordTypes } = await import(pathToFileURL(join(UI, 'ticketdesk', 'schema_editor.js')).href);
     const el = document.createElement('div');
     document.body.appendChild(el);
     const cleanup = mountRecordTypes(el, { store: 'backlog', type: 'story' });
@@ -1759,7 +1759,7 @@ await t('Record types: a prefix is set beside its type, and Save sends only the 
 await t('Record types: unsaved changes are still there when you come back', async () => {
     const realFetchLocal = globalThis.fetch;
     fakeApi({});
-    const { mountRecordTypes } = await import(join(UI, 'ticketdesk', 'schema_editor.js'));
+    const { mountRecordTypes } = await import(pathToFileURL(join(UI, 'ticketdesk', 'schema_editor.js')).href);
     const el = document.createElement('div');
     let cleanup = mountRecordTypes(el, { store: 'backlog', type: 'epic' });
     const pad = el.querySelector('[data-num="pad"]');
@@ -1781,7 +1781,7 @@ await t('Team: the roster on the page, saved with its own Save', async () => {
         'GET /api/project': { ok: true, path: '.bugdesk/project.json', config: { collaborators: [{ name: 'bob', agent: 'bob_agent' }] } },
         'POST /api/project/collaborators': (b) => ({ ok: true, collaborators: b.collaborators }),
     });
-    const { mountTeam } = await import(join(UI, 'ticketdesk', 'collaborators.js'));
+    const { mountTeam } = await import(pathToFileURL(join(UI, 'ticketdesk', 'collaborators.js')).href);
     const el = document.createElement('div');
     mountTeam(el);
     await tick(); await tick();
@@ -1804,7 +1804,7 @@ await t('Git: the two switches apply as flipped, and leave the project auto-save
         'GET /api/git': { ok: true, enabled: true, settings: { commitAfterSave: false, pushAfterCommit: false, autosave: 'debounce', autosaveSeconds: 3 } },
         'POST /api/project/git': (b) => ({ ok: true, enabled: true, settings: { ...b, autosave: 'debounce', autosaveSeconds: 3 } }),
     });
-    const { mountGitSettings } = await import(join(UI, 'ticketdesk', 'changes_pane.js'));
+    const { mountGitSettings } = await import(pathToFileURL(join(UI, 'ticketdesk', 'changes_pane.js')).href);
     const el = document.createElement('div');
     await mountGitSettings(el);
     assert.ok(el.querySelector('[data-set="pushAfterCommit"]').disabled, 'push is offered without commit');
@@ -1819,12 +1819,12 @@ await t('Git: the two switches apply as flipped, and leave the project auto-save
 
 await t('Auto-save is yours: chosen in your profile, and the project default clears it', async () => {
     const realFetchLocal = globalThis.fetch;
-    const { CONFIG } = await import(join(UI, 'ticketdesk', 'instance.js'));
-    const { autosaveMode } = await import(join(UI, 'ticketdesk', 'autosave.js'));
+    const { CONFIG } = await import(pathToFileURL(join(UI, 'ticketdesk', 'instance.js')).href);
+    const { autosaveMode } = await import(pathToFileURL(join(UI, 'ticketdesk', 'autosave.js')).href);
     CONFIG.saving = { commitAfterSave: false, pushAfterCommit: false, autosave: 'off', autosaveSeconds: 0,
         ownAutosave: false, projectAutosave: 'off', projectAutosaveSeconds: 0 };
     const posts = fakeApi({ 'POST /api/user/settings': { ok: true, settings: {} } });
-    const { mountAutosaveSetting } = await import(join(UI, 'ticketdesk', 'autosave_setting.js'));
+    const { mountAutosaveSetting } = await import(pathToFileURL(join(UI, 'ticketdesk', 'autosave_setting.js')).href);
     const el = document.createElement('div');
     document.body.appendChild(el);
     const cleanup = mountAutosaveSetting(el);
@@ -2004,7 +2004,7 @@ await t('a focus change does NOT rebuild the panel under the pointer', async () 
 console.log('\nEverything on one person');
 
 await t('a flat board lists that person\'s open items and nothing else', async () => {
-    const { assigneeExpr } = await import(join(UI, 'ticketdesk', 'backlog_filters.js'));
+    const { assigneeExpr } = await import(pathToFileURL(join(UI, 'ticketdesk', 'backlog_filters.js')).href);
     const host = document.createElement('div');
     document.body.appendChild(host);
     const page = createBacklogContent({ eventBus: null })
@@ -2052,7 +2052,7 @@ await t('the tree is still a tree when it is not a person\'s list', async () => 
  * rule Backspace does. */
 await t('an item\'s breadcrumb is its hierarchy, and every crumb climbs through the WM', async () => {
     const { mountTileBreadcrumb } = await import('@flexdesk/wm');
-    const { taxonomy: tax } = await import(join(UI, 'tiling', 'kind_taxonomy.js'));
+    const { taxonomy: tax } = await import(pathToFileURL(join(UI, 'tiling', 'kind_taxonomy.js')).href);
     const climbed = [];
     const navigated = [];
     const wm = {
@@ -2156,7 +2156,7 @@ await t('a board\'s sort survives being unmounted and mounted again', async () =
  * first hundred rows even with the page controls switched off, so the rest of
  * the store was unreachable and nothing said so. */
 // FlexDesk's DataTable since STORY-0008, through BugDesk's adapter.
-const { createTable: createPaged } = await import(join(UI, 'ticketdesk', 'bd_table.js'));
+const { createTable: createPaged } = await import(pathToFileURL(join(UI, 'ticketdesk', 'bd_table.js')).href);
 const PagedTable = function PagedTable(host, opts) { return createPaged(host, opts); };
 // The first row DRAWN — FlexDesk's getDisplayedRows() is every page's rows (in
 // order), so "which page am I on" is read off the body itself.
@@ -2256,7 +2256,7 @@ console.log('\nInspector, end to end');
 
 const { WindowManager } = await import('@flexdesk/wm');
 const { createContentRegistry } = await import('@flexdesk/wm');
-const { taxonomy } = await import(join(UI, 'tiling', 'kind_taxonomy.js'));
+const { taxonomy } = await import(pathToFileURL(join(UI, 'tiling', 'kind_taxonomy.js')).href);
 
 await t('clicking a name puts that person\'s list in the primary tile', async () => {
     const realFetchLocal = globalThis.fetch;
@@ -2297,7 +2297,7 @@ await t('clicking a name puts that person\'s list in the primary tile', async ()
     assert.equal(activeTab().kind, 'item', 'the fixture did not set up a drilled-in tile');
 
     // Now the thing the Inspector does.
-    const { assigneeExpr } = await import(join(UI, 'ticketdesk', 'backlog_filters.js'));
+    const { assigneeExpr } = await import(pathToFileURL(join(UI, 'ticketdesk', 'backlog_filters.js')).href);
     wm.openInPrimary('backlog', { expr: assigneeExpr('bob'), label: 'On bob' });
 
     const tab = activeTab();
@@ -2372,7 +2372,7 @@ const mountTicketPage = async (bug, {
         if (path.endsWith('/api/backlog/meta')) return { ok: true, json: async () => ({ ok: true, phases: [] }) };
         return { ok: true, json: async () => ({ ok: true, settings: {}, filters: [] }) };
     });
-    const bugsData = await import(join(UI, 'ticketdesk', 'data.js'));
+    const bugsData = await import(pathToFileURL(join(UI, 'ticketdesk', 'data.js')).href);
     await bugsData.loadData();
     // ITEMS is emptied deliberately: the page is supposed to load the other
     // store ITSELF, so leaving a previous section's fixture in place would hide
@@ -2414,8 +2414,8 @@ await t('a bug can go back to open from every later stage, and the move is saved
 
 /* ── a status move and its message ────────────────────────────────── */
 
-const moves = await import(join(UI, 'ticketdesk', 'bug_transitions.js'));
-const moveBugData = await import(join(UI, 'ticketdesk', 'data.js'));
+const moves = await import(pathToFileURL(join(UI, 'ticketdesk', 'bug_transitions.js')).href);
+const moveBugData = await import(pathToFileURL(join(UI, 'ticketdesk', 'data.js')).href);
 const me = moveBugData.HUMAN_AUTHOR;
 const stampNow = (msAgo = 0) => new Date(Date.now() - msAgo).toISOString().slice(0, 16) + 'Z';
 
@@ -2940,11 +2940,11 @@ console.log('\nRecord references while typing');
         if (path.endsWith('/api/backlog/meta')) return { ok: true, json: async () => ({ ok: true, phases: [] }) };
         return { ok: true, json: async () => ({ ok: true, settings: {}, filters: [] }) };
     });
-    const refBugs = await import(join(UI, 'ticketdesk', 'data.js'));
+    const refBugs = await import(pathToFileURL(join(UI, 'ticketdesk', 'data.js')).href);
     await refBugs.loadData();
     await backlogData.loadBacklog();
-    const auto = await import(join(UI, 'ticketdesk', 'ref_autolink.js'));
-    const { renderMarkdown: md } = await import(join(UI, 'ticketdesk', 'markdown.js'));
+    const auto = await import(pathToFileURL(join(UI, 'ticketdesk', 'ref_autolink.js')).href);
+    const { renderMarkdown: md } = await import(pathToFileURL(join(UI, 'ticketdesk', 'markdown.js')).href);
 
     /** A textarea with the autolink on, and a way to type into it. */
     const editor = () => {
@@ -3052,8 +3052,8 @@ console.log('\nRecord references while typing');
 console.log('\nUpdated, to the minute');
 
 {
-    const stampData = await import(join(UI, 'ticketdesk', 'data.js'));
-    const engine = await import(join(UI, 'ticketdesk', 'filter_engine.js'));
+    const stampData = await import(pathToFileURL(join(UI, 'ticketdesk', 'data.js')).href);
+    const engine = await import(pathToFileURL(join(UI, 'ticketdesk', 'filter_engine.js')).href);
     const { formatStamp } = stampData;
     const local = (iso) => {
         const d = new Date(iso);
@@ -3095,10 +3095,10 @@ console.log('\nUpdated, to the minute');
 
 console.log('\nRecord schema');
 {
-    const schema = await import(join(UI, 'ticketdesk', 'schema.js'));
-    const moves = await import(join(UI, 'ticketdesk', 'bug_transitions.js'));
-    const { mountCustomFields } = await import(join(UI, 'ticketdesk', 'custom_fields.js'));
-    const { createFilterModel } = await import(join(UI, 'ticketdesk', 'filter_engine.js'));
+    const schema = await import(pathToFileURL(join(UI, 'ticketdesk', 'schema.js')).href);
+    const moves = await import(pathToFileURL(join(UI, 'ticketdesk', 'bug_transitions.js')).href);
+    const { mountCustomFields } = await import(pathToFileURL(join(UI, 'ticketdesk', 'custom_fields.js')).href);
+    const { createFilterModel } = await import(pathToFileURL(join(UI, 'ticketdesk', 'filter_engine.js')).href);
     const SCHEMA = {
         types: {
             bugs: {
@@ -3240,7 +3240,7 @@ console.log('\nRecord schema');
 
 console.log('\nWorkflow');
 {
-    const wf = await import(join(UI, 'ticketdesk', 'workflow.js'));
+    const wf = await import(pathToFileURL(join(UI, 'ticketdesk', 'workflow.js')).href);
     const flow = (nodes, links) => ({
         nodes: [{ id: 'start', type: 'start', config: {} }, ...nodes],
         connections: links.map(([source, target, sourcePort = 'out']) => ({ source, target, sourcePort, targetPort: 'in' })),
@@ -3301,7 +3301,7 @@ console.log('\nWorkflow');
     });
 
     await t('the flow editor names an answer by its question, never by the step id it is stored as', async () => {
-        const { mountFlowEditor } = await import(join(UI, 'ticketdesk', 'workflow_editor.js'));
+        const { mountFlowEditor } = await import(pathToFileURL(join(UI, 'ticketdesk', 'workflow_editor.js')).href);
         const host = document.createElement('div');
         document.body.appendChild(host);
         const graph = flow([
@@ -3418,7 +3418,7 @@ console.log('\nWorkflow');
     });
 
     await t('the built-in moves are what the pages offer, custom statuses included', async () => {
-        const { builtinTable } = await import(join(UI, 'ticketdesk', 'builtin_moves.js'));
+        const { builtinTable } = await import(pathToFileURL(join(UI, 'ticketdesk', 'builtin_moves.js')).href);
         const story = builtinTable('backlog', ['story']);
         assert.ok(story.some((m) => m.from === 'refined' && m.to === 'in-progress' && m.label === 'Start work'));
         assert.ok(story.some((m) => m.from === 'dropped' && m.to === 'draft'));
@@ -3436,8 +3436,8 @@ console.log('\nWorkflow');
 
 console.log('\nOne workflow');
 {
-    const wf = await import(join(UI, 'ticketdesk', 'workflow.js'));
-    const model = await import(join(UI, 'ticketdesk', 'workflow_model.js'));
+    const wf = await import(pathToFileURL(join(UI, 'ticketdesk', 'workflow.js')).href);
+    const model = await import(pathToFileURL(join(UI, 'ticketdesk', 'workflow_model.js')).href);
     const TYPES = [
         ...['bug', 'regression', 'task'].map((type) => ({ store: 'bugs', type, storeLabel: 'Bugs' })),
         ...['epic', 'story', 'task'].map((type) => ({ store: 'backlog', type, storeLabel: 'Backlog' })),
@@ -3506,8 +3506,8 @@ console.log('\nOne workflow');
 
 console.log('\nLinks and resolutions');
 {
-    const wf = await import(join(UI, 'ticketdesk', 'workflow.js'));
-    const model = await import(join(UI, 'ticketdesk', 'workflow_model.js'));
+    const wf = await import(pathToFileURL(join(UI, 'ticketdesk', 'workflow.js')).href);
+    const model = await import(pathToFileURL(join(UI, 'ticketdesk', 'workflow_model.js')).href);
     const flow = (nodes, links) => ({
         nodes: [{ id: 'start', type: 'start', config: {} }, ...nodes],
         connections: links.map(([source, target, sourcePort = 'out']) => ({ source, target, sourcePort, targetPort: 'in' })),
@@ -3679,7 +3679,7 @@ console.log('\nLinks and resolutions');
         const b = await mountTicketPage(bug42({ status: 'closed', stage: 3, resolution: 'wontfix' }));
         assert.equal(b.host.querySelector('[data-f="resolution"]')?.value, 'wontfix');
         b.done();
-        const schema = await import(join(UI, 'ticketdesk', 'schema.js'));
+        const schema = await import(pathToFileURL(join(UI, 'ticketdesk', 'schema.js')).href);
         schema.setSchema({ types: { bugs: { bug: { fields: [], hidden: ['resolution'], statuses: [] } } } });
         try {
             const patch = await wf.planMove({ store: 'bugs', record: { status: 'open', title: 'T' },
@@ -3695,8 +3695,8 @@ console.log('\nLinks and resolutions');
         const i = await mountItemPage(itemRecord({ status: 'dropped', resolution: 'wont-fix' }));
         assert.equal(i.host.querySelector('[data-f="resolution"]')?.value, 'wont-fix');
         i.done();
-        const bugFilters = await import(join(UI, 'ticketdesk', 'filters.js'));
-        const itemFilters = await import(join(UI, 'ticketdesk', 'backlog_filters.js'));
+        const bugFilters = await import(pathToFileURL(join(UI, 'ticketdesk', 'filters.js')).href);
+        const itemFilters = await import(pathToFileURL(join(UI, 'ticketdesk', 'backlog_filters.js')).href);
         const clause = (value) => ({ kind: 'group', op: 'AND', children: [{ kind: 'clause', field: 'resolution', op: 'is', value }] });
         const rows = [{ id: '#1', resolution: 'duplicate' }, { id: '#2', resolution: '' }];
         assert.deepEqual(rows.filter(bugFilters.MODEL.matcherFor(clause('duplicate'))).map((r) => r.id), ['#1']);
@@ -3707,8 +3707,8 @@ console.log('\nLinks and resolutions');
 
 console.log('\nMass actions');
 {
-    const wf = await import(join(UI, 'ticketdesk', 'workflow.js'));
-    const mass = await import(join(UI, 'ticketdesk', 'mass_actions.js'));
+    const wf = await import(pathToFileURL(join(UI, 'ticketdesk', 'workflow.js')).href);
+    const mass = await import(pathToFileURL(join(UI, 'ticketdesk', 'mass_actions.js')).href);
     const bug = (id, status, type = 'bug') => mass.bugRecord({ bugId: id, id: `#${id}`, rawStatus: status, rawType: type });
     const story = (id, status, extra = {}) => mass.itemRecord({ id, ref: `STORY-${id}`, type: 'story', status,
         title: 'A story with a title', description: 'Why', criteria: ['x'], points: '3', parent: 1, ...extra });
@@ -3838,7 +3838,7 @@ console.log('\nMass actions');
 
 console.log('\nConversion');
 {
-    const { convertedBanner } = await import(join(UI, 'ticketdesk', 'convert.js'));
+    const { convertedBanner } = await import(pathToFileURL(join(UI, 'ticketdesk', 'convert.js')).href);
     await t('a converted record says where it went, as a link the app opens', () => {
         const box = document.createElement('div');
         box.innerHTML = convertedBanner({ convertedTo: 'STORY-0031' });
@@ -3857,8 +3857,8 @@ console.log('\nConversion');
 
 console.log('\nAuto-save');
 {
-    const inst = await import(join(UI, 'ticketdesk', 'instance.js'));
-    const { attachAutosave } = await import(join(UI, 'ticketdesk', 'autosave.js'));
+    const inst = await import(pathToFileURL(join(UI, 'ticketdesk', 'instance.js')).href);
+    const { attachAutosave } = await import(pathToFileURL(join(UI, 'ticketdesk', 'autosave.js')).href);
     const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     const make = (saveImpl) => {
         inst.CONFIG.saving = { autosave: 'debounce', autosaveSeconds: 1 };
@@ -3914,7 +3914,7 @@ console.log('\nAuto-save');
 
 console.log('\nBottom panel: Changes and Alerts');
 {
-    const rd = await import(join(UI, 'ticketdesk', 'record_diff.js'));
+    const rd = await import(pathToFileURL(join(UI, 'ticketdesk', 'record_diff.js')).href);
     const before = '---\nid: 3\ntitle: "Export to CSV"\nseverity: high\nlabels:\n  - data\n---\n\nThe body.\nSecond line.\n';
     const after = '---\nid: 3\ntitle: "Export to CSV"\nseverity: critical\nlabels:\n  - data\n  - csv\n---\n\nThe body.\nSecond line.\nAdded.\n';
 
@@ -3961,7 +3961,7 @@ console.log('\nBottom panel: Changes and Alerts');
             if (u.endsWith('/git/commit')) { posted.push(JSON.parse(init.body)); return reply(state()); }
             return reply({ ok: true });
         };
-        const { mountChangesPane } = await import(join(UI, 'ticketdesk', 'changes_pane.js'));
+        const { mountChangesPane } = await import(pathToFileURL(join(UI, 'ticketdesk', 'changes_pane.js')).href);
         const host = document.createElement('div');
         document.body.appendChild(host);
         let count = null;
@@ -3995,7 +3995,7 @@ console.log('\nBottom panel: Changes and Alerts');
     });
 
     await t('the Alerts tab (FlexDesk\'s pane on one log over every copy) counts per rule and level, filters, and badges the unread', async () => {
-        const { mountAlertsTab, sharedAlertLog } = await import(join(UI, 'ticketdesk', 'alerts.js'));
+        const { mountAlertsTab, sharedAlertLog } = await import(pathToFileURL(join(UI, 'ticketdesk', 'alerts.js')).href);
         const { NotificationHistory } = await import('@flexdesk/widgets');
         const fake = (entries, rules, matching) => {
             const opened = [];
@@ -4083,7 +4083,7 @@ console.log('\nBottom panel: Changes and Alerts');
 
 console.log('\nGit warnings: no repository, no remote (STORY-0049)');
 {
-    const gw = await import(join(UI, 'ticketdesk', 'git_warnings.js'));
+    const gw = await import(pathToFileURL(join(UI, 'ticketdesk', 'git_warnings.js')).href);
     const settle = async () => { for (let i = 0; i < 20; i++) await new Promise((r) => setTimeout(r, 5)); };
 
     await t('the condition: no repository, no remote at all, and an upstream-less branch is neither', () => {
@@ -4218,7 +4218,7 @@ console.log('\nGit warnings: no repository, no remote (STORY-0049)');
         const realFetch = globalThis.fetch;
         const b = bridge({ ok: true, enabled: false, reason: 'This store is not in a git repository, so there is nothing to commit or push.', home: '/p', files: [], others: [] });
         globalThis.fetch = b.fetch;
-        const { mountChangesPane } = await import(join(UI, 'ticketdesk', 'changes_pane.js'));
+        const { mountChangesPane } = await import(pathToFileURL(join(UI, 'ticketdesk', 'changes_pane.js')).href);
         const host = document.createElement('div');
         document.body.appendChild(host);
         const pane = mountChangesPane(host, {});
@@ -4256,7 +4256,7 @@ console.log('\nGit warnings: no repository, no remote (STORY-0049)');
         globalThis.fetch = (url, init) => (String(url).startsWith('/t/') ? tracker : page).fetch(url, init);
         const host = document.createElement('div');
         document.body.appendChild(host);
-        const pane = (await import(join(UI, 'ticketdesk', 'changes_pane.js'))).mountChangesPane(host, { sources: [{ inst: inst(page, false) }, { inst: inst(tracker, true) }] });
+        const pane = (await import(pathToFileURL(join(UI, 'ticketdesk', 'changes_pane.js')).href)).mountChangesPane(host, { sources: [{ inst: inst(page, false) }, { inst: inst(tracker, true) }] });
         try {
             await settle();
             assert.match(host.querySelector('.bd-changes__bar').textContent, /No remote branch, so nothing to push/);
@@ -4283,8 +4283,8 @@ console.log('\nGit warnings: no repository, no remote (STORY-0049)');
 console.log('\nThe top bar');
 
 {
-    const { bootBugDesk } = await import(join(UI, 'bootstrap', 'boot.js'));
-    const { installAppMenu } = await import(join(UI, 'tiling', 'install.js'));
+    const { bootBugDesk } = await import(pathToFileURL(join(UI, 'bootstrap', 'boot.js')).href);
+    const { installAppMenu } = await import(pathToFileURL(join(UI, 'tiling', 'install.js')).href);
     const { MenuBar } = await import('@flexdesk/widgets');
     bootBugDesk();
     const bar = document.querySelector('.global-top-bar');
