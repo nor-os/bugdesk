@@ -4565,6 +4565,37 @@ console.log('\nThe filter editor');
         await within(closed);
     });
 
+    await t('Save on a saved filter changes that filter and makes no second one', async () => {
+        const mine = await saveFilter({ scope: 'bugs', label: 'Before', icon: FILTER_ICONS[0], expr: seed, builtin: false }, 'bugs');
+        const before = listFilters('bugs').map((f) => f.id);
+        let saved = null;
+        const closed = openFilterEditor({ model, scope: 'bugs', filter: mine, items, onSaved: (f) => { saved = f; } });
+        await settle();
+        typeName('After');
+        await settle();
+        button('save').click();
+        await within(closed);
+        assert.equal(saved.id, mine.id);
+        assert.equal(getFilter(mine.id).label, 'After');
+        assert.deepEqual(listFilters('bugs').map((f) => f.id), before);
+    });
+
+    await t('Delete removes that filter once the question is confirmed, and tells the caller', async () => {
+        const mine = await saveFilter({ scope: 'bugs', label: 'Going', icon: FILTER_ICONS[0], expr: seed, builtin: false }, 'bugs');
+        const others = listFilters('bugs').map((f) => f.id).filter((id) => id !== mine.id);
+        let deleted = null;
+        const closed = openFilterEditor({ model, scope: 'bugs', filter: mine, items, onDeleted: (id) => { deleted = id; } });
+        await settle();
+        button('delete').click();
+        await settle();
+        assert.ok(getFilter(mine.id), 'gone before the question was answered');
+        await answer('confirm');
+        await within(closed);
+        assert.equal(deleted, mine.id);
+        assert.equal(getFilter(mine.id), undefined);
+        assert.deepEqual(listFilters('bugs').map((f) => f.id), others);
+    });
+
     await t('a value of days cannot be stepped below zero', async () => {
         const closed = openFilterEditor({
             model: createFilterModel({ fields: [{ key: 'updated', label: 'Updated', type: 'date', get: (r) => r.updated }] }),
