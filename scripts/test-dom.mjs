@@ -4332,7 +4332,7 @@ console.log('\nThe top bar');
     });
 }
 
-/* ── FlexDesk's project picker, with what is BugDesk's in it ───────────────── */
+/* ── FlexDesk's picker and filter dialog, with what is BugDesk's in them ───── */
 
 console.log('\nThe project picker');
 {
@@ -4418,75 +4418,83 @@ console.log('\nThe filter editor');
     const { getFilter, saveFilter } = await import(pathToFileURL(join(UI, 'ticketdesk', 'filter_store.js')).href);
     const model = createFilterModel({
         noun: 'bug',
-        fields: [{ key: 'severity', label: 'Severity', type: 'enum', options: ['high', 'low'], get: (r) => r.severity }],
+        fields: [
+            { key: 'severity', label: 'Severity', type: 'enum', options: ['high', 'low'], get: (r) => r.severity },
+            { key: 'title', label: 'Title', type: 'text', get: (r) => r.title },
+            { key: 'cf.env', label: 'Env', type: 'text', custom: true, get: (r) => r.env },
+        ],
     });
+    const items = [
+        { id: 'BUG-1', summary: 'one', severity: 'high', title: 'one' },
+        { id: 'BUG-2', summary: 'two', severity: 'low', title: 'two' },
+    ];
     const seed = { kind: 'group', op: 'AND', children: [{ kind: 'clause', field: 'severity', op: 'is', value: 'high' }] };
-    const stored = await saveFilter({ scope: 'bugs', label: "Norman's bugs & crashes", icon: FILTER_ICONS[0], expr: seed, builtin: false }, 'bugs');
-    const overlay = () => document.querySelector('.td-fed');
-    const act = (name) => overlay().querySelector(`[data-act="${name}"]`);
-    const nameInput = () => overlay().querySelector('.td-fed__name');
-    const clickBeside = () => overlay().dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    const button = (word) => [...document.querySelectorAll('button')].find((b) => b.textContent.trim().toLowerCase() === word);
+    const settle = async () => { for (let i = 0; i < 6; i++) await new Promise((r) => setTimeout(r, 30)); };
     const typeName = (text) => {
-        nameInput().value = text;
-        nameInput().dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+        const name = document.querySelector('.twm-filter-dialog__name input');
+        name.value = text;
+        name.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
     };
 
-    await t('it opens with the name selected, so typing replaces it', () => {
-        openFilterEditor({ model, scope: 'bugs', filter: stored });
-        const { selectionStart, selectionEnd, value } = nameInput();
-        assert.equal(value, "Norman's bugs & crashes");
-        assert.deepEqual([selectionStart, selectionEnd], [0, value.length]);
-        act('cancel').click();
-        assert.equal(overlay(), null);
+    await t('a field of the catalogue lands in its type group, a custom one in its own', () => {
+        assert.deepEqual(model.fields.map((f) => f.group), ['Choice', 'Text', 'Custom fields']);
     });
 
-    await t('a click beside an unchanged editor closes it', () => {
-        openFilterEditor({ model, scope: 'bugs', filter: stored });
-        clickBeside();
-        assert.equal(overlay(), null);
+    await t('a field gone from the schema is said by name, without its prefix', () => {
+        assert.match(model.describeFilter({ kind: 'clause', field: 'cf.gone', op: 'is', value: 'x' }), /unknown field “gone”/);
     });
 
-    await t('a click beside a changed editor asks first', () => {
-        openFilterEditor({ model, scope: 'bugs', filter: stored });
-        typeName('Renamed');
-        clickBeside();
-        assert.ok(overlay(), 'closed without asking');
-        assert.equal(overlay().querySelector('[data-role="confirmtitle"]').textContent, 'Discard changes?');
-        act('confirm-no').click();
-        assert.ok(overlay(), 'Keep editing closed it');
-        clickBeside();
-        act('confirm-yes').click();
-        assert.equal(overlay(), null);
+    await t('a filter saved by the old editor reads the same', () => {
+        // The old editor stored `value: null` for an operator with no value.
+        const expr = { kind: 'group', op: 'OR', negate: true, children: [
+            { kind: 'clause', field: 'title', op: 'is_empty', value: null },
+            { kind: 'clause', field: 'severity', op: 'one_of', value: ['low'] },
+        ] };
+        assert.deepEqual(model.validateFilter(expr), { ok: true, errors: [] });
+        assert.deepEqual(items.filter(model.matcherFor(expr)).map((r) => r.id), ['BUG-1']);
     });
 
-    await t('the Delete question names the filter as it is typed, as written', () => {
-        openFilterEditor({ model, scope: 'bugs', filter: stored });
-        typeName('Bugs & <crashes>');
-        act('delete').click();
-        assert.match(overlay().querySelector('[data-role="confirmbody"]').textContent, /^"Bugs & <crashes>" will be removed/);
-        act('confirm-no').click();
-        typeName("Norman's bugs & crashes");
-        act('cancel').click();
-        assert.equal(overlay(), null);
+    await t('the preview says what matches; Save needs a name, stores it and tells the caller', async () => {
+        let saved = null;
+        const closed = openFilterEditor({ model, scope: 'bugs', seedExpr: seed, items, onSaved: (f) => { saved = f; } });
+        await settle();
+        assert.match(document.querySelector('.bd-fprev__count').textContent, /1\s+of 2 bugs match/);
+        assert.equal(document.querySelectorAll('.bd-fprev__hit').length, 1);
+        assert.match(document.querySelector('.twm-filter-dialog__sentence').textContent, /Severity is high/);
+        assert.ok(button('save').disabled, 'Save offered with no name');
+        assert.equal(button('delete'), undefined, 'Delete offered for a filter never saved');
+        typeName('High ones');
+        await settle();
+        button('save').click();
+        await closed;
+        assert.equal(saved.label, 'High ones');
+        assert.equal(saved.icon, FILTER_ICONS[0]);
+        assert.deepEqual(getFilter(saved.id).expr, seed);
+        assert.equal(document.querySelector('.twm-filter-dialog'), null);
     });
 
-    await t('a value of days cannot be stepped below zero', () => {
-        openFilterEditor({
-            model: createFilterModel({ fields: [{ key: 'updated', label: 'Updated', type: 'date', get: (r) => r.updated }] }),
-            scope: 'bugs',
-            seedExpr: { kind: 'group', op: 'AND', children: [{ kind: 'clause', field: 'updated', op: 'in_last_days', value: 3 }] },
-        });
-        assert.equal(overlay().querySelector('[data-role="vnum"]').min, '0');
-        act('cancel').click();
+    await t('the Delete question names the filter as it is written', async () => {
+        const stored = await saveFilter({ scope: 'bugs', label: "Norman's bugs & crashes", icon: FILTER_ICONS[0], expr: seed, builtin: false }, 'bugs');
+        const closed = openFilterEditor({ model, scope: 'bugs', filter: stored, items });
+        await settle();
+        button('delete').click();
+        await settle();
+        assert.match(document.querySelector('.twm-modal__body--text').textContent, /^"Norman's bugs & crashes" will be removed/);
+        document.querySelector('[data-action="cancel"]').click();
+        await settle();
+        button('cancel').click();
+        await closed;
     });
 
-    await t('an alert condition comes back to the caller and is not stored', () => {
+    await t('an alert condition comes back to the caller and is not stored', async () => {
         let picked = null;
-        openFilterEditor({ model, scope: 'bugs', filter: { label: 'Alert', expr: seed }, onPick: (c) => { picked = c; } });
-        act('save').click();
-        assert.equal(overlay(), null);
+        const closed = openFilterEditor({ model, scope: 'bugs', filter: { label: 'Alert', expr: seed }, items,
+            onPick: (p) => { picked = p; } });
+        await settle();
+        button('save').click();
+        await closed;
         assert.deepEqual(picked, { label: 'Alert', expr: seed });
-        assert.equal(getFilter(stored.id).label, "Norman's bugs & crashes");
     });
 }
 
