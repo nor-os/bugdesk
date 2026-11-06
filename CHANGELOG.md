@@ -15,14 +15,17 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   while the app is running closes the window, says why in `desktop.log` and a
   message box, and the exit code is 1; the window used to vanish with exit code 0.
 
-- **More of the page is FlexDesk's** (0.18.0): the project field and switcher
+- **More of the page is FlexDesk's** (0.18.1): the project field and switcher
   (`createWorkspacePicker`), form selects (`createSelect`), the filter dialog and
   its expression model (`openFilterDialog`, `createFilterModel`) and the Changes
   pane's diff (`createDiffViewer`). What you see of them follows FlexDesk: the
-  filter dialog is a modal window, so a click beside it no longer cancels it;
-  the Text view numbers both sides of a change; a select's list follows a scroll
+  Text view numbers both sides of a change; a select's list follows a scroll
   rather than closing on one; the project switcher moves with a resized window
-  rather than closing. Stored filters and their expressions are unchanged.
+  rather than closing, and its arrows move real focus, so from a freshly opened
+  switcher the first Down lands on the first row; a filter condition moved to
+  another field keeps its operator and value when they fit; a range with one end
+  filled cannot be saved. A click beside the filter dialog still cancels it, asking
+  first if anything changed. Stored filters and their expressions are unchanged.
 
 - **The top bar matches EcoSim's and EcoAgent's** (STORY-0062). The menu is
   FlexDesk's menu bar drawn as a hamburger at the far left, before the brand:
@@ -31,7 +34,7 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   keyboard. The command-palette button moved to the right of the panel
   toggles, and the left and right panel toggles now show their own side.
 
-- **FlexDesk 0.18.0** (from 0.16.1), vendored with `npm run sync:flexdesk`.
+- **FlexDesk 0.18.1** (from 0.16.1), vendored with `npm run sync:flexdesk`.
   A dashboard tile's settings dialog reads FlexDesk 0.17's config schema
   (`key`, `description`); without that it showed no display settings at all.
 

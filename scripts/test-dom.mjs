@@ -4382,7 +4382,7 @@ console.log('\nThe project picker');
             const el = document.querySelector('.twm-modal__body--text');
             if (!el || body !== null) return;
             body = el.textContent;
-            document.querySelector('.twm-modal [data-action="cancel"]').click();
+            el.parentElement.querySelector('[data-action="cancel"]').click();
         });
         seen.observe(document.body, { childList: true, subtree: true });
         await open();
@@ -4392,6 +4392,7 @@ console.log('\nThe project picker');
         seen.disconnect();
         assert.match(body, /^Remove beta from projects\.toml\?\n\nOnly the entry goes\./);
         assert.ok(!/[<&]/.test(body), body);
+        assert.equal(document.querySelector('.twm-modal__body--text'), null, 'the question stayed open');
         field.click();
         await tick();
     });
@@ -4431,6 +4432,8 @@ console.log('\nThe filter editor');
     const seed = { kind: 'group', op: 'AND', children: [{ kind: 'clause', field: 'severity', op: 'is', value: 'high' }] };
     const button = (word) => [...document.querySelectorAll('button')].find((b) => b.textContent.trim().toLowerCase() === word);
     const settle = async () => { for (let i = 0; i < 6; i++) await new Promise((r) => setTimeout(r, 30)); };
+    // A dialog that stays open is a failed test, not a suite that never ends.
+    const within = (closed) => Promise.race([closed, new Promise((_, no) => setTimeout(() => no(new Error('the dialog stayed open')), 2000))]);
     const typeName = (text) => {
         const name = document.querySelector('.twm-filter-dialog__name input');
         name.value = text;
@@ -4442,7 +4445,19 @@ console.log('\nThe filter editor');
     });
 
     await t('a field gone from the schema is said by name, without its prefix', () => {
-        assert.match(model.describeFilter({ kind: 'clause', field: 'cf.gone', op: 'is', value: 'x' }), /unknown field “gone”/);
+        assert.match(model.describeFilter({ kind: 'clause', field: 'cf.gone', op: 'is', value: 'x' }), /unknown field “gone” is x$/);
+    });
+
+    await t('the sentence of a filter has no brackets around its root', () => {
+        assert.equal(model.describeFilter({ kind: 'group', op: 'AND', children: [
+            { kind: 'clause', field: 'severity', op: 'is', value: 'high' },
+            { kind: 'clause', field: 'title', op: 'contains', value: 'x' },
+        ] }), 'Severity is high AND Title contains x');
+    });
+
+    await t('a condition moved to another field keeps its operator and value when they fit', () => {
+        assert.deepEqual(model.moveClause({ kind: 'clause', field: 'title', op: 'is', value: 'x' }, 'cf.env'),
+            { kind: 'clause', field: 'cf.env', op: 'is', value: 'x' });
     });
 
     await t('a filter saved by the old editor reads the same', () => {
@@ -4467,24 +4482,99 @@ console.log('\nThe filter editor');
         typeName('High ones');
         await settle();
         button('save').click();
-        await closed;
+        await within(closed);
         assert.equal(saved.label, 'High ones');
         assert.equal(saved.icon, FILTER_ICONS[0]);
         assert.deepEqual(getFilter(saved.id).expr, seed);
         assert.equal(document.querySelector('.twm-filter-dialog'), null);
     });
 
-    await t('the Delete question names the filter as it is written', async () => {
-        const stored = await saveFilter({ scope: 'bugs', label: "Norman's bugs & crashes", icon: FILTER_ICONS[0], expr: seed, builtin: false }, 'bugs');
+    const stored = await saveFilter({ scope: 'bugs', label: "Norman's bugs & crashes", icon: FILTER_ICONS[0], expr: seed, builtin: false }, 'bugs');
+    const dialog = () => document.querySelector('.twm-filter-dialog');
+    const nameInput = () => document.querySelector('.twm-filter-dialog__name input');
+    const question = () => document.querySelector('.twm-modal__body--text');
+    const clickBeside = async () => {
+        [...document.querySelectorAll('.twm-managed-window__backdrop')].at(-1)
+            .dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+        await settle();
+    };
+    const answer = async (action) => {
+        document.querySelector(`[data-action="${action}"]`).click();
+        await settle();
+    };
+
+    await t('it opens with the name selected, so typing replaces it', async () => {
+        const closed = openFilterEditor({ model, scope: 'bugs', filter: stored, items });
+        await settle();
+        const { selectionStart, selectionEnd, value } = nameInput();
+        assert.equal(document.activeElement, nameInput());
+        assert.equal(value, "Norman's bugs & crashes");
+        assert.deepEqual([selectionStart, selectionEnd], [0, value.length]);
+        button('cancel').click();
+        await within(closed);
+    });
+
+    await t('a click beside an unchanged editor closes it', async () => {
+        const closed = openFilterEditor({ model, scope: 'bugs', filter: stored, items });
+        await settle();
+        await clickBeside();
+        await within(closed);
+        assert.equal(dialog(), null);
+    });
+
+    await t('a click beside a changed editor asks first', async () => {
+        const closed = openFilterEditor({ model, scope: 'bugs', filter: stored, items });
+        await settle();
+        typeName('Renamed');
+        await settle();
+        await clickBeside();
+        assert.ok(dialog(), 'closed without asking');
+        assert.match(question().textContent, /unsaved changes/);
+        await answer('cancel');
+        assert.ok(dialog(), 'Keep editing closed it');
+        assert.equal(nameInput().value, 'Renamed');
+        await clickBeside();
+        await answer('confirm');
+        await within(closed);
+        assert.equal(dialog(), null);
+        assert.equal(getFilter(stored.id).label, "Norman's bugs & crashes");
+    });
+
+    await t('the Delete question names the filter as it is typed, as written', async () => {
         const closed = openFilterEditor({ model, scope: 'bugs', filter: stored, items });
         await settle();
         button('delete').click();
         await settle();
-        assert.match(document.querySelector('.twm-modal__body--text').textContent, /^"Norman's bugs & crashes" will be removed/);
-        document.querySelector('[data-action="cancel"]').click();
+        assert.match(question().textContent, /^"Norman's bugs & crashes" will be removed/);
+        await answer('cancel');
+        typeName('Bugs & <crashes>');
         await settle();
+        button('delete').click();
+        await settle();
+        assert.match(question().textContent, /^"Bugs & <crashes>" will be removed/);
+        await answer('cancel');
+        typeName('');
+        await settle();
+        button('delete').click();
+        await settle();
+        assert.match(question().textContent, /^"Norman's bugs & crashes" will be removed/);
+        await answer('cancel');
         button('cancel').click();
-        await closed;
+        await settle();
+        await answer('confirm');
+        await within(closed);
+    });
+
+    await t('a value of days cannot be stepped below zero', async () => {
+        const closed = openFilterEditor({
+            model: createFilterModel({ fields: [{ key: 'updated', label: 'Updated', type: 'date', get: (r) => r.updated }] }),
+            scope: 'bugs',
+            seedExpr: { kind: 'group', op: 'AND', children: [{ kind: 'clause', field: 'updated', op: 'in_last_days', value: 3 }] },
+        });
+        await settle();
+        assert.equal(document.querySelector('.twm-filter-builder input[type="number"]').min, '0');
+        button('cancel').click();
+        await within(closed);
     });
 
     await t('an alert condition comes back to the caller and is not stored', async () => {
@@ -4493,8 +4583,9 @@ console.log('\nThe filter editor');
             onPick: (p) => { picked = p; } });
         await settle();
         button('save').click();
-        await closed;
+        await within(closed);
         assert.deepEqual(picked, { label: 'Alert', expr: seed });
+        assert.equal(getFilter(stored.id).label, "Norman's bugs & crashes");
     });
 }
 

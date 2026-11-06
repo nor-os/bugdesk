@@ -110,6 +110,7 @@ export async function openFilterEditor({
         name: { value: label, placeholder: 'e.g. Crashers on me' },
         iconChoice: { value: filter?.icon || FILTER_ICONS[0], options: FILTER_ICONS },
         confirmDiscard: true,
+        dismissOnBackdrop: true,
         submitLabel: 'Save',
         onSubmit,
         preview,
@@ -119,7 +120,7 @@ export async function openFilterEditor({
             danger: true,
             confirm: {
                 title: 'Delete this filter?',
-                message: `"${label}" will be removed from the filter rail. This cannot be undone.`,
+                message: ({ name }) => `"${name || label}" will be removed from the filter rail. This cannot be undone.`,
                 confirmLabel: 'Delete',
                 danger: true,
             },
