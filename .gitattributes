@@ -1,0 +1,3 @@
+# The vendored FlexDesk is the npm package's own bytes (scripts/sync-flexdesk.mjs
+# compares them), so checkout must not rewrite its line endings.
+ui/vendor/flexdesk/** -text

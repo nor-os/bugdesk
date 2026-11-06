@@ -40,6 +40,8 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **FlexDesk 0.18.1** (from 0.16.1), vendored with `npm run sync:flexdesk`.
   A dashboard tile's settings dialog reads FlexDesk 0.17's config schema
   (`key`, `description`); without that it showed no display settings at all.
+  `ui/vendor/flexdesk/` is marked `-text` in `.gitattributes`, so a Windows clone
+  checks out the package's own bytes and `npm run check:flexdesk` passes there.
 
 - **A configured `config` folder no longer falls back to a legacy root
   `bugdesk.json`** (STORY-0060). A project that already had `config = …` in
