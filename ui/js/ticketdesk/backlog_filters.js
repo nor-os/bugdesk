@@ -1,8 +1,8 @@
 /**
  * ticketdesk/backlog_filters.js — the BACKLOG's filter vocabulary.
  *
- * The sibling of ./filters.js over the second store, sharing the engine
- * (./filter_engine.js) and the saved-filter list (./filter_store.js, scope
+ * The sibling of ./filters.js over the second store, sharing FlexDesk's filter
+ * model (./filter_engine.js) and the saved-filter list (./filter_store.js, scope
  * 'backlog'). The questions you ask of a backlog are not the questions you ask
  * of a bug queue — there is no severity, and there IS a hierarchy — so the
  * field catalogue is entirely its own.

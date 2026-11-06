@@ -23,8 +23,11 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   rather than closing on one; the project switcher moves with a resized window
   rather than closing, and its arrows move real focus, so from a freshly opened
   switcher the first Down lands on the first row; a filter condition moved to
-  another field keeps its operator and value when they fit; a range with one end
-  filled cannot be saved. A click beside the filter dialog still cancels it, asking
+  another field keeps its operator and value when they fit. A value that does not
+  fit its field is now refused where it was accepted: a non-number in a list on a
+  number field (`Priority one of zzz`), or ends of a range that are not numbers or
+  dates. A saved filter holding one matches as it did, but cannot be saved again
+  until it is corrected. A click beside the filter dialog still cancels it, asking
   first if anything changed. Stored filters and their expressions are unchanged.
 
 - **The top bar matches EcoSim's and EcoAgent's** (STORY-0062). The menu is

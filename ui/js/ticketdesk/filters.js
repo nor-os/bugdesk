@@ -1,16 +1,14 @@
 /**
  * ticketdesk/filters.js — the BUG queue's filter vocabulary.
  *
- * The expression language, the compiler, the describer and the validator used
- * to live here. They now live in ./filter_engine.js, and the saved-filter store
- * in ./filter_store.js, because the backlog needs both over a completely
- * different set of fields (see ./backlog_filters.js). What is left here is the
- * part that is genuinely about BUGS: which fields you can ask about, and the
- * builtin filters the rail offers.
+ * The expression language is FlexDesk's filter model, bound to BugDesk's words in
+ * ./filter_engine.js, and saved filters are kept by ./filter_store.js: the backlog
+ * needs both over a completely different set of fields (see ./backlog_filters.js).
+ * What is here is the part that is genuinely about BUGS: which fields you can ask
+ * about, and the builtin filters the rail offers.
  *
- * Every export the rest of the bug UI used to import from this file is still
- * exported from it — bound to the bug model and the 'bugs' store scope — so
- * pages.js and filter_editor.js did not have to learn about the split.
+ * The exports are bound to the bug model and the 'bugs' store scope, so a page
+ * of the bug UI names neither.
  */
 
 import {

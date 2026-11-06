@@ -684,9 +684,10 @@ and bugs from the bug queue, never the store you are not looking at.
 
 ## Filters
 
-Both stores share one filter engine (`ui/js/ticketdesk/filter_engine.js`): a
-JSON expression tree of AND/OR groups over clauses, with a visual editor, a live
-preview and saved filters. What differs is the **field catalogue** each is bound
+Both stores share FlexDesk's filter model (bound in
+`ui/js/ticketdesk/filter_engine.js`): a JSON expression tree of AND/OR groups
+over clauses, with FlexDesk's filter dialog, a live preview and saved filters.
+What differs is the **field catalogue** each is bound
 to — there is no severity in a backlog, and there is no hierarchy in a bug
 queue:
 

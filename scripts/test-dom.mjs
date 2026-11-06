@@ -4416,7 +4416,7 @@ console.log('\nThe filter editor');
 {
     const { openFilterEditor } = await import(pathToFileURL(join(UI, 'ticketdesk', 'filter_editor.js')).href);
     const { createFilterModel, FILTER_ICONS } = await import(pathToFileURL(join(UI, 'ticketdesk', 'filter_engine.js')).href);
-    const { getFilter, saveFilter } = await import(pathToFileURL(join(UI, 'ticketdesk', 'filter_store.js')).href);
+    const { getFilter, listFilters, saveFilter } = await import(pathToFileURL(join(UI, 'ticketdesk', 'filter_store.js')).href);
     const model = createFilterModel({
         noun: 'bug',
         fields: [
@@ -4579,13 +4579,14 @@ console.log('\nThe filter editor');
 
     await t('an alert condition comes back to the caller and is not stored', async () => {
         let picked = null;
+        const before = listFilters('bugs').map((f) => f.id);
         const closed = openFilterEditor({ model, scope: 'bugs', filter: { label: 'Alert', expr: seed }, items,
             onPick: (p) => { picked = p; } });
         await settle();
         button('save').click();
         await within(closed);
         assert.deepEqual(picked, { label: 'Alert', expr: seed });
-        assert.equal(getFilter(stored.id).label, "Norman's bugs & crashes");
+        assert.deepEqual(listFilters('bugs').map((f) => f.id), before);
     });
 }
 

@@ -12,7 +12,8 @@
    Loaded AFTER ticketdesk.css (see ui/index.html) so it can lean on
    .ea-btn / .ea-tin and the .td-* scaffolding without fighting it.
    ticketdesk.css itself is owned by another file — nothing here edits
-   or overrides its rules, it only adds new `bd-fprev`/`td-nav` classes.
+   or overrides its rules. Besides its own `bd-fprev`/`td-nav` classes, this
+   file restores the hover of the filter builder's FlexDesk buttons.
    ──────────────────────────────────────────────────────────────────── */
 
 /* ════════════════════════════════════════════════════════════════════
