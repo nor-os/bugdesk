@@ -144,6 +144,18 @@ try {
         rmSync(join(hosted, 'bugs', 'notes.txt'));
     });
 
+    await t('the Changes pane reads committed text as UTF-8', async () => {
+        const committed = '---\nid: 2\ntitle: "Two"\nstatus: open\n---\n\nüber · 5 €\n';
+        const rel = 'bugs/BUG-0002.md';
+        writeFileSync(join(plain, rel), committed);
+        git(plain, 'add', '-A');
+        git(plain, '-c', 'user.name=t', '-c', 'user.email=t\nt', 'commit', '-q', '-m', 'two');
+        writeFileSync(join(plain, rel), `${committed}changed\n`);
+        const d = await get(`/p/plain/api/git/diff?path=${encodeURIComponent(rel)}`);
+        assert.equal(d.before, committed);
+        assert.match(d.diff, /^ über · 5 €$/m);
+    });
+
     await t('without config nothing changes: the legacy root bugdesk.json still wins', async () => {
         const p = await get('/p/plain/api/project');
         assert.equal(p.path, join(plain, 'bugdesk.json'));

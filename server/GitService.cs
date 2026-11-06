@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 
@@ -302,6 +303,9 @@ sealed class GitService
                 WorkingDirectory = cwd,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
+                // git writes UTF-8; the default here is the console's code page.
+                StandardOutputEncoding = Encoding.UTF8,
+                StandardErrorEncoding = Encoding.UTF8,
                 UseShellExecute = false,
                 CreateNoWindow = true,
             };

@@ -595,6 +595,9 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- On Windows the Changes pane read a record's committed text in the console's code
+  page, so `·` arrived as `┬╖` and every line with a non-ASCII character showed as
+  changed. Git's output is read as UTF-8 now.
 - Questions before removing a project, deleting a bug or a dashboard, removing a
   tile, resetting a home and discarding a change showed their markup as text
   (`Remove <b>beta</b>…`). They are plain sentences now.
